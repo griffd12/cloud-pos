@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,8 +72,19 @@ export function EntityForm<T extends z.ZodTypeAny>({
 
   const form = useForm<z.infer<T>>({
     resolver: zodResolver(schema),
-    defaultValues,
+    defaultValues: defaultValues as any,
   });
+
+  // Reset form when initialData changes (e.g., when editing a different item)
+  useEffect(() => {
+    if (open) {
+      const newValues = fields.reduce((acc, field) => {
+        acc[field.name] = initialData?.[field.name] ?? field.defaultValue ?? getDefaultForType(field.type);
+        return acc;
+      }, {} as Record<string, any>);
+      form.reset(newValues);
+    }
+  }, [open, initialData]);
 
   const handleSubmit = (data: z.infer<T>) => {
     onSubmit(data);

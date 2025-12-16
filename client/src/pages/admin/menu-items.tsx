@@ -330,7 +330,11 @@ export default function MenuItemsPage() {
         schema={insertMenuItemSchema}
         fields={formFields}
         title={editingItem ? "Edit Menu Item" : "Add Menu Item"}
-        initialData={editingItem || undefined}
+        initialData={editingItem ? {
+          ...editingItem,
+          taxGroupId: editingItem.taxGroupId || "__none__",
+          printClassId: editingItem.printClassId || "__none__",
+        } : undefined}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
