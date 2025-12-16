@@ -61,13 +61,13 @@ export default function MenuItemsPage() {
       name: "taxGroupId",
       label: "Tax Group",
       type: "select",
-      options: [{ value: "", label: "None" }, ...taxGroups.map((t) => ({ value: t.id, label: t.name }))],
+      options: [{ value: "__none__", label: "None" }, ...taxGroups.map((t) => ({ value: t.id, label: t.name }))],
     },
     {
       name: "printClassId",
       label: "Print Class",
       type: "select",
-      options: [{ value: "", label: "None" }, ...printClasses.map((p) => ({ value: p.id, label: p.name }))],
+      options: [{ value: "__none__", label: "None" }, ...printClasses.map((p) => ({ value: p.id, label: p.name }))],
     },
     { name: "color", label: "Button Color", type: "color", defaultValue: "#3B82F6" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
@@ -247,10 +247,16 @@ export default function MenuItemsPage() {
   };
 
   const handleSubmit = (data: InsertMenuItem) => {
+    // Convert "__none__" placeholder back to null
+    const cleanedData: InsertMenuItem = {
+      ...data,
+      taxGroupId: data.taxGroupId === "__none__" ? null : (data.taxGroupId || null),
+      printClassId: data.printClassId === "__none__" ? null : (data.printClassId || null),
+    };
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, ...cleanedData });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(cleanedData);
     }
   };
 
