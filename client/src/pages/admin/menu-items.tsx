@@ -56,7 +56,7 @@ export default function MenuItemsPage() {
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Item Name", type: "text", placeholder: "e.g., Cheeseburger", required: true },
     { name: "shortName", label: "Short Name", type: "text", placeholder: "e.g., CHZBGR" },
-    { name: "price", label: "Price", type: "number", placeholder: "0.00", required: true },
+    { name: "price", label: "Price", type: "text", placeholder: "0.00", required: true },
     {
       name: "taxGroupId",
       label: "Tax Group",
