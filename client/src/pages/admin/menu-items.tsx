@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass } from "@shared/schema";
+import { Download, Upload } from "lucide-react";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: menuItems = [], isLoading } = useQuery<MenuItem[]>({
     queryKey: ["/api/menu-items"],
@@ -103,16 +106,71 @@ export default function MenuItemsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/menu-items/" + id);
+      const response = await apiRequest("DELETE", "/api/menu-items/" + id);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items"] });
       toast({ title: "Menu item deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete menu item", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to delete menu item", variant: "destructive" });
     },
   });
+
+  const importMutation = useMutation({
+    mutationFn: async (items: any[]) => {
+      const response = await apiRequest("POST", "/api/menu-items/import", items);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items"] });
+      toast({ title: `Imported ${data.imported} menu items` });
+    },
+    onError: () => {
+      toast({ title: "Failed to import menu items", variant: "destructive" });
+    },
+  });
+
+  const handleExport = () => {
+    const dataStr = JSON.stringify(menuItems, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "menu-items.json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Menu items exported" });
+  };
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const items = JSON.parse(e.target?.result as string);
+        if (Array.isArray(items)) {
+          importMutation.mutate(items);
+        } else {
+          toast({ title: "Invalid file format - expected an array", variant: "destructive" });
+        }
+      } catch {
+        toast({ title: "Failed to parse JSON file", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = (data: InsertMenuItem) => {
     if (editingItem) {
@@ -124,6 +182,33 @@ export default function MenuItemsPage() {
 
   return (
     <div className="p-6">
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-menu">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importMutation.isPending}
+            data-testid="button-import-menu"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {importMutation.isPending ? "Importing..." : "Import"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+            data-testid="input-import-file"
+          />
+        </div>
+      </div>
+      
       <DataTable
         data={menuItems}
         columns={columns}

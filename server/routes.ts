@@ -334,8 +334,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/menu-items/:id", async (req, res) => {
-    await storage.deleteMenuItem(req.params.id);
-    res.status(204).send();
+    try {
+      await storage.deleteMenuItem(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Cannot delete menu item" });
+    }
+  });
+
+  // Menu Items Import/Export
+  app.get("/api/menu-items/export", async (req, res) => {
+    const items = await storage.getMenuItems();
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", "attachment; filename=menu-items.json");
+    res.json(items);
+  });
+
+  app.post("/api/menu-items/import", async (req, res) => {
+    try {
+      const items = req.body;
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ message: "Expected an array of menu items" });
+      }
+      const imported: any[] = [];
+      for (const item of items) {
+        const { id, ...data } = item;
+        const newItem = await storage.createMenuItem({
+          name: data.name,
+          shortName: data.shortName || null,
+          price: data.price,
+          taxGroupId: data.taxGroupId || null,
+          printClassId: data.printClassId || null,
+          color: data.color || "#3B82F6",
+          active: data.active !== false,
+          enterpriseId: null,
+          propertyId: null,
+          rvcId: null,
+        });
+        imported.push(newItem);
+      }
+      res.status(201).json({ imported: imported.length, items: imported });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Import failed" });
+    }
   });
 
   // ============================================================================
