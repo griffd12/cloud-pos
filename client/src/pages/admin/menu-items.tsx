@@ -247,9 +247,10 @@ export default function MenuItemsPage() {
   };
 
   const handleSubmit = (data: InsertMenuItem) => {
-    // Convert "__none__" placeholder back to null
+    // Convert "__none__" placeholder back to null, and ensure price is a string
     const cleanedData: InsertMenuItem = {
       ...data,
+      price: String(data.price),
       taxGroupId: data.taxGroupId === "__none__" ? null : (data.taxGroupId || null),
       printClassId: data.printClassId === "__none__" ? null : (data.printClassId || null),
     };
