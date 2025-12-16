@@ -1,0 +1,461 @@
+CLOUD-BASED QSR POS SYSTEM – FULL SCOPE & REQUIREMENTS
+
+(Simphony-Class Architecture, KDS-Driven, Multi-Property, AI-Ingest Version)
+
+1. TARGET ENVIRONMENT & BUSINESS CONTEXT
+Target Industry
+
+Quick Service Restaurant (QSR)
+
+High-volume, fast-paced environment
+
+Kitchen Display System (KDS) is the primary production driver
+
+POS optimized for speed, low-tap order entry, and real-time kitchen communication
+
+Deployment Model
+
+Cloud-based POS with local edge/offline support
+
+Designed for 5 Properties, each with 2 Revenue Centers (RVCs)
+
+2. ENTERPRISE HIERARCHY & CONFIGURATION INHERITANCE
+Hierarchy (Highest → Lowest)
+
+Enterprise
+
+Property
+
+Revenue Center (RVC)
+
+Inheritance Rules (CRITICAL)
+
+Configuration defined at Enterprise flows down to all Properties and RVCs
+
+Configuration defined at Property flows only to that Property and its RVCs
+
+Configuration defined at RVC applies only to that RVC
+
+Overrides are allowed at Property and RVC
+
+Enterprise configuration cannot be overridden upward
+
+Effective Configuration Resolution (when POS runs in an RVC)
+
+Load Enterprise defaults
+
+Overlay Property overrides (if present)
+
+Overlay RVC overrides (if present)
+
+This applies to:
+
+Menu Items
+
+SLUs (Screen Lookup Units)
+
+Modifier Groups / Modifiers
+
+Print Classes
+
+Order Devices
+
+Taxes
+
+Discounts
+
+Tenders
+
+Service Charges
+
+Employee Roles & Privileges
+
+Routing Rules
+
+3. USER TYPES & ACCESS CONTROL
+Employee Sign-In
+
+PIN-based authentication
+
+PINs stored securely (hashed)
+
+Optional employee number + PIN
+
+Roles (Examples)
+
+Cashier
+
+Server
+
+Bartender
+
+Manager
+
+Clock-In Only
+
+Administrator
+
+Privileges (Examples)
+
+Fast Transaction mode
+
+Begin Check requirement bypass
+
+Send to Kitchen
+
+Void Unsent Items
+
+Void Sent Items (Manager Approval Required)
+
+Reopen Closed Checks
+
+Transfer Checks
+
+Split / Merge Checks
+
+Apply Discounts
+
+Price Overrides
+
+Manager Approval Authority
+
+Privileges are role-based and enforceable at runtime.
+
+4. FRONT-OF-HOUSE (FOH) CHECK LIFECYCLE
+Order Types (Required)
+
+Dine In
+
+Take Out
+
+Delivery
+
+Pickup
+
+Additional types configurable
+
+Order Type may affect:
+
+Pricing
+
+Tax
+
+Print/KDS routing
+
+Service Charges
+
+Begin Check / Fast Transaction Mode
+Standard Mode
+
+Employee must select Begin Check
+
+Must select Order Type before ringing items
+
+Fast Transaction Mode (Role-Based)
+
+Check auto-created on first item ring
+
+Order Type:
+
+Prompt on first item OR
+
+Default per workstation/employee (configurable)
+
+Designed for QSR speed lanes
+
+5. SEND / PICKUP CHECK & ROUND-BASED LOGIC
+Rounds Concept
+
+Each “Send” action creates a Round
+
+Items are assigned to a round once sent
+
+Items can only be sent once
+
+Visual Indicator
+
+Items already sent to kitchen show a “*”
+
+“*” indicates:
+
+Item has already been printed / sent to KDS
+
+Item can never be re-sent
+
+Send Check Behavior
+
+Only items not yet sent are transmitted
+
+Creates a new round record
+
+Routes items to printers/KDS
+
+Marks items as sent
+
+Pickup Check
+
+Retrieve previously open check
+
+Sent items remain marked with “*”
+
+Only unsent items are eligible for next Send
+
+6. VOIDING & MANAGER APPROVAL RULES
+Unsent Items
+
+Can be voided by cashier (if privilege allows)
+
+Reason optional or required (configurable)
+
+Previously Sent Items (“*” Items)
+
+Manager approval required
+
+Manager PIN validation required
+
+Void reason selection required
+
+Void generates:
+
+Audit log
+
+KDS/printer cancellation message
+
+Original item is never resent
+
+7. ADDITIONAL CHECK FUNCTIONS
+
+Reopen Closed Checks (manager + reason required)
+
+Transfer Checks (employee to employee)
+
+Split Checks (by item)
+
+Merge Checks
+
+All actions audited
+
+8. MENU & ORDERING CONFIGURATION (ADMIN)
+SLU (Screen Lookup Units)
+
+SLUs act as FOH category buttons (e.g., Appetizers, Drinks)
+
+SLU configuration includes:
+
+Name
+
+Button label
+
+Display order
+
+Menu Items are linked to one or more SLUs
+
+FOH uses SLUs to display items dynamically
+
+Menu Items
+
+Name
+
+Price
+
+Tax Group
+
+Print Class
+
+Order Device routing
+
+SLU linkage
+
+Modifier Group linkage
+
+Availability rules
+
+9. MODIFIER SYSTEM (REQUIRED MODS, MIN/MAX)
+Modifier Groups
+
+Name
+
+Required flag
+
+Min selections
+
+Max selections
+
+Display order
+
+Modifiers
+
+Name
+
+Price delta
+
+Default flag
+
+Enforcement
+
+If Modifier Group has min_select >= 1, selection is mandatory
+
+Item cannot be finalized or sent until requirements are met
+
+Example:
+
+Steak requires Meat Temperature (min=1, max=1)
+
+10. PRINTING, KDS & ROUTING
+Devices (Property Level)
+
+Workstations
+
+Printers
+
+KDS Screens
+
+Print Classes (Logical)
+
+Examples:
+
+Kitchen
+
+Bar
+
+Hot
+
+Cold
+
+Prep
+
+Expo
+
+Configurable at Enterprise / Property / RVC
+
+Order Devices (Routing Targets)
+
+Logical groupings of printers/KDS
+
+Examples:
+
+Hot Line
+
+Cold Prep
+
+Expo
+
+Configured at Property level
+
+Can include:
+
+One or more printers
+
+One or more KDS screens
+
+Routing Model
+
+Menu Item → Print Class
+
+Print Class → Order Device
+
+Order Device → Physical Devices
+
+This allows routing changes without editing menu items.
+
+11. KDS DYNAMIC ORDER MODE
+Behavior
+
+Items appear on KDS as they are rung
+
+Items initially marked as:
+
+Draft / Not Sent
+
+When “Send” is pressed:
+
+Items move into active production queue
+
+Round is committed
+
+Voids and edits appear live on KDS
+
+KDS Functions
+
+Bump
+
+Recall
+
+Timers per item and per ticket
+
+Station-based views (Hot, Cold, Expo)
+
+12. TAXES, DISCOUNTS, TENDERS, SERVICE CHARGES
+Default Configuration Level
+
+Enterprise
+
+Can Be Overridden or Added At
+
+Property
+
+RVC
+
+Items
+
+Tax Rates & Tax Groups
+
+Discounts
+
+Tenders (Cash, Credit, Gift, etc.)
+
+Service Charges (Delivery fee, auto-grat, etc.)
+
+Overrides reuse the same code to replace behavior locally.
+
+13. AUDIT & COMPLIANCE
+Audit Required For
+
+Voids
+
+Reopens
+
+Transfers
+
+Overrides
+
+Manager approvals
+
+Audit Log Captures
+
+Who
+
+When
+
+What action
+
+Reason code
+
+Manager approval (if required)
+
+14. TECHNICAL REQUIREMENTS
+Architecture
+
+Cloud backend with REST + WebSocket APIs
+
+Local persistence for offline support
+
+Event-based order and KDS messaging
+
+Platform
+
+Web-based POS (React + Tailwind)
+
+Runs on:
+
+Windows terminals
+
+Android tablets
+
+KDS web app
+
+Offline Support
+
+Orders, sends, and KDS queue continue offline
+
+Sync on reconnect using event journal
