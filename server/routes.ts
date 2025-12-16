@@ -279,6 +279,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
+  // Get SLUs by RVC ID (path param version for frontend convenience)
+  app.get("/api/slus/:rvcId", async (req, res) => {
+    // Return all active SLUs - in inheritance model, if no RVC-specific SLUs, return global ones
+    const data = await storage.getSlus();
+    res.json(data);
+  });
+
   app.post("/api/slus", async (req, res) => {
     try {
       const validated = insertSluSchema.parse(req.body);
@@ -460,6 +467,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/tenders", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
     const data = await storage.getTenders(rvcId);
+    res.json(data);
+  });
+
+  // Get tenders by RVC ID (path param version for frontend convenience)
+  app.get("/api/tenders/:rvcId", async (req, res) => {
+    const data = await storage.getTenders();
     res.json(data);
   });
 
