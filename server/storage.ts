@@ -327,6 +327,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSlu(id: string): Promise<boolean> {
+    // First delete related menu item linkages
+    await db.delete(menuItemSlus).where(eq(menuItemSlus.sluId, id));
+    // Then delete the SLU
     const result = await db.delete(slus).where(eq(slus.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
