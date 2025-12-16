@@ -150,17 +150,76 @@ export default function MenuItemsPage() {
   });
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(menuItems, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
+    const headers = ["name", "shortName", "price", "color", "active"];
+    const csvRows = [headers.join(",")];
+    
+    for (const item of menuItems) {
+      const row = [
+        `"${(item.name || "").replace(/"/g, '""')}"`,
+        `"${(item.shortName || "").replace(/"/g, '""')}"`,
+        item.price || "0",
+        `"${item.color || "#3B82F6"}"`,
+        item.active ? "true" : "false",
+      ];
+      csvRows.push(row.join(","));
+    }
+    
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "menu-items.json";
+    link.download = "menu-items.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "Menu items exported" });
+    toast({ title: "Menu items exported to CSV" });
+  };
+
+  const parseCSV = (text: string): any[] => {
+    const lines = text.split("\n").filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+    const items: any[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      
+      for (const char of lines[i]) {
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === "," && !inQuotes) {
+          values.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim());
+      
+      const item: any = {};
+      headers.forEach((header, idx) => {
+        let value = values[idx] || "";
+        value = value.replace(/^"|"$/g, "").replace(/""/g, '"');
+        if (header === "active") {
+          item[header] = value.toLowerCase() === "true";
+        } else if (header === "price") {
+          item[header] = value;
+        } else {
+          item[header] = value;
+        }
+      });
+      
+      if (item.name) {
+        items.push(item);
+      }
+    }
+    
+    return items;
   };
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,14 +229,15 @@ export default function MenuItemsPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const items = JSON.parse(e.target?.result as string);
-        if (Array.isArray(items)) {
+        const text = e.target?.result as string;
+        const items = parseCSV(text);
+        if (items.length > 0) {
           importMutation.mutate(items);
         } else {
-          toast({ title: "Invalid file format - expected an array", variant: "destructive" });
+          toast({ title: "No valid items found in CSV file", variant: "destructive" });
         }
       } catch {
-        toast({ title: "Failed to parse JSON file", variant: "destructive" });
+        toast({ title: "Failed to parse CSV file", variant: "destructive" });
       }
     };
     reader.readAsText(file);
@@ -200,7 +260,7 @@ export default function MenuItemsPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-menu">
             <Download className="w-4 h-4 mr-2" />
-            Export
+            Export CSV
           </Button>
           <Button 
             variant="outline" 
@@ -210,12 +270,12 @@ export default function MenuItemsPage() {
             data-testid="button-import-menu"
           >
             <Upload className="w-4 h-4 mr-2" />
-            {importMutation.isPending ? "Importing..." : "Import"}
+            {importMutation.isPending ? "Importing..." : "Import CSV"}
           </Button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json"
+            accept=".csv"
             onChange={handleImport}
             className="hidden"
             data-testid="input-import-file"
