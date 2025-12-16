@@ -37,6 +37,28 @@ Preferred communication style: Simple, everyday language.
 - **Menu System**: SLUs (Screen Lookup Units/Categories) → Menu Items → Modifier Groups → Modifiers
 - **Transactions**: Checks → Rounds → Check Items → Payments
 - **Operations**: Employees, Roles, Privileges, Tax Groups, Tenders, Discounts
+- **Device Configuration**: Workstations, Printers, KDS Devices, Order Devices, Print Classes
+
+### Device Configuration (Simphony-Style)
+The system implements a comprehensive device configuration model similar to Oracle Simphony:
+
+**Physical Devices** (configured at Property level):
+- **Workstations**: POS terminals, kiosks, manager stations with behavioral flags (fast transaction mode, default order types, clock-in allowed, etc.)
+- **Printers**: Receipt printers, kitchen printers, bar printers with connection settings, failover configuration, and driver protocols
+- **KDS Devices**: Kitchen Display System screens with station types (hot, cold, prep, expo, bar) and display options
+
+**Routing Model**:
+- **Print Classes**: Logical categories that define where menu items should be printed/displayed (e.g., "Hot Food", "Cold Food", "Drinks")
+- **Order Devices**: Logical routing containers that group physical printers and KDS devices
+- **Print Class Routing**: Links Print Classes to Order Devices with optional Property/RVC-level overrides
+
+**Device Routing Resolution**:
+Menu Item → Print Class → Print Class Routing → Order Device → Physical Devices (Printers + KDS)
+
+The routing resolution (`resolveDevicesForMenuItem`) follows priority:
+1. RVC-specific routing (highest priority)
+2. Property-level routing
+3. Global/default routing (lowest priority)
 
 ### Real-time Communication
 - WebSocket server at `/ws` path for KDS ticket updates
