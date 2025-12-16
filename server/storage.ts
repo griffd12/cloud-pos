@@ -442,13 +442,18 @@ export class DatabaseStorage implements IStorage {
     // Check if menu item is referenced in check_items (can't delete if used in orders)
     const usedInOrders = await db.select().from(checkItems).where(eq(checkItems.menuItemId, id)).limit(1);
     if (usedInOrders.length > 0) {
-      throw new Error("Cannot delete menu item that has been used in orders. Consider deactivating it instead.");
+      throw new Error("This menu item has transaction history and cannot be deleted. To remove it from the POS, use 'Unlink from Categories' or set it to Inactive.");
     }
     // First delete related SLU linkages
     await db.delete(menuItemSlus).where(eq(menuItemSlus.menuItemId, id));
     // Then delete the menu item
     const result = await db.delete(menuItems).where(eq(menuItems.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async unlinkMenuItemFromSLUs(menuItemId: string): Promise<number> {
+    const result = await db.delete(menuItemSlus).where(eq(menuItemSlus.menuItemId, menuItemId));
+    return result.rowCount || 0;
   }
 
   // Modifier Groups

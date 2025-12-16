@@ -379,6 +379,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Unlink menu item from all SLUs (remove from POS display without deleting)
+  app.post("/api/menu-items/:id/unlink-slus", async (req, res) => {
+    try {
+      const count = await storage.unlinkMenuItemFromSLUs(req.params.id);
+      // Also deactivate the menu item
+      await storage.updateMenuItem(req.params.id, { active: false });
+      res.json({ message: `Unlinked from ${count} categories and deactivated`, unlinkedCount: count });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Failed to unlink" });
+    }
+  });
+
   // ============================================================================
   // MODIFIER GROUP ROUTES
   // ============================================================================

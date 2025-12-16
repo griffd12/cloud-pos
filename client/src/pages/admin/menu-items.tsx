@@ -1,13 +1,13 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { DataTable, type Column } from "@/components/admin/data-table";
+import { DataTable, type Column, type CustomAction } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass } from "@shared/schema";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload, Unlink } from "lucide-react";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
@@ -135,6 +135,20 @@ export default function MenuItemsPage() {
     },
   });
 
+  const unlinkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/menu-items/${id}/unlink-slus`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items"] });
+      toast({ title: data.message || "Item unlinked from categories and deactivated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to unlink menu item", variant: "destructive" });
+    },
+  });
+
   const handleExport = () => {
     const dataStr = JSON.stringify(menuItems, null, 2);
     const blob = new Blob([dataStr], { type: "application/json" });
@@ -228,6 +242,13 @@ export default function MenuItemsPage() {
             name: `${item.name} (Copy)`,
           });
         }}
+        customActions={[
+          {
+            label: "Unlink from Categories",
+            icon: Unlink,
+            onClick: (item) => unlinkMutation.mutate(item.id),
+          },
+        ] as CustomAction<MenuItem>[]}
         isLoading={isLoading}
         searchPlaceholder="Search menu items..."
         emptyMessage="No menu items configured"

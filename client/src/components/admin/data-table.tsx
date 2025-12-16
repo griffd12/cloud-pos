@@ -26,6 +26,7 @@ import {
   Search,
   Trash2,
   Copy,
+  LucideIcon,
 } from "lucide-react";
 
 export interface Column<T> {
@@ -35,6 +36,13 @@ export interface Column<T> {
   sortable?: boolean;
 }
 
+export interface CustomAction<T> {
+  label: string;
+  icon: LucideIcon;
+  onClick: (item: T) => void;
+  variant?: "default" | "destructive";
+}
+
 interface DataTableProps<T extends { id: string }> {
   data: T[];
   columns: Column<T>[];
@@ -42,6 +50,7 @@ interface DataTableProps<T extends { id: string }> {
   onEdit?: (item: T) => void;
   onDelete?: (item: T) => void;
   onDuplicate?: (item: T) => void;
+  customActions?: CustomAction<T>[];
   isLoading?: boolean;
   title?: string;
   searchPlaceholder?: string;
@@ -56,6 +65,7 @@ export function DataTable<T extends { id: string }>({
   onEdit,
   onDelete,
   onDuplicate,
+  customActions = [],
   isLoading = false,
   title,
   searchPlaceholder = "Search...",
@@ -148,7 +158,7 @@ export function DataTable<T extends { id: string }>({
                     </div>
                   </TableHead>
                 ))}
-                {(onEdit || onDelete || onDuplicate) && (
+                {(onEdit || onDelete || onDuplicate || customActions.length > 0) && (
                   <TableHead className="w-12" />
                 )}
               </TableRow>
@@ -162,7 +172,7 @@ export function DataTable<T extends { id: string }>({
                         <div className="h-4 bg-muted animate-pulse rounded" />
                       </TableCell>
                     ))}
-                    {(onEdit || onDelete || onDuplicate) && <TableCell />}
+                    {(onEdit || onDelete || onDuplicate || customActions.length > 0) && <TableCell />}
                   </TableRow>
                 ))
               ) : paginatedData.length === 0 ? (
@@ -184,7 +194,7 @@ export function DataTable<T extends { id: string }>({
                           : String(getNestedValue(item, col.key as string) ?? "")}
                       </TableCell>
                     ))}
-                    {(onEdit || onDelete || onDuplicate) && (
+                    {(onEdit || onDelete || onDuplicate || customActions.length > 0) && (
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -209,6 +219,19 @@ export function DataTable<T extends { id: string }>({
                                 Duplicate
                               </DropdownMenuItem>
                             )}
+                            {customActions.map((action, idx) => {
+                              const ActionIcon = action.icon;
+                              return (
+                                <DropdownMenuItem
+                                  key={idx}
+                                  onClick={() => action.onClick(item)}
+                                  className={action.variant === "destructive" ? "text-destructive" : ""}
+                                >
+                                  <ActionIcon className="w-4 h-4 mr-2" />
+                                  {action.label}
+                                </DropdownMenuItem>
+                              );
+                            })}
                             {onDelete && (
                               <DropdownMenuItem
                                 onClick={() => onDelete(item)}
