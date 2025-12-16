@@ -1,0 +1,133 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { DataTable, type Column } from "@/components/admin/data-table";
+import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { insertPropertySchema, type Property, type InsertProperty, type Enterprise } from "@shared/schema";
+
+export default function PropertiesPage() {
+  const { toast } = useToast();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Property | null>(null);
+
+  const { data: properties = [], isLoading } = useQuery<Property[]>({
+    queryKey: ["/api/properties"],
+  });
+
+  const { data: enterprises = [] } = useQuery<Enterprise[]>({
+    queryKey: ["/api/enterprises"],
+  });
+
+  const columns: Column<Property>[] = [
+    { key: "name", header: "Name", sortable: true },
+    { key: "code", header: "Code", sortable: true },
+    {
+      key: "enterpriseId",
+      header: "Enterprise",
+      render: (value) => enterprises.find((e) => e.id === value)?.name || "-",
+    },
+    { key: "address", header: "Address" },
+  ];
+
+  const formFields: FormFieldConfig[] = [
+    { name: "name", label: "Property Name", type: "text", placeholder: "Enter name", required: true },
+    { name: "code", label: "Code", type: "text", placeholder: "e.g., PROP001", required: true },
+    {
+      name: "enterpriseId",
+      label: "Enterprise",
+      type: "select",
+      options: enterprises.map((e) => ({ value: e.id, label: e.name })),
+      required: true,
+    },
+    { name: "address", label: "Address", type: "textarea", placeholder: "Enter address" },
+  ];
+
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertProperty) => {
+      const response = await apiRequest("POST", "/api/properties", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      setFormOpen(false);
+      toast({ title: "Property created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create property", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Property) => {
+      const response = await apiRequest("PUT", "/api/properties/" + data.id, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      setFormOpen(false);
+      setEditingItem(null);
+      toast({ title: "Property updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update property", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", "/api/properties/" + id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      toast({ title: "Property deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete property", variant: "destructive" });
+    },
+  });
+
+  const handleSubmit = (data: InsertProperty) => {
+    if (editingItem) {
+      updateMutation.mutate({ ...editingItem, ...data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  return (
+    <div className="p-6">
+      <DataTable
+        data={properties}
+        columns={columns}
+        title="Properties"
+        onAdd={() => {
+          setEditingItem(null);
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        isLoading={isLoading}
+        searchPlaceholder="Search properties..."
+        emptyMessage="No properties configured"
+      />
+
+      <EntityForm
+        open={formOpen}
+        onClose={() => {
+          setFormOpen(false);
+          setEditingItem(null);
+        }}
+        onSubmit={handleSubmit}
+        schema={insertPropertySchema}
+        fields={formFields}
+        title={editingItem ? "Edit Property" : "Add Property"}
+        initialData={editingItem || undefined}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
+    </div>
+  );
+}
