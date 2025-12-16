@@ -5,6 +5,7 @@ import {
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus,
   modifierGroups, modifiers, menuItemModifierGroups, tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
+  workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -13,7 +14,13 @@ import {
   type Slu, type InsertSlu,
   type TaxGroup, type InsertTaxGroup,
   type PrintClass, type InsertPrintClass,
+  type Workstation, type InsertWorkstation,
+  type Printer, type InsertPrinter,
+  type KdsDevice, type InsertKdsDevice,
   type OrderDevice, type InsertOrderDevice,
+  type OrderDevicePrinter, type InsertOrderDevicePrinter,
+  type OrderDeviceKds, type InsertOrderDeviceKds,
+  type PrintClassRouting, type InsertPrintClassRouting,
   type MenuItem, type InsertMenuItem,
   type ModifierGroup, type InsertModifierGroup,
   type Modifier, type InsertModifier,
@@ -87,12 +94,47 @@ export interface IStorage {
   updatePrintClass(id: string, data: Partial<InsertPrintClass>): Promise<PrintClass | undefined>;
   deletePrintClass(id: string): Promise<boolean>;
 
+  // Workstations
+  getWorkstations(propertyId?: string): Promise<Workstation[]>;
+  getWorkstation(id: string): Promise<Workstation | undefined>;
+  createWorkstation(data: InsertWorkstation): Promise<Workstation>;
+  updateWorkstation(id: string, data: Partial<InsertWorkstation>): Promise<Workstation | undefined>;
+  deleteWorkstation(id: string): Promise<boolean>;
+
+  // Printers
+  getPrinters(propertyId?: string): Promise<Printer[]>;
+  getPrinter(id: string): Promise<Printer | undefined>;
+  createPrinter(data: InsertPrinter): Promise<Printer>;
+  updatePrinter(id: string, data: Partial<InsertPrinter>): Promise<Printer | undefined>;
+  deletePrinter(id: string): Promise<boolean>;
+
+  // KDS Devices
+  getKdsDevices(propertyId?: string): Promise<KdsDevice[]>;
+  getKdsDevice(id: string): Promise<KdsDevice | undefined>;
+  createKdsDevice(data: InsertKdsDevice): Promise<KdsDevice>;
+  updateKdsDevice(id: string, data: Partial<InsertKdsDevice>): Promise<KdsDevice | undefined>;
+  deleteKdsDevice(id: string): Promise<boolean>;
+
   // Order Devices
   getOrderDevices(propertyId?: string): Promise<OrderDevice[]>;
   getOrderDevice(id: string): Promise<OrderDevice | undefined>;
   createOrderDevice(data: InsertOrderDevice): Promise<OrderDevice>;
   updateOrderDevice(id: string, data: Partial<InsertOrderDevice>): Promise<OrderDevice | undefined>;
   deleteOrderDevice(id: string): Promise<boolean>;
+
+  // Order Device Linkages
+  getOrderDevicePrinters(orderDeviceId: string): Promise<OrderDevicePrinter[]>;
+  linkPrinterToOrderDevice(data: InsertOrderDevicePrinter): Promise<OrderDevicePrinter>;
+  unlinkPrinterFromOrderDevice(id: string): Promise<boolean>;
+  getOrderDeviceKdsList(orderDeviceId: string): Promise<OrderDeviceKds[]>;
+  linkKdsToOrderDevice(data: InsertOrderDeviceKds): Promise<OrderDeviceKds>;
+  unlinkKdsFromOrderDevice(id: string): Promise<boolean>;
+
+  // Print Class Routing
+  getPrintClassRouting(printClassId: string, propertyId?: string, rvcId?: string): Promise<PrintClassRouting[]>;
+  createPrintClassRouting(data: InsertPrintClassRouting): Promise<PrintClassRouting>;
+  deletePrintClassRouting(id: string): Promise<boolean>;
+  resolveDevicesForMenuItem(menuItemId: string, rvcId: string): Promise<{ printers: Printer[]; kdsDevices: KdsDevice[] }>;
 
   // Menu Items
   getMenuItems(sluId?: string): Promise<MenuItem[]>;
@@ -384,6 +426,90 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  // Workstations
+  async getWorkstations(propertyId?: string): Promise<Workstation[]> {
+    if (propertyId) {
+      return db.select().from(workstations).where(eq(workstations.propertyId, propertyId));
+    }
+    return db.select().from(workstations);
+  }
+
+  async getWorkstation(id: string): Promise<Workstation | undefined> {
+    const [result] = await db.select().from(workstations).where(eq(workstations.id, id));
+    return result;
+  }
+
+  async createWorkstation(data: InsertWorkstation): Promise<Workstation> {
+    const [result] = await db.insert(workstations).values(data).returning();
+    return result;
+  }
+
+  async updateWorkstation(id: string, data: Partial<InsertWorkstation>): Promise<Workstation | undefined> {
+    const [result] = await db.update(workstations).set(data).where(eq(workstations.id, id)).returning();
+    return result;
+  }
+
+  async deleteWorkstation(id: string): Promise<boolean> {
+    const result = await db.delete(workstations).where(eq(workstations.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Printers
+  async getPrinters(propertyId?: string): Promise<Printer[]> {
+    if (propertyId) {
+      return db.select().from(printers).where(eq(printers.propertyId, propertyId));
+    }
+    return db.select().from(printers);
+  }
+
+  async getPrinter(id: string): Promise<Printer | undefined> {
+    const [result] = await db.select().from(printers).where(eq(printers.id, id));
+    return result;
+  }
+
+  async createPrinter(data: InsertPrinter): Promise<Printer> {
+    const [result] = await db.insert(printers).values(data).returning();
+    return result;
+  }
+
+  async updatePrinter(id: string, data: Partial<InsertPrinter>): Promise<Printer | undefined> {
+    const [result] = await db.update(printers).set(data).where(eq(printers.id, id)).returning();
+    return result;
+  }
+
+  async deletePrinter(id: string): Promise<boolean> {
+    const result = await db.delete(printers).where(eq(printers.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // KDS Devices
+  async getKdsDevices(propertyId?: string): Promise<KdsDevice[]> {
+    if (propertyId) {
+      return db.select().from(kdsDevices).where(eq(kdsDevices.propertyId, propertyId));
+    }
+    return db.select().from(kdsDevices);
+  }
+
+  async getKdsDevice(id: string): Promise<KdsDevice | undefined> {
+    const [result] = await db.select().from(kdsDevices).where(eq(kdsDevices.id, id));
+    return result;
+  }
+
+  async createKdsDevice(data: InsertKdsDevice): Promise<KdsDevice> {
+    const [result] = await db.insert(kdsDevices).values(data).returning();
+    return result;
+  }
+
+  async updateKdsDevice(id: string, data: Partial<InsertKdsDevice>): Promise<KdsDevice | undefined> {
+    const [result] = await db.update(kdsDevices).set(data).where(eq(kdsDevices.id, id)).returning();
+    return result;
+  }
+
+  async deleteKdsDevice(id: string): Promise<boolean> {
+    const result = await db.delete(kdsDevices).where(eq(kdsDevices.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
   // Order Devices
   async getOrderDevices(propertyId?: string): Promise<OrderDevice[]> {
     if (propertyId) {
@@ -410,6 +536,147 @@ export class DatabaseStorage implements IStorage {
   async deleteOrderDevice(id: string): Promise<boolean> {
     const result = await db.delete(orderDevices).where(eq(orderDevices.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Order Device Linkages
+  async getOrderDevicePrinters(orderDeviceId: string): Promise<OrderDevicePrinter[]> {
+    return db.select().from(orderDevicePrinters).where(eq(orderDevicePrinters.orderDeviceId, orderDeviceId));
+  }
+
+  async linkPrinterToOrderDevice(data: InsertOrderDevicePrinter): Promise<OrderDevicePrinter> {
+    // Validate: Ensure printer and order device belong to same property
+    const orderDevice = await this.getOrderDevice(data.orderDeviceId);
+    const printer = await this.getPrinter(data.printerId);
+    
+    if (!orderDevice) {
+      throw new Error("Order device not found");
+    }
+    if (!printer) {
+      throw new Error("Printer not found");
+    }
+    if (orderDevice.propertyId !== printer.propertyId) {
+      throw new Error("Printer must belong to the same property as the order device");
+    }
+    
+    const [result] = await db.insert(orderDevicePrinters).values(data).returning();
+    return result;
+  }
+
+  async unlinkPrinterFromOrderDevice(id: string): Promise<boolean> {
+    const result = await db.delete(orderDevicePrinters).where(eq(orderDevicePrinters.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getOrderDeviceKdsList(orderDeviceId: string): Promise<OrderDeviceKds[]> {
+    return db.select().from(orderDeviceKds).where(eq(orderDeviceKds.orderDeviceId, orderDeviceId));
+  }
+
+  async linkKdsToOrderDevice(data: InsertOrderDeviceKds): Promise<OrderDeviceKds> {
+    // Validate: Ensure KDS device and order device belong to same property
+    const orderDevice = await this.getOrderDevice(data.orderDeviceId);
+    const kdsDevice = await this.getKdsDevice(data.kdsDeviceId);
+    
+    if (!orderDevice) {
+      throw new Error("Order device not found");
+    }
+    if (!kdsDevice) {
+      throw new Error("KDS device not found");
+    }
+    if (orderDevice.propertyId !== kdsDevice.propertyId) {
+      throw new Error("KDS device must belong to the same property as the order device");
+    }
+    
+    const [result] = await db.insert(orderDeviceKds).values(data).returning();
+    return result;
+  }
+
+  async unlinkKdsFromOrderDevice(id: string): Promise<boolean> {
+    const result = await db.delete(orderDeviceKds).where(eq(orderDeviceKds.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Print Class Routing
+  async getPrintClassRouting(printClassId: string, propertyId?: string, rvcId?: string): Promise<PrintClassRouting[]> {
+    const conditions = [eq(printClassRouting.printClassId, printClassId)];
+    if (propertyId) conditions.push(eq(printClassRouting.propertyId, propertyId));
+    if (rvcId) conditions.push(eq(printClassRouting.rvcId, rvcId));
+    return db.select().from(printClassRouting).where(and(...conditions));
+  }
+
+  async createPrintClassRouting(data: InsertPrintClassRouting): Promise<PrintClassRouting> {
+    const [result] = await db.insert(printClassRouting).values(data).returning();
+    return result;
+  }
+
+  async deletePrintClassRouting(id: string): Promise<boolean> {
+    const result = await db.delete(printClassRouting).where(eq(printClassRouting.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Routing Resolution: Menu Item → Print Class → Order Device → Physical Devices
+  async resolveDevicesForMenuItem(menuItemId: string, rvcId: string): Promise<{ printers: Printer[]; kdsDevices: KdsDevice[] }> {
+    // Get menu item and its print class
+    const menuItem = await this.getMenuItem(menuItemId);
+    if (!menuItem?.printClassId) {
+      return { printers: [], kdsDevices: [] };
+    }
+
+    // Get RVC to find property
+    const rvc = await this.getRvc(rvcId);
+    if (!rvc) {
+      return { printers: [], kdsDevices: [] };
+    }
+
+    // Find routing for this print class (check RVC-specific first, then property-level, then any)
+    let routing = await db.select().from(printClassRouting)
+      .where(and(
+        eq(printClassRouting.printClassId, menuItem.printClassId),
+        eq(printClassRouting.rvcId, rvcId)
+      ));
+
+    if (routing.length === 0) {
+      routing = await db.select().from(printClassRouting)
+        .where(and(
+          eq(printClassRouting.printClassId, menuItem.printClassId),
+          eq(printClassRouting.propertyId, rvc.propertyId)
+        ));
+    }
+
+    if (routing.length === 0) {
+      routing = await db.select().from(printClassRouting)
+        .where(eq(printClassRouting.printClassId, menuItem.printClassId));
+    }
+
+    if (routing.length === 0) {
+      return { printers: [], kdsDevices: [] };
+    }
+
+    // Get all order devices from routing
+    const orderDeviceIds = routing.map(r => r.orderDeviceId);
+    
+    // Get linked printers and KDS devices for each order device
+    const resolvedPrinters: Printer[] = [];
+    const resolvedKds: KdsDevice[] = [];
+
+    for (const odId of orderDeviceIds) {
+      const printerLinks = await this.getOrderDevicePrinters(odId);
+      for (const link of printerLinks) {
+        const printer = await this.getPrinter(link.printerId);
+        if (printer && printer.active) {
+          resolvedPrinters.push(printer);
+        }
+      }
+
+      const kdsLinks = await this.getOrderDeviceKdsList(odId);
+      for (const link of kdsLinks) {
+        const kds = await this.getKdsDevice(link.kdsDeviceId);
+        if (kds && kds.active) {
+          resolvedKds.push(kds);
+        }
+      }
+    }
+
+    return { printers: resolvedPrinters, kdsDevices: resolvedKds };
   }
 
   // Menu Items

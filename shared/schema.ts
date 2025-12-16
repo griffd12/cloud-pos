@@ -124,30 +124,142 @@ export const taxGroups = pgTable("tax_groups", {
   active: boolean("active").default(true),
 });
 
-// Print Classes (logical routing category)
+// Print Classes (logical routing category - decouples menu items from physical devices)
 export const printClasses = pgTable("print_classes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
   propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
   name: text("name").notNull(),
   code: text("code").notNull(),
+  active: boolean("active").default(true),
 });
 
-// Order Devices (routing targets)
+// ============================================================================
+// DEVICE CONFIGURATION (Simphony-style)
+// ============================================================================
+
+// Workstations (FOH Terminals)
+export const workstations = pgTable("workstations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull(),
+  deviceType: text("device_type").notNull().default("pos_terminal"), // pos_terminal, kiosk, manager_station
+  // Functional Behavior
+  defaultOrderType: text("default_order_type").default("dine_in"),
+  fastTransactionEnabled: boolean("fast_transaction_enabled").default(false),
+  requireBeginCheck: boolean("require_begin_check").default(true),
+  allowPickupCheck: boolean("allow_pickup_check").default(true),
+  allowReopenClosedChecks: boolean("allow_reopen_closed_checks").default(false),
+  allowOfflineOperation: boolean("allow_offline_operation").default(false),
+  // Employee Interaction
+  allowedRoleIds: text("allowed_role_ids").array(),
+  managerApprovalDevice: boolean("manager_approval_device").default(false),
+  clockInAllowed: boolean("clock_in_allowed").default(true),
+  // Routing & Printing
+  defaultReceiptPrinterId: varchar("default_receipt_printer_id"),
+  backupReceiptPrinterId: varchar("backup_receipt_printer_id"),
+  defaultOrderDeviceId: varchar("default_order_device_id"),
+  defaultKdsExpoId: varchar("default_kds_expo_id"),
+  // Network / System
+  ipAddress: text("ip_address"),
+  hostname: text("hostname"),
+  isOnline: boolean("is_online").default(false),
+  lastSeenAt: timestamp("last_seen_at"),
+  active: boolean("active").default(true),
+});
+
+// Printers (Physical print devices)
+export const printers = pgTable("printers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(),
+  printerType: text("printer_type").notNull().default("kitchen"), // receipt, kitchen, bar, prep, report
+  // Connection
+  connectionType: text("connection_type").notNull().default("network"), // network, usb, serial
+  ipAddress: text("ip_address"),
+  port: integer("port").default(9100),
+  driverProtocol: text("driver_protocol").default("escpos"), // escpos, starprnt, epson_tm
+  characterWidth: integer("character_width").default(42), // 42, 48, 56
+  // Behavior
+  autoCut: boolean("auto_cut").default(true),
+  printLogo: boolean("print_logo").default(false),
+  printOrderHeader: boolean("print_order_header").default(true),
+  printOrderFooter: boolean("print_order_footer").default(true),
+  printVoids: boolean("print_voids").default(true),
+  printReprints: boolean("print_reprints").default(true),
+  // Failover
+  backupPrinterId: varchar("backup_printer_id"),
+  retryAttempts: integer("retry_attempts").default(3),
+  failureHandlingMode: text("failure_handling_mode").default("alert_cashier"), // fail_silently, alert_cashier, reroute_to_backup
+  // Status
+  isOnline: boolean("is_online").default(false),
+  lastSeenAt: timestamp("last_seen_at"),
+  active: boolean("active").default(true),
+});
+
+// KDS Devices (Kitchen Display Screens)
+export const kdsDevices = pgTable("kds_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(),
+  stationType: text("station_type").notNull().default("hot"), // hot, cold, prep, expo, bar
+  // Display Rules
+  showDraftItems: boolean("show_draft_items").default(false),
+  showSentItemsOnly: boolean("show_sent_items_only").default(true),
+  groupBy: text("group_by").default("order"), // order, item, course
+  showTimers: boolean("show_timers").default(true),
+  autoSortBy: text("auto_sort_by").default("time"), // priority, time
+  // Interaction
+  allowBump: boolean("allow_bump").default(true),
+  allowRecall: boolean("allow_recall").default(true),
+  allowVoidDisplay: boolean("allow_void_display").default(true),
+  expoMode: boolean("expo_mode").default(false),
+  // Network
+  wsChannel: text("ws_channel"),
+  ipAddress: text("ip_address"),
+  isOnline: boolean("is_online").default(false),
+  lastSeenAt: timestamp("last_seen_at"),
+  active: boolean("active").default(true),
+});
+
+// Order Devices (Logical routing containers - links to printers and KDS)
 export const orderDevices = pgTable("order_devices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
   name: text("name").notNull(),
-  type: text("type").notNull(), // 'printer', 'kds'
-  ipAddress: text("ip_address"),
+  code: text("code").notNull(),
+  // Behavior
+  sendOn: text("send_on").default("send_button"), // send_button, dynamic
+  sendVoids: boolean("send_voids").default(true),
+  sendReprints: boolean("send_reprints").default(true),
   active: boolean("active").default(true),
 });
 
-// Print Class to Order Device routing
+// Order Device to Printer linkage
+export const orderDevicePrinters = pgTable("order_device_printers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderDeviceId: varchar("order_device_id").notNull().references(() => orderDevices.id),
+  printerId: varchar("printer_id").notNull().references(() => printers.id),
+  displayOrder: integer("display_order").default(0),
+});
+
+// Order Device to KDS linkage
+export const orderDeviceKds = pgTable("order_device_kds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderDeviceId: varchar("order_device_id").notNull().references(() => orderDevices.id),
+  kdsDeviceId: varchar("kds_device_id").notNull().references(() => kdsDevices.id),
+  displayOrder: integer("display_order").default(0),
+});
+
+// Print Class to Order Device routing (resolved per Property/RVC)
 export const printClassRouting = pgTable("print_class_routing", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   printClassId: varchar("print_class_id").notNull().references(() => printClasses.id),
   orderDeviceId: varchar("order_device_id").notNull().references(() => orderDevices.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
 });
 
 // Menu Items
@@ -372,7 +484,13 @@ export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: tru
 export const insertSluSchema = createInsertSchema(slus).omit({ id: true });
 export const insertTaxGroupSchema = createInsertSchema(taxGroups).omit({ id: true });
 export const insertPrintClassSchema = createInsertSchema(printClasses).omit({ id: true });
+export const insertWorkstationSchema = createInsertSchema(workstations).omit({ id: true });
+export const insertPrinterSchema = createInsertSchema(printers).omit({ id: true });
+export const insertKdsDeviceSchema = createInsertSchema(kdsDevices).omit({ id: true });
 export const insertOrderDeviceSchema = createInsertSchema(orderDevices).omit({ id: true });
+export const insertOrderDevicePrinterSchema = createInsertSchema(orderDevicePrinters).omit({ id: true });
+export const insertOrderDeviceKdsSchema = createInsertSchema(orderDeviceKds).omit({ id: true });
+export const insertPrintClassRoutingSchema = createInsertSchema(printClassRouting).omit({ id: true });
 export const insertMenuItemSchema = createInsertSchema(menuItems).omit({ id: true });
 export const insertModifierGroupSchema = createInsertSchema(modifierGroups).omit({ id: true });
 export const insertModifierSchema = createInsertSchema(modifiers).omit({ id: true });
@@ -404,8 +522,20 @@ export type TaxGroup = typeof taxGroups.$inferSelect;
 export type InsertTaxGroup = z.infer<typeof insertTaxGroupSchema>;
 export type PrintClass = typeof printClasses.$inferSelect;
 export type InsertPrintClass = z.infer<typeof insertPrintClassSchema>;
+export type Workstation = typeof workstations.$inferSelect;
+export type InsertWorkstation = z.infer<typeof insertWorkstationSchema>;
+export type Printer = typeof printers.$inferSelect;
+export type InsertPrinter = z.infer<typeof insertPrinterSchema>;
+export type KdsDevice = typeof kdsDevices.$inferSelect;
+export type InsertKdsDevice = z.infer<typeof insertKdsDeviceSchema>;
 export type OrderDevice = typeof orderDevices.$inferSelect;
 export type InsertOrderDevice = z.infer<typeof insertOrderDeviceSchema>;
+export type OrderDevicePrinter = typeof orderDevicePrinters.$inferSelect;
+export type InsertOrderDevicePrinter = z.infer<typeof insertOrderDevicePrinterSchema>;
+export type OrderDeviceKds = typeof orderDeviceKds.$inferSelect;
+export type InsertOrderDeviceKds = z.infer<typeof insertOrderDeviceKdsSchema>;
+export type PrintClassRouting = typeof printClassRouting.$inferSelect;
+export type InsertPrintClassRouting = z.infer<typeof insertPrintClassRoutingSchema>;
 export type MenuItem = typeof menuItems.$inferSelect;
 export type InsertMenuItem = z.infer<typeof insertMenuItemSchema>;
 export type ModifierGroup = typeof modifierGroups.$inferSelect;

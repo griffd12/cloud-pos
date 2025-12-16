@@ -1,0 +1,369 @@
+ORACLE SIMPHONY–STYLE DEVICE CONFIGURATION
+
+Workstations, Printers, KDS, and Order Routing
+
+1. DEVICE MODEL OVERVIEW (How Simphony Thinks)
+
+Simphony separates physical devices, logical roles, and routing rules.
+
+You must do the same.
+
+Core device layers
+
+Workstations – where orders are entered
+
+Printers – where output is printed
+
+KDS Devices – where orders are displayed
+
+Order Devices – logical routing containers
+
+Print Classes – logical grouping for menu routing
+
+❗ Key rule:
+Menu items do NOT point directly to printers.
+They point to Print Classes, which resolve to Order Devices, which contain printers/KDS.
+
+2. WORKSTATION CONFIGURATION (FOH TERMINALS)
+Purpose
+
+Defines how a POS terminal behaves, what it can do, and what it controls.
+
+Required Workstation Attributes (AI MUST CREATE)
+Identity
+
+Workstation ID (unique)
+
+Name (e.g., Front Counter 1)
+
+Property ID
+
+RVC ID
+
+Device Type:
+
+POS Terminal
+
+Self-Service Kiosk
+
+Manager Station
+
+Functional Behavior
+
+Default Order Type (Dine In / Take Out / etc.)
+
+Fast Transaction Enabled (Yes/No)
+
+Require Begin Check (Yes/No)
+
+Allow Pickup Check (Yes/No)
+
+Allow Reopen Closed Checks (Yes/No)
+
+Allow Offline Operation (Yes/No)
+
+Employee Interaction
+
+Allowed Roles (Cashier, Server, Manager, etc.)
+
+Manager Approval Device (Yes/No)
+
+Clock-In Allowed (Yes/No)
+
+Routing & Printing
+
+Default Receipt Printer
+
+Backup Receipt Printer
+
+Default Order Device (optional)
+
+Default KDS Expo (optional)
+
+Network / System
+
+IP Address or Hostname
+
+Online / Offline Status
+
+Last Seen Timestamp
+
+3. PRINTER CONFIGURATION (CRITICAL)
+Printer Types in Simphony
+
+Receipt Printers (guest checks)
+
+Order Printers (kitchen/bar/prep)
+
+Report Printers (manager reports – optional)
+
+Required Printer Attributes
+Identity
+
+Printer ID
+
+Name (e.g., Kitchen Printer – Hot Line)
+
+Property ID
+
+Printer Type:
+
+Receipt
+
+Kitchen
+
+Bar
+
+Prep
+
+Report
+
+Connection
+
+Connection Type:
+
+Network (IP)
+
+USB
+
+Serial (legacy)
+
+IP Address / Port (for network printers)
+
+Driver / Protocol:
+
+ESC/POS
+
+StarPRNT
+
+Epson TM
+
+Character Width (42 / 48 / 56)
+
+Behavior
+
+Auto Cut (Yes/No)
+
+Print Logo (Yes/No)
+
+Print Order Header/Footer
+
+Print Voids / Cancellations (Yes/No)
+
+Print Reprints (Yes/No)
+
+Failover
+
+Backup Printer ID
+
+Retry Attempts
+
+Failure Handling Mode:
+
+Fail silently
+
+Alert cashier
+
+Reroute to backup
+
+4. KDS DEVICE CONFIGURATION
+Purpose
+
+Displays live orders to production stations.
+
+Required KDS Attributes
+Identity
+
+KDS Device ID
+
+Name (e.g., Hot Line KDS 1)
+
+Property ID
+
+Station Type:
+
+Hot
+
+Cold
+
+Prep
+
+Expo
+
+Display Rules
+
+Show Draft (Unsent) Items (Yes/No)
+
+Show Sent Items Only (Yes/No)
+
+Group by Order / Item / Course
+
+Show Timers (Yes/No)
+
+Auto-Sort by Priority / Time
+
+Interaction
+
+Allow Bump
+
+Allow Recall
+
+Allow Void Display
+
+Expo Mode (Yes/No)
+
+Network
+
+WebSocket Channel / Station Subscription
+
+Last Seen Timestamp
+
+5. ORDER DEVICES (THE MOST MISSED CONCEPT)
+What an Order Device Is (Simphony Concept)
+
+An Order Device is a logical routing container that can contain:
+
+One or more printers
+
+One or more KDS devices
+
+Examples
+
+Hot Line
+
+Cold Prep
+
+Bar
+
+Expo
+
+Required Order Device Attributes
+Identity
+
+Order Device ID
+
+Name
+
+Property ID
+
+Linked Devices
+
+Printer IDs (0..N)
+
+KDS Device IDs (0..N)
+
+Behavior
+
+Send On:
+
+Send Button
+
+Dynamic (as rung)
+
+Send Voids (Yes/No)
+
+Send Reprints (Yes/No)
+
+6. PRINT CLASSES (MENU ROUTING LOGIC)
+Purpose
+
+Decouples menu items from physical devices.
+
+Required Print Class Attributes
+
+Print Class ID
+
+Code (stable identifier)
+
+Name (e.g., HOT_FOOD)
+
+Scope (Enterprise / Property / RVC)
+
+Active Flag
+
+Routing
+
+Print Class → Order Device (per Property / RVC)
+
+Menu Item Link
+
+Menu Item → Print Class
+
+🔑 This allows:
+
+Same menu item to route differently per property
+
+No menu edits when printers change
+
+7. COMPLETE ROUTING FLOW (EXACTLY LIKE SIMPHONY)
+Menu Item
+   ↓
+Print Class
+   ↓ (resolved per Property/RVC)
+Order Device
+   ↓
+Printer(s) + KDS Device(s)
+
+8. REQUIRED DATA AI MUST GENERATE
+
+When configuring devices, AI must generate:
+
+For Each Workstation
+
+Behavioral flags
+
+Default routing
+
+Role restrictions
+
+Network identity
+
+For Each Printer
+
+Connection details
+
+Type and behavior flags
+
+Backup routing
+
+For Each KDS
+
+Station type
+
+Display rules
+
+Interaction permissions
+
+For Each Order Device
+
+Linked printers
+
+Linked KDS screens
+
+Send behavior
+
+For Each Print Class
+
+Scope-aware routing rules
+
+9. WHY THIS MATTERS (REALITY CHECK)
+
+If AI:
+
+Routes menu items directly to printers ❌
+
+Doesn’t support Order Devices ❌
+
+Doesn’t support Print Classes ❌
+
+Doesn’t model Workstation behavior ❌
+
+Then you do not have a Simphony-class POS, and it will break the moment:
+
+You add a second kitchen
+
+You add Expo
+
+A printer dies
+
+A property routes items differently

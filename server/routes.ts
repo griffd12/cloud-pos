@@ -5,7 +5,9 @@ import { storage } from "./storage";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
   insertEmployeeSchema, insertSluSchema, insertTaxGroupSchema, insertPrintClassSchema,
-  insertOrderDeviceSchema, insertMenuItemSchema, insertModifierGroupSchema,
+  insertWorkstationSchema, insertPrinterSchema, insertKdsDeviceSchema,
+  insertOrderDeviceSchema, insertOrderDevicePrinterSchema, insertOrderDeviceKdsSchema,
+  insertPrintClassRoutingSchema, insertMenuItemSchema, insertModifierGroupSchema,
   insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
 } from "@shared/schema";
@@ -511,6 +513,202 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/order-devices/:id", async (req, res) => {
     await storage.deleteOrderDevice(req.params.id);
     res.status(204).send();
+  });
+
+  // Order Device Printers linkage
+  app.get("/api/order-devices/:id/printers", async (req, res) => {
+    const data = await storage.getOrderDevicePrinters(req.params.id);
+    res.json(data);
+  });
+
+  app.post("/api/order-devices/:id/printers", async (req, res) => {
+    try {
+      const validated = insertOrderDevicePrinterSchema.parse({
+        orderDeviceId: req.params.id,
+        ...req.body,
+      });
+      const data = await storage.linkPrinterToOrderDevice(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid data";
+      res.status(400).json({ message });
+    }
+  });
+
+  app.delete("/api/order-device-printers/:id", async (req, res) => {
+    await storage.unlinkPrinterFromOrderDevice(req.params.id);
+    res.status(204).send();
+  });
+
+  // Order Device KDS linkage
+  app.get("/api/order-devices/:id/kds", async (req, res) => {
+    const data = await storage.getOrderDeviceKdsList(req.params.id);
+    res.json(data);
+  });
+
+  app.post("/api/order-devices/:id/kds", async (req, res) => {
+    try {
+      const validated = insertOrderDeviceKdsSchema.parse({
+        orderDeviceId: req.params.id,
+        ...req.body,
+      });
+      const data = await storage.linkKdsToOrderDevice(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid data";
+      res.status(400).json({ message });
+    }
+  });
+
+  app.delete("/api/order-device-kds/:id", async (req, res) => {
+    await storage.unlinkKdsFromOrderDevice(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // WORKSTATION ROUTES
+  // ============================================================================
+
+  app.get("/api/workstations", async (req, res) => {
+    const propertyId = req.query.propertyId as string | undefined;
+    const data = await storage.getWorkstations(propertyId);
+    res.json(data);
+  });
+
+  app.get("/api/workstations/:id", async (req, res) => {
+    const data = await storage.getWorkstation(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.post("/api/workstations", async (req, res) => {
+    try {
+      const validated = insertWorkstationSchema.parse(req.body);
+      const data = await storage.createWorkstation(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/workstations/:id", async (req, res) => {
+    const data = await storage.updateWorkstation(req.params.id, req.body);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.delete("/api/workstations/:id", async (req, res) => {
+    await storage.deleteWorkstation(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // PRINTER ROUTES
+  // ============================================================================
+
+  app.get("/api/printers", async (req, res) => {
+    const propertyId = req.query.propertyId as string | undefined;
+    const data = await storage.getPrinters(propertyId);
+    res.json(data);
+  });
+
+  app.get("/api/printers/:id", async (req, res) => {
+    const data = await storage.getPrinter(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.post("/api/printers", async (req, res) => {
+    try {
+      const validated = insertPrinterSchema.parse(req.body);
+      const data = await storage.createPrinter(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/printers/:id", async (req, res) => {
+    const data = await storage.updatePrinter(req.params.id, req.body);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.delete("/api/printers/:id", async (req, res) => {
+    await storage.deletePrinter(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // KDS DEVICE ROUTES
+  // ============================================================================
+
+  app.get("/api/kds-devices", async (req, res) => {
+    const propertyId = req.query.propertyId as string | undefined;
+    const data = await storage.getKdsDevices(propertyId);
+    res.json(data);
+  });
+
+  app.get("/api/kds-devices/:id", async (req, res) => {
+    const data = await storage.getKdsDevice(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.post("/api/kds-devices", async (req, res) => {
+    try {
+      const validated = insertKdsDeviceSchema.parse(req.body);
+      const data = await storage.createKdsDevice(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/kds-devices/:id", async (req, res) => {
+    const data = await storage.updateKdsDevice(req.params.id, req.body);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.delete("/api/kds-devices/:id", async (req, res) => {
+    await storage.deleteKdsDevice(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // PRINT CLASS ROUTING
+  // ============================================================================
+
+  app.get("/api/print-class-routing", async (req, res) => {
+    const { printClassId, propertyId, rvcId } = req.query as { printClassId?: string; propertyId?: string; rvcId?: string };
+    if (!printClassId) {
+      return res.status(400).json({ message: "printClassId required" });
+    }
+    const data = await storage.getPrintClassRouting(printClassId, propertyId, rvcId);
+    res.json(data);
+  });
+
+  app.post("/api/print-class-routing", async (req, res) => {
+    try {
+      const validated = insertPrintClassRoutingSchema.parse(req.body);
+      const data = await storage.createPrintClassRouting(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/print-class-routing/:id", async (req, res) => {
+    await storage.deletePrintClassRouting(req.params.id);
+    res.status(204).send();
+  });
+
+  // Routing resolution endpoint
+  app.get("/api/resolve-devices/:menuItemId/:rvcId", async (req, res) => {
+    const { menuItemId, rvcId } = req.params;
+    const devices = await storage.resolveDevicesForMenuItem(menuItemId, rvcId);
+    res.json(devices);
   });
 
   // ============================================================================

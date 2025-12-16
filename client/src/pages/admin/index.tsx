@@ -34,6 +34,9 @@ import DiscountsPage from "./discounts";
 import ServiceChargesPage from "./service-charges";
 import PrintClassesPage from "./print-classes";
 import OrderDevicesPage from "./order-devices";
+import WorkstationsPage from "./workstations";
+import PrintersPage from "./printers";
+import KdsDevicesPage from "./kds-devices";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -245,6 +248,9 @@ export default function AdminLayout() {
               <Route path="/admin/service-charges" component={ServiceChargesPage} />
               <Route path="/admin/print-classes" component={PrintClassesPage} />
               <Route path="/admin/order-devices" component={OrderDevicesPage} />
+              <Route path="/admin/workstations" component={WorkstationsPage} />
+              <Route path="/admin/printers" component={PrintersPage} />
+              <Route path="/admin/kds-devices" component={KdsDevicesPage} />
             </Switch>
           </main>
         </div>
