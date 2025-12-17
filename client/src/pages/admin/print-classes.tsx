@@ -230,7 +230,7 @@ function PrintClassFormDialog({
 }: PrintClassFormDialogProps) {
   const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const prevOpenRef = useRef(false);
+  const initializedForRef = useRef<string | null>(null);
 
   const form = useForm<InsertPrintClass>({
     resolver: zodResolver(insertPrintClassSchema),
@@ -241,34 +241,42 @@ function PrintClassFormDialog({
     },
   });
 
+  const dialogKey = open ? (editingItem?.id || "new") : null;
+  
   useEffect(() => {
-    const wasOpen = prevOpenRef.current;
-    prevOpenRef.current = open;
-    
-    if (open && !wasOpen) {
-      if (editingItem) {
-        form.reset({
-          name: editingItem.name,
-          code: editingItem.code,
-          enterpriseId: editingItem.enterpriseId,
-          propertyId: editingItem.propertyId,
-          rvcId: editingItem.rvcId,
-          active: editingItem.active ?? true,
-        });
-        const linkedOrderDeviceIds = existingRoutings
-          .filter(r => r.printClassId === editingItem.id)
-          .map(r => r.orderDeviceId);
-        setSelectedOrderDevices(linkedOrderDeviceIds);
-      } else {
-        form.reset({
-          name: "",
-          code: "",
-          active: true,
-        });
-        setSelectedOrderDevices([]);
-      }
+    if (!open) {
+      initializedForRef.current = null;
+      return;
     }
-  }, [open, editingItem, existingRoutings]);
+    
+    if (initializedForRef.current === dialogKey) {
+      return;
+    }
+    
+    initializedForRef.current = dialogKey;
+    
+    if (editingItem) {
+      form.reset({
+        name: editingItem.name,
+        code: editingItem.code,
+        enterpriseId: editingItem.enterpriseId,
+        propertyId: editingItem.propertyId,
+        rvcId: editingItem.rvcId,
+        active: editingItem.active ?? true,
+      });
+      const linkedOrderDeviceIds = existingRoutings
+        .filter(r => r.printClassId === editingItem.id)
+        .map(r => r.orderDeviceId);
+      setSelectedOrderDevices(linkedOrderDeviceIds);
+    } else {
+      form.reset({
+        name: "",
+        code: "",
+        active: true,
+      });
+      setSelectedOrderDevices([]);
+    }
+  }, [open, dialogKey, editingItem, existingRoutings, form]);
 
   const toggleOrderDevice = (orderDeviceId: string) => {
     setSelectedOrderDevices(prev => 
