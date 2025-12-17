@@ -157,9 +157,16 @@ export const workstations = pgTable("workstations", {
   allowedRoleIds: text("allowed_role_ids").array(),
   managerApprovalDevice: boolean("manager_approval_device").default(false),
   clockInAllowed: boolean("clock_in_allowed").default(true),
-  // Routing & Printing
+  // Routing & Printing - Receipt Printing
   defaultReceiptPrinterId: varchar("default_receipt_printer_id"),
   backupReceiptPrinterId: varchar("backup_receipt_printer_id"),
+  // Routing & Printing - Report Printing
+  reportPrinterId: varchar("report_printer_id"),
+  backupReportPrinterId: varchar("backup_report_printer_id"),
+  // Routing & Printing - Void Printing
+  voidPrinterId: varchar("void_printer_id"),
+  backupVoidPrinterId: varchar("backup_void_printer_id"),
+  // Order Routing
   defaultOrderDeviceId: varchar("default_order_device_id"),
   defaultKdsExpoId: varchar("default_kds_expo_id"),
   // Network / System
@@ -180,7 +187,8 @@ export const printers = pgTable("printers", {
   connectionType: text("connection_type").notNull().default("network"), // network, usb, serial
   ipAddress: text("ip_address"),
   port: integer("port").default(9100),
-  driverProtocol: text("driver_protocol").default("escpos"), // escpos, starprnt, epson_tm
+  driverProtocol: text("driver_protocol").default("epson"), // epson, star
+  model: text("model"), // e.g., TM-T88V, TM-T20III, TSP143IV, mC-Print3
   characterWidth: integer("character_width").default(42), // 42, 48, 56
   // Behavior
   autoCut: boolean("auto_cut").default(true),
@@ -190,9 +198,8 @@ export const printers = pgTable("printers", {
   printVoids: boolean("print_voids").default(true),
   printReprints: boolean("print_reprints").default(true),
   // Failover
-  backupPrinterId: varchar("backup_printer_id"),
   retryAttempts: integer("retry_attempts").default(3),
-  failureHandlingMode: text("failure_handling_mode").default("alert_cashier"), // fail_silently, alert_cashier, reroute_to_backup
+  failureHandlingMode: text("failure_handling_mode").default("alert_cashier"), // fail_silently, alert_cashier
   // Status
   isOnline: boolean("is_online").default(false),
   lastSeenAt: timestamp("last_seen_at"),
