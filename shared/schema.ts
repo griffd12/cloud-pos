@@ -238,6 +238,8 @@ export const orderDevices = pgTable("order_devices", {
   propertyId: varchar("property_id").notNull().references(() => properties.id),
   name: text("name").notNull(),
   code: text("code").notNull(),
+  // Controller KDS Device - the KDS that controls this order device's behavior
+  kdsDeviceId: varchar("kds_device_id").references(() => kdsDevices.id),
   // Behavior
   sendOn: text("send_on").default("send_button"), // send_button, dynamic
   sendVoids: boolean("send_voids").default(true),

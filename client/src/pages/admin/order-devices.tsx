@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertOrderDeviceSchema, type OrderDevice, type InsertOrderDevice, type Property } from "@shared/schema";
+import { insertOrderDeviceSchema, type OrderDevice, type InsertOrderDevice, type Property, type KdsDevice } from "@shared/schema";
 
 export default function OrderDevicesPage() {
   const { toast } = useToast();
@@ -20,19 +20,45 @@ export default function OrderDevicesPage() {
     queryKey: ["/api/properties"],
   });
 
+  const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
+    queryKey: ["/api/kds-devices"],
+  });
+
   const columns: Column<OrderDevice>[] = [
     { key: "name", header: "Name", sortable: true },
-    {
-      key: "type",
-      header: "Type",
-      render: (value) => <Badge variant="outline">{value === "kds" ? "KDS" : "Printer"}</Badge>,
-    },
+    { key: "code", header: "Code" },
     {
       key: "propertyId",
       header: "Property",
       render: (value) => properties.find((p) => p.id === value)?.name || "-",
     },
-    { key: "ipAddress", header: "IP Address" },
+    {
+      key: "kdsDeviceId",
+      header: "Controller KDS",
+      render: (value) => {
+        const kds = kdsDevices.find((k) => k.id === value);
+        if (!kds) return <span className="text-muted-foreground">None</span>;
+        return (
+          <Badge variant="outline">
+            {kds.name} ({kds.stationType})
+          </Badge>
+        );
+      },
+    },
+    {
+      key: "sendOn",
+      header: "Send On",
+      render: (value) => (
+        <Badge variant="secondary">
+          {value === "send_button" ? "Send Button" : "Dynamic"}
+        </Badge>
+      ),
+    },
+    {
+      key: "sendVoids",
+      header: "Send Voids",
+      render: (value) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
+    },
     {
       key: "active",
       header: "Status",
@@ -40,18 +66,23 @@ export default function OrderDevicesPage() {
     },
   ];
 
-  const formFields: FormFieldConfig[] = [
-    { name: "name", label: "Device Name", type: "text", placeholder: "e.g., Hot Line KDS", required: true },
-    {
-      name: "type",
-      label: "Type",
-      type: "select",
-      options: [
-        { value: "kds", label: "KDS (Kitchen Display)" },
-        { value: "printer", label: "Printer" },
-      ],
-      required: true,
-    },
+  const kdsOptions = useMemo(() => {
+    const getPropertyName = (propertyId: string) => {
+      const prop = properties.find(p => p.id === propertyId);
+      return prop?.name || "Unknown";
+    };
+    return [
+      { value: "__none__", label: "None (No Controller)" },
+      ...kdsDevices.map((k) => ({ 
+        value: k.id, 
+        label: `${k.name} (${k.stationType}) - ${getPropertyName(k.propertyId)}` 
+      })),
+    ];
+  }, [kdsDevices, properties]);
+
+  const formFields: FormFieldConfig[] = useMemo(() => [
+    { name: "name", label: "Device Name", type: "text", placeholder: "e.g., Hot Line Expo", required: true },
+    { name: "code", label: "Code", type: "text", placeholder: "e.g., HOTLINE", required: true, description: "Short code for routing" },
     {
       name: "propertyId",
       label: "Property",
@@ -59,9 +90,28 @@ export default function OrderDevicesPage() {
       options: properties.map((p) => ({ value: p.id, label: p.name })),
       required: true,
     },
-    { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
+    {
+      name: "kdsDeviceId",
+      label: "Controller KDS Device",
+      type: "select",
+      options: kdsOptions,
+      description: "The KDS device that controls this order device's display and behavior settings",
+    },
+    {
+      name: "sendOn",
+      label: "Send On",
+      type: "select",
+      options: [
+        { value: "send_button", label: "Send Button - Manual send" },
+        { value: "dynamic", label: "Dynamic - Auto-send when ready" },
+      ],
+      defaultValue: "send_button",
+      description: "When should orders be sent to this device",
+    },
+    { name: "sendVoids", label: "Send Voids", type: "switch", defaultValue: true, description: "Send void notifications to this device" },
+    { name: "sendReprints", label: "Send Reprints", type: "switch", defaultValue: true, description: "Allow reprints on this device" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ];
+  ], [properties, kdsOptions]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertOrderDevice) => {
@@ -107,12 +157,29 @@ export default function OrderDevicesPage() {
     },
   });
 
+  const cleanKdsDeviceId = (value: string | null | undefined): string | null => {
+    if (!value || value === "__none__") return null;
+    return value;
+  };
+
   const handleSubmit = (data: InsertOrderDevice) => {
+    const cleanedData = {
+      ...data,
+      kdsDeviceId: cleanKdsDeviceId(data.kdsDeviceId),
+    };
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, ...cleanedData });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(cleanedData);
     }
+  };
+
+  const getInitialData = (item: OrderDevice | null) => {
+    if (!item) return undefined;
+    return {
+      ...item,
+      kdsDeviceId: item.kdsDeviceId || "__none__",
+    };
   };
 
   return (
@@ -145,7 +212,7 @@ export default function OrderDevicesPage() {
         schema={insertOrderDeviceSchema}
         fields={formFields}
         title={editingItem ? "Edit Order Device" : "Add Order Device"}
-        initialData={editingItem || undefined}
+        initialData={getInitialData(editingItem)}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
