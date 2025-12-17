@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -155,6 +155,7 @@ export default function PrintClassesPage() {
       />
 
       <PrintClassFormDialog
+        key={editingItem?.id || "new"}
         open={formOpen}
         onClose={() => {
           setFormOpen(false);
@@ -228,55 +229,28 @@ function PrintClassFormDialog({
   onSubmit, 
   isLoading 
 }: PrintClassFormDialogProps) {
-  const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>([]);
+  const initialOrderDevices = editingItem 
+    ? existingRoutings.filter(r => r.printClassId === editingItem.id).map(r => r.orderDeviceId)
+    : [];
+    
+  const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>(initialOrderDevices);
   const [isSaving, setIsSaving] = useState(false);
-  const initializedForRef = useRef<string | null>(null);
 
   const form = useForm<InsertPrintClass>({
     resolver: zodResolver(insertPrintClassSchema),
-    defaultValues: {
+    defaultValues: editingItem ? {
+      name: editingItem.name,
+      code: editingItem.code,
+      enterpriseId: editingItem.enterpriseId,
+      propertyId: editingItem.propertyId,
+      rvcId: editingItem.rvcId,
+      active: editingItem.active ?? true,
+    } : {
       name: "",
       code: "",
       active: true,
     },
   });
-
-  const dialogKey = open ? (editingItem?.id || "new") : null;
-  
-  useEffect(() => {
-    if (!open) {
-      initializedForRef.current = null;
-      return;
-    }
-    
-    if (initializedForRef.current === dialogKey) {
-      return;
-    }
-    
-    initializedForRef.current = dialogKey;
-    
-    if (editingItem) {
-      form.reset({
-        name: editingItem.name,
-        code: editingItem.code,
-        enterpriseId: editingItem.enterpriseId,
-        propertyId: editingItem.propertyId,
-        rvcId: editingItem.rvcId,
-        active: editingItem.active ?? true,
-      });
-      const linkedOrderDeviceIds = existingRoutings
-        .filter(r => r.printClassId === editingItem.id)
-        .map(r => r.orderDeviceId);
-      setSelectedOrderDevices(linkedOrderDeviceIds);
-    } else {
-      form.reset({
-        name: "",
-        code: "",
-        active: true,
-      });
-      setSelectedOrderDevices([]);
-    }
-  }, [open, dialogKey, editingItem, existingRoutings, form]);
 
   const toggleOrderDevice = (orderDeviceId: string) => {
     setSelectedOrderDevices(prev => 
