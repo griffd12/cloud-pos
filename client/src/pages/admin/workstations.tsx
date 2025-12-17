@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc } from "@shared/schema";
+import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
@@ -22,6 +22,10 @@ export default function WorkstationsPage() {
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
+  });
+
+  const { data: printers = [] } = useQuery<Printer[]>({
+    queryKey: ["/api/printers"],
   });
 
   const columns: Column<Workstation>[] = [
@@ -47,6 +51,11 @@ export default function WorkstationsPage() {
     },
     { key: "ipAddress", header: "IP Address" },
     {
+      key: "defaultReceiptPrinterId",
+      header: "Receipt Printer",
+      render: (value) => printers.find((p) => p.id === value)?.name || "-",
+    },
+    {
       key: "fastTransactionEnabled",
       header: "Fast Transaction",
       render: (value) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
@@ -63,7 +72,21 @@ export default function WorkstationsPage() {
     },
   ];
 
-  const formFields: FormFieldConfig[] = [
+  const printerOptions = useMemo(() => {
+    const getPropertyName = (propertyId: string) => {
+      const prop = properties.find(p => p.id === propertyId);
+      return prop?.name || "Unknown";
+    };
+    return [
+      { value: "__none__", label: "None" },
+      ...printers.map((p) => ({ 
+        value: p.id, 
+        label: `${p.name} (${p.printerType}) - ${getPropertyName(p.propertyId)}` 
+      })),
+    ];
+  }, [printers, properties]);
+
+  const formFields: FormFieldConfig[] = useMemo(() => [
     { name: "name", label: "Workstation Name", type: "text", placeholder: "e.g., Front Counter 1", required: true },
     {
       name: "deviceType",
@@ -108,10 +131,56 @@ export default function WorkstationsPage() {
     { name: "allowOfflineOperation", label: "Allow Offline Operation", type: "switch", defaultValue: false },
     { name: "managerApprovalDevice", label: "Manager Approval Device", type: "switch", defaultValue: false },
     { name: "clockInAllowed", label: "Clock-In Allowed", type: "switch", defaultValue: true },
+    // Receipt Printer Section
+    {
+      name: "defaultReceiptPrinterId",
+      label: "Receipt Printer",
+      type: "select",
+      options: printerOptions,
+      description: "Primary printer for guest checks",
+    },
+    {
+      name: "backupReceiptPrinterId",
+      label: "Backup Receipt Printer",
+      type: "select",
+      options: printerOptions,
+      description: "Fallback if primary is offline",
+    },
+    // Report Printer Section
+    {
+      name: "reportPrinterId",
+      label: "Report Printer",
+      type: "select",
+      options: printerOptions,
+      description: "Printer for reports and summaries",
+    },
+    {
+      name: "backupReportPrinterId",
+      label: "Backup Report Printer",
+      type: "select",
+      options: printerOptions,
+      description: "Fallback for report printing",
+    },
+    // Void Printer Section
+    {
+      name: "voidPrinterId",
+      label: "Void Printer",
+      type: "select",
+      options: printerOptions,
+      description: "Printer for void receipts",
+    },
+    {
+      name: "backupVoidPrinterId",
+      label: "Backup Void Printer",
+      type: "select",
+      options: printerOptions,
+      description: "Fallback for void printing",
+    },
+    // Network Settings
     { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
     { name: "hostname", label: "Hostname", type: "text", placeholder: "e.g., pos-terminal-1" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ];
+  ], [properties, rvcs, printerOptions]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertWorkstation) => {
@@ -157,16 +226,41 @@ export default function WorkstationsPage() {
     },
   });
 
+  const cleanPrinterId = (value: string | null | undefined): string | null => {
+    if (!value || value === "__none__") return null;
+    return value;
+  };
+
   const handleSubmit = (data: InsertWorkstation) => {
     const cleanedData = {
       ...data,
-      rvcId: data.rvcId === "__none__" ? null : (data.rvcId || null),
+      rvcId: cleanPrinterId(data.rvcId),
+      defaultReceiptPrinterId: cleanPrinterId(data.defaultReceiptPrinterId),
+      backupReceiptPrinterId: cleanPrinterId(data.backupReceiptPrinterId),
+      reportPrinterId: cleanPrinterId(data.reportPrinterId),
+      backupReportPrinterId: cleanPrinterId(data.backupReportPrinterId),
+      voidPrinterId: cleanPrinterId(data.voidPrinterId),
+      backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
     };
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...cleanedData } as Workstation);
     } else {
       createMutation.mutate(cleanedData);
     }
+  };
+
+  const getInitialData = (item: Workstation | null) => {
+    if (!item) return undefined;
+    return {
+      ...item,
+      rvcId: item.rvcId || "__none__",
+      defaultReceiptPrinterId: item.defaultReceiptPrinterId || "__none__",
+      backupReceiptPrinterId: item.backupReceiptPrinterId || "__none__",
+      reportPrinterId: item.reportPrinterId || "__none__",
+      backupReportPrinterId: item.backupReportPrinterId || "__none__",
+      voidPrinterId: item.voidPrinterId || "__none__",
+      backupVoidPrinterId: item.backupVoidPrinterId || "__none__",
+    };
   };
 
   return (
@@ -199,10 +293,7 @@ export default function WorkstationsPage() {
         schema={insertWorkstationSchema}
         fields={formFields}
         title={editingItem ? "Edit Workstation" : "Add Workstation"}
-        initialData={editingItem ? {
-          ...editingItem,
-          rvcId: editingItem.rvcId || "__none__",
-        } : undefined}
+        initialData={getInitialData(editingItem)}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
