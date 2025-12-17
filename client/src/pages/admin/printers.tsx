@@ -206,7 +206,8 @@ export default function PrintersPage() {
       defaultValue: "network",
     },
     { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
-    { name: "port", label: "Port", type: "text", placeholder: "9100", defaultValue: "9100" },
+    { name: "subnetMask", label: "Subnet Mask", type: "text", placeholder: "255.255.255.0", defaultValue: "255.255.255.0" },
+    { name: "port", label: "Port", type: "number", placeholder: "9100", defaultValue: 9100 },
     {
       name: "driverProtocol",
       label: "Printer Brand",
@@ -229,9 +230,9 @@ export default function PrintersPage() {
       label: "Character Width",
       type: "select",
       options: [
-        { value: "42", label: "42 characters" },
-        { value: "48", label: "48 characters" },
-        { value: "56", label: "56 characters" },
+        { value: "42", label: "42 characters (standard)" },
+        { value: "48", label: "48 characters (wide)" },
+        { value: "56", label: "56 characters (extra wide)" },
       ],
       defaultValue: "42",
     },
@@ -241,7 +242,7 @@ export default function PrintersPage() {
     { name: "printOrderFooter", label: "Print Order Footer", type: "switch", defaultValue: true },
     { name: "printVoids", label: "Print Voids/Cancellations", type: "switch", defaultValue: true },
     { name: "printReprints", label: "Print Reprints", type: "switch", defaultValue: true },
-    { name: "retryAttempts", label: "Retry Attempts", type: "text", placeholder: "3", defaultValue: "3" },
+    { name: "retryAttempts", label: "Retry Attempts", type: "number", placeholder: "3", defaultValue: 3 },
     {
       name: "failureHandlingMode",
       label: "Failure Handling",

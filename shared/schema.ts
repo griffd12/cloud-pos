@@ -186,6 +186,7 @@ export const printers = pgTable("printers", {
   // Connection
   connectionType: text("connection_type").notNull().default("network"), // network, usb, serial
   ipAddress: text("ip_address"),
+  subnetMask: text("subnet_mask").default("255.255.255.0"),
   port: integer("port").default(9100),
   driverProtocol: text("driver_protocol").default("epson"), // epson, star
   model: text("model"), // e.g., TM-T88V, TM-T20III, TSP143IV, mC-Print3
