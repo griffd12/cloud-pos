@@ -1,113 +1,89 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column } from "@/components/admin/data-table";
-import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-const PRINTER_MODELS = [
-  // === EPSON THERMAL RECEIPT ===
-  { value: "TM-T88VII", label: "[Epson Thermal] TM-T88VII - Latest High-Speed" },
-  { value: "TM-T88VI", label: "[Epson Thermal] TM-T88VI - High-Speed" },
-  { value: "TM-T88V", label: "[Epson Thermal] TM-T88V - Industry Standard" },
-  { value: "TM-T88IV", label: "[Epson Thermal] TM-T88IV - Legacy" },
-  { value: "TM-T88III", label: "[Epson Thermal] TM-T88III - Legacy" },
-  { value: "TM-T88II", label: "[Epson Thermal] TM-T88II - Classic" },
-  { value: "TM-T20III", label: "[Epson Thermal] TM-T20III - Budget" },
-  { value: "TM-T20II", label: "[Epson Thermal] TM-T20II - Cost-Effective" },
-  { value: "TM-T70II", label: "[Epson Thermal] TM-T70II - Under-Counter" },
-  { value: "TM-T82III", label: "[Epson Thermal] TM-T82III - Compact" },
-  // === EPSON mPOS ===
-  { value: "TM-m30III", label: "[Epson mPOS] TM-m30III - Modern" },
-  { value: "TM-m30II", label: "[Epson mPOS] TM-m30II - Compact" },
-  { value: "TM-m30II-H", label: "[Epson mPOS] TM-m30II-H - Hub" },
-  { value: "TM-m50II", label: "[Epson mPOS] TM-m50II - Fast" },
-  { value: "TM-m50II-H", label: "[Epson mPOS] TM-m50II-H - High-End" },
-  { value: "TM-m30", label: "[Epson mPOS] TM-m30 - Standard" },
-  { value: "TM-m10", label: "[Epson mPOS] TM-m10 - Ultra-Compact" },
-  // === EPSON IMPACT/KITCHEN ===
-  { value: "TM-U220A", label: "[Epson Impact] TM-U220A - Auto-Cutter" },
-  { value: "TM-U220B", label: "[Epson Impact] TM-U220B - Standard" },
-  { value: "TM-U220C", label: "[Epson Impact] TM-U220C - Compact" },
-  { value: "TM-U220D", label: "[Epson Impact] TM-U220D - No-Cutter" },
-  { value: "TM-U220PA", label: "[Epson Impact] TM-U220PA - Parallel" },
-  { value: "TM-U220PB", label: "[Epson Impact] TM-U220PB - Parallel" },
-  { value: "TM-U220PD", label: "[Epson Impact] TM-U220PD - Parallel" },
-  { value: "TM-U230", label: "[Epson Impact] TM-U230 - Kitchen" },
-  { value: "TM-U295", label: "[Epson Impact] TM-U295 - Slip" },
-  { value: "TM-U675", label: "[Epson Impact] TM-U675 - Multifunction" },
-  // === EPSON MOBILE ===
-  { value: "TM-P20II", label: "[Epson Mobile] TM-P20II - 2-inch" },
-  { value: "TM-P20", label: "[Epson Mobile] TM-P20 - 2-inch Legacy" },
-  { value: "TM-P60II", label: "[Epson Mobile] TM-P60II - Rugged" },
-  { value: "TM-P60", label: "[Epson Mobile] TM-P60 - Rugged Legacy" },
-  { value: "TM-P80II", label: "[Epson Mobile] TM-P80II - 3-inch" },
-  { value: "TM-P80", label: "[Epson Mobile] TM-P80 - 3-inch Legacy" },
-  // === EPSON HYBRID/LABEL ===
-  { value: "TM-H6000V", label: "[Epson Hybrid] TM-H6000V - Multifunction" },
-  { value: "TM-H6000IV", label: "[Epson Hybrid] TM-H6000IV - Multifunction" },
-  { value: "TM-L90II", label: "[Epson Label] TM-L90II - Label" },
-  { value: "TM-L90", label: "[Epson Label] TM-L90 - Label Legacy" },
-  { value: "TM-L100", label: "[Epson Label] TM-L100 - Liner-Free" },
-  // === STAR THERMAL RECEIPT ===
-  { value: "mC-Print3", label: "[Star Thermal] mC-Print3 - Premium 3-inch" },
-  { value: "mC-Print31Ci", label: "[Star Thermal] mC-Print31Ci - LAN+USB" },
-  { value: "mC-Print31CBi", label: "[Star Thermal] mC-Print31CBi - LAN+USB+BT" },
-  { value: "mC-Print31WCi", label: "[Star Thermal] mC-Print31WCi - WiFi+USB" },
-  { value: "mC-Print31WCBi", label: "[Star Thermal] mC-Print31WCBi - WiFi+USB+BT" },
-  { value: "mC-Print2", label: "[Star Thermal] mC-Print2 - Compact 2-inch" },
-  { value: "TSP143IV", label: "[Star Thermal] TSP143IV - Best-Selling" },
-  { value: "TSP143IV-SK", label: "[Star Thermal] TSP143IV SK - Linerless" },
-  { value: "TSP143IIIU", label: "[Star Thermal] TSP143IIIU - USB" },
-  { value: "TSP143IIIBI", label: "[Star Thermal] TSP143IIIBI - Bluetooth" },
-  { value: "TSP143IIILAN", label: "[Star Thermal] TSP143IIILAN - Ethernet" },
-  { value: "TSP143IIIWLAN", label: "[Star Thermal] TSP143IIIWLAN - WiFi" },
-  { value: "TSP143IIU", label: "[Star Thermal] TSP143IIU - USB Legacy" },
-  { value: "TSP654II", label: "[Star Thermal] TSP654II - 4-inch Wide" },
-  { value: "TSP650II", label: "[Star Thermal] TSP650II - Wide Format" },
-  { value: "TSP743II", label: "[Star Thermal] TSP743II - 3-inch" },
-  { value: "TSP613", label: "[Star Thermal] TSP613 - Legacy" },
-  // === STAR IMPACT/KITCHEN ===
-  { value: "SP700", label: "[Star Impact] SP700 - Kitchen Standard" },
-  { value: "SP712", label: "[Star Impact] SP712 - Ethernet" },
-  { value: "SP717", label: "[Star Impact] SP717 - WiFi" },
-  { value: "SP742", label: "[Star Impact] SP742 - Serial" },
-  { value: "SP742ML", label: "[Star Impact] SP742ML - Multi-Interface" },
-  { value: "SP500", label: "[Star Impact] SP500 - Fast" },
-  { value: "SP512", label: "[Star Impact] SP512 - Fast Ethernet" },
-  { value: "SP300", label: "[Star Impact] SP300 - Versatile" },
-  { value: "SP200", label: "[Star Impact] SP200 - Budget" },
-  { value: "DP8340", label: "[Star Impact] DP8340 - Two-Color Wide" },
-  // === STAR MOBILE ===
-  { value: "SM-T300i", label: "[Star Mobile] SM-T300i - 3-inch" },
-  { value: "SM-T300", label: "[Star Mobile] SM-T300 - 3-inch Legacy" },
-  { value: "SM-L200", label: "[Star Mobile] SM-L200 - Label" },
-  { value: "SM-L300", label: "[Star Mobile] SM-L300 - Label 3-inch" },
-  { value: "SM-S230i", label: "[Star Mobile] SM-S230i - 2-inch" },
-  { value: "SM-S220i", label: "[Star Mobile] SM-S220i - 2-inch Legacy" },
-  // === STAR ALL-IN-ONE ===
-  { value: "mPOP", label: "[Star All-in-One] mPOP - Printer+Drawer" },
-  { value: "mC-Label3", label: "[Star Label] mC-Label3 - Multi-Function" },
-  // === ADDITIONAL EPSON MODELS ===
-  { value: "TM-T82X", label: "[Epson Thermal] TM-T82X - Compact" },
-  { value: "TM-T81III", label: "[Epson Thermal] TM-T81III - Entry-Level" },
-  { value: "TM-T82IIIL", label: "[Epson Thermal] TM-T82IIIL - Liner-Free" },
-  { value: "TM-U950", label: "[Epson Impact] TM-U950 - Heavy-Duty" },
-  { value: "TM-U590", label: "[Epson Impact] TM-U590 - Wide-Format" },
-  { value: "TM-U325", label: "[Epson Impact] TM-U325 - Validation" },
-  { value: "TM-S9000MJ", label: "[Epson Check] TM-S9000MJ - Check Scanner" },
-  { value: "TM-S2000MJ", label: "[Epson Check] TM-S2000MJ - Check Scanner" },
-  // === ADDITIONAL STAR MODELS ===
-  { value: "TSP847II", label: "[Star Thermal] TSP847II - 4-inch Wide" },
-  { value: "TSP828L", label: "[Star Thermal] TSP828L - Label" },
-  { value: "BSC10", label: "[Star Thermal] BSC10 - Kiosk" },
-  { value: "TSP100ECO", label: "[Star Thermal] TSP100ECO - Eco Series" },
-  { value: "SP2000", label: "[Star Impact] SP2000 - Entry-Level" },
-  { value: "HSP7000", label: "[Star Hybrid] HSP7000 - Multifunction" },
-  // === CUSTOM ===
-  { value: "Custom", label: "[Other] Custom / Unlisted Model" },
+const EPSON_MODELS = [
+  { value: "TM-T88VII", label: "TM-T88VII - Latest High-Speed" },
+  { value: "TM-T88VI", label: "TM-T88VI - High-Speed" },
+  { value: "TM-T88V", label: "TM-T88V - Industry Standard" },
+  { value: "TM-T88IV", label: "TM-T88IV - Legacy" },
+  { value: "TM-T20III", label: "TM-T20III - Budget" },
+  { value: "TM-T20II", label: "TM-T20II - Cost-Effective" },
+  { value: "TM-T70II", label: "TM-T70II - Under-Counter" },
+  { value: "TM-T82III", label: "TM-T82III - Compact" },
+  { value: "TM-m30III", label: "TM-m30III - mPOS Modern" },
+  { value: "TM-m30II", label: "TM-m30II - mPOS Compact" },
+  { value: "TM-m50II", label: "TM-m50II - mPOS Fast" },
+  { value: "TM-U220A", label: "TM-U220A - Impact Auto-Cutter" },
+  { value: "TM-U220B", label: "TM-U220B - Impact Standard" },
+  { value: "TM-U220D", label: "TM-U220D - Impact No-Cutter" },
+  { value: "TM-U230", label: "TM-U230 - Impact Kitchen" },
+  { value: "TM-P20II", label: "TM-P20II - Mobile 2-inch" },
+  { value: "TM-P80II", label: "TM-P80II - Mobile 3-inch" },
+  { value: "TM-H6000V", label: "TM-H6000V - Hybrid" },
+  { value: "TM-L90II", label: "TM-L90II - Label" },
+  { value: "Custom-Epson", label: "Other Epson Model" },
+];
+
+const STAR_MODELS = [
+  { value: "mC-Print3", label: "mC-Print3 - Premium 3-inch" },
+  { value: "mC-Print31Ci", label: "mC-Print31Ci - LAN+USB" },
+  { value: "mC-Print31CBi", label: "mC-Print31CBi - LAN+USB+BT" },
+  { value: "mC-Print2", label: "mC-Print2 - Compact 2-inch" },
+  { value: "TSP143IV", label: "TSP143IV - Best-Selling" },
+  { value: "TSP143IIIU", label: "TSP143IIIU - USB" },
+  { value: "TSP143IIIBI", label: "TSP143IIIBI - Bluetooth" },
+  { value: "TSP143IIILAN", label: "TSP143IIILAN - Ethernet" },
+  { value: "TSP654II", label: "TSP654II - 4-inch Wide" },
+  { value: "TSP743II", label: "TSP743II - 3-inch" },
+  { value: "SP700", label: "SP700 - Impact Kitchen" },
+  { value: "SP712", label: "SP712 - Impact Ethernet" },
+  { value: "SP742", label: "SP742 - Impact Serial" },
+  { value: "SP500", label: "SP500 - Impact Fast" },
+  { value: "SM-T300i", label: "SM-T300i - Mobile 3-inch" },
+  { value: "SM-L200", label: "SM-L200 - Mobile Label" },
+  { value: "mPOP", label: "mPOP - All-in-One + Cash Drawer" },
+  { value: "Custom-Star", label: "Other Star Model" },
+];
+
+const CHARACTER_WIDTHS = [
+  { value: "32", label: "32" },
+  { value: "40", label: "40" },
+  { value: "42", label: "42" },
+  { value: "48", label: "48" },
+  { value: "56", label: "56" },
+  { value: "80", label: "80" },
 ];
 
 export default function PrintersPage() {
@@ -172,90 +148,6 @@ export default function PrintersPage() {
     },
   ];
 
-  const formFields: FormFieldConfig[] = useMemo(() => [
-    { name: "name", label: "Printer Name", type: "text", placeholder: "e.g., Kitchen Printer - Hot Line", required: true },
-    {
-      name: "printerType",
-      label: "Printer Type",
-      type: "select",
-      options: [
-        { value: "receipt", label: "Receipt" },
-        { value: "kitchen", label: "Kitchen" },
-        { value: "bar", label: "Bar" },
-        { value: "prep", label: "Prep" },
-        { value: "report", label: "Report" },
-      ],
-      defaultValue: "kitchen",
-    },
-    {
-      name: "propertyId",
-      label: "Property",
-      type: "select",
-      options: properties.map((p) => ({ value: p.id, label: p.name })),
-      required: true,
-    },
-    {
-      name: "connectionType",
-      label: "Connection Type",
-      type: "select",
-      options: [
-        { value: "network", label: "Network (IP)" },
-        { value: "usb", label: "USB" },
-        { value: "serial", label: "Serial (Legacy)" },
-      ],
-      defaultValue: "network",
-    },
-    { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
-    { name: "subnetMask", label: "Subnet Mask", type: "text", placeholder: "255.255.255.0", defaultValue: "255.255.255.0" },
-    { name: "port", label: "Port", type: "number", placeholder: "9100", defaultValue: 9100 },
-    {
-      name: "driverProtocol",
-      label: "Printer Brand",
-      type: "select",
-      options: [
-        { value: "epson", label: "Epson" },
-        { value: "star", label: "Star Micronics" },
-      ],
-      defaultValue: "epson",
-    },
-    {
-      name: "model",
-      label: "Printer Model",
-      type: "select",
-      options: PRINTER_MODELS,
-      defaultValue: "TM-T88VII",
-    },
-    {
-      name: "characterWidth",
-      label: "Character Width",
-      type: "select",
-      options: [
-        { value: "42", label: "42 characters (standard)" },
-        { value: "48", label: "48 characters (wide)" },
-        { value: "56", label: "56 characters (extra wide)" },
-      ],
-      defaultValue: "42",
-    },
-    { name: "autoCut", label: "Auto Cut", type: "switch", defaultValue: true },
-    { name: "printLogo", label: "Print Logo", type: "switch", defaultValue: false },
-    { name: "printOrderHeader", label: "Print Order Header", type: "switch", defaultValue: true },
-    { name: "printOrderFooter", label: "Print Order Footer", type: "switch", defaultValue: true },
-    { name: "printVoids", label: "Print Voids/Cancellations", type: "switch", defaultValue: true },
-    { name: "printReprints", label: "Print Reprints", type: "switch", defaultValue: true },
-    { name: "retryAttempts", label: "Retry Attempts", type: "number", placeholder: "3", defaultValue: 3 },
-    {
-      name: "failureHandlingMode",
-      label: "Failure Handling",
-      type: "select",
-      options: [
-        { value: "fail_silently", label: "Fail Silently" },
-        { value: "alert_cashier", label: "Alert Cashier" },
-      ],
-      defaultValue: "alert_cashier",
-    },
-    { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ], [properties]);
-
   const createMutation = useMutation({
     mutationFn: async (data: InsertPrinter) => {
       const response = await apiRequest("POST", "/api/printers", data);
@@ -300,24 +192,14 @@ export default function PrintersPage() {
     },
   });
 
-  const handleSubmit = (data: InsertPrinter) => {
-    const cleanedData = {
-      ...data,
-      model: data.model || null,
-      port: typeof data.port === "string" ? parseInt(data.port, 10) : (data.port ?? 9100),
-      retryAttempts: typeof data.retryAttempts === "string" ? parseInt(data.retryAttempts as string, 10) : (data.retryAttempts ?? 3),
-      characterWidth: typeof data.characterWidth === "string" ? parseInt(data.characterWidth as string, 10) : (data.characterWidth ?? 42),
-    };
-    if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...cleanedData } as Printer);
-    } else {
-      createMutation.mutate(cleanedData);
-    }
-  };
-
   const handleOpenForm = (item: Printer | null) => {
     setEditingItem(item);
     setFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setFormOpen(false);
+    setEditingItem(null);
   };
 
   return (
@@ -334,25 +216,489 @@ export default function PrintersPage() {
         emptyMessage="No printers configured"
       />
 
-      <EntityForm
+      <PrinterFormDialog
         open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
+        onClose={handleCloseForm}
+        editingItem={editingItem}
+        properties={properties}
+        onSubmit={(data) => {
+          if (editingItem) {
+            updateMutation.mutate({ ...editingItem, ...data } as Printer);
+          } else {
+            createMutation.mutate(data);
+          }
         }}
-        onSubmit={handleSubmit}
-        schema={insertPrinterSchema}
-        fields={formFields}
-        title={editingItem ? "Edit Printer" : "Add Printer"}
-        initialData={editingItem ? {
-          ...editingItem,
-          port: editingItem.port ?? 9100,
-          retryAttempts: editingItem.retryAttempts ?? 3,
-          characterWidth: editingItem.characterWidth ?? 42,
-          model: editingItem.model || "",
-        } : undefined}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
+  );
+}
+
+interface PrinterFormDialogProps {
+  open: boolean;
+  onClose: () => void;
+  editingItem: Printer | null;
+  properties: Property[];
+  onSubmit: (data: InsertPrinter) => void;
+  isLoading: boolean;
+}
+
+function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, isLoading }: PrinterFormDialogProps) {
+  const form = useForm<InsertPrinter>({
+    resolver: zodResolver(insertPrinterSchema),
+    defaultValues: {
+      name: "",
+      printerType: "kitchen",
+      propertyId: "",
+      connectionType: "network",
+      ipAddress: "",
+      subnetMask: "255.255.255.0",
+      port: 9100,
+      driverProtocol: "epson",
+      model: "TM-T88VII",
+      characterWidth: 42,
+      autoCut: true,
+      printLogo: false,
+      printOrderHeader: true,
+      printOrderFooter: true,
+      printVoids: true,
+      printReprints: true,
+      retryAttempts: 3,
+      failureHandlingMode: "alert_cashier",
+      active: true,
+    },
+  });
+
+  const selectedBrand = form.watch("driverProtocol");
+  const modelOptions = selectedBrand === "star" ? STAR_MODELS : EPSON_MODELS;
+
+  useEffect(() => {
+    if (open) {
+      if (editingItem) {
+        form.reset({
+          name: editingItem.name,
+          printerType: editingItem.printerType,
+          propertyId: editingItem.propertyId,
+          connectionType: editingItem.connectionType,
+          ipAddress: editingItem.ipAddress || "",
+          subnetMask: editingItem.subnetMask || "255.255.255.0",
+          port: editingItem.port ?? 9100,
+          driverProtocol: editingItem.driverProtocol || "epson",
+          model: editingItem.model || "TM-T88VII",
+          characterWidth: editingItem.characterWidth ?? 42,
+          autoCut: editingItem.autoCut ?? true,
+          printLogo: editingItem.printLogo ?? false,
+          printOrderHeader: editingItem.printOrderHeader ?? true,
+          printOrderFooter: editingItem.printOrderFooter ?? true,
+          printVoids: editingItem.printVoids ?? true,
+          printReprints: editingItem.printReprints ?? true,
+          retryAttempts: editingItem.retryAttempts ?? 3,
+          failureHandlingMode: editingItem.failureHandlingMode || "alert_cashier",
+          active: editingItem.active ?? true,
+        });
+      } else {
+        form.reset({
+          name: "",
+          printerType: "kitchen",
+          propertyId: properties[0]?.id || "",
+          connectionType: "network",
+          ipAddress: "",
+          subnetMask: "255.255.255.0",
+          port: 9100,
+          driverProtocol: "epson",
+          model: "TM-T88VII",
+          characterWidth: 42,
+          autoCut: true,
+          printLogo: false,
+          printOrderHeader: true,
+          printOrderFooter: true,
+          printVoids: true,
+          printReprints: true,
+          retryAttempts: 3,
+          failureHandlingMode: "alert_cashier",
+          active: true,
+        });
+      }
+    }
+  }, [open, editingItem, properties]);
+
+  useEffect(() => {
+    const currentModel = form.getValues("model");
+    const isValidForBrand = modelOptions.some(m => m.value === currentModel);
+    if (!isValidForBrand) {
+      form.setValue("model", modelOptions[0]?.value || "");
+    }
+  }, [selectedBrand]);
+
+  const handleSubmit = (data: InsertPrinter) => {
+    onSubmit(data);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle data-testid="text-form-title">
+            {editingItem ? "Edit Printer" : "Add Printer"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto -mx-6 px-6 pr-4">
+              <div className="space-y-4 py-4 pr-2">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Printer Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Kitchen Printer - Hot Line" {...field} data-testid="input-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="printerType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Printer Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-printerType">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="receipt">Receipt</SelectItem>
+                          <SelectItem value="kitchen">Kitchen</SelectItem>
+                          <SelectItem value="bar">Bar</SelectItem>
+                          <SelectItem value="prep">Prep</SelectItem>
+                          <SelectItem value="report">Report</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="propertyId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Property</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-propertyId">
+                            <SelectValue placeholder="Select property" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {properties.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="connectionType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Connection Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-connectionType">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="network">Network (IP)</SelectItem>
+                          <SelectItem value="usb">USB</SelectItem>
+                          <SelectItem value="serial">Serial (Legacy)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="ipAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>IP Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value || ""} data-testid="input-ipAddress" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="subnetMask"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Subnet Mask</FormLabel>
+                      <FormControl>
+                        <Input placeholder="255.255.255.0" {...field} value={field.value || ""} data-testid="input-subnetMask" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="port"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Port</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="9100" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 9100)}
+                          data-testid="input-port" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="driverProtocol"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Printer Brand</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "epson"}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-driverProtocol">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="epson">Epson</SelectItem>
+                          <SelectItem value="star">Star Micronics</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="model"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Printer Model</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || modelOptions[0]?.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-model">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {modelOptions.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="characterWidth"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Character Width</FormLabel>
+                      <Select 
+                        onValueChange={(val) => field.onChange(parseInt(val))} 
+                        value={String(field.value || 42)}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-characterWidth">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {CHARACTER_WIDTHS.map((w) => (
+                            <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="autoCut"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Auto Cut</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-autoCut" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="printLogo"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Print Logo</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-printLogo" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="printOrderHeader"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Print Order Header</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printOrderHeader" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="printOrderFooter"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Print Order Footer</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printOrderFooter" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="printVoids"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Print Voids</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printVoids" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="printReprints"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Print Reprints</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printReprints" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel>Active</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-active" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="retryAttempts"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Retry Attempts</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="3" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 3)}
+                          data-testid="input-retryAttempts" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="failureHandlingMode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Failure Handling</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "alert_cashier"}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-failureHandlingMode">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="fail_silently">Fail Silently</SelectItem>
+                          <SelectItem value="alert_cashier">Alert Cashier</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
+              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} data-testid="button-save">
+                {isLoading ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }

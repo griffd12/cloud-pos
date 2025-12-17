@@ -493,7 +493,11 @@ export const insertSluSchema = createInsertSchema(slus).omit({ id: true });
 export const insertTaxGroupSchema = createInsertSchema(taxGroups).omit({ id: true });
 export const insertPrintClassSchema = createInsertSchema(printClasses).omit({ id: true });
 export const insertWorkstationSchema = createInsertSchema(workstations).omit({ id: true });
-export const insertPrinterSchema = createInsertSchema(printers).omit({ id: true });
+export const insertPrinterSchema = createInsertSchema(printers).omit({ id: true }).extend({
+  port: z.coerce.number().optional().default(9100),
+  characterWidth: z.coerce.number().optional().default(42),
+  retryAttempts: z.coerce.number().optional().default(3),
+});
 export const insertKdsDeviceSchema = createInsertSchema(kdsDevices).omit({ id: true });
 export const insertOrderDeviceSchema = createInsertSchema(orderDevices).omit({ id: true });
 export const insertOrderDevicePrinterSchema = createInsertSchema(orderDevicePrinters).omit({ id: true });
