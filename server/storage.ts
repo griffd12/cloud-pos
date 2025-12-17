@@ -131,6 +131,7 @@ export interface IStorage {
   unlinkKdsFromOrderDevice(id: string): Promise<boolean>;
 
   // Print Class Routing
+  getAllPrintClassRoutings(): Promise<PrintClassRouting[]>;
   getPrintClassRouting(printClassId: string, propertyId?: string, rvcId?: string): Promise<PrintClassRouting[]>;
   createPrintClassRouting(data: InsertPrintClassRouting): Promise<PrintClassRouting>;
   deletePrintClassRouting(id: string): Promise<boolean>;
@@ -596,6 +597,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Print Class Routing
+  async getAllPrintClassRoutings(): Promise<PrintClassRouting[]> {
+    return db.select().from(printClassRouting);
+  }
+
   async getPrintClassRouting(printClassId: string, propertyId?: string, rvcId?: string): Promise<PrintClassRouting[]> {
     const conditions = [eq(printClassRouting.printClassId, printClassId)];
     if (propertyId) conditions.push(eq(printClassRouting.propertyId, propertyId));

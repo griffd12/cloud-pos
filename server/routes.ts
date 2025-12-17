@@ -691,11 +691,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/print-class-routing", async (req, res) => {
     const { printClassId, propertyId, rvcId } = req.query as { printClassId?: string; propertyId?: string; rvcId?: string };
-    if (!printClassId) {
-      return res.status(400).json({ message: "printClassId required" });
+    if (printClassId) {
+      const data = await storage.getPrintClassRouting(printClassId, propertyId, rvcId);
+      res.json(data);
+    } else {
+      const data = await storage.getAllPrintClassRoutings();
+      res.json(data);
     }
-    const data = await storage.getPrintClassRouting(printClassId, propertyId, rvcId);
-    res.json(data);
   });
 
   app.post("/api/print-class-routing", async (req, res) => {
