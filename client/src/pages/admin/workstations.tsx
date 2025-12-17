@@ -1,11 +1,38 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column } from "@/components/admin/data-table";
-import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
@@ -72,116 +99,6 @@ export default function WorkstationsPage() {
     },
   ];
 
-  const printerOptions = useMemo(() => {
-    const getPropertyName = (propertyId: string) => {
-      const prop = properties.find(p => p.id === propertyId);
-      return prop?.name || "Unknown";
-    };
-    return [
-      { value: "__none__", label: "None" },
-      ...printers.map((p) => ({ 
-        value: p.id, 
-        label: `${p.name} (${p.printerType}) - ${getPropertyName(p.propertyId)}` 
-      })),
-    ];
-  }, [printers, properties]);
-
-  const formFields: FormFieldConfig[] = useMemo(() => [
-    { name: "name", label: "Workstation Name", type: "text", placeholder: "e.g., Front Counter 1", required: true },
-    {
-      name: "deviceType",
-      label: "Device Type",
-      type: "select",
-      options: [
-        { value: "pos_terminal", label: "POS Terminal" },
-        { value: "kiosk", label: "Self-Service Kiosk" },
-        { value: "manager_station", label: "Manager Station" },
-      ],
-      defaultValue: "pos_terminal",
-    },
-    {
-      name: "propertyId",
-      label: "Property",
-      type: "select",
-      options: properties.map((p) => ({ value: p.id, label: p.name })),
-      required: true,
-    },
-    {
-      name: "rvcId",
-      label: "Revenue Center (Optional)",
-      type: "select",
-      options: [{ value: "__none__", label: "None" }, ...rvcs.map((r) => ({ value: r.id, label: r.name }))],
-    },
-    {
-      name: "defaultOrderType",
-      label: "Default Order Type",
-      type: "select",
-      options: [
-        { value: "dine_in", label: "Dine In" },
-        { value: "take_out", label: "Take Out" },
-        { value: "delivery", label: "Delivery" },
-        { value: "drive_thru", label: "Drive Thru" },
-      ],
-      defaultValue: "dine_in",
-    },
-    { name: "fastTransactionEnabled", label: "Fast Transaction Enabled", type: "switch", defaultValue: false },
-    { name: "requireBeginCheck", label: "Require Begin Check", type: "switch", defaultValue: true },
-    { name: "allowPickupCheck", label: "Allow Pickup Check", type: "switch", defaultValue: true },
-    { name: "allowReopenClosedChecks", label: "Allow Reopen Closed Checks", type: "switch", defaultValue: false },
-    { name: "allowOfflineOperation", label: "Allow Offline Operation", type: "switch", defaultValue: false },
-    { name: "managerApprovalDevice", label: "Manager Approval Device", type: "switch", defaultValue: false },
-    { name: "clockInAllowed", label: "Clock-In Allowed", type: "switch", defaultValue: true },
-    // Receipt Printer Section
-    {
-      name: "defaultReceiptPrinterId",
-      label: "Receipt Printer",
-      type: "select",
-      options: printerOptions,
-      description: "Primary printer for guest checks",
-    },
-    {
-      name: "backupReceiptPrinterId",
-      label: "Backup Receipt Printer",
-      type: "select",
-      options: printerOptions,
-      description: "Fallback if primary is offline",
-    },
-    // Report Printer Section
-    {
-      name: "reportPrinterId",
-      label: "Report Printer",
-      type: "select",
-      options: printerOptions,
-      description: "Printer for reports and summaries",
-    },
-    {
-      name: "backupReportPrinterId",
-      label: "Backup Report Printer",
-      type: "select",
-      options: printerOptions,
-      description: "Fallback for report printing",
-    },
-    // Void Printer Section
-    {
-      name: "voidPrinterId",
-      label: "Void Printer",
-      type: "select",
-      options: printerOptions,
-      description: "Printer for void receipts",
-    },
-    {
-      name: "backupVoidPrinterId",
-      label: "Backup Void Printer",
-      type: "select",
-      options: printerOptions,
-      description: "Fallback for void printing",
-    },
-    // Network Settings
-    { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
-    { name: "hostname", label: "Hostname", type: "text", placeholder: "e.g., pos-terminal-1" },
-    { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ], [properties, rvcs, printerOptions]);
-
   const createMutation = useMutation({
     mutationFn: async (data: InsertWorkstation) => {
       const response = await apiRequest("POST", "/api/workstations", data);
@@ -226,43 +143,6 @@ export default function WorkstationsPage() {
     },
   });
 
-  const cleanPrinterId = (value: string | null | undefined): string | null => {
-    if (!value || value === "__none__") return null;
-    return value;
-  };
-
-  const handleSubmit = (data: InsertWorkstation) => {
-    const cleanedData = {
-      ...data,
-      rvcId: cleanPrinterId(data.rvcId),
-      defaultReceiptPrinterId: cleanPrinterId(data.defaultReceiptPrinterId),
-      backupReceiptPrinterId: cleanPrinterId(data.backupReceiptPrinterId),
-      reportPrinterId: cleanPrinterId(data.reportPrinterId),
-      backupReportPrinterId: cleanPrinterId(data.backupReportPrinterId),
-      voidPrinterId: cleanPrinterId(data.voidPrinterId),
-      backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
-    };
-    if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...cleanedData } as Workstation);
-    } else {
-      createMutation.mutate(cleanedData);
-    }
-  };
-
-  const getInitialData = (item: Workstation | null) => {
-    if (!item) return undefined;
-    return {
-      ...item,
-      rvcId: item.rvcId || "__none__",
-      defaultReceiptPrinterId: item.defaultReceiptPrinterId || "__none__",
-      backupReceiptPrinterId: item.backupReceiptPrinterId || "__none__",
-      reportPrinterId: item.reportPrinterId || "__none__",
-      backupReportPrinterId: item.backupReportPrinterId || "__none__",
-      voidPrinterId: item.voidPrinterId || "__none__",
-      backupVoidPrinterId: item.backupVoidPrinterId || "__none__",
-    };
-  };
-
   return (
     <div className="p-6">
       <DataTable
@@ -283,19 +163,565 @@ export default function WorkstationsPage() {
         emptyMessage="No workstations configured"
       />
 
-      <EntityForm
+      <WorkstationFormDialog
         open={formOpen}
         onClose={() => {
           setFormOpen(false);
           setEditingItem(null);
         }}
-        onSubmit={handleSubmit}
-        schema={insertWorkstationSchema}
-        fields={formFields}
-        title={editingItem ? "Edit Workstation" : "Add Workstation"}
-        initialData={getInitialData(editingItem)}
+        editingItem={editingItem}
+        properties={properties}
+        rvcs={rvcs}
+        printers={printers}
+        onSubmit={(data) => {
+          if (editingItem) {
+            updateMutation.mutate({ ...editingItem, ...data } as Workstation);
+          } else {
+            createMutation.mutate(data);
+          }
+        }}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
+  );
+}
+
+interface WorkstationFormDialogProps {
+  open: boolean;
+  onClose: () => void;
+  editingItem: Workstation | null;
+  properties: Property[];
+  rvcs: Rvc[];
+  printers: Printer[];
+  onSubmit: (data: InsertWorkstation) => void;
+  isLoading: boolean;
+}
+
+const PRINTER_FIELDS = [
+  "defaultReceiptPrinterId",
+  "backupReceiptPrinterId",
+  "reportPrinterId",
+  "backupReportPrinterId",
+  "voidPrinterId",
+  "backupVoidPrinterId",
+] as const;
+
+type PrinterFieldName = typeof PRINTER_FIELDS[number];
+
+function WorkstationFormDialog({ 
+  open, 
+  onClose, 
+  editingItem, 
+  properties, 
+  rvcs, 
+  printers,
+  onSubmit, 
+  isLoading 
+}: WorkstationFormDialogProps) {
+  const { toast } = useToast();
+  
+  const form = useForm<InsertWorkstation>({
+    resolver: zodResolver(insertWorkstationSchema),
+    defaultValues: {
+      name: "",
+      deviceType: "pos_terminal",
+      propertyId: "",
+      rvcId: null,
+      defaultOrderType: "dine_in",
+      fastTransactionEnabled: false,
+      requireBeginCheck: true,
+      allowPickupCheck: true,
+      allowReopenClosedChecks: false,
+      allowOfflineOperation: false,
+      managerApprovalDevice: false,
+      clockInAllowed: true,
+      defaultReceiptPrinterId: null,
+      backupReceiptPrinterId: null,
+      reportPrinterId: null,
+      backupReportPrinterId: null,
+      voidPrinterId: null,
+      backupVoidPrinterId: null,
+      ipAddress: "",
+      hostname: "",
+      active: true,
+    },
+  });
+
+  const printerOptions = useMemo(() => {
+    const getPropertyName = (propertyId: string) => {
+      const prop = properties.find(p => p.id === propertyId);
+      return prop?.name || "Unknown";
+    };
+    return [
+      { value: "__none__", label: "None" },
+      ...printers.map((p) => ({ 
+        value: p.id, 
+        label: `${p.name} (${p.printerType}) - ${getPropertyName(p.propertyId)}` 
+      })),
+    ];
+  }, [printers, properties]);
+
+  const rvcOptions = useMemo(() => [
+    { value: "__none__", label: "None" },
+    ...rvcs.map((r) => ({ value: r.id, label: r.name })),
+  ], [rvcs]);
+
+  useEffect(() => {
+    if (open) {
+      if (editingItem) {
+        form.reset({
+          name: editingItem.name,
+          deviceType: editingItem.deviceType,
+          propertyId: editingItem.propertyId,
+          rvcId: editingItem.rvcId || null,
+          defaultOrderType: editingItem.defaultOrderType || "dine_in",
+          fastTransactionEnabled: editingItem.fastTransactionEnabled ?? false,
+          requireBeginCheck: editingItem.requireBeginCheck ?? true,
+          allowPickupCheck: editingItem.allowPickupCheck ?? true,
+          allowReopenClosedChecks: editingItem.allowReopenClosedChecks ?? false,
+          allowOfflineOperation: editingItem.allowOfflineOperation ?? false,
+          managerApprovalDevice: editingItem.managerApprovalDevice ?? false,
+          clockInAllowed: editingItem.clockInAllowed ?? true,
+          defaultReceiptPrinterId: editingItem.defaultReceiptPrinterId || null,
+          backupReceiptPrinterId: editingItem.backupReceiptPrinterId || null,
+          reportPrinterId: editingItem.reportPrinterId || null,
+          backupReportPrinterId: editingItem.backupReportPrinterId || null,
+          voidPrinterId: editingItem.voidPrinterId || null,
+          backupVoidPrinterId: editingItem.backupVoidPrinterId || null,
+          ipAddress: editingItem.ipAddress || "",
+          hostname: editingItem.hostname || "",
+          active: editingItem.active ?? true,
+        });
+      } else {
+        form.reset({
+          name: "",
+          deviceType: "pos_terminal",
+          propertyId: properties[0]?.id || "",
+          rvcId: null,
+          defaultOrderType: "dine_in",
+          fastTransactionEnabled: false,
+          requireBeginCheck: true,
+          allowPickupCheck: true,
+          allowReopenClosedChecks: false,
+          allowOfflineOperation: false,
+          managerApprovalDevice: false,
+          clockInAllowed: true,
+          defaultReceiptPrinterId: null,
+          backupReceiptPrinterId: null,
+          reportPrinterId: null,
+          backupReportPrinterId: null,
+          voidPrinterId: null,
+          backupVoidPrinterId: null,
+          ipAddress: "",
+          hostname: "",
+          active: true,
+        });
+      }
+    }
+  }, [open, editingItem, properties]);
+
+  const cleanPrinterId = (value: string | null | undefined): string | null => {
+    if (!value || value === "__none__") return null;
+    return value;
+  };
+
+  const handleSetForAll = (sourceField: PrinterFieldName) => {
+    const sourceValue = form.getValues(sourceField);
+    if (!sourceValue || sourceValue === "__none__") {
+      toast({ 
+        title: "No printer selected", 
+        description: "Please select a printer first before applying to all.",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    PRINTER_FIELDS.forEach(field => {
+      if (field !== sourceField) {
+        form.setValue(field, sourceValue);
+      }
+    });
+    
+    toast({ 
+      title: "Applied to all printers", 
+      description: "The selected printer has been set for all printer types." 
+    });
+  };
+
+  const handleSubmit = (data: InsertWorkstation) => {
+    const cleanedData = {
+      ...data,
+      rvcId: cleanPrinterId(data.rvcId),
+      defaultReceiptPrinterId: cleanPrinterId(data.defaultReceiptPrinterId),
+      backupReceiptPrinterId: cleanPrinterId(data.backupReceiptPrinterId),
+      reportPrinterId: cleanPrinterId(data.reportPrinterId),
+      backupReportPrinterId: cleanPrinterId(data.backupReportPrinterId),
+      voidPrinterId: cleanPrinterId(data.voidPrinterId),
+      backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
+    };
+    onSubmit(cleanedData);
+  };
+
+  const PrinterSelectField = ({ 
+    name, 
+    label, 
+    description 
+  }: { 
+    name: PrinterFieldName; 
+    label: string; 
+    description: string;
+  }) => (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <div className="flex items-center justify-between gap-2">
+            <FormLabel>{label}</FormLabel>
+            <button
+              type="button"
+              onClick={() => handleSetForAll(name)}
+              className="text-xs text-muted-foreground hover:text-primary underline"
+              data-testid={`link-set-all-${name}`}
+            >
+              Set for all
+            </button>
+          </div>
+          <Select 
+            onValueChange={field.onChange} 
+            value={field.value || "__none__"}
+          >
+            <FormControl>
+              <SelectTrigger data-testid={`select-${name}`}>
+                <SelectValue placeholder="Select printer" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {printerOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormDescription className="text-xs">{description}</FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle data-testid="text-form-title">
+            {editingItem ? "Edit Workstation" : "Add Workstation"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex-1 overflow-y-auto -mx-6 px-6 pr-4">
+              <div className="space-y-4 py-4 pr-2">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Workstation Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Front Counter 1" {...field} data-testid="input-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="deviceType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Device Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-deviceType">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="pos_terminal">POS Terminal</SelectItem>
+                          <SelectItem value="kiosk">Self-Service Kiosk</SelectItem>
+                          <SelectItem value="manager_station">Manager Station</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="propertyId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Property</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-propertyId">
+                            <SelectValue placeholder="Select property" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {properties.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="rvcId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Revenue Center (Optional)</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || "__none__"}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-rvcId">
+                            <SelectValue placeholder="Select RVC" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {rvcOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="defaultOrderType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Default Order Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "dine_in"}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-defaultOrderType">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="dine_in">Dine In</SelectItem>
+                          <SelectItem value="take_out">Take Out</SelectItem>
+                          <SelectItem value="delivery">Delivery</SelectItem>
+                          <SelectItem value="drive_thru">Drive Thru</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Workstation Settings</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="fastTransactionEnabled"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Fast Transaction</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-fastTransactionEnabled" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="requireBeginCheck"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Require Begin Check</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-requireBeginCheck" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowPickupCheck"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Allow Pickup Check</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-allowPickupCheck" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowReopenClosedChecks"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Reopen Closed Checks</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-allowReopenClosedChecks" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowOfflineOperation"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Allow Offline</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-allowOfflineOperation" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="managerApprovalDevice"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Manager Approval</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-managerApprovalDevice" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="clockInAllowed"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Clock-In Allowed</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-clockInAllowed" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="active"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Active</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-active" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="border rounded-md p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Printer Assignments</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Select a printer and click "Set for all" to apply it to all printer types.
+                  </p>
+                  
+                  <PrinterSelectField
+                    name="defaultReceiptPrinterId"
+                    label="Receipt Printer"
+                    description="Primary printer for guest checks"
+                  />
+                  
+                  <PrinterSelectField
+                    name="backupReceiptPrinterId"
+                    label="Backup Receipt Printer"
+                    description="Fallback if primary is offline"
+                  />
+                  
+                  <PrinterSelectField
+                    name="reportPrinterId"
+                    label="Report Printer"
+                    description="Printer for reports and summaries"
+                  />
+                  
+                  <PrinterSelectField
+                    name="backupReportPrinterId"
+                    label="Backup Report Printer"
+                    description="Fallback for report printing"
+                  />
+                  
+                  <PrinterSelectField
+                    name="voidPrinterId"
+                    label="Void Printer"
+                    description="Printer for void receipts"
+                  />
+                  
+                  <PrinterSelectField
+                    name="backupVoidPrinterId"
+                    label="Backup Void Printer"
+                    description="Fallback for void printing"
+                  />
+                </div>
+
+                <div className="border rounded-md p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Network Settings</h4>
+                  
+                  <FormField
+                    control={form.control}
+                    name="ipAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>IP Address</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value || ""} data-testid="input-ipAddress" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="hostname"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Hostname</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., pos-terminal-1" {...field} value={field.value || ""} data-testid="input-hostname" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
+              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} data-testid="button-save">
+                {isLoading ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
