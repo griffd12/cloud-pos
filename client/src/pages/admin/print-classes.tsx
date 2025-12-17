@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -230,7 +230,7 @@ function PrintClassFormDialog({
 }: PrintClassFormDialogProps) {
   const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [initialized, setInitialized] = useState(false);
+  const prevOpenRef = useRef(false);
 
   const form = useForm<InsertPrintClass>({
     resolver: zodResolver(insertPrintClassSchema),
@@ -242,7 +242,10 @@ function PrintClassFormDialog({
   });
 
   useEffect(() => {
-    if (open && !initialized) {
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    
+    if (open && !wasOpen) {
       if (editingItem) {
         form.reset({
           name: editingItem.name,
@@ -264,12 +267,8 @@ function PrintClassFormDialog({
         });
         setSelectedOrderDevices([]);
       }
-      setInitialized(true);
     }
-    if (!open) {
-      setInitialized(false);
-    }
-  }, [open, editingItem, existingRoutings, initialized]);
+  }, [open, editingItem, existingRoutings]);
 
   const toggleOrderDevice = (orderDeviceId: string) => {
     setSelectedOrderDevices(prev => 
