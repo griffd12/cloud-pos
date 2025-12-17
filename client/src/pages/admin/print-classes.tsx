@@ -230,6 +230,7 @@ function PrintClassFormDialog({
 }: PrintClassFormDialogProps) {
   const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   const form = useForm<InsertPrintClass>({
     resolver: zodResolver(insertPrintClassSchema),
@@ -241,7 +242,7 @@ function PrintClassFormDialog({
   });
 
   useEffect(() => {
-    if (open) {
+    if (open && !initialized) {
       if (editingItem) {
         form.reset({
           name: editingItem.name,
@@ -263,8 +264,12 @@ function PrintClassFormDialog({
         });
         setSelectedOrderDevices([]);
       }
+      setInitialized(true);
     }
-  }, [open, editingItem, existingRoutings]);
+    if (!open) {
+      setInitialized(false);
+    }
+  }, [open, editingItem, existingRoutings, initialized]);
 
   const toggleOrderDevice = (orderDeviceId: string) => {
     setSelectedOrderDevices(prev => 
