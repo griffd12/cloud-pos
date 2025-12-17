@@ -97,15 +97,15 @@ export function EntityForm<T extends z.ZodTypeAny>({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle data-testid="text-form-title">{title}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1">
-            <ScrollArea className="flex-1 -mx-6 px-6">
-              <div className="space-y-4 py-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+            <ScrollArea className="flex-1 -mx-6 px-6 pr-4" style={{ maxHeight: "calc(90vh - 140px)" }}>
+              <div className="space-y-4 py-4 pr-2">
                 {fields.map((fieldConfig) => (
                   <FormField
                     key={fieldConfig.name}
@@ -227,7 +227,7 @@ export function EntityForm<T extends z.ZodTypeAny>({
               </div>
             </ScrollArea>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-4">
+            <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0 border-t mt-2">
               <Button
                 type="button"
                 variant="outline"
