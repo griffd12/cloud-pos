@@ -480,8 +480,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/print-classes/:id", async (req, res) => {
-    await storage.deletePrintClass(req.params.id);
-    res.status(204).send();
+    try {
+      await storage.deletePrintClass(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.code === '23503') {
+        res.status(400).json({ message: "Cannot delete: This print class is still assigned to menu items. Please remove it from all menu items first." });
+      } else {
+        console.error("Error deleting print class:", error);
+        res.status(500).json({ message: "Failed to delete print class" });
+      }
+    }
   });
 
   // ============================================================================
