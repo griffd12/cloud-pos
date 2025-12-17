@@ -8,7 +8,6 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
 
 const PRINTER_MODELS = [
-  { value: "", label: "Select model..." },
   // === EPSON THERMAL RECEIPT ===
   { value: "TM-T88VII", label: "[Epson Thermal] TM-T88VII - Latest High-Speed" },
   { value: "TM-T88VI", label: "[Epson Thermal] TM-T88VI - High-Speed" },
@@ -223,7 +222,7 @@ export default function PrintersPage() {
       label: "Printer Model",
       type: "select",
       options: PRINTER_MODELS,
-      defaultValue: "",
+      defaultValue: "TM-T88VII",
     },
     {
       name: "characterWidth",
