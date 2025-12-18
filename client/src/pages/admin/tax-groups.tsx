@@ -25,6 +25,15 @@ export default function TaxGroupsPage() {
       render: (value) => `${(parseFloat(value || "0") * 100).toFixed(2)}%`,
     },
     {
+      key: "taxMode",
+      header: "Type",
+      render: (value) => (
+        <Badge variant={value === "inclusive" ? "secondary" : "default"}>
+          {value === "inclusive" ? "Inclusive" : "Add-on"}
+        </Badge>
+      ),
+    },
+    {
       key: "active",
       header: "Status",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
@@ -34,6 +43,17 @@ export default function TaxGroupsPage() {
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Tax Group Name", type: "text", placeholder: "e.g., State Sales Tax", required: true },
     { name: "rate", label: "Tax Rate (%)", type: "number", placeholder: "e.g., 7.25 for 7.25%", required: true },
+    { 
+      name: "taxMode", 
+      label: "Tax Type", 
+      type: "select",
+      options: [
+        { value: "add_on", label: "Add-on (tax added to price)" },
+        { value: "inclusive", label: "Inclusive (tax included in price)" },
+      ],
+      defaultValue: "add_on",
+      required: true,
+    },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 

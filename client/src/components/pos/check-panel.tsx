@@ -18,6 +18,9 @@ interface CheckPanelProps {
   canSend: boolean;
   canVoid: boolean;
   isSending?: boolean;
+  subtotal?: number;
+  tax?: number;
+  total?: number;
 }
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
@@ -39,6 +42,9 @@ export function CheckPanel({
   canSend,
   canVoid,
   isSending,
+  subtotal: propSubtotal,
+  tax: propTax,
+  total: propTotal,
 }: CheckPanelProps) {
   const formatPrice = (price: string | number | null) => {
     const numPrice = typeof price === "string" ? parseFloat(price) : (price || 0);
@@ -47,17 +53,11 @@ export function CheckPanel({
 
   const activeItems = items.filter(item => !item.voided);
   const unsentItems = activeItems.filter(item => !item.sent);
-  const subtotal = activeItems.reduce((sum, item) => {
-    const unitPrice = parseFloat(item.unitPrice || "0");
-    const modifierTotal = (item.modifiers || []).reduce(
-      (mSum, mod) => mSum + parseFloat(mod.priceDelta || "0"),
-      0
-    );
-    return sum + (unitPrice + modifierTotal) * (item.quantity || 1);
-  }, 0);
-  const taxRate = 0.0825;
-  const tax = subtotal * taxRate;
-  const total = subtotal + tax;
+  
+  // Use provided values or fall back to local calculation
+  const subtotal = propSubtotal ?? 0;
+  const tax = propTax ?? 0;
+  const total = propTotal ?? (subtotal + tax);
 
   if (!check) {
     return (
@@ -185,10 +185,12 @@ export function CheckPanel({
             <span className="text-muted-foreground">Subtotal</span>
             <span className="tabular-nums">{formatPrice(subtotal)}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Tax (8.25%)</span>
-            <span className="tabular-nums">{formatPrice(tax)}</span>
-          </div>
+          {tax > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Tax</span>
+              <span className="tabular-nums">{formatPrice(tax)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-lg font-semibold pt-1">
             <span>Total</span>
             <span className="tabular-nums" data-testid="text-check-total">

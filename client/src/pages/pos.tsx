@@ -14,7 +14,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType } from "@shared/schema";
+import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings } from "lucide-react";
 import { Link } from "wouter";
 
@@ -77,6 +77,19 @@ export default function PosPage() {
   const { data: modifierGroups = [] } = useQuery<(ModifierGroup & { modifiers: Modifier[] })[]>({
     queryKey: ["/api/modifier-groups", pendingItem?.id],
     enabled: !!pendingItem,
+  });
+
+  const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
+    queryKey: ["/api/tax-groups"],
+  });
+
+  const { data: allMenuItems = [] } = useQuery<MenuItem[]>({
+    queryKey: ["/api/menu-items", "all"],
+    queryFn: async () => {
+      const res = await fetch("/api/menu-items", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch menu items");
+      return res.json();
+    },
   });
 
   const createCheckMutation = useMutation({
@@ -264,19 +277,46 @@ export default function PosPage() {
     }
   };
 
-  const calculateTotal = () => {
+  const calculateTotals = () => {
     const activeItems = checkItems.filter((item) => !item.voided);
-    const subtotal = activeItems.reduce((sum, item) => {
+    let displaySubtotal = 0;  // What customer sees as subtotal (item prices sum)
+    let addOnTax = 0;
+
+    activeItems.forEach((item) => {
       const unitPrice = parseFloat(item.unitPrice || "0");
       const modifierTotal = (item.modifiers || []).reduce(
         (mSum, mod) => mSum + parseFloat(mod.priceDelta || "0"),
         0
       );
-      return sum + (unitPrice + modifierTotal) * (item.quantity || 1);
-    }, 0);
-    const tax = subtotal * 0.0825;
-    return subtotal + tax;
+      const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
+
+      // Find the menu item and its tax group
+      const menuItem = allMenuItems.find((mi) => mi.id === item.menuItemId);
+      const taxGroup = menuItem?.taxGroupId
+        ? taxGroups.find((tg) => tg.id === menuItem.taxGroupId)
+        : null;
+
+      if (taxGroup) {
+        const rate = parseFloat(taxGroup.rate || "0");
+        if (taxGroup.taxMode === "inclusive") {
+          // For inclusive, item price already contains tax
+          // Customer sees the full price, no separate tax line
+          displaySubtotal += itemTotal;
+        } else {
+          // For add-on, add the item total and calculate tax separately
+          displaySubtotal += itemTotal;
+          addOnTax += itemTotal * rate;
+        }
+      } else {
+        displaySubtotal += itemTotal;
+      }
+    });
+
+    // Total = subtotal + add-on taxes (inclusive taxes are already in the item prices)
+    return { subtotal: displaySubtotal, tax: addOnTax, total: displaySubtotal + addOnTax };
   };
+
+  const { subtotal, tax, total } = calculateTotals();
 
   if (!currentEmployee || !currentRvc) {
     return null;
@@ -361,6 +401,9 @@ export default function PosPage() {
             canSend={hasPrivilege("send_to_kitchen")}
             canVoid={hasPrivilege("void_unsent") || hasPrivilege("void_sent")}
             isSending={sendCheckMutation.isPending}
+            subtotal={subtotal}
+            tax={tax}
+            total={total}
           />
         </div>
       </div>
@@ -403,7 +446,7 @@ export default function PosPage() {
         onPayment={(tenderId, amount) => paymentMutation.mutate({ tenderId, amount })}
         tenders={tenders}
         check={currentCheck}
-        remainingBalance={calculateTotal()}
+        remainingBalance={total}
         isLoading={paymentMutation.isPending}
       />
     </div>

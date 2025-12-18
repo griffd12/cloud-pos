@@ -121,6 +121,7 @@ export const taxGroups = pgTable("tax_groups", {
   rvcId: varchar("rvc_id").references(() => rvcs.id),
   name: text("name").notNull(),
   rate: decimal("rate", { precision: 5, scale: 4 }).notNull(),
+  taxMode: text("tax_mode").notNull().default("add_on"), // 'add_on' or 'inclusive'
   active: boolean("active").default(true),
 });
 
@@ -492,7 +493,9 @@ export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
 export const insertPrivilegeSchema = createInsertSchema(privileges).omit({ id: true });
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
 export const insertSluSchema = createInsertSchema(slus).omit({ id: true });
-export const insertTaxGroupSchema = createInsertSchema(taxGroups).omit({ id: true });
+export const insertTaxGroupSchema = createInsertSchema(taxGroups).omit({ id: true }).extend({
+  rate: z.coerce.string(),
+});
 export const insertPrintClassSchema = createInsertSchema(printClasses).omit({ id: true });
 export const insertWorkstationSchema = createInsertSchema(workstations).omit({ id: true });
 export const insertPrinterSchema = createInsertSchema(printers).omit({ id: true }).extend({
