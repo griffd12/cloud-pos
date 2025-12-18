@@ -550,6 +550,7 @@ export type OrderDeviceKds = typeof orderDeviceKds.$inferSelect;
 export type InsertOrderDeviceKds = z.infer<typeof insertOrderDeviceKdsSchema>;
 export type PrintClassRouting = typeof printClassRouting.$inferSelect;
 export type InsertPrintClassRouting = z.infer<typeof insertPrintClassRoutingSchema>;
+export type MenuItemSlu = typeof menuItemSlus.$inferSelect;
 export type MenuItem = typeof menuItems.$inferSelect;
 export type InsertMenuItem = z.infer<typeof insertMenuItemSchema>;
 export type ModifierGroup = typeof modifierGroups.$inferSelect;

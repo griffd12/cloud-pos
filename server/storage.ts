@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees,
-  slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus,
+  slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
   modifierGroups, modifiers, menuItemModifierGroups, tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
@@ -79,6 +79,10 @@ export interface IStorage {
   createSlu(data: InsertSlu): Promise<Slu>;
   updateSlu(id: string, data: Partial<InsertSlu>): Promise<Slu | undefined>;
   deleteSlu(id: string): Promise<boolean>;
+
+  // Menu Item SLU Linkages
+  getMenuItemSlus(menuItemId?: string): Promise<MenuItemSlu[]>;
+  setMenuItemSlus(menuItemId: string, sluIds: string[]): Promise<void>;
 
   // Tax Groups
   getTaxGroups(): Promise<TaxGroup[]>;
@@ -375,6 +379,29 @@ export class DatabaseStorage implements IStorage {
     // Then delete the SLU
     const result = await db.delete(slus).where(eq(slus.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Menu Item SLU Linkages
+  async getMenuItemSlus(menuItemId?: string): Promise<MenuItemSlu[]> {
+    if (menuItemId) {
+      return db.select().from(menuItemSlus).where(eq(menuItemSlus.menuItemId, menuItemId));
+    }
+    return db.select().from(menuItemSlus);
+  }
+
+  async setMenuItemSlus(menuItemId: string, sluIds: string[]): Promise<void> {
+    // Delete existing linkages
+    await db.delete(menuItemSlus).where(eq(menuItemSlus.menuItemId, menuItemId));
+    // Insert new linkages
+    if (sluIds.length > 0) {
+      await db.insert(menuItemSlus).values(
+        sluIds.map((sluId, index) => ({
+          menuItemId,
+          sluId,
+          displayOrder: index,
+        }))
+      );
+    }
   }
 
   // Tax Groups

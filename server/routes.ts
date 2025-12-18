@@ -393,6 +393,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Get all menu item SLU linkages (or filter by menuItemId)
+  app.get("/api/menu-item-slus", async (req, res) => {
+    const menuItemId = req.query.menuItemId as string | undefined;
+    const data = await storage.getMenuItemSlus(menuItemId);
+    res.json(data);
+  });
+
+  // Set SLU linkages for a menu item
+  app.post("/api/menu-items/:id/slus", async (req, res) => {
+    try {
+      const { sluIds } = req.body;
+      if (!Array.isArray(sluIds)) {
+        return res.status(400).json({ message: "sluIds must be an array" });
+      }
+      await storage.setMenuItemSlus(req.params.id, sluIds);
+      res.json({ message: "SLU linkages updated" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Failed to update SLU linkages" });
+    }
+  });
+
   // ============================================================================
   // MODIFIER GROUP ROUTES
   // ============================================================================
