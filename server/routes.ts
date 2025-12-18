@@ -471,8 +471,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/tax-groups/:id", async (req, res) => {
-    await storage.deleteTaxGroup(req.params.id);
-    res.status(204).send();
+    try {
+      await storage.deleteTaxGroup(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.code === "23503") {
+        res.status(400).json({ message: "Cannot delete tax group that is in use by menu items" });
+      } else {
+        console.error("Delete tax group error:", error);
+        res.status(500).json({ message: "Failed to delete tax group" });
+      }
+    }
   });
 
   // ============================================================================
