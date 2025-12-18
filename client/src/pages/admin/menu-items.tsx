@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column, type CustomAction } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -598,9 +597,9 @@ function MenuItemFormDialog({
                 />
 
                 <div className="pt-4 border-t">
-                  <Label className="text-base font-semibold">Category Assignment (SLUs)</Label>
+                  <Label className="text-base font-semibold">Category Assignment (SLU)</Label>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Select which categories this item appears in on the POS. Items must be linked to at least one category to be available for ordering.
+                    Select which category this item appears in on the POS.
                   </p>
                   
                   {slus.length === 0 ? (
@@ -608,34 +607,34 @@ function MenuItemFormDialog({
                       No categories configured. Create SLUs in the Categories section first.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                      {slus.map(slu => (
-                        <div
-                          key={slu.id}
-                          className="flex items-center space-x-2 p-2 rounded hover-elevate cursor-pointer"
-                          onClick={() => toggleSlu(slu.id)}
-                        >
-                          <Checkbox
-                            id={`slu-${slu.id}`}
-                            checked={selectedSlus.includes(slu.id)}
-                            onCheckedChange={() => toggleSlu(slu.id)}
-                            data-testid={`checkbox-slu-${slu.id}`}
-                          />
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <div 
-                              className="w-3 h-3 rounded flex-shrink-0" 
-                              style={{ backgroundColor: slu.color || "#3B82F6" }} 
-                            />
-                            <label
-                              htmlFor={`slu-${slu.id}`}
-                              className="text-sm font-medium cursor-pointer truncate"
-                            >
+                    <Select
+                      value={selectedSlus[0] || "__none__"}
+                      onValueChange={(value) => {
+                        if (value === "__none__") {
+                          setSelectedSlus([]);
+                        } else {
+                          setSelectedSlus([value]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger data-testid="select-slu">
+                        <SelectValue placeholder="Select a category..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No Category</SelectItem>
+                        {slus.map(slu => (
+                          <SelectItem key={slu.id} value={slu.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded flex-shrink-0" 
+                                style={{ backgroundColor: slu.color || "#3B82F6" }} 
+                              />
                               {slu.buttonLabel || slu.name}
-                            </label>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                   
                   {selectedSlus.length === 0 && slus.length > 0 && (
