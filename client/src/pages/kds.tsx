@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import { ArrowLeft } from "lucide-react";
-import { Link } from "wouter";
+import { Link, Redirect } from "wouter";
 
 interface KdsItem {
   id: string;
@@ -105,6 +105,10 @@ export default function KdsPage() {
   const handleRefresh = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  if (!currentEmployee || !currentRvc) {
+    return <Redirect to="/" />;
+  }
 
   return (
     <div className="h-screen flex flex-col">

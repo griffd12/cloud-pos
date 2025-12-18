@@ -16,7 +16,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings } from "lucide-react";
-import { Link } from "wouter";
+import { Link, Redirect } from "wouter";
 
 interface MenuItemWithModifiers extends MenuItem {
   hasRequiredModifiers?: boolean;
@@ -336,7 +336,7 @@ export default function PosPage() {
   const { subtotal, tax, total } = calculateTotals();
 
   if (!currentEmployee || !currentRvc) {
-    return null;
+    return <Redirect to="/" />;
   }
 
   return (
