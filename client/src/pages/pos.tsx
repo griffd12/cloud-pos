@@ -54,6 +54,20 @@ export default function PosPage() {
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
 
+  const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
+    queryKey: ["/api/checks", currentCheck?.id, "payments"],
+    queryFn: async () => {
+      if (!currentCheck?.id) return { payments: [], paidAmount: 0 };
+      const res = await fetch(`/api/checks/${currentCheck.id}/payments`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch payments");
+      return res.json();
+    },
+    enabled: !!currentCheck?.id,
+  });
+
+  const paidAmount = paymentInfo?.paidAmount || 0;
+  const paymentsReady = !paymentsLoading && paymentInfo !== undefined;
+
   const { data: slus = [], isLoading: slusLoading } = useQuery<Slu[]>({
     queryKey: ["/api/slus", currentRvc?.id],
     enabled: !!currentRvc,
@@ -185,17 +199,18 @@ export default function PosPage() {
       });
       return response.json();
     },
-    onSuccess: (updatedCheck: Check) => {
-      if (updatedCheck.status === "closed") {
+    onSuccess: (result: Check & { paidAmount: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
+      if (result.status === "closed") {
         setCurrentCheck(null);
         setCheckItems([]);
+        setShowPaymentModal(false);
         toast({ title: "Check closed successfully" });
       } else {
-        setCurrentCheck(updatedCheck);
+        setCurrentCheck(result);
         toast({ title: "Payment applied" });
       }
-      setShowPaymentModal(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
     },
     onError: () => {
       toast({ title: "Payment failed", variant: "destructive" });
@@ -404,6 +419,8 @@ export default function PosPage() {
             subtotal={subtotal}
             tax={tax}
             total={total}
+            paidAmount={paidAmount}
+            paymentsReady={paymentsReady}
           />
         </div>
       </div>
@@ -446,7 +463,7 @@ export default function PosPage() {
         onPayment={(tenderId, amount) => paymentMutation.mutate({ tenderId, amount })}
         tenders={tenders}
         check={currentCheck}
-        remainingBalance={total}
+        remainingBalance={Math.max(0, total - paidAmount)}
         isLoading={paymentMutation.isPending}
       />
     </div>

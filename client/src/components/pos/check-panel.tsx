@@ -21,6 +21,8 @@ interface CheckPanelProps {
   subtotal?: number;
   tax?: number;
   total?: number;
+  paidAmount?: number;
+  paymentsReady?: boolean;
 }
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
@@ -45,6 +47,8 @@ export function CheckPanel({
   subtotal: propSubtotal,
   tax: propTax,
   total: propTotal,
+  paidAmount = 0,
+  paymentsReady = true,
 }: CheckPanelProps) {
   const formatPrice = (price: string | number | null) => {
     const numPrice = typeof price === "string" ? parseFloat(price) : (price || 0);
@@ -191,12 +195,26 @@ export function CheckPanel({
               <span className="tabular-nums">{formatPrice(tax)}</span>
             </div>
           )}
-          <div className="flex justify-between text-lg font-semibold pt-1">
+          <div className="flex justify-between text-sm font-medium pt-1">
             <span>Total</span>
             <span className="tabular-nums" data-testid="text-check-total">
               {formatPrice(total)}
             </span>
           </div>
+          {paidAmount > 0 && (
+            <>
+              <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                <span>Paid</span>
+                <span className="tabular-nums">-{formatPrice(paidAmount)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-semibold">
+                <span>Balance Due</span>
+                <span className="tabular-nums" data-testid="text-balance-due">
+                  {formatPrice(Math.max(0, total - paidAmount))}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="w-full grid grid-cols-2 gap-2">
@@ -213,11 +231,11 @@ export function CheckPanel({
           <Button
             className="h-12"
             onClick={onPay}
-            disabled={activeItems.length === 0}
+            disabled={activeItems.length === 0 || !paymentsReady}
             data-testid="button-pay"
           >
             <CreditCard className="w-4 h-4 mr-2" />
-            Pay
+            {paymentsReady ? "Pay" : "Loading..."}
           </Button>
         </div>
       </CardFooter>

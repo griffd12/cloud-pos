@@ -847,15 +847,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/checks", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
     const status = req.query.status as string | undefined;
-    const data = await storage.getChecks(rvcId, status);
-    res.json(data);
+    const checks = await storage.getChecks(rvcId, status);
+    const checksWithPayments = await Promise.all(
+      checks.map(async (check) => {
+        const payments = await storage.getPayments(check.id);
+        const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        return { ...check, paidAmount };
+      })
+    );
+    res.json(checksWithPayments);
   });
 
   app.get("/api/checks/:id", async (req, res) => {
     const check = await storage.getCheck(req.params.id);
     if (!check) return res.status(404).json({ message: "Check not found" });
     const items = await storage.getCheckItems(req.params.id);
-    res.json({ check, items });
+    const payments = await storage.getPayments(req.params.id);
+    const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    res.json({ check: { ...check, paidAmount }, items });
   });
 
   app.post("/api/checks", async (req, res) => {
@@ -1049,14 +1058,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           details: { total, paidAmount },
         });
 
-        return res.json(updatedCheck);
+        return res.json({ ...updatedCheck, paidAmount });
       }
 
-      res.json(check);
+      res.json({ ...check, paidAmount });
     } catch (error) {
       console.error("Payment error:", error);
       res.status(400).json({ message: "Payment failed" });
     }
+  });
+
+  app.get("/api/checks/:id/payments", async (req, res) => {
+    const payments = await storage.getPayments(req.params.id);
+    const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    res.json({ payments, paidAmount });
   });
 
   // ============================================================================
