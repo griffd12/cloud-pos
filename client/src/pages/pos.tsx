@@ -200,12 +200,14 @@ export default function PosPage() {
       return response.json();
     },
     onSuccess: (result: Check & { paidAmount: number }) => {
+      console.log("Payment result:", result, "status:", result.status);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       if (result.status === "closed") {
+        console.log("Check is closed, clearing state");
+        setShowPaymentModal(false);
         setCurrentCheck(null);
         setCheckItems([]);
-        setShowPaymentModal(false);
         toast({ title: "Check closed successfully" });
       } else {
         setCurrentCheck(result);

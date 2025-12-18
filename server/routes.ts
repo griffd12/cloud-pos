@@ -848,14 +848,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const rvcId = req.query.rvcId as string | undefined;
     const status = req.query.status as string | undefined;
     const checks = await storage.getChecks(rvcId, status);
-    const checksWithPayments = await Promise.all(
-      checks.map(async (check) => {
-        const payments = await storage.getPayments(check.id);
-        const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
-        return { ...check, paidAmount };
-      })
-    );
-    res.json(checksWithPayments);
+    res.json(checks);
   });
 
   app.get("/api/checks/:id", async (req, res) => {
@@ -1040,7 +1033,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const total = subtotal + tax;
       const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
 
-      if (paidAmount >= total) {
+      console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
+      
+      if (paidAmount >= total - 0.01) {
         const updatedCheck = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),
@@ -1058,6 +1053,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           details: { total, paidAmount },
         });
 
+        console.log("Closing check, returning status:", updatedCheck?.status);
         return res.json({ ...updatedCheck, paidAmount });
       }
 
