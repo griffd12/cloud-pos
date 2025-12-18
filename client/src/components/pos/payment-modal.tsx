@@ -3,15 +3,13 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { Tender, Check } from "@shared/schema";
-import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon } from "lucide-react";
+import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X } from "lucide-react";
 
 interface PaymentModalProps {
   open: boolean;
@@ -30,7 +28,7 @@ const TENDER_ICONS: Record<string, typeof Banknote> = {
   other: DollarSign,
 };
 
-const QUICK_AMOUNTS = [1, 5, 10, 20, 50, 100];
+const QUICK_CASH_AMOUNTS = [1, 5, 10, 20, 50, 100];
 
 export function PaymentModal({
   open,
@@ -41,41 +39,61 @@ export function PaymentModal({
   remainingBalance,
   isLoading = false,
 }: PaymentModalProps) {
+  const [customAmount, setCustomAmount] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
-  const [amount, setAmount] = useState("");
+  const [tenderAmount, setTenderAmount] = useState("");
 
-  const handleTenderSelect = (tender: Tender) => {
-    setSelectedTender(tender);
-    setAmount(remainingBalance.toFixed(2));
-  };
-
-  const handleQuickAmount = (quickAmount: number) => {
-    setAmount(quickAmount.toFixed(2));
-  };
-
-  const handleExactAmount = () => {
-    setAmount(remainingBalance.toFixed(2));
-  };
-
-  const handleSubmit = () => {
-    if (selectedTender && parseFloat(amount) > 0) {
-      onPayment(selectedTender.id, parseFloat(amount));
-    }
-  };
+  const cashTender = tenders.find((t) => t.type === "cash");
+  const nonCashTenders = tenders.filter((t) => t.type !== "cash");
 
   const handleClose = () => {
+    setCustomAmount("");
     setSelectedTender(null);
-    setAmount("");
+    setTenderAmount("");
     onClose();
   };
 
-  const numAmount = parseFloat(amount) || 0;
-  const change = numAmount - remainingBalance;
+  const handleExactCash = () => {
+    if (cashTender) {
+      onPayment(cashTender.id, remainingBalance);
+    }
+  };
+
+  const handleQuickCash = (amount: number) => {
+    if (cashTender) {
+      onPayment(cashTender.id, amount);
+    }
+  };
+
+  const handleCustomCashSubmit = () => {
+    const amount = parseFloat(customAmount);
+    if (cashTender && amount > 0) {
+      onPayment(cashTender.id, amount);
+    }
+  };
+
+  const handleNonCashExact = (tender: Tender) => {
+    onPayment(tender.id, remainingBalance);
+  };
+
+  const handleNonCashPartial = () => {
+    const amount = parseFloat(tenderAmount);
+    if (selectedTender && amount > 0) {
+      onPayment(selectedTender.id, amount);
+      setSelectedTender(null);
+      setTenderAmount("");
+    }
+  };
+
+  const relevantQuickAmounts = QUICK_CASH_AMOUNTS;
+  const customAmountNum = parseFloat(customAmount) || 0;
+  const changeFromCustom = customAmountNum - remainingBalance;
+  const tenderAmountNum = parseFloat(tenderAmount) || 0;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl p-0 gap-0">
+        <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center justify-between" data-testid="text-payment-title">
             <span>Payment</span>
             {check && (
@@ -86,133 +104,163 @@ export function PaymentModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-1">Amount Due</p>
+        <div className="p-4">
+          <div className="bg-primary text-primary-foreground rounded-lg p-4 text-center mb-4">
+            <p className="text-sm opacity-90 mb-1">Amount Due</p>
             <p className="text-4xl font-bold tabular-nums" data-testid="text-amount-due">
               ${remainingBalance.toFixed(2)}
             </p>
           </div>
 
-          {!selectedTender ? (
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">
-              <Label>Select Payment Method</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {tenders.map((tender) => {
-                  const Icon = TENDER_ICONS[tender.type] || DollarSign;
-                  return (
-                    <Button
-                      key={tender.id}
-                      variant="outline"
-                      className="h-16 flex items-center gap-3"
-                      onClick={() => handleTenderSelect(tender)}
-                      data-testid={`button-tender-${tender.id}`}
-                    >
-                      <Icon className="w-6 h-6" />
-                      <span className="font-medium">{tender.name}</span>
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    const Icon = TENDER_ICONS[selectedTender.type] || DollarSign;
-                    return <Icon className="w-5 h-5" />;
-                  })()}
-                  <span className="font-medium">{selectedTender.name}</span>
-                </div>
+              <p className="text-sm font-medium text-muted-foreground">Cash</p>
+              
+              {cashTender && (
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedTender(null)}
+                  variant="default"
+                  className="w-full h-14 text-lg font-semibold"
+                  onClick={handleExactCash}
+                  disabled={isLoading}
+                  data-testid="button-exact-cash"
                 >
-                  Change
+                  <Banknote className="w-5 h-5 mr-2" />
+                  Exact ${remainingBalance.toFixed(2)}
                 </Button>
-              </div>
+              )}
 
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Amount</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    $
-                  </span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="pl-7 text-lg h-12 tabular-nums"
-                    placeholder="0.00"
-                    data-testid="input-payment-amount"
-                  />
-                </div>
-              </div>
-
-              {selectedTender.type === "cash" && (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground text-sm">Quick Amounts</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {QUICK_AMOUNTS.map((quickAmount) => (
-                      <Button
-                        key={quickAmount}
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleQuickAmount(quickAmount)}
-                        data-testid={`button-quick-amount-${quickAmount}`}
-                      >
-                        ${quickAmount}
-                      </Button>
-                    ))}
+              {cashTender && (
+                <div className="grid grid-cols-3 gap-2">
+                  {relevantQuickAmounts.map((amount) => (
                     <Button
+                      key={amount}
                       variant="secondary"
-                      size="sm"
-                      onClick={handleExactAmount}
-                      data-testid="button-exact-amount"
+                      className="h-11"
+                      onClick={() => handleQuickCash(amount)}
+                      disabled={isLoading}
+                      data-testid={`button-quick-cash-${amount}`}
                     >
-                      Exact
+                      ${amount}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
+              {cashTender && (
+                <div className="pt-1">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                        $
+                      </span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={customAmount}
+                        onChange={(e) => setCustomAmount(e.target.value)}
+                        className="pl-7 h-10 tabular-nums"
+                        placeholder="Custom"
+                        data-testid="input-custom-cash-amount"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleCustomCashSubmit}
+                      disabled={isLoading || customAmountNum <= 0}
+                      data-testid="button-custom-cash-submit"
+                    >
+                      <CheckIcon className="w-4 h-4" />
                     </Button>
                   </div>
-                </div>
-              )}
-
-              {selectedTender.type === "cash" && numAmount >= remainingBalance && (
-                <div className="bg-accent/50 rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-sm font-medium">Change Due</span>
-                  <span className="text-lg font-bold tabular-nums text-green-600 dark:text-green-400">
-                    ${change.toFixed(2)}
-                  </span>
+                  {customAmountNum >= remainingBalance && (
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1 tabular-nums">
+                      Change: ${changeFromCustom.toFixed(2)}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={handleClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!selectedTender || numAmount <= 0 || isLoading}
-            data-testid="button-submit-payment"
-          >
-            {isLoading ? (
-              "Processing..."
-            ) : (
-              <>
-                <CheckIcon className="w-4 h-4 mr-2" />
-                Complete Payment
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-muted-foreground">Card / Other</p>
+              
+              {nonCashTenders.map((tender) => {
+                const Icon = TENDER_ICONS[tender.type] || DollarSign;
+                const isSelected = selectedTender?.id === tender.id;
+                
+                return (
+                  <div key={tender.id} className="space-y-2">
+                    <div className="flex gap-2">
+                      <Button
+                        variant={isSelected ? "secondary" : "outline"}
+                        className="flex-1 h-12 justify-start gap-3"
+                        onClick={() => handleNonCashExact(tender)}
+                        disabled={isLoading}
+                        data-testid={`button-tender-exact-${tender.id}`}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span className="font-medium">{tender.name}</span>
+                        <span className="ml-auto text-muted-foreground tabular-nums text-sm">
+                          ${remainingBalance.toFixed(2)}
+                        </span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedTender(isSelected ? null : tender)}
+                        disabled={isLoading}
+                        data-testid={`button-tender-split-${tender.id}`}
+                        title="Split payment"
+                      >
+                        <DollarSign className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    
+                    {isSelected && (
+                      <div className="flex gap-2 pl-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={remainingBalance}
+                            value={tenderAmount}
+                            onChange={(e) => setTenderAmount(e.target.value)}
+                            className="pl-7 h-9 tabular-nums text-sm"
+                            placeholder="Partial amount"
+                            autoFocus
+                            data-testid={`input-tender-amount-${tender.id}`}
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={handleNonCashPartial}
+                          disabled={isLoading || tenderAmountNum <= 0 || tenderAmountNum > remainingBalance}
+                          data-testid={`button-tender-submit-${tender.id}`}
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="flex justify-end">
+            <Button variant="ghost" onClick={handleClose} disabled={isLoading} data-testid="button-cancel-payment">
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
