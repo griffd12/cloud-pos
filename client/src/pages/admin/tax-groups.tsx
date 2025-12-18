@@ -33,7 +33,7 @@ export default function TaxGroupsPage() {
 
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Tax Group Name", type: "text", placeholder: "e.g., State Sales Tax", required: true },
-    { name: "rate", label: "Rate (decimal)", type: "number", placeholder: "e.g., 0.0825 for 8.25%", required: true },
+    { name: "rate", label: "Tax Rate (%)", type: "number", placeholder: "e.g., 7.25 for 7.25%", required: true },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 
@@ -82,10 +82,15 @@ export default function TaxGroupsPage() {
   });
 
   const handleSubmit = (data: InsertTaxGroup) => {
+    // Convert percentage to decimal for storage
+    const dataWithDecimalRate = {
+      ...data,
+      rate: (parseFloat(data.rate as string) / 100).toString(),
+    };
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, ...dataWithDecimalRate });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(dataWithDecimalRate);
     }
   };
 
@@ -119,7 +124,10 @@ export default function TaxGroupsPage() {
         schema={insertTaxGroupSchema}
         fields={formFields}
         title={editingItem ? "Edit Tax Group" : "Add Tax Group"}
-        initialData={editingItem || undefined}
+        initialData={editingItem ? {
+          ...editingItem,
+          rate: (parseFloat(editingItem.rate || "0") * 100).toString(),
+        } : undefined}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
