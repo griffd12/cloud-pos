@@ -194,10 +194,12 @@ export default function PosPage() {
   };
 
   const handleSelectItem = async (item: MenuItemWithModifiers) => {
-    if (!currentCheck) {
+    let checkToUse = currentCheck;
+    
+    if (!checkToUse) {
       if (hasPrivilege("fast_transaction")) {
         const defaultOrderType = (currentRvc?.defaultOrderType as OrderType) || "dine_in";
-        await createCheckMutation.mutateAsync(defaultOrderType);
+        checkToUse = await createCheckMutation.mutateAsync(defaultOrderType);
       } else {
         setShowOrderTypeModal(true);
         setPendingItem(item);
@@ -209,7 +211,21 @@ export default function PosPage() {
       setPendingItem(item);
       setShowModifierModal(true);
     } else {
-      addItemMutation.mutate({ menuItem: item, modifiers: [] });
+      try {
+        const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
+          menuItemId: item.id,
+          menuItemName: item.name,
+          unitPrice: item.price,
+          modifiers: [],
+          quantity: 1,
+        });
+        const newItem = await response.json();
+        setCheckItems([...checkItems, newItem]);
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      } catch {
+        toast({ title: "Failed to add item", variant: "destructive" });
+      }
     }
   };
 
