@@ -32,6 +32,8 @@ export const rvcs = pgTable("rvcs", {
   fastTransactionDefault: boolean("fast_transaction_default").default(false),
   defaultOrderType: text("default_order_type").default("dine_in"),
   orderTypeDefault: text("order_type_default").default("dine_in"),
+  defaultSignInPageId: varchar("default_sign_in_page_id"),
+  defaultTransactionPageId: varchar("default_transaction_page_id"),
   active: boolean("active").default(true),
 });
 
@@ -657,7 +659,7 @@ export type PosPageKey = typeof posPageKeys.$inferSelect;
 export type InsertPosPageKey = z.infer<typeof insertPosPageKeySchema>;
 
 // Page Design constants
-export const PAGE_TYPES = ["menu", "functions", "payments"] as const;
+export const PAGE_TYPES = ["menu", "functions", "payments", "signin"] as const;
 export type PageType = typeof PAGE_TYPES[number];
 
 export const KEY_ACTION_TYPES = ["slu", "menu_item", "function", "navigation"] as const;
@@ -676,6 +678,7 @@ export const POS_FUNCTION_CODES = {
   SEND_ORDER: "send_order",
   FIRE_COURSE: "fire_course",
   REPEAT_ROUND: "repeat_round",
+  NEW_CHECK: "new_check",
   // Check editing
   EDIT_SEAT: "edit_seat",
   CHANGE_ORDER_TYPE: "change_order_type",
@@ -690,9 +693,72 @@ export const POS_FUNCTION_CODES = {
   QUICK_CASH: "quick_cash",
   NO_SALE: "no_sale",
   // Navigation
+  CHANGE_SCREEN: "change_screen",
   BACK: "back",
   HOME: "home",
+  // Sign-in functions
+  SIGN_IN: "sign_in",
+  CLOCK_IN: "clock_in",
+  CLOCK_OUT: "clock_out",
 } as const;
+
+// Function metadata for Page Design UI - describes what each action type needs
+export const KEY_ACTION_METADATA = {
+  slu: {
+    label: "SLU Lookup",
+    description: "Opens a category and displays its menu items",
+    requiresTarget: true,
+    targetType: "slu" as const,
+  },
+  menu_item: {
+    label: "Menu Item",
+    description: "Adds a specific menu item directly to the check",
+    requiresTarget: true,
+    targetType: "menu_item" as const,
+  },
+  function: {
+    label: "Function",
+    description: "Executes a POS function (void, pay, send, etc.)",
+    requiresTarget: true,
+    targetType: "function" as const,
+  },
+  navigation: {
+    label: "Change Screen",
+    description: "Navigates to another page design screen",
+    requiresTarget: true,
+    targetType: "page" as const,
+  },
+} as const;
+
+// Human-readable function labels
+export const POS_FUNCTION_LABELS: Record<string, string> = {
+  void_item: "Void Item",
+  void_check: "Void Check",
+  split_check: "Split Check",
+  transfer_check: "Transfer Check",
+  merge_checks: "Merge Checks",
+  reopen_check: "Reopen Check",
+  send_order: "Send Order",
+  fire_course: "Fire Course",
+  repeat_round: "Repeat Round",
+  new_check: "New Check",
+  edit_seat: "Edit Seat",
+  change_order_type: "Change Order Type",
+  change_table: "Change Table",
+  add_guest: "Add Guest",
+  apply_discount: "Apply Discount",
+  remove_discount: "Remove Discount",
+  apply_service_charge: "Apply Service Charge",
+  pay_check: "Pay Check",
+  quick_cash: "Quick Cash",
+  no_sale: "No Sale",
+  change_screen: "Change Screen",
+  back: "Back",
+  home: "Home",
+  sign_in: "Sign In",
+  clock_in: "Clock In",
+  clock_out: "Clock Out",
+};
 
 // Privilege codes as constants
 export const PRIVILEGE_CODES = {

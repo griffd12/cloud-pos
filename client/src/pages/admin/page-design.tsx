@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Plus, Trash2, Edit, Grid3X3, Save, ArrowLeft } from "lucide-react";
 import type { PosPage, PosPageKey, Slu, MenuItem, InsertPosPageKey } from "@shared/schema";
-import { PAGE_TYPES, KEY_ACTION_TYPES, POS_FUNCTION_CODES } from "@shared/schema";
+import { PAGE_TYPES, KEY_ACTION_TYPES, POS_FUNCTION_CODES, POS_FUNCTION_LABELS, KEY_ACTION_METADATA } from "@shared/schema";
 
 type KeyActionType = typeof KEY_ACTION_TYPES[number];
 
@@ -490,13 +490,15 @@ function PageFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAGE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </SelectItem>
-                ))}
+                <SelectItem value="menu">Menu - For ordering screens</SelectItem>
+                <SelectItem value="functions">Functions - For POS operations</SelectItem>
+                <SelectItem value="payments">Payments - For payment screens</SelectItem>
+                <SelectItem value="signin">Sign-In - For login screens</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Page types are organizational labels. Any keys can be placed on any page type.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
@@ -524,15 +526,20 @@ function PageFormDialog({
               />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="isDefault"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-              data-testid="checkbox-is-default"
-            />
-            <Label htmlFor="isDefault">Default page for this type</Label>
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isDefault"
+                checked={isDefault}
+                onChange={(e) => setIsDefault(e.target.checked)}
+                data-testid="checkbox-is-default"
+              />
+              <Label htmlFor="isDefault">Default page for this type</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When set, this page will be used as the starting screen. For menu pages, this is the transaction screen. For signin pages, this is the login screen.
+            </p>
           </div>
         </div>
         <DialogFooter>
@@ -620,9 +627,9 @@ function KeyFormDialog({
     });
   };
 
-  const functionCodes = Object.entries(POS_FUNCTION_CODES).map(([key, value]) => ({
-    value,
-    label: key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
+  const functionCodes = Object.values(POS_FUNCTION_CODES).map((code) => ({
+    value: code,
+    label: POS_FUNCTION_LABELS[code] || code,
   }));
 
   return (
@@ -731,12 +738,16 @@ function KeyFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="slu">Open SLU Category</SelectItem>
-                <SelectItem value="menu_item">Add Menu Item</SelectItem>
-                <SelectItem value="function">POS Function</SelectItem>
-                <SelectItem value="navigation">Navigate to Page</SelectItem>
+                {KEY_ACTION_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {KEY_ACTION_METADATA[type].label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              {KEY_ACTION_METADATA[actionType].description}
+            </p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="actionTarget">
