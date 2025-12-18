@@ -1028,17 +1028,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const check = await storage.getCheck(checkId);
       const items = await storage.getCheckItems(checkId);
       const payments = await storage.getPayments(checkId);
+      const taxGroups = await storage.getTaxGroups();
+      const menuItems = await storage.getMenuItems();
 
       const activeItems = items.filter((i) => !i.voided);
-      const subtotal = activeItems.reduce((sum, item) => {
+      let subtotal = 0;
+      let tax = 0;
+      
+      for (const item of activeItems) {
         const unitPrice = parseFloat(item.unitPrice || "0");
         const modifierTotal = (item.modifiers || []).reduce(
-          (mSum, mod) => mSum + parseFloat(mod.priceDelta || "0"),
+          (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
           0
         );
-        return sum + (unitPrice + modifierTotal) * (item.quantity || 1);
-      }, 0);
-      const tax = subtotal * 0.0825;
+        const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
+        subtotal += itemTotal;
+        
+        const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
+        const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
+        const taxRate = parseFloat(taxGroup?.rate || "0");
+        tax += itemTotal * taxRate;
+      }
+      
       const total = subtotal + tax;
       const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
 
