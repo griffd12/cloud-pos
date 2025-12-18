@@ -1032,8 +1032,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const menuItems = await storage.getMenuItems();
 
       const activeItems = items.filter((i) => !i.voided);
-      let subtotal = 0;
-      let tax = 0;
+      let displaySubtotal = 0;  // What customer sees as subtotal
+      let addOnTax = 0;
       
       for (const item of activeItems) {
         const unitPrice = parseFloat(item.unitPrice || "0");
@@ -1042,15 +1042,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           0
         );
         const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
-        subtotal += itemTotal;
         
         const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
         const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
         const taxRate = parseFloat(taxGroup?.rate || "0");
-        tax += itemTotal * taxRate;
+        const taxMode = taxGroup?.taxMode || "add_on";
+        
+        if (taxMode === "inclusive") {
+          // For inclusive tax, the item price already contains tax
+          // Customer sees the full price, no separate tax line added
+          displaySubtotal += itemTotal;
+        } else {
+          // For add-on tax, add item total and calculate tax separately
+          displaySubtotal += itemTotal;
+          addOnTax += itemTotal * taxRate;
+        }
       }
       
-      const total = subtotal + tax;
+      const subtotal = displaySubtotal;
+      const tax = addOnTax;
+      const total = displaySubtotal + addOnTax;
       const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
 
       console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
