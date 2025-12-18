@@ -6,7 +6,6 @@ import {
   modifierGroups, modifiers, menuItemModifierGroups, tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
-  posPages, posPageKeys,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -34,8 +33,6 @@ import {
   type CheckPayment, type InsertCheckPayment,
   type AuditLog, type InsertAuditLog,
   type KdsTicket, type InsertKdsTicket,
-  type PosPage, type InsertPosPage,
-  type PosPageKey, type InsertPosPageKey,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -212,21 +209,6 @@ export interface IStorage {
 
   // Admin Stats
   getAdminStats(): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }>;
-
-  // POS Pages
-  getPosPages(rvcId?: string): Promise<PosPage[]>;
-  getPosPage(id: string): Promise<PosPage | undefined>;
-  createPosPage(data: InsertPosPage): Promise<PosPage>;
-  updatePosPage(id: string, data: Partial<InsertPosPage>): Promise<PosPage | undefined>;
-  deletePosPage(id: string): Promise<boolean>;
-
-  // POS Page Keys
-  getPosPageKeys(pageId: string): Promise<PosPageKey[]>;
-  getPosPageKey(id: string): Promise<PosPageKey | undefined>;
-  createPosPageKey(data: InsertPosPageKey): Promise<PosPageKey>;
-  updatePosPageKey(id: string, data: Partial<InsertPosPageKey>): Promise<PosPageKey | undefined>;
-  deletePosPageKey(id: string): Promise<boolean>;
-  bulkUpdatePosPageKeys(pageId: string, keys: InsertPosPageKey[]): Promise<PosPageKey[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1045,67 +1027,6 @@ export class DatabaseStorage implements IStorage {
       menuItems: Number(itemCount?.count || 0),
       activeChecks: Number(checkCount?.count || 0),
     };
-  }
-  // POS Pages
-  async getPosPages(rvcId?: string): Promise<PosPage[]> {
-    if (rvcId) {
-      return db.select().from(posPages).where(eq(posPages.rvcId, rvcId)).orderBy(posPages.sortOrder);
-    }
-    return db.select().from(posPages).orderBy(posPages.sortOrder);
-  }
-
-  async getPosPage(id: string): Promise<PosPage | undefined> {
-    const [result] = await db.select().from(posPages).where(eq(posPages.id, id));
-    return result;
-  }
-
-  async createPosPage(data: InsertPosPage): Promise<PosPage> {
-    const [result] = await db.insert(posPages).values(data).returning();
-    return result;
-  }
-
-  async updatePosPage(id: string, data: Partial<InsertPosPage>): Promise<PosPage | undefined> {
-    const [result] = await db.update(posPages).set(data).where(eq(posPages.id, id)).returning();
-    return result;
-  }
-
-  async deletePosPage(id: string): Promise<boolean> {
-    const result = await db.delete(posPages).where(eq(posPages.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  // POS Page Keys
-  async getPosPageKeys(pageId: string): Promise<PosPageKey[]> {
-    return db.select().from(posPageKeys).where(eq(posPageKeys.pageId, pageId));
-  }
-
-  async getPosPageKey(id: string): Promise<PosPageKey | undefined> {
-    const [result] = await db.select().from(posPageKeys).where(eq(posPageKeys.id, id));
-    return result;
-  }
-
-  async createPosPageKey(data: InsertPosPageKey): Promise<PosPageKey> {
-    const [result] = await db.insert(posPageKeys).values(data).returning();
-    return result;
-  }
-
-  async updatePosPageKey(id: string, data: Partial<InsertPosPageKey>): Promise<PosPageKey | undefined> {
-    const [result] = await db.update(posPageKeys).set(data).where(eq(posPageKeys.id, id)).returning();
-    return result;
-  }
-
-  async deletePosPageKey(id: string): Promise<boolean> {
-    const result = await db.delete(posPageKeys).where(eq(posPageKeys.id, id));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async bulkUpdatePosPageKeys(pageId: string, keys: InsertPosPageKey[]): Promise<PosPageKey[]> {
-    // Delete all existing keys for this page
-    await db.delete(posPageKeys).where(eq(posPageKeys.pageId, pageId));
-    // Insert all new keys
-    if (keys.length === 0) return [];
-    const result = await db.insert(posPageKeys).values(keys.map(k => ({ ...k, pageId }))).returning();
-    return result;
   }
 }
 

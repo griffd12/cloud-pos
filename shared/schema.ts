@@ -32,8 +32,6 @@ export const rvcs = pgTable("rvcs", {
   fastTransactionDefault: boolean("fast_transaction_default").default(false),
   defaultOrderType: text("default_order_type").default("dine_in"),
   orderTypeDefault: text("order_type_default").default("dine_in"),
-  defaultSignInPageId: varchar("default_sign_in_page_id"),
-  defaultTransactionPageId: varchar("default_transaction_page_id"),
   active: boolean("active").default(true),
 });
 
@@ -485,77 +483,6 @@ export const kdsTicketItems = pgTable("kds_ticket_items", {
 });
 
 // ============================================================================
-// PAGE DESIGN (TouchScreen Designer)
-// ============================================================================
-
-// Page Types: menu (order entry), functions (POS operations), payments (tender selection)
-export const posPages = pgTable("pos_pages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
-  propertyId: varchar("property_id").references(() => properties.id),
-  rvcId: varchar("rvc_id").references(() => rvcs.id),
-  name: text("name").notNull(),
-  pageType: text("page_type").notNull().default("menu"), // 'menu', 'functions', 'payments'
-  // Grid configuration
-  gridColumns: integer("grid_columns").default(8),
-  gridRows: integer("grid_rows").default(6),
-  // Display
-  isDefault: boolean("is_default").default(false), // Default page for this RVC/page type
-  sortOrder: integer("sort_order").default(0),
-  active: boolean("active").default(true),
-});
-
-// Key action types define what happens when a key is pressed
-// slu - opens an SLU category to show menu items
-// menu_item - directly adds a menu item to the check
-// function - triggers a POS function (void, split, transfer, etc.)
-// navigation - navigates to another page
-export const posPageKeys = pgTable("pos_page_keys", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  pageId: varchar("page_id").notNull().references(() => posPages.id, { onDelete: "cascade" }),
-  // Position and size (grid-based)
-  gridRow: integer("grid_row").notNull().default(0), // 0-indexed row position
-  gridColumn: integer("grid_column").notNull().default(0), // 0-indexed column position
-  rowSpan: integer("row_span").default(1), // How many rows this key spans
-  colSpan: integer("col_span").default(1), // How many columns this key spans
-  // Display
-  label: text("label").notNull(),
-  labelLine2: text("label_line_2"), // Optional second line
-  color: text("color").default("#3B82F6"),
-  textColor: text("text_color").default("#FFFFFF"),
-  icon: text("icon"), // Lucide icon name
-  fontSize: text("font_size").default("medium"), // 'small', 'medium', 'large'
-  // Action configuration
-  actionType: text("action_type").notNull(), // 'slu', 'menu_item', 'function', 'navigation'
-  // Action target (depends on actionType):
-  // - slu: sluId
-  // - menu_item: menuItemId
-  // - function: functionCode (e.g., 'void_item', 'split_check', 'transfer_check')
-  // - navigation: targetPageId
-  actionTarget: text("action_target"),
-  // Additional action config as JSON (function params, etc.)
-  actionConfig: jsonb("action_config"),
-  active: boolean("active").default(true),
-});
-
-// Page assignment to workstations (optional override)
-export const posPageWorkstations = pgTable("pos_page_workstations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  pageId: varchar("page_id").notNull().references(() => posPages.id, { onDelete: "cascade" }),
-  workstationId: varchar("workstation_id").notNull().references(() => workstations.id),
-});
-
-// Relations
-export const posPagesRelations = relations(posPages, ({ many }) => ({
-  keys: many(posPageKeys),
-  workstationAssignments: many(posPageWorkstations),
-}));
-
-export const posPageKeysRelations = relations(posPageKeys, ({ one }) => ({
-  page: one(posPages, { fields: [posPageKeys.pageId], references: [posPages.id] }),
-}));
-
-// ============================================================================
 // INSERT SCHEMAS & TYPES
 // ============================================================================
 
@@ -593,8 +520,6 @@ export const insertCheckItemSchema = createInsertSchema(checkItems).omit({ id: t
 export const insertCheckPaymentSchema = createInsertSchema(checkPayments).omit({ id: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true });
 export const insertKdsTicketSchema = createInsertSchema(kdsTickets).omit({ id: true });
-export const insertPosPageSchema = createInsertSchema(posPages).omit({ id: true });
-export const insertPosPageKeySchema = createInsertSchema(posPageKeys).omit({ id: true });
 
 // Types
 export type Enterprise = typeof enterprises.$inferSelect;
@@ -653,112 +578,6 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type KdsTicket = typeof kdsTickets.$inferSelect;
 export type InsertKdsTicket = z.infer<typeof insertKdsTicketSchema>;
-export type PosPage = typeof posPages.$inferSelect;
-export type InsertPosPage = z.infer<typeof insertPosPageSchema>;
-export type PosPageKey = typeof posPageKeys.$inferSelect;
-export type InsertPosPageKey = z.infer<typeof insertPosPageKeySchema>;
-
-// Page Design constants
-export const PAGE_TYPES = ["menu", "functions", "payments", "signin"] as const;
-export type PageType = typeof PAGE_TYPES[number];
-
-export const KEY_ACTION_TYPES = ["slu", "menu_item", "function", "navigation"] as const;
-export type KeyActionType = typeof KEY_ACTION_TYPES[number];
-
-// Available POS function codes for function keys
-export const POS_FUNCTION_CODES = {
-  // Transaction functions
-  VOID_ITEM: "void_item",
-  VOID_CHECK: "void_check",
-  SPLIT_CHECK: "split_check",
-  TRANSFER_CHECK: "transfer_check",
-  MERGE_CHECKS: "merge_checks",
-  REOPEN_CHECK: "reopen_check",
-  // Order functions
-  SEND_ORDER: "send_order",
-  FIRE_COURSE: "fire_course",
-  REPEAT_ROUND: "repeat_round",
-  NEW_CHECK: "new_check",
-  // Check editing
-  EDIT_SEAT: "edit_seat",
-  CHANGE_ORDER_TYPE: "change_order_type",
-  CHANGE_TABLE: "change_table",
-  ADD_GUEST: "add_guest",
-  // Discounts & service charges
-  APPLY_DISCOUNT: "apply_discount",
-  REMOVE_DISCOUNT: "remove_discount",
-  APPLY_SERVICE_CHARGE: "apply_service_charge",
-  // Payments
-  PAY_CHECK: "pay_check",
-  QUICK_CASH: "quick_cash",
-  NO_SALE: "no_sale",
-  // Navigation
-  CHANGE_SCREEN: "change_screen",
-  BACK: "back",
-  HOME: "home",
-  // Sign-in functions
-  SIGN_IN: "sign_in",
-  CLOCK_IN: "clock_in",
-  CLOCK_OUT: "clock_out",
-} as const;
-
-// Function metadata for Page Design UI - describes what each action type needs
-export const KEY_ACTION_METADATA = {
-  slu: {
-    label: "SLU Lookup",
-    description: "Opens a category and displays its menu items",
-    requiresTarget: true,
-    targetType: "slu" as const,
-  },
-  menu_item: {
-    label: "Menu Item",
-    description: "Adds a specific menu item directly to the check",
-    requiresTarget: true,
-    targetType: "menu_item" as const,
-  },
-  function: {
-    label: "Function",
-    description: "Executes a POS function (void, pay, send, etc.)",
-    requiresTarget: true,
-    targetType: "function" as const,
-  },
-  navigation: {
-    label: "Change Screen",
-    description: "Navigates to another page design screen",
-    requiresTarget: true,
-    targetType: "page" as const,
-  },
-} as const;
-
-// Human-readable function labels
-export const POS_FUNCTION_LABELS: Record<string, string> = {
-  void_item: "Void Item",
-  void_check: "Void Check",
-  split_check: "Split Check",
-  transfer_check: "Transfer Check",
-  merge_checks: "Merge Checks",
-  reopen_check: "Reopen Check",
-  send_order: "Send Order",
-  fire_course: "Fire Course",
-  repeat_round: "Repeat Round",
-  new_check: "New Check",
-  edit_seat: "Edit Seat",
-  change_order_type: "Change Order Type",
-  change_table: "Change Table",
-  add_guest: "Add Guest",
-  apply_discount: "Apply Discount",
-  remove_discount: "Remove Discount",
-  apply_service_charge: "Apply Service Charge",
-  pay_check: "Pay Check",
-  quick_cash: "Quick Cash",
-  no_sale: "No Sale",
-  change_screen: "Change Screen",
-  back: "Back",
-  home: "Home",
-  sign_in: "Sign In",
-  clock_in: "Clock In",
-  clock_out: "Clock Out",
-};
 
 // Privilege codes as constants
 export const PRIVILEGE_CODES = {

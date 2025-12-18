@@ -10,7 +10,6 @@ import {
   insertPrintClassRoutingSchema, insertMenuItemSchema, insertModifierGroupSchema,
   insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
-  insertPosPageSchema, insertPosPageKeySchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1086,100 +1085,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Bump error:", error);
       res.status(400).json({ message: "Failed to bump ticket" });
-    }
-  });
-
-  // ============================================================================
-  // POS PAGE DESIGN ROUTES
-  // ============================================================================
-
-  app.get("/api/pos-pages", async (req, res) => {
-    const rvcId = req.query.rvcId as string | undefined;
-    const data = await storage.getPosPages(rvcId);
-    res.json(data);
-  });
-
-  app.get("/api/pos-pages/:id", async (req, res) => {
-    const data = await storage.getPosPage(req.params.id);
-    if (!data) {
-      return res.status(404).json({ message: "Page not found" });
-    }
-    res.json(data);
-  });
-
-  app.post("/api/pos-pages", async (req, res) => {
-    try {
-      const validated = insertPosPageSchema.parse(req.body);
-      const data = await storage.createPosPage(validated);
-      res.status(201).json(data);
-    } catch (error) {
-      console.error("Create POS page error:", error);
-      res.status(400).json({ message: "Invalid page data" });
-    }
-  });
-
-  app.patch("/api/pos-pages/:id", async (req, res) => {
-    try {
-      const data = await storage.updatePosPage(req.params.id, req.body);
-      res.json(data);
-    } catch (error) {
-      console.error("Update POS page error:", error);
-      res.status(400).json({ message: "Failed to update page" });
-    }
-  });
-
-  app.delete("/api/pos-pages/:id", async (req, res) => {
-    await storage.deletePosPage(req.params.id);
-    res.status(204).send();
-  });
-
-  // POS Page Keys
-  app.get("/api/pos-pages/:pageId/keys", async (req, res) => {
-    const data = await storage.getPosPageKeys(req.params.pageId);
-    res.json(data);
-  });
-
-  app.post("/api/pos-pages/:pageId/keys", async (req, res) => {
-    try {
-      const validated = insertPosPageKeySchema.parse({
-        ...req.body,
-        pageId: req.params.pageId,
-      });
-      const data = await storage.createPosPageKey(validated);
-      res.status(201).json(data);
-    } catch (error) {
-      console.error("Create POS page key error:", error);
-      res.status(400).json({ message: "Invalid key data" });
-    }
-  });
-
-  app.patch("/api/pos-page-keys/:id", async (req, res) => {
-    try {
-      const data = await storage.updatePosPageKey(req.params.id, req.body);
-      res.json(data);
-    } catch (error) {
-      console.error("Update POS page key error:", error);
-      res.status(400).json({ message: "Failed to update key" });
-    }
-  });
-
-  app.delete("/api/pos-page-keys/:id", async (req, res) => {
-    await storage.deletePosPageKey(req.params.id);
-    res.status(204).send();
-  });
-
-  // Bulk update keys for a page
-  app.put("/api/pos-pages/:pageId/keys", async (req, res) => {
-    try {
-      const keys = req.body;
-      if (!Array.isArray(keys)) {
-        return res.status(400).json({ message: "Expected an array of keys" });
-      }
-      const data = await storage.bulkUpdatePosPageKeys(req.params.pageId, keys);
-      res.json(data);
-    } catch (error) {
-      console.error("Bulk update POS page keys error:", error);
-      res.status(400).json({ message: "Failed to update keys" });
     }
   });
 
