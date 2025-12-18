@@ -30,6 +30,7 @@ import {
   ChefHat,
   MonitorSmartphone,
   Tv2,
+  Grid3X3,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -51,6 +52,7 @@ const menuGroups = [
       { title: "SLUs (Categories)", url: "/admin/slus", icon: LayoutGrid },
       { title: "Menu Items", url: "/admin/menu-items", icon: UtensilsCrossed },
       { title: "Modifier Groups", url: "/admin/modifier-groups", icon: Settings2 },
+      { title: "Page Design", url: "/admin/page-design", icon: Grid3X3 },
     ],
   },
   {

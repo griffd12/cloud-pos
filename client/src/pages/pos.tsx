@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { SluGrid } from "@/components/pos/slu-grid";
 import { MenuItemGrid } from "@/components/pos/menu-item-grid";
+import { DynamicPageGrid } from "@/components/pos/dynamic-page-grid";
 import { CheckPanel } from "@/components/pos/check-panel";
 import { ModifierModal } from "@/components/pos/modifier-modal";
 import { ManagerApprovalModal } from "@/components/pos/manager-approval-modal";
@@ -14,8 +15,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings } from "lucide-react";
+import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosPage, PosPageKey } from "@shared/schema";
+import { LogOut, User, Receipt, Settings, Grid3X3 } from "lucide-react";
 import { Link } from "wouter";
 
 interface MenuItemWithModifiers extends MenuItem {
@@ -53,6 +54,9 @@ export default function PosPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [usePages, setUsePages] = useState(true);
+  const [currentPageId, setCurrentPageId] = useState<string | null>(null);
+  const [pageStack, setPageStack] = useState<string[]>([]);
 
   const { data: slus = [], isLoading: slusLoading } = useQuery<Slu[]>({
     queryKey: ["/api/slus", currentRvc?.id],
@@ -91,6 +95,36 @@ export default function PosPage() {
       return res.json();
     },
   });
+
+  const { data: posPages = [], isLoading: pagesLoading } = useQuery<PosPage[]>({
+    queryKey: ["/api/pos-pages", currentRvc?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/pos-pages?rvcId=${currentRvc?.id || ""}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch pages");
+      return res.json();
+    },
+    enabled: !!currentRvc,
+  });
+
+  const defaultMenuPage = posPages.find((p) => p.pageType === "menu" && p.isDefault) || posPages.find((p) => p.pageType === "menu");
+  const activePage = posPages.find((p) => p.id === currentPageId) || defaultMenuPage;
+
+  const { data: pageKeys = [], isLoading: keysLoading } = useQuery<PosPageKey[]>({
+    queryKey: ["/api/pos-pages", activePage?.id, "keys"],
+    queryFn: async () => {
+      if (!activePage) return [];
+      const res = await fetch(`/api/pos-pages/${activePage.id}/keys`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch page keys");
+      return res.json();
+    },
+    enabled: !!activePage,
+  });
+
+  useEffect(() => {
+    if (defaultMenuPage && !currentPageId) {
+      setCurrentPageId(defaultMenuPage.id);
+    }
+  }, [defaultMenuPage, currentPageId]);
 
   const createCheckMutation = useMutation({
     mutationFn: async (orderType: OrderType) => {
@@ -277,6 +311,53 @@ export default function PosPage() {
     }
   };
 
+  const handleNavigateToPage = (pageId: string) => {
+    if (currentPageId) {
+      setPageStack([...pageStack, currentPageId]);
+    }
+    setCurrentPageId(pageId);
+  };
+
+  const handlePageBack = () => {
+    if (pageStack.length > 0) {
+      const newStack = [...pageStack];
+      const prevPageId = newStack.pop() || null;
+      setPageStack(newStack);
+      setCurrentPageId(prevPageId);
+    }
+  };
+
+  const handleExecuteFunction = (functionCode: string) => {
+    switch (functionCode) {
+      case "split_check":
+        toast({ title: "Split check not implemented yet" });
+        break;
+      case "void_check":
+        toast({ title: "Void check not implemented yet" });
+        break;
+      case "discount":
+        toast({ title: "Discount not implemented yet" });
+        break;
+      case "new_check":
+        setShowOrderTypeModal(true);
+        break;
+      case "send":
+        sendCheckMutation.mutate();
+        break;
+      case "pay":
+        setShowPaymentModal(true);
+        break;
+      default:
+        toast({ title: `Function ${functionCode} not implemented` });
+    }
+  };
+
+  const handlePageMenuItem = (menuItem: MenuItem) => {
+    handleSelectItem(menuItem as MenuItemWithModifiers);
+  };
+
+  const hasConfiguredPages = posPages.length > 0 && activePage;
+
   const calculateTotals = () => {
     const activeItems = checkItems.filter((item) => !item.voided);
     let displaySubtotal = 0;  // What customer sees as subtotal (item prices sum)
@@ -362,31 +443,90 @@ export default function PosPage() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-48 lg:w-56 flex-shrink-0 border-r bg-muted/30">
-          <ScrollArea className="h-full">
-            <div className="p-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2 py-2">
-                Categories
-              </p>
-              <SluGrid
+        {hasConfiguredPages && usePages && activePage ? (
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-shrink-0 flex items-center justify-between px-2 py-1 border-b bg-muted/30">
+              <div className="flex items-center gap-2">
+                {posPages.filter((p) => p.pageType === "menu").map((page) => (
+                  <Button
+                    key={page.id}
+                    variant={activePage.id === page.id ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => {
+                      setPageStack([]);
+                      setCurrentPageId(page.id);
+                    }}
+                    data-testid={`button-page-${page.id}`}
+                  >
+                    {page.name}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setUsePages(false)}
+                data-testid="button-switch-to-classic"
+              >
+                <Grid3X3 className="w-4 h-4 mr-1" />
+                Classic
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <DynamicPageGrid
+                page={activePage}
+                pageKeys={pageKeys}
                 slus={slus}
-                selectedSluId={selectedSlu?.id || null}
+                menuItems={allMenuItems}
                 onSelectSlu={handleSelectSlu}
-                isLoading={slusLoading}
+                onSelectMenuItem={handlePageMenuItem}
+                onNavigateToPage={handleNavigateToPage}
+                onExecuteFunction={handleExecuteFunction}
+                onBack={pageStack.length > 0 ? handlePageBack : undefined}
+                isLoading={keysLoading}
               />
             </div>
-          </ScrollArea>
-        </div>
-
-        <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full">
-            <MenuItemGrid
-              items={menuItems}
-              onSelectItem={handleSelectItem}
-              isLoading={itemsLoading && !!selectedSlu}
-            />
-          </ScrollArea>
-        </div>
+          </div>
+        ) : (
+          <>
+            <div className="w-48 lg:w-56 flex-shrink-0 border-r bg-muted/30">
+              <ScrollArea className="h-full">
+                <div className="p-2">
+                  <div className="flex items-center justify-between px-2 py-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Categories
+                    </p>
+                    {hasConfiguredPages && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setUsePages(true)}
+                        data-testid="button-switch-to-pages"
+                      >
+                        <Grid3X3 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <SluGrid
+                    slus={slus}
+                    selectedSluId={selectedSlu?.id || null}
+                    onSelectSlu={handleSelectSlu}
+                    isLoading={slusLoading}
+                  />
+                </div>
+              </ScrollArea>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ScrollArea className="h-full">
+                <MenuItemGrid
+                  items={menuItems}
+                  onSelectItem={handleSelectItem}
+                  isLoading={itemsLoading && !!selectedSlu}
+                />
+              </ScrollArea>
+            </div>
+          </>
+        )}
 
         <div className="w-80 lg:w-96 flex-shrink-0 border-l">
           <CheckPanel
