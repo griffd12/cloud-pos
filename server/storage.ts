@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees,
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
@@ -717,7 +717,7 @@ export class DatabaseStorage implements IStorage {
       const linkages = await db.select().from(menuItemSlus).where(eq(menuItemSlus.sluId, sluId));
       const itemIds = linkages.map(l => l.menuItemId);
       if (itemIds.length === 0) return [];
-      return db.select().from(menuItems).where(sql`${menuItems.id} = ANY(${itemIds})`);
+      return db.select().from(menuItems).where(inArray(menuItems.id, itemIds));
     }
     return db.select().from(menuItems);
   }

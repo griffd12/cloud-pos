@@ -60,7 +60,12 @@ export default function PosPage() {
   });
 
   const { data: menuItems = [], isLoading: itemsLoading } = useQuery<MenuItemWithModifiers[]>({
-    queryKey: ["/api/menu-items", selectedSlu?.id],
+    queryKey: ["/api/menu-items", { sluId: selectedSlu?.id }],
+    queryFn: async () => {
+      const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch menu items");
+      return res.json();
+    },
     enabled: !!selectedSlu,
   });
 
