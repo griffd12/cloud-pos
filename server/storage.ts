@@ -3,7 +3,8 @@ import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees,
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
-  modifierGroups, modifiers, menuItemModifierGroups, tenders, discounts, serviceCharges,
+  modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
+  tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   type Enterprise, type InsertEnterprise,
@@ -24,6 +25,8 @@ import {
   type MenuItem, type InsertMenuItem,
   type ModifierGroup, type InsertModifierGroup,
   type Modifier, type InsertModifier,
+  type ModifierGroupModifier, type InsertModifierGroupModifier,
+  type MenuItemModifierGroup, type InsertMenuItemModifierGroup,
   type Tender, type InsertTender,
   type Discount, type InsertDiscount,
   type ServiceCharge, type InsertServiceCharge,
@@ -148,12 +151,30 @@ export interface IStorage {
   updateMenuItem(id: string, data: Partial<InsertMenuItem>): Promise<MenuItem | undefined>;
   deleteMenuItem(id: string): Promise<boolean>;
 
+  // Modifiers (standalone)
+  getModifiers(): Promise<Modifier[]>;
+  getModifier(id: string): Promise<Modifier | undefined>;
+  createModifier(data: InsertModifier): Promise<Modifier>;
+  updateModifier(id: string, data: Partial<InsertModifier>): Promise<Modifier | undefined>;
+  deleteModifier(id: string): Promise<boolean>;
+
   // Modifier Groups
-  getModifierGroups(menuItemId?: string): Promise<(ModifierGroup & { modifiers: Modifier[] })[]>;
+  getModifierGroups(menuItemId?: string): Promise<(ModifierGroup & { modifiers: (Modifier & { isDefault: boolean; displayOrder: number })[] })[]>;
   getModifierGroup(id: string): Promise<ModifierGroup | undefined>;
   createModifierGroup(data: InsertModifierGroup): Promise<ModifierGroup>;
   updateModifierGroup(id: string, data: Partial<InsertModifierGroup>): Promise<ModifierGroup | undefined>;
   deleteModifierGroup(id: string): Promise<boolean>;
+
+  // Modifier Group to Modifier linkage
+  getModifierGroupModifiers(modifierGroupId: string): Promise<ModifierGroupModifier[]>;
+  linkModifierToGroup(data: InsertModifierGroupModifier): Promise<ModifierGroupModifier>;
+  unlinkModifierFromGroup(modifierGroupId: string, modifierId: string): Promise<boolean>;
+  updateModifierGroupModifier(id: string, data: Partial<InsertModifierGroupModifier>): Promise<ModifierGroupModifier | undefined>;
+
+  // Menu Item to Modifier Group linkage
+  getMenuItemModifierGroups(menuItemId: string): Promise<MenuItemModifierGroup[]>;
+  linkModifierGroupToMenuItem(data: InsertMenuItemModifierGroup): Promise<MenuItemModifierGroup>;
+  unlinkModifierGroupFromMenuItem(menuItemId: string, modifierGroupId: string): Promise<boolean>;
 
   // Tenders
   getTenders(rvcId?: string): Promise<Tender[]>;
@@ -755,22 +776,68 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount || 0;
   }
 
+  // Modifiers (standalone)
+  async getModifiers(): Promise<Modifier[]> {
+    return db.select().from(modifiers).where(eq(modifiers.active, true));
+  }
+
+  async getModifier(id: string): Promise<Modifier | undefined> {
+    const [result] = await db.select().from(modifiers).where(eq(modifiers.id, id));
+    return result;
+  }
+
+  async createModifier(data: InsertModifier): Promise<Modifier> {
+    const [result] = await db.insert(modifiers).values(data).returning();
+    return result;
+  }
+
+  async updateModifier(id: string, data: Partial<InsertModifier>): Promise<Modifier | undefined> {
+    const [result] = await db.update(modifiers).set(data).where(eq(modifiers.id, id)).returning();
+    return result;
+  }
+
+  async deleteModifier(id: string): Promise<boolean> {
+    // First delete linkages to groups
+    await db.delete(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierId, id));
+    const result = await db.delete(modifiers).where(eq(modifiers.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
   // Modifier Groups
-  async getModifierGroups(menuItemId?: string): Promise<(ModifierGroup & { modifiers: Modifier[] })[]> {
+  async getModifierGroups(menuItemId?: string): Promise<(ModifierGroup & { modifiers: (Modifier & { isDefault: boolean; displayOrder: number })[] })[]> {
     let groups: ModifierGroup[];
     if (menuItemId) {
-      const linkages = await db.select().from(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, menuItemId));
+      const linkages = await db.select().from(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, menuItemId)).orderBy(menuItemModifierGroups.displayOrder);
       const groupIds = linkages.map(l => l.modifierGroupId);
       if (groupIds.length === 0) return [];
       groups = await db.select().from(modifierGroups).where(sql`${modifierGroups.id} = ANY(${groupIds})`);
     } else {
-      groups = await db.select().from(modifierGroups).orderBy(modifierGroups.displayOrder);
+      groups = await db.select().from(modifierGroups).where(eq(modifierGroups.active, true)).orderBy(modifierGroups.displayOrder);
     }
 
-    const result: (ModifierGroup & { modifiers: Modifier[] })[] = [];
+    const result: (ModifierGroup & { modifiers: (Modifier & { isDefault: boolean; displayOrder: number })[] })[] = [];
     for (const group of groups) {
-      const mods = await db.select().from(modifiers).where(eq(modifiers.modifierGroupId, group.id)).orderBy(modifiers.displayOrder);
-      result.push({ ...group, modifiers: mods });
+      // Get modifiers through the join table
+      const linkages = await db.select().from(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierGroupId, group.id)).orderBy(modifierGroupModifiers.displayOrder);
+      const modifierIds = linkages.map(l => l.modifierId);
+      
+      if (modifierIds.length === 0) {
+        result.push({ ...group, modifiers: [] });
+        continue;
+      }
+      
+      const mods = await db.select().from(modifiers).where(sql`${modifiers.id} = ANY(${modifierIds}) AND ${modifiers.active} = true`);
+      // Add isDefault and displayOrder from the linkage
+      const modsWithMeta = mods.map(m => {
+        const linkage = linkages.find(l => l.modifierId === m.id);
+        return {
+          ...m,
+          isDefault: linkage?.isDefault ?? false,
+          displayOrder: linkage?.displayOrder ?? 0,
+        };
+      }).sort((a, b) => a.displayOrder - b.displayOrder);
+      
+      result.push({ ...group, modifiers: modsWithMeta });
     }
     return result;
   }
@@ -791,7 +858,49 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteModifierGroup(id: string): Promise<boolean> {
+    // First delete linkages to modifiers and menu items
+    await db.delete(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierGroupId, id));
+    await db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.modifierGroupId, id));
     const result = await db.delete(modifierGroups).where(eq(modifierGroups.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Modifier Group to Modifier linkage
+  async getModifierGroupModifiers(modifierGroupId: string): Promise<ModifierGroupModifier[]> {
+    return db.select().from(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierGroupId, modifierGroupId)).orderBy(modifierGroupModifiers.displayOrder);
+  }
+
+  async linkModifierToGroup(data: InsertModifierGroupModifier): Promise<ModifierGroupModifier> {
+    const [result] = await db.insert(modifierGroupModifiers).values(data).returning();
+    return result;
+  }
+
+  async unlinkModifierFromGroup(modifierGroupId: string, modifierId: string): Promise<boolean> {
+    const result = await db.delete(modifierGroupModifiers).where(
+      and(eq(modifierGroupModifiers.modifierGroupId, modifierGroupId), eq(modifierGroupModifiers.modifierId, modifierId))
+    );
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async updateModifierGroupModifier(id: string, data: Partial<InsertModifierGroupModifier>): Promise<ModifierGroupModifier | undefined> {
+    const [result] = await db.update(modifierGroupModifiers).set(data).where(eq(modifierGroupModifiers.id, id)).returning();
+    return result;
+  }
+
+  // Menu Item to Modifier Group linkage
+  async getMenuItemModifierGroups(menuItemId: string): Promise<MenuItemModifierGroup[]> {
+    return db.select().from(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, menuItemId)).orderBy(menuItemModifierGroups.displayOrder);
+  }
+
+  async linkModifierGroupToMenuItem(data: InsertMenuItemModifierGroup): Promise<MenuItemModifierGroup> {
+    const [result] = await db.insert(menuItemModifierGroups).values(data).returning();
+    return result;
+  }
+
+  async unlinkModifierGroupFromMenuItem(menuItemId: string, modifierGroupId: string): Promise<boolean> {
+    const result = await db.delete(menuItemModifierGroups).where(
+      and(eq(menuItemModifierGroups.menuItemId, menuItemId), eq(menuItemModifierGroups.modifierGroupId, modifierGroupId))
+    );
     return result.rowCount !== null && result.rowCount > 0;
   }
 
