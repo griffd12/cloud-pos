@@ -142,8 +142,8 @@ export function ModifierModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
           <DialogTitle className="text-xl" data-testid="text-modifier-modal-title">
             {menuItem.name}
           </DialogTitle>
@@ -152,7 +152,7 @@ export function ModifierModal({
           </p>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+        <div className="max-h-[60vh] overflow-y-auto -mx-6 px-6">
           <div className="space-y-6 py-4">
             {modifierGroups.map((group) => {
               const groupSelected = selectedModifiers.get(group.id) || [];
@@ -206,7 +206,7 @@ export function ModifierModal({
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={onClose} data-testid="button-modifier-cancel">
