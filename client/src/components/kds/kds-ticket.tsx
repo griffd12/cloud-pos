@@ -217,7 +217,7 @@ export function KdsTicket({
       </CardContent>
 
       <CardFooter className="pt-2">
-        {!isDraft && (
+        {!isDraft && !activeItems.some((i) => i.itemStatus === "pending") && (
           <Button
             className="w-full h-12 text-base font-semibold"
             onClick={() => onBump(ticketId)}
@@ -227,6 +227,11 @@ export function KdsTicket({
             <CheckIcon className="w-5 h-5 mr-2" />
             BUMP
           </Button>
+        )}
+        {!isDraft && activeItems.some((i) => i.itemStatus === "pending") && (
+          <div className="w-full h-12 flex items-center justify-center text-amber-600 dark:text-amber-400 text-sm font-medium animate-pulse">
+            Item being configured...
+          </div>
         )}
         {isDraft && (
           <div className="w-full h-12 flex items-center justify-center text-muted-foreground text-sm">

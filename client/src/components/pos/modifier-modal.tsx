@@ -68,13 +68,10 @@ export function ModifierModal({
       });
 
       try {
-        await apiRequest(`/api/check-items/${pendingItemId}/modifiers`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            modifiers: allModifiers,
-            employeeId,
-            // Keep pending status - will be finalized on confirm
-          }),
+        await apiRequest("PATCH", `/api/check-items/${pendingItemId}/modifiers`, {
+          modifiers: allModifiers,
+          employeeId,
+          // Keep pending status - will be finalized on confirm
         });
       } catch (error) {
         console.error("Failed to send live modifier update:", error);
