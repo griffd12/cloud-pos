@@ -300,6 +300,7 @@ export const menuItemSlus = pgTable("menu_item_slus", {
 // MODIFIER SYSTEM
 // ============================================================================
 
+// Modifier Groups - categories like "Meat Temps", "Bread Choice", "Toppings", "Dips"
 export const modifierGroups = pgTable("modifier_groups", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
@@ -310,23 +311,38 @@ export const modifierGroups = pgTable("modifier_groups", {
   minSelect: integer("min_select").default(0),
   maxSelect: integer("max_select").default(99),
   displayOrder: integer("display_order").default(0),
-});
-
-export const modifiers = pgTable("modifiers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  modifierGroupId: varchar("modifier_group_id").notNull().references(() => modifierGroups.id),
-  name: text("name").notNull(),
-  priceDelta: decimal("price_delta", { precision: 10, scale: 2 }).default("0"),
-  isDefault: boolean("is_default").default(false),
-  displayOrder: integer("display_order").default(0),
   active: boolean("active").default(true),
 });
 
-// Menu Item to Modifier Group linkage
+// Standalone Modifiers - items like "Medium", "Well Done", "Rye", "Wheat", "Peanuts", "Almonds"
+// Can belong to multiple groups
+export const modifiers = pgTable("modifiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull(),
+  priceDelta: decimal("price_delta", { precision: 10, scale: 2 }).default("0"),
+  active: boolean("active").default(true),
+});
+
+// Many-to-many: Modifier to Modifier Group linkage
+// A modifier can belong to multiple groups
+export const modifierGroupModifiers = pgTable("modifier_group_modifiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  modifierGroupId: varchar("modifier_group_id").notNull().references(() => modifierGroups.id),
+  modifierId: varchar("modifier_id").notNull().references(() => modifiers.id),
+  isDefault: boolean("is_default").default(false),
+  displayOrder: integer("display_order").default(0),
+});
+
+// Many-to-many: Menu Item to Modifier Group linkage (Required Modifiers)
+// A menu item can have multiple required modifier groups
 export const menuItemModifierGroups = pgTable("menu_item_modifier_groups", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   menuItemId: varchar("menu_item_id").notNull().references(() => menuItems.id),
   modifierGroupId: varchar("modifier_group_id").notNull().references(() => modifierGroups.id),
+  displayOrder: integer("display_order").default(0),
 });
 
 // ============================================================================
@@ -511,6 +527,8 @@ export const insertPrintClassRoutingSchema = createInsertSchema(printClassRoutin
 export const insertMenuItemSchema = createInsertSchema(menuItems).omit({ id: true });
 export const insertModifierGroupSchema = createInsertSchema(modifierGroups).omit({ id: true });
 export const insertModifierSchema = createInsertSchema(modifiers).omit({ id: true });
+export const insertModifierGroupModifierSchema = createInsertSchema(modifierGroupModifiers).omit({ id: true });
+export const insertMenuItemModifierGroupSchema = createInsertSchema(menuItemModifierGroups).omit({ id: true });
 export const insertTenderSchema = createInsertSchema(tenders).omit({ id: true });
 export const insertDiscountSchema = createInsertSchema(discounts).omit({ id: true });
 export const insertServiceChargeSchema = createInsertSchema(serviceCharges).omit({ id: true });
@@ -560,6 +578,10 @@ export type ModifierGroup = typeof modifierGroups.$inferSelect;
 export type InsertModifierGroup = z.infer<typeof insertModifierGroupSchema>;
 export type Modifier = typeof modifiers.$inferSelect;
 export type InsertModifier = z.infer<typeof insertModifierSchema>;
+export type ModifierGroupModifier = typeof modifierGroupModifiers.$inferSelect;
+export type InsertModifierGroupModifier = z.infer<typeof insertModifierGroupModifierSchema>;
+export type MenuItemModifierGroup = typeof menuItemModifierGroups.$inferSelect;
+export type InsertMenuItemModifierGroup = z.infer<typeof insertMenuItemModifierGroupSchema>;
 export type Tender = typeof tenders.$inferSelect;
 export type InsertTender = z.infer<typeof insertTenderSchema>;
 export type Discount = typeof discounts.$inferSelect;
