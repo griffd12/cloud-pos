@@ -226,10 +226,13 @@ export interface IStorage {
   getAuditLogs(rvcId?: string): Promise<AuditLog[]>;
 
   // KDS Tickets
-  getKdsTickets(rvcId?: string): Promise<any[]>;
+  getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]>;
   getKdsTicket(id: string): Promise<KdsTicket | undefined>;
   createKdsTicket(data: InsertKdsTicket): Promise<KdsTicket>;
   updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined>;
+  createKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
+  bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
+  recallKdsTicket(id: string): Promise<KdsTicket | undefined>;
 
   // Admin Stats
   getAdminStats(): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }>;
@@ -1085,9 +1088,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // KDS Tickets
-  async getKdsTickets(rvcId?: string): Promise<any[]> {
+  async getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]> {
+    const conditions = [sql`${kdsTickets.status} != 'bumped'`];
+    
+    if (filters?.rvcId) {
+      conditions.push(eq(kdsTickets.rvcId, filters.rvcId));
+    }
+    if (filters?.kdsDeviceId) {
+      conditions.push(eq(kdsTickets.kdsDeviceId, filters.kdsDeviceId));
+    }
+    if (filters?.stationType) {
+      conditions.push(eq(kdsTickets.stationType, filters.stationType));
+    }
+
     const tickets = await db.select().from(kdsTickets)
-      .where(sql`${kdsTickets.status} != 'bumped'`)
+      .where(and(...conditions))
       .orderBy(kdsTickets.createdAt);
 
     const result = [];
@@ -1111,8 +1126,11 @@ export class DatabaseStorage implements IStorage {
         id: ticket.id,
         checkNumber: check?.checkNumber || 0,
         orderType: check?.orderType || 'dine_in',
+        stationType: ticket.stationType,
+        kdsDeviceId: ticket.kdsDeviceId,
         items: checkItemsList,
         isDraft: ticket.status === 'draft',
+        status: ticket.status,
         createdAt: ticket.createdAt,
       });
     }
@@ -1131,6 +1149,38 @@ export class DatabaseStorage implements IStorage {
 
   async updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined> {
     const [result] = await db.update(kdsTickets).set(data).where(eq(kdsTickets.id, id)).returning();
+    return result;
+  }
+
+  async createKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void> {
+    await db.insert(kdsTicketItems).values({ kdsTicketId, checkItemId, status: "pending" });
+  }
+
+  async bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined> {
+    const [result] = await db.update(kdsTickets).set({
+      status: "bumped",
+      bumpedAt: new Date(),
+      bumpedByEmployeeId: employeeId,
+    }).where(eq(kdsTickets.id, id)).returning();
+    
+    if (result) {
+      await db.update(kdsTicketItems).set({ status: "bumped" })
+        .where(eq(kdsTicketItems.kdsTicketId, id));
+    }
+    return result;
+  }
+
+  async recallKdsTicket(id: string): Promise<KdsTicket | undefined> {
+    const [result] = await db.update(kdsTickets).set({
+      status: "active",
+      bumpedAt: null,
+      bumpedByEmployeeId: null,
+    }).where(eq(kdsTickets.id, id)).returning();
+    
+    if (result) {
+      await db.update(kdsTicketItems).set({ status: "pending" })
+        .where(eq(kdsTicketItems.kdsTicketId, id));
+    }
     return result;
   }
 

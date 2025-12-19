@@ -21,19 +21,51 @@ interface Ticket {
   id: string;
   checkNumber: number;
   orderType: string;
+  stationType?: string;
+  kdsDeviceId?: string;
   items: KdsItem[];
   isDraft: boolean;
+  status: string;
   createdAt: Date;
-  station?: string;
+}
+
+interface KdsDevice {
+  id: string;
+  name: string;
+  stationType: string;
+  propertyId: string;
 }
 
 export default function KdsPage() {
   const { toast } = useToast();
   const { currentEmployee, currentRvc } = usePosContext();
   const [wsConnected, setWsConnected] = useState(false);
+  const [selectedStation, setSelectedStation] = useState("all");
+
+  const propertyId = currentRvc?.propertyId;
+
+  const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
+    queryKey: ["/api/kds-devices/active", propertyId],
+    enabled: !!propertyId,
+  });
+
+  const stationTypes = kdsDevices.reduce((acc, device) => {
+    if (!acc.includes(device.stationType)) {
+      acc.push(device.stationType);
+    }
+    return acc;
+  }, [] as string[]);
+
+  const queryParams = new URLSearchParams();
+  if (currentRvc?.id) queryParams.set("rvcId", currentRvc.id);
+  if (selectedStation !== "all") queryParams.set("stationType", selectedStation);
 
   const { data: tickets = [], isLoading, refetch } = useQuery<Ticket[]>({
-    queryKey: ["/api/kds-tickets", currentRvc?.id],
+    queryKey: ["/api/kds-tickets", currentRvc?.id, selectedStation],
+    queryFn: async () => {
+      const res = await fetch(`/api/kds-tickets?${queryParams.toString()}`, { credentials: "include" });
+      return res.json();
+    },
     enabled: !!currentRvc,
     select: (data: any[]) =>
       data.map((t) => ({
@@ -95,11 +127,32 @@ export default function KdsPage() {
     },
   });
 
+  const recallMutation = useMutation({
+    mutationFn: async (ticketId: string) => {
+      const response = await apiRequest("POST", "/api/kds-tickets/" + ticketId + "/recall", {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      toast({ title: "Ticket recalled" });
+    },
+    onError: () => {
+      toast({ title: "Failed to recall ticket", variant: "destructive" });
+    },
+  });
+
   const handleBump = useCallback(
     (ticketId: string) => {
       bumpMutation.mutate(ticketId);
     },
     [bumpMutation]
+  );
+
+  const handleRecall = useCallback(
+    (ticketId: string) => {
+      recallMutation.mutate(ticketId);
+    },
+    [recallMutation]
   );
 
   const handleRefresh = useCallback(() => {
@@ -130,7 +183,11 @@ export default function KdsPage() {
 
       <KdsDisplay
         tickets={tickets}
+        stationTypes={stationTypes}
+        selectedStation={selectedStation}
+        onStationChange={setSelectedStation}
         onBump={handleBump}
+        onRecall={handleRecall}
         onRefresh={handleRefresh}
         isLoading={isLoading}
       />

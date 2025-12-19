@@ -485,6 +485,9 @@ export const kdsTickets = pgTable("kds_tickets", {
   checkId: varchar("check_id").notNull().references(() => checks.id),
   roundId: varchar("round_id").references(() => rounds.id),
   orderDeviceId: varchar("order_device_id").references(() => orderDevices.id),
+  kdsDeviceId: varchar("kds_device_id").references(() => kdsDevices.id),
+  stationType: text("station_type"), // cached from KDS device for fast filtering
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
   status: text("status").notNull().default("draft"), // 'draft', 'active', 'bumped'
   bumpedAt: timestamp("bumped_at"),
   bumpedByEmployeeId: varchar("bumped_by_employee_id").references(() => employees.id),

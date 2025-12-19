@@ -17,6 +17,7 @@ interface KdsTicketProps {
   ticketId: string;
   checkNumber: number;
   orderType: string;
+  stationType?: string;
   items: KdsItem[];
   isDraft: boolean;
   createdAt: Date;
@@ -38,10 +39,27 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   pickup: "Pickup",
 };
 
+const STATION_TYPE_COLORS: Record<string, string> = {
+  hot: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+  cold: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20",
+  prep: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+  expo: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  bar: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+};
+
+const STATION_TYPE_LABELS: Record<string, string> = {
+  hot: "HOT",
+  cold: "COLD",
+  prep: "PREP",
+  expo: "EXPO",
+  bar: "BAR",
+};
+
 export function KdsTicket({
   ticketId,
   checkNumber,
   orderType,
+  stationType,
   items,
   isDraft,
   createdAt,
@@ -84,13 +102,21 @@ export function KdsTicket({
           <span className="text-xl font-bold" data-testid={`text-ticket-number-${ticketId}`}>
             #{checkNumber}
           </span>
+          {stationType && (
+            <Badge
+              variant="outline"
+              className={`text-xs font-bold ${STATION_TYPE_COLORS[stationType] || ""}`}
+            >
+              {STATION_TYPE_LABELS[stationType] || stationType.toUpperCase()}
+            </Badge>
+          )}
           {isDraft && (
             <Badge variant="secondary" className="text-xs">
               DRAFT
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge
             variant="outline"
             className={ORDER_TYPE_COLORS[orderType] || ""}

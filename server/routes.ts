@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
+import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
   insertEmployeeSchema, insertSluSchema, insertTaxGroupSchema, insertPrintClassSchema,
@@ -47,11 +48,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         const data = JSON.parse(message.toString());
         if (data.type === "subscribe" && data.channel === "kds") {
-          subscribedChannel = data.rvcId || "all";
-          if (!clients.has(subscribedChannel)) {
-            clients.set(subscribedChannel, new Set());
+          const channel = data.rvcId || "all";
+          subscribedChannel = channel;
+          if (!clients.has(channel)) {
+            clients.set(channel, new Set());
           }
-          clients.get(subscribedChannel)!.add(ws);
+          clients.get(channel)!.add(ws);
         }
       } catch (e) {
         console.error("WebSocket message error:", e);
@@ -1042,6 +1044,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         voided: false,
       });
 
+      // Check for dynamic order mode - auto-send if any order device is configured for dynamic
+      const check = await storage.getCheck(checkId);
+      if (check && menuItemId) {
+        const rvc = await storage.getRvc(check.rvcId);
+        if (rvc) {
+          const targets = await resolveKdsTargetsForMenuItem(menuItemId, rvc.propertyId, check.rvcId);
+          
+          // Check if any target order device uses dynamic send mode
+          const dynamicTargets = [];
+          for (const target of targets) {
+            const sendMode = await getOrderDeviceSendMode(target.orderDeviceId);
+            if (sendMode === "dynamic") {
+              dynamicTargets.push(target);
+            }
+          }
+
+          // If there are dynamic targets, auto-send this item to KDS
+          if (dynamicTargets.length > 0) {
+            // Mark item as sent
+            await storage.updateCheckItem(item.id, { sent: true });
+
+            // Create KDS tickets for dynamic targets (matching send flow pattern)
+            for (const target of dynamicTargets) {
+              const kdsTicket = await storage.createKdsTicket({
+                checkId,
+                rvcId: check.rvcId,
+                kdsDeviceId: target.kdsDeviceId,
+                orderDeviceId: target.orderDeviceId,
+                stationType: target.stationType,
+                status: "active",
+              });
+              // Link the item to the ticket
+              await storage.createKdsTicketItem(kdsTicket.id, item.id);
+            }
+          }
+        }
+      }
+
       broadcastKdsUpdate();
       res.status(201).json(item);
     } catch (error) {
@@ -1078,11 +1118,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const check = await storage.getCheck(checkId);
       if (check) {
-        const kdsTicket = await storage.createKdsTicket({
-          checkId,
-          roundId: round.id,
-          status: "active",
-        });
+        const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
+        const propertyId = rvc?.propertyId;
+
+        const itemsByKdsDevice = new Map<string, { kdsDeviceId: string; stationType: string; orderDeviceId: string; items: typeof updatedItems }>();
+        const unroutedItems: typeof updatedItems = [];
+
+        for (const item of updatedItems) {
+          if (item.menuItemId && propertyId) {
+            const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, propertyId, check.rvcId || undefined);
+            if (targets.length > 0) {
+              for (const target of targets) {
+                if (!itemsByKdsDevice.has(target.kdsDeviceId)) {
+                  itemsByKdsDevice.set(target.kdsDeviceId, {
+                    kdsDeviceId: target.kdsDeviceId,
+                    stationType: target.stationType,
+                    orderDeviceId: target.orderDeviceId,
+                    items: [],
+                  });
+                }
+                itemsByKdsDevice.get(target.kdsDeviceId)!.items.push(item);
+              }
+            } else {
+              unroutedItems.push(item);
+            }
+          } else {
+            unroutedItems.push(item);
+          }
+        }
+
+        for (const [kdsDeviceId, data] of Array.from(itemsByKdsDevice.entries())) {
+          const kdsTicket = await storage.createKdsTicket({
+            checkId,
+            roundId: round.id,
+            kdsDeviceId: data.kdsDeviceId,
+            orderDeviceId: data.orderDeviceId,
+            stationType: data.stationType,
+            rvcId: check.rvcId,
+            status: "active",
+          });
+          for (const item of data.items) {
+            await storage.createKdsTicketItem(kdsTicket.id, item.id);
+          }
+        }
+
+        if (unroutedItems.length > 0) {
+          const fallbackTicket = await storage.createKdsTicket({
+            checkId,
+            roundId: round.id,
+            rvcId: check.rvcId,
+            status: "active",
+          });
+          for (const item of unroutedItems) {
+            await storage.createKdsTicketItem(fallbackTicket.id, item.id);
+          }
+        }
       }
 
       const allItems = await storage.getCheckItems(checkId);
@@ -1277,9 +1367,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/kds-tickets", async (req, res) => {
-    const rvcId = req.query.rvcId as string | undefined;
-    const data = await storage.getKdsTickets(rvcId);
+    const filters = {
+      rvcId: req.query.rvcId as string | undefined,
+      kdsDeviceId: req.query.kdsDeviceId as string | undefined,
+      stationType: req.query.stationType as string | undefined,
+    };
+    const data = await storage.getKdsTickets(filters);
     res.json(data);
+  });
+
+  app.get("/api/kds-station-types", async (req, res) => {
+    const propertyId = req.query.propertyId as string | undefined;
+    const types = await getKdsStationTypes(propertyId);
+    res.json(types);
+  });
+
+  app.get("/api/kds-devices/active", async (req, res) => {
+    const propertyId = req.query.propertyId as string | undefined;
+    const devices = await getActiveKdsDevices(propertyId);
+    res.json(devices);
   });
 
   app.post("/api/kds-tickets/:id/bump", async (req, res) => {
@@ -1287,17 +1393,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ticketId = req.params.id;
       const { employeeId } = req.body;
 
-      const updated = await storage.updateKdsTicket(ticketId, {
-        status: "bumped",
-        bumpedAt: new Date(),
-        bumpedByEmployeeId: employeeId,
-      });
+      const updated = await storage.bumpKdsTicket(ticketId, employeeId);
 
       broadcastKdsUpdate();
       res.json(updated);
     } catch (error) {
       console.error("Bump error:", error);
       res.status(400).json({ message: "Failed to bump ticket" });
+    }
+  });
+
+  app.post("/api/kds-tickets/:id/recall", async (req, res) => {
+    try {
+      const ticketId = req.params.id;
+
+      const updated = await storage.recallKdsTicket(ticketId);
+
+      broadcastKdsUpdate();
+      res.json(updated);
+    } catch (error) {
+      console.error("Recall error:", error);
+      res.status(400).json({ message: "Failed to recall ticket" });
     }
   });
 

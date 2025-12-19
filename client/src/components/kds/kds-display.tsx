@@ -1,10 +1,10 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { KdsTicket } from "./kds-ticket";
-import { RefreshCw, Monitor, Flame, Snowflake, PackageCheck } from "lucide-react";
+import { RefreshCw, Monitor, Flame, Snowflake, PackageCheck, UtensilsCrossed, GlassWater } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface KdsItem {
   id: string;
@@ -18,43 +18,52 @@ interface Ticket {
   id: string;
   checkNumber: number;
   orderType: string;
+  stationType?: string;
   items: KdsItem[];
   isDraft: boolean;
+  status: string;
   createdAt: Date;
-  station?: string;
 }
 
 interface KdsDisplayProps {
   tickets: Ticket[];
+  stationTypes: string[];
+  selectedStation: string;
+  onStationChange: (station: string) => void;
   onBump: (ticketId: string) => void;
   onRecall?: (ticketId: string) => void;
   onRefresh?: () => void;
   isLoading?: boolean;
 }
 
-const STATIONS = [
-  { id: "all", label: "All", icon: Monitor },
-  { id: "hot", label: "Hot", icon: Flame },
-  { id: "cold", label: "Cold", icon: Snowflake },
-  { id: "expo", label: "Expo", icon: PackageCheck },
-];
+const STATION_ICONS: Record<string, LucideIcon> = {
+  hot: Flame,
+  cold: Snowflake,
+  expo: PackageCheck,
+  prep: UtensilsCrossed,
+  bar: GlassWater,
+};
+
+const STATION_LABELS: Record<string, string> = {
+  hot: "Hot",
+  cold: "Cold",
+  expo: "Expo",
+  prep: "Prep",
+  bar: "Bar",
+};
 
 export function KdsDisplay({
   tickets,
+  stationTypes,
+  selectedStation,
+  onStationChange,
   onBump,
   onRecall,
   onRefresh,
   isLoading = false,
 }: KdsDisplayProps) {
-  const [selectedStation, setSelectedStation] = useState("all");
-
-  const filteredTickets =
-    selectedStation === "all"
-      ? tickets
-      : tickets.filter((t) => t.station === selectedStation);
-
-  const activeTickets = filteredTickets.filter((t) => !t.isDraft);
-  const draftTickets = filteredTickets.filter((t) => t.isDraft);
+  const activeTickets = tickets.filter((t) => t.status === "active");
+  const draftTickets = tickets.filter((t) => t.status === "draft");
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -75,19 +84,28 @@ export function KdsDisplay({
           </div>
 
           <div className="flex items-center gap-2">
-            <Tabs value={selectedStation} onValueChange={setSelectedStation}>
+            <Tabs value={selectedStation} onValueChange={onStationChange}>
               <TabsList>
-                {STATIONS.map((station) => {
-                  const Icon = station.icon;
+                <TabsTrigger
+                  value="all"
+                  className="gap-1.5"
+                  data-testid="tab-station-all"
+                >
+                  <Monitor className="w-4 h-4" />
+                  <span className="hidden sm:inline">All</span>
+                </TabsTrigger>
+                {stationTypes.map((stationType) => {
+                  const Icon = STATION_ICONS[stationType] || Monitor;
+                  const label = STATION_LABELS[stationType] || stationType;
                   return (
                     <TabsTrigger
-                      key={station.id}
-                      value={station.id}
+                      key={stationType}
+                      value={stationType}
                       className="gap-1.5"
-                      data-testid={`tab-station-${station.id}`}
+                      data-testid={`tab-station-${stationType}`}
                     >
                       <Icon className="w-4 h-4" />
-                      <span className="hidden sm:inline">{station.label}</span>
+                      <span className="hidden sm:inline">{label}</span>
                     </TabsTrigger>
                   );
                 })}
@@ -111,7 +129,7 @@ export function KdsDisplay({
 
       <ScrollArea className="flex-1">
         <div className="p-4">
-          {filteredTickets.length === 0 ? (
+          {tickets.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
               <Monitor className="w-12 h-12 mb-4 opacity-50" />
               <p className="text-lg font-medium">No tickets to display</p>
@@ -125,6 +143,7 @@ export function KdsDisplay({
                   ticketId={ticket.id}
                   checkNumber={ticket.checkNumber}
                   orderType={ticket.orderType}
+                  stationType={ticket.stationType}
                   items={ticket.items}
                   isDraft={false}
                   createdAt={ticket.createdAt}
@@ -138,6 +157,7 @@ export function KdsDisplay({
                   ticketId={ticket.id}
                   checkNumber={ticket.checkNumber}
                   orderType={ticket.orderType}
+                  stationType={ticket.stationType}
                   items={ticket.items}
                   isDraft={true}
                   createdAt={ticket.createdAt}
