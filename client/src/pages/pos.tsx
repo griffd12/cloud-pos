@@ -53,6 +53,8 @@ export default function PosPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [cashChangeDue, setCashChangeDue] = useState<number | null>(null);
+  const [pendingCashOverTender, setPendingCashOverTender] = useState<{ tenderId: string; amount: number } | null>(null);
 
   const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
@@ -191,20 +193,28 @@ export default function PosPage() {
   });
 
   const paymentMutation = useMutation({
-    mutationFn: async (data: { tenderId: string; amount: number }) => {
+    mutationFn: async (data: { tenderId: string; amount: number; isCashOverTender?: boolean }) => {
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/payments", {
         tenderId: data.tenderId,
         amount: data.amount.toString(),
         employeeId: currentEmployee?.id,
       });
-      return response.json();
+      const result = await response.json();
+      return { ...result, isCashOverTender: data.isCashOverTender, tenderedAmount: data.amount };
     },
-    onSuccess: (result: Check & { paidAmount: number }) => {
+    onSuccess: (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number }) => {
       console.log("Payment result:", result, "status:", result.status);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       if (result.status === "closed") {
         console.log("Check is closed, clearing state");
+        if (result.isCashOverTender && result.tenderedAmount) {
+          const changeAmount = result.tenderedAmount - total;
+          if (changeAmount > 0) {
+            setCashChangeDue(changeAmount);
+            return;
+          }
+        }
         setShowPaymentModal(false);
         setCurrentCheck(null);
         setCheckItems([]);
@@ -215,9 +225,18 @@ export default function PosPage() {
       }
     },
     onError: () => {
+      setCashChangeDue(null);
       toast({ title: "Payment failed", variant: "destructive" });
     },
   });
+
+  const handleReadyForNextOrder = () => {
+    setCashChangeDue(null);
+    setShowPaymentModal(false);
+    setCurrentCheck(null);
+    setCheckItems([]);
+    toast({ title: "Check closed successfully" });
+  };
 
   const handleSelectSlu = (slu: Slu) => {
     setSelectedSlu(slu);
@@ -461,12 +480,18 @@ export default function PosPage() {
 
       <PaymentModal
         open={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
-        onPayment={(tenderId, amount) => paymentMutation.mutate({ tenderId, amount })}
+        onClose={() => {
+          if (!cashChangeDue) {
+            setShowPaymentModal(false);
+          }
+        }}
+        onPayment={(tenderId, amount, isCashOverTender) => paymentMutation.mutate({ tenderId, amount, isCashOverTender })}
         tenders={tenders}
         check={currentCheck}
         remainingBalance={Math.max(0, total - paidAmount)}
         isLoading={paymentMutation.isPending}
+        changeDue={cashChangeDue}
+        onReadyForNextOrder={handleReadyForNextOrder}
       />
     </div>
   );

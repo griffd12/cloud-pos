@@ -14,11 +14,13 @@ import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X } from "l
 interface PaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onPayment: (tenderId: string, amount: number) => void;
+  onPayment: (tenderId: string, amount: number, isCashOverTender?: boolean) => void;
   tenders: Tender[];
   check: Check | null;
   remainingBalance: number;
   isLoading?: boolean;
+  changeDue?: number | null;
+  onReadyForNextOrder?: () => void;
 }
 
 const TENDER_ICONS: Record<string, typeof Banknote> = {
@@ -38,6 +40,8 @@ export function PaymentModal({
   check,
   remainingBalance,
   isLoading = false,
+  changeDue = null,
+  onReadyForNextOrder,
 }: PaymentModalProps) {
   const [customAmount, setCustomAmount] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
@@ -45,6 +49,8 @@ export function PaymentModal({
 
   const cashTender = tenders.find((t) => t.type === "cash");
   const nonCashTenders = tenders.filter((t) => t.type !== "cash");
+  
+  const showChangeDueScreen = changeDue !== null && changeDue > 0;
 
   const handleClose = () => {
     setCustomAmount("");
@@ -55,20 +61,31 @@ export function PaymentModal({
 
   const handleExactCash = () => {
     if (cashTender) {
-      onPayment(cashTender.id, remainingBalance);
+      onPayment(cashTender.id, remainingBalance, false);
     }
   };
 
   const handleQuickCash = (amount: number) => {
     if (cashTender) {
-      onPayment(cashTender.id, amount);
+      const isOverTender = amount > remainingBalance;
+      onPayment(cashTender.id, amount, isOverTender);
     }
   };
 
   const handleCustomCashSubmit = () => {
     const amount = parseFloat(customAmount);
     if (cashTender && amount > 0) {
-      onPayment(cashTender.id, amount);
+      const isOverTender = amount > remainingBalance;
+      onPayment(cashTender.id, amount, isOverTender);
+    }
+  };
+  
+  const handleReadyForNextOrder = () => {
+    setCustomAmount("");
+    setSelectedTender(null);
+    setTenderAmount("");
+    if (onReadyForNextOrder) {
+      onReadyForNextOrder();
     }
   };
 
@@ -91,11 +108,11 @@ export function PaymentModal({
   const tenderAmountNum = parseFloat(tenderAmount) || 0;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !showChangeDueScreen && handleClose()}>
       <DialogContent className="max-w-2xl p-0 gap-0">
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center justify-between" data-testid="text-payment-title">
-            <span>Payment</span>
+            <span>{showChangeDueScreen ? "Change Due" : "Payment"}</span>
             {check && (
               <span className="text-muted-foreground text-base font-normal">
                 Check #{check.checkNumber}
@@ -104,6 +121,25 @@ export function PaymentModal({
           </DialogTitle>
         </DialogHeader>
 
+        {showChangeDueScreen ? (
+          <div className="p-4">
+            <div className="bg-green-600 text-white rounded-lg p-8 text-center mb-6">
+              <p className="text-lg opacity-90 mb-2">Change Due</p>
+              <p className="text-6xl font-bold tabular-nums" data-testid="text-change-due">
+                ${changeDue.toFixed(2)}
+              </p>
+            </div>
+            
+            <Button
+              variant="default"
+              className="w-full h-16 text-xl font-semibold"
+              onClick={handleReadyForNextOrder}
+              data-testid="button-ready-next-order"
+            >
+              Ready for Next Order
+            </Button>
+          </div>
+        ) : (
         <div className="p-4">
           <div className="bg-primary text-primary-foreground rounded-lg p-4 text-center mb-4">
             <p className="text-sm opacity-90 mb-1">Amount Due</p>
@@ -261,6 +297,7 @@ export function PaymentModal({
             </Button>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );
