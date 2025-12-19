@@ -8,6 +8,7 @@ import {
   insertWorkstationSchema, insertPrinterSchema, insertKdsDeviceSchema,
   insertOrderDeviceSchema, insertOrderDevicePrinterSchema, insertOrderDeviceKdsSchema,
   insertPrintClassRoutingSchema, insertMenuItemSchema, insertModifierGroupSchema,
+  insertModifierSchema, insertModifierGroupModifierSchema, insertMenuItemModifierGroupSchema,
   insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
 } from "@shared/schema";
@@ -415,12 +416,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // MODIFIER ROUTES (standalone modifiers)
+  // ============================================================================
+
+  app.get("/api/modifiers", async (req, res) => {
+    const data = await storage.getModifiers();
+    res.json(data);
+  });
+
+  app.get("/api/modifiers/:id", async (req, res) => {
+    const data = await storage.getModifier(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.post("/api/modifiers", async (req, res) => {
+    try {
+      const validated = insertModifierSchema.parse(req.body);
+      const data = await storage.createModifier(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/modifiers/:id", async (req, res) => {
+    const data = await storage.updateModifier(req.params.id, req.body);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.delete("/api/modifiers/:id", async (req, res) => {
+    try {
+      await storage.deleteModifier(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete modifier" });
+    }
+  });
+
+  // ============================================================================
   // MODIFIER GROUP ROUTES
   // ============================================================================
 
   app.get("/api/modifier-groups", async (req, res) => {
     const menuItemId = req.query.menuItemId as string | undefined;
     const data = await storage.getModifierGroups(menuItemId);
+    res.json(data);
+  });
+
+  app.get("/api/modifier-groups/:id", async (req, res) => {
+    const data = await storage.getModifierGroup(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
     res.json(data);
   });
 
@@ -443,6 +490,97 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/modifier-groups/:id", async (req, res) => {
     await storage.deleteModifierGroup(req.params.id);
     res.status(204).send();
+  });
+
+  // Modifier Group to Modifier linkage
+  app.get("/api/modifier-groups/:id/modifiers", async (req, res) => {
+    const data = await storage.getModifierGroupModifiers(req.params.id);
+    res.json(data);
+  });
+
+  app.post("/api/modifier-groups/:id/modifiers", async (req, res) => {
+    try {
+      const { modifierId, isDefault, displayOrder } = req.body;
+      const validated = insertModifierGroupModifierSchema.parse({
+        modifierGroupId: req.params.id,
+        modifierId,
+        isDefault: isDefault || false,
+        displayOrder: displayOrder || 0,
+      });
+      const data = await storage.linkModifierToGroup(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/modifier-groups/:groupId/modifiers/:modifierId", async (req, res) => {
+    await storage.unlinkModifierFromGroup(req.params.groupId, req.params.modifierId);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // MENU ITEM MODIFIER GROUP LINKAGE ROUTES
+  // ============================================================================
+
+  app.get("/api/menu-items/:id/modifier-groups", async (req, res) => {
+    const data = await storage.getMenuItemModifierGroups(req.params.id);
+    res.json(data);
+  });
+
+  app.post("/api/menu-items/:id/modifier-groups", async (req, res) => {
+    try {
+      const { modifierGroupId, displayOrder } = req.body;
+      const validated = insertMenuItemModifierGroupSchema.parse({
+        menuItemId: req.params.id,
+        modifierGroupId,
+        displayOrder: displayOrder || 0,
+      });
+      const data = await storage.linkModifierGroupToMenuItem(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/menu-items/:menuItemId/modifier-groups/:groupId", async (req, res) => {
+    await storage.unlinkModifierGroupFromMenuItem(req.params.menuItemId, req.params.groupId);
+    res.status(204).send();
+  });
+
+  // Bulk update menu item modifier groups
+  app.put("/api/menu-items/:id/modifier-groups", async (req, res) => {
+    try {
+      const { modifierGroupIds } = req.body;
+      if (!Array.isArray(modifierGroupIds)) {
+        return res.status(400).json({ message: "modifierGroupIds must be an array" });
+      }
+      // Get existing linkages
+      const existing = await storage.getMenuItemModifierGroups(req.params.id);
+      const existingIds = existing.map(e => e.modifierGroupId);
+      
+      // Remove those not in the new list
+      for (const ex of existing) {
+        if (!modifierGroupIds.includes(ex.modifierGroupId)) {
+          await storage.unlinkModifierGroupFromMenuItem(req.params.id, ex.modifierGroupId);
+        }
+      }
+      
+      // Add new ones
+      for (let i = 0; i < modifierGroupIds.length; i++) {
+        if (!existingIds.includes(modifierGroupIds[i])) {
+          await storage.linkModifierGroupToMenuItem({
+            menuItemId: req.params.id,
+            modifierGroupId: modifierGroupIds[i],
+            displayOrder: i,
+          });
+        }
+      }
+      
+      res.json({ message: "Modifier group linkages updated" });
+    } catch (error) {
+      res.status(400).json({ message: "Failed to update modifier group linkages" });
+    }
   });
 
   // ============================================================================
