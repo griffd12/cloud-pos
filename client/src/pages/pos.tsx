@@ -208,7 +208,7 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       if (result.status === "closed") {
         console.log("Check is closed, clearing state");
-        if (result.isCashOverTender && result.tenderedAmount) {
+        if (result.isCashOverTender && result.tenderedAmount && total > 0) {
           const changeAmount = result.tenderedAmount - total;
           if (changeAmount > 0) {
             setCashChangeDue(changeAmount);
@@ -485,7 +485,11 @@ export default function PosPage() {
             setShowPaymentModal(false);
           }
         }}
-        onPayment={(tenderId, amount, isCashOverTender) => paymentMutation.mutate({ tenderId, amount, isCashOverTender })}
+        onPayment={(tenderId, amount, isCashOverTender) => {
+          if (currentCheck?.id && !paymentMutation.isPending) {
+            paymentMutation.mutate({ tenderId, amount, isCashOverTender });
+          }
+        }}
         tenders={tenders}
         check={currentCheck}
         remainingBalance={Math.max(0, total - paidAmount)}
