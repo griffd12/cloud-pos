@@ -3,17 +3,39 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertModifierGroupSchema, type ModifierGroup, type InsertModifierGroup } from "@shared/schema";
+import { insertModifierGroupSchema, type ModifierGroup, type InsertModifierGroup, type Modifier, type ModifierGroupModifier } from "@shared/schema";
+import { Link2 } from "lucide-react";
 
 export default function ModifierGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ModifierGroup | null>(null);
+  const [linkingGroup, setLinkingGroup] = useState<ModifierGroup | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<Set<string>>(new Set());
 
   const { data: modifierGroups = [], isLoading } = useQuery<ModifierGroup[]>({
     queryKey: ["/api/modifier-groups"],
+  });
+
+  const { data: allModifiers = [] } = useQuery<Modifier[]>({
+    queryKey: ["/api/modifiers"],
+  });
+
+  const { data: linkedModifiers = [], refetch: refetchLinked } = useQuery<ModifierGroupModifier[]>({
+    queryKey: ["/api/modifier-groups", linkingGroup?.id, "modifiers"],
+    queryFn: async () => {
+      if (!linkingGroup) return [];
+      const res = await fetch(`/api/modifier-groups/${linkingGroup.id}/modifiers`);
+      return res.json();
+    },
+    enabled: !!linkingGroup,
   });
 
   const columns: Column<ModifierGroup>[] = [
@@ -80,12 +102,51 @@ export default function ModifierGroupsPage() {
     },
   });
 
+  const linkMutation = useMutation({
+    mutationFn: async ({ groupId, modifierId }: { groupId: string; modifierId: string }) => {
+      await apiRequest("POST", `/api/modifier-groups/${groupId}/modifiers`, { modifierId });
+    },
+    onSuccess: () => {
+      refetchLinked();
+    },
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: async ({ groupId, modifierId }: { groupId: string; modifierId: string }) => {
+      await apiRequest("DELETE", `/api/modifier-groups/${groupId}/modifiers/${modifierId}`);
+    },
+    onSuccess: () => {
+      refetchLinked();
+    },
+  });
+
   const handleSubmit = (data: InsertModifierGroup) => {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
       createMutation.mutate(data);
     }
+  };
+
+  const handleOpenLinkDialog = (group: ModifierGroup) => {
+    setLinkingGroup(group);
+  };
+
+  const handleToggleModifier = (modifierId: string) => {
+    if (!linkingGroup) return;
+    
+    const isLinked = linkedModifiers.some((lm) => lm.modifierId === modifierId);
+    
+    if (isLinked) {
+      unlinkMutation.mutate({ groupId: linkingGroup.id, modifierId });
+    } else {
+      linkMutation.mutate({ groupId: linkingGroup.id, modifierId });
+    }
+  };
+
+  const handleCloseLinkDialog = () => {
+    setLinkingGroup(null);
+    queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups"] });
   };
 
   return (
@@ -103,6 +164,13 @@ export default function ModifierGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={[
+          {
+            label: "Manage Modifiers",
+            icon: Link2,
+            onClick: handleOpenLinkDialog,
+          },
+        ]}
         isLoading={isLoading}
         searchPlaceholder="Search modifier groups..."
         emptyMessage="No modifier groups configured"
@@ -121,6 +189,61 @@ export default function ModifierGroupsPage() {
         initialData={editingItem || undefined}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
+
+      <Dialog open={!!linkingGroup} onOpenChange={(open) => !open && handleCloseLinkDialog()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage Modifiers in "{linkingGroup?.name}"</DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {allModifiers.length === 0 ? (
+              <p className="text-muted-foreground text-sm text-center py-8">
+                No modifiers available. Create modifiers first in the Modifiers section.
+              </p>
+            ) : (
+              <ScrollArea className="h-[300px]">
+                <div className="space-y-3">
+                  {allModifiers.map((modifier) => {
+                    const isLinked = linkedModifiers.some((lm) => lm.modifierId === modifier.id);
+                    return (
+                      <div
+                        key={modifier.id}
+                        className="flex items-center gap-3 p-2 rounded-md hover-elevate"
+                      >
+                        <Checkbox
+                          id={`mod-${modifier.id}`}
+                          checked={isLinked}
+                          onCheckedChange={() => handleToggleModifier(modifier.id)}
+                          data-testid={`checkbox-modifier-${modifier.id}`}
+                        />
+                        <Label
+                          htmlFor={`mod-${modifier.id}`}
+                          className="flex-1 cursor-pointer flex items-center justify-between"
+                        >
+                          <span>{modifier.name}</span>
+                          {modifier.priceDelta && parseFloat(modifier.priceDelta) !== 0 && (
+                            <span className="text-sm text-muted-foreground">
+                              {parseFloat(modifier.priceDelta) > 0 ? "+" : ""}
+                              {parseFloat(modifier.priceDelta).toFixed(2)}
+                            </span>
+                          )}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={handleCloseLinkDialog} data-testid="button-close-link-dialog">
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
