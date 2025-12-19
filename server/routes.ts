@@ -1573,6 +1573,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Bump all tickets for a station/RVC
+  app.post("/api/kds-tickets/bump-all", async (req, res) => {
+    try {
+      const { employeeId, rvcId, stationType } = req.body;
+
+      const tickets = await storage.getKdsTickets({ rvcId, stationType });
+      const activeTickets = tickets.filter((t: any) => t.status === "active");
+      
+      let bumped = 0;
+      for (const ticket of activeTickets) {
+        await storage.bumpKdsTicket(ticket.id, employeeId);
+        bumped++;
+      }
+
+      broadcastKdsUpdate(rvcId);
+      res.json({ bumped, message: `Cleared ${bumped} tickets` });
+    } catch (error) {
+      console.error("Bump all error:", error);
+      res.status(400).json({ message: "Failed to clear tickets" });
+    }
+  });
+
   app.post("/api/kds-tickets/:id/recall", async (req, res) => {
     try {
       const ticketId = req.params.id;

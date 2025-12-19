@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { KdsTicket } from "./kds-ticket";
-import { RefreshCw, Monitor, Flame, Snowflake, PackageCheck, UtensilsCrossed, GlassWater } from "lucide-react";
+import { RefreshCw, Monitor, Flame, Snowflake, PackageCheck, UtensilsCrossed, GlassWater, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface KdsItem {
@@ -35,7 +35,9 @@ interface KdsDisplayProps {
   onBump: (ticketId: string) => void;
   onRecall?: (ticketId: string) => void;
   onRefresh?: () => void;
+  onBumpAll?: () => void;
   isLoading?: boolean;
+  isBumpingAll?: boolean;
 }
 
 const STATION_ICONS: Record<string, LucideIcon> = {
@@ -62,7 +64,9 @@ export function KdsDisplay({
   onBump,
   onRecall,
   onRefresh,
+  onBumpAll,
   isLoading = false,
+  isBumpingAll = false,
 }: KdsDisplayProps) {
   const activeTickets = tickets.filter((t) => t.status === "active");
   const draftTickets = tickets.filter((t) => t.status === "draft");
@@ -113,6 +117,19 @@ export function KdsDisplay({
                 })}
               </TabsList>
             </Tabs>
+
+            {onBumpAll && tickets.length > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onBumpAll}
+                disabled={isBumpingAll}
+                data-testid="button-kds-bump-all"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Clear All
+              </Button>
+            )}
 
             {onRefresh && (
               <Button

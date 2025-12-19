@@ -141,6 +141,24 @@ export default function KdsPage() {
     },
   });
 
+  const bumpAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/kds-tickets/bump-all", {
+        employeeId: currentEmployee?.id,
+        rvcId: currentRvc?.id,
+        stationType: selectedStation !== "all" ? selectedStation : undefined,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { bumped: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      toast({ title: `Cleared ${data.bumped} tickets` });
+    },
+    onError: () => {
+      toast({ title: "Failed to clear tickets", variant: "destructive" });
+    },
+  });
+
   const handleBump = useCallback(
     (ticketId: string) => {
       bumpMutation.mutate(ticketId);
@@ -158,6 +176,10 @@ export default function KdsPage() {
   const handleRefresh = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  const handleBumpAll = useCallback(() => {
+    bumpAllMutation.mutate();
+  }, [bumpAllMutation]);
 
   if (!currentEmployee || !currentRvc) {
     return <Redirect to="/" />;
@@ -189,7 +211,9 @@ export default function KdsPage() {
         onBump={handleBump}
         onRecall={handleRecall}
         onRefresh={handleRefresh}
+        onBumpAll={handleBumpAll}
         isLoading={isLoading}
+        isBumpingAll={bumpAllMutation.isPending}
       />
     </div>
   );
