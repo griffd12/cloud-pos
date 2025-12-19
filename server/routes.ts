@@ -38,6 +38,212 @@ function broadcastKdsUpdate(rvcId?: string) {
   }
 }
 
+// Shared helper to send unsent items to KDS with proper round and ticket creation
+async function sendItemsToKds(
+  checkId: string,
+  employeeId: string,
+  itemsToSend: any[],
+  options: { auditAction?: string } = {}
+): Promise<{ round: any; updatedItems: any[] }> {
+  const check = await storage.getCheck(checkId);
+  if (!check) throw new Error("Check not found");
+
+  const rvc = await storage.getRvc(check.rvcId);
+  if (!rvc) throw new Error("RVC not found");
+
+  // Create round for this batch of items
+  const existingRounds = await storage.getRounds(checkId);
+  const roundNumber = existingRounds.length + 1;
+
+  const round = await storage.createRound({
+    checkId,
+    roundNumber,
+    sentByEmployeeId: employeeId,
+  });
+
+  // Mark items as sent with round ID
+  const updatedItems = [];
+  for (const item of itemsToSend) {
+    const updated = await storage.updateCheckItem(item.id, {
+      sent: true,
+      roundId: round.id,
+    });
+    if (updated) updatedItems.push(updated);
+  }
+
+  // Group items by KDS device for routing
+  const itemsByKdsDevice = new Map<string, { kdsDeviceId: string; stationType: string; orderDeviceId: string; items: any[] }>();
+  const unroutedItems: any[] = [];
+
+  for (const item of updatedItems) {
+    if (item.menuItemId) {
+      const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined);
+      if (targets.length > 0) {
+        for (const target of targets) {
+          if (!itemsByKdsDevice.has(target.kdsDeviceId)) {
+            itemsByKdsDevice.set(target.kdsDeviceId, {
+              kdsDeviceId: target.kdsDeviceId,
+              stationType: target.stationType,
+              orderDeviceId: target.orderDeviceId,
+              items: [],
+            });
+          }
+          itemsByKdsDevice.get(target.kdsDeviceId)!.items.push(item);
+        }
+      } else {
+        unroutedItems.push(item);
+      }
+    } else {
+      unroutedItems.push(item);
+    }
+  }
+
+  // Create KDS tickets for routed items
+  for (const [kdsDeviceId, data] of Array.from(itemsByKdsDevice.entries())) {
+    const kdsTicket = await storage.createKdsTicket({
+      checkId,
+      roundId: round.id,
+      kdsDeviceId: data.kdsDeviceId,
+      orderDeviceId: data.orderDeviceId,
+      stationType: data.stationType,
+      rvcId: check.rvcId,
+      status: "active",
+    });
+    for (const item of data.items) {
+      await storage.createKdsTicketItem(kdsTicket.id, item.id);
+    }
+  }
+
+  // Create fallback ticket for unrouted items
+  if (unroutedItems.length > 0) {
+    const fallbackTicket = await storage.createKdsTicket({
+      checkId,
+      roundId: round.id,
+      rvcId: check.rvcId,
+      status: "active",
+    });
+    for (const item of unroutedItems) {
+      await storage.createKdsTicketItem(fallbackTicket.id, item.id);
+    }
+  }
+
+  // Create audit log
+  await storage.createAuditLog({
+    rvcId: check.rvcId,
+    employeeId,
+    action: options.auditAction || "send_to_kitchen",
+    targetType: "check",
+    targetId: checkId,
+    details: { roundNumber, itemCount: itemsToSend.length },
+  });
+
+  broadcastKdsUpdate(check.rvcId || undefined);
+
+  return { round, updatedItems };
+}
+
+// Helper for dynamic order mode - sends single item immediately to KDS
+// Creates a new round for each dynamic send to maintain clean tracking
+async function sendItemDynamic(
+  checkId: string,
+  item: any,
+  rvc: any,
+  employeeId?: string
+): Promise<any> {
+  const check = await storage.getCheck(checkId);
+  if (!check) return item;
+
+  // Use provided employeeId, or fall back to check's employee
+  const actualEmployeeId = employeeId || check.employeeId;
+  if (!actualEmployeeId) {
+    // Skip round/audit creation if no employee context - just mark sent and route
+    const updatedItem = await storage.updateCheckItem(item.id, { sent: true });
+    
+    if (item.menuItemId) {
+      const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined);
+      for (const target of targets) {
+        const kdsTicket = await storage.createKdsTicket({
+          checkId,
+          kdsDeviceId: target.kdsDeviceId,
+          orderDeviceId: target.orderDeviceId,
+          stationType: target.stationType,
+          rvcId: check.rvcId,
+          status: "active",
+        });
+        await storage.createKdsTicketItem(kdsTicket.id, item.id);
+      }
+      if (targets.length === 0) {
+        const fallbackTicket = await storage.createKdsTicket({
+          checkId,
+          rvcId: check.rvcId,
+          status: "active",
+        });
+        await storage.createKdsTicketItem(fallbackTicket.id, item.id);
+      }
+    }
+    broadcastKdsUpdate(check.rvcId || undefined);
+    return updatedItem;
+  }
+
+  // Create new round for this dynamic send
+  const existingRounds = await storage.getRounds(checkId);
+  const roundNumber = existingRounds.length + 1;
+
+  const round = await storage.createRound({
+    checkId,
+    roundNumber,
+    sentByEmployeeId: actualEmployeeId,
+  });
+
+  // Mark item as sent with round linkage
+  const updatedItem = await storage.updateCheckItem(item.id, { 
+    sent: true,
+    roundId: round.id,
+  });
+
+  // Route item to KDS devices
+  if (item.menuItemId) {
+    const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined);
+    
+    for (const target of targets) {
+      const kdsTicket = await storage.createKdsTicket({
+        checkId,
+        roundId: round.id,
+        kdsDeviceId: target.kdsDeviceId,
+        orderDeviceId: target.orderDeviceId,
+        stationType: target.stationType,
+        rvcId: check.rvcId,
+        status: "active",
+      });
+      await storage.createKdsTicketItem(kdsTicket.id, item.id);
+    }
+
+    // Fallback for unrouted items
+    if (targets.length === 0) {
+      const fallbackTicket = await storage.createKdsTicket({
+        checkId,
+        roundId: round.id,
+        rvcId: check.rvcId,
+        status: "active",
+      });
+      await storage.createKdsTicketItem(fallbackTicket.id, item.id);
+    }
+  }
+
+  // Create audit log for dynamic send
+  await storage.createAuditLog({
+    rvcId: check.rvcId,
+    employeeId: actualEmployeeId,
+    action: "dynamic_order_send",
+    targetType: "check_item",
+    targetId: item.id,
+    details: { menuItemName: item.menuItemName, checkId, roundId: round.id, roundNumber },
+  });
+
+  broadcastKdsUpdate(check.rvcId || undefined);
+  return updatedItem;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
@@ -1044,46 +1250,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         voided: false,
       });
 
-      // Check for dynamic order mode - auto-send if any order device is configured for dynamic
+      // Check for dynamic order mode - auto-send if RVC has dynamicOrderMode enabled
+      let finalItem = item;
       const check = await storage.getCheck(checkId);
       if (check && menuItemId) {
         const rvc = await storage.getRvc(check.rvcId);
-        if (rvc) {
-          const targets = await resolveKdsTargetsForMenuItem(menuItemId, rvc.propertyId, check.rvcId);
-          
-          // Check if any target order device uses dynamic send mode
-          const dynamicTargets = [];
-          for (const target of targets) {
-            const sendMode = await getOrderDeviceSendMode(target.orderDeviceId);
-            if (sendMode === "dynamic") {
-              dynamicTargets.push(target);
+        if (rvc && rvc.dynamicOrderMode) {
+          // RVC has dynamic order mode enabled - send item immediately to KDS (no round)
+          try {
+            const updatedItem = await sendItemDynamic(checkId, item, rvc);
+            if (updatedItem) {
+              finalItem = updatedItem;
             }
-          }
-
-          // If there are dynamic targets, auto-send this item to KDS
-          if (dynamicTargets.length > 0) {
-            // Mark item as sent
-            await storage.updateCheckItem(item.id, { sent: true });
-
-            // Create KDS tickets for dynamic targets (matching send flow pattern)
-            for (const target of dynamicTargets) {
-              const kdsTicket = await storage.createKdsTicket({
-                checkId,
-                rvcId: check.rvcId,
-                kdsDeviceId: target.kdsDeviceId,
-                orderDeviceId: target.orderDeviceId,
-                stationType: target.stationType,
-                status: "active",
-              });
-              // Link the item to the ticket
-              await storage.createKdsTicketItem(kdsTicket.id, item.id);
-            }
+          } catch (e) {
+            console.error("Dynamic order send error:", e);
           }
         }
       }
 
-      broadcastKdsUpdate();
-      res.status(201).json(item);
+      res.status(201).json(finalItem);
     } catch (error) {
       console.error("Add item error:", error);
       res.status(400).json({ message: "Failed to add item" });
@@ -1095,98 +1280,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkId = req.params.id;
       const { employeeId } = req.body;
 
-      const existingRounds = await storage.getRounds(checkId);
-      const roundNumber = existingRounds.length + 1;
-
-      const round = await storage.createRound({
-        checkId,
-        roundNumber,
-        sentByEmployeeId: employeeId,
-      });
-
       const items = await storage.getCheckItems(checkId);
       const unsentItems = items.filter((item) => !item.sent && !item.voided);
 
-      const updatedItems = [];
-      for (const item of unsentItems) {
-        const updated = await storage.updateCheckItem(item.id, {
-          sent: true,
-          roundId: round.id,
-        });
-        if (updated) updatedItems.push(updated);
+      if (unsentItems.length === 0) {
+        const allItems = await storage.getCheckItems(checkId);
+        return res.json({ round: null, updatedItems: allItems });
       }
 
-      const check = await storage.getCheck(checkId);
-      if (check) {
-        const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
-        const propertyId = rvc?.propertyId;
-
-        const itemsByKdsDevice = new Map<string, { kdsDeviceId: string; stationType: string; orderDeviceId: string; items: typeof updatedItems }>();
-        const unroutedItems: typeof updatedItems = [];
-
-        for (const item of updatedItems) {
-          if (item.menuItemId && propertyId) {
-            const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, propertyId, check.rvcId || undefined);
-            if (targets.length > 0) {
-              for (const target of targets) {
-                if (!itemsByKdsDevice.has(target.kdsDeviceId)) {
-                  itemsByKdsDevice.set(target.kdsDeviceId, {
-                    kdsDeviceId: target.kdsDeviceId,
-                    stationType: target.stationType,
-                    orderDeviceId: target.orderDeviceId,
-                    items: [],
-                  });
-                }
-                itemsByKdsDevice.get(target.kdsDeviceId)!.items.push(item);
-              }
-            } else {
-              unroutedItems.push(item);
-            }
-          } else {
-            unroutedItems.push(item);
-          }
-        }
-
-        for (const [kdsDeviceId, data] of Array.from(itemsByKdsDevice.entries())) {
-          const kdsTicket = await storage.createKdsTicket({
-            checkId,
-            roundId: round.id,
-            kdsDeviceId: data.kdsDeviceId,
-            orderDeviceId: data.orderDeviceId,
-            stationType: data.stationType,
-            rvcId: check.rvcId,
-            status: "active",
-          });
-          for (const item of data.items) {
-            await storage.createKdsTicketItem(kdsTicket.id, item.id);
-          }
-        }
-
-        if (unroutedItems.length > 0) {
-          const fallbackTicket = await storage.createKdsTicket({
-            checkId,
-            roundId: round.id,
-            rvcId: check.rvcId,
-            status: "active",
-          });
-          for (const item of unroutedItems) {
-            await storage.createKdsTicketItem(fallbackTicket.id, item.id);
-          }
-        }
-      }
-
+      // Use shared helper for consistent send behavior
+      const { round, updatedItems } = await sendItemsToKds(checkId, employeeId, unsentItems);
+      
       const allItems = await storage.getCheckItems(checkId);
-
-      await storage.createAuditLog({
-        rvcId: check?.rvcId,
-        employeeId,
-        action: "send_to_kitchen",
-        targetType: "check",
-        targetId: checkId,
-        details: { roundNumber, itemCount: unsentItems.length },
-      });
-
-      broadcastKdsUpdate();
       res.json({ round, updatedItems: allItems });
     } catch (error) {
       console.error("Send error:", error);
@@ -1328,6 +1433,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
       
       if (paidAmount >= total - 0.01) {
+        // Auto-send any unsent items to KDS before closing check
+        const unsentItems = activeItems.filter((i) => !i.sent);
+        if (unsentItems.length > 0 && check) {
+          try {
+            await sendItemsToKds(checkId, employeeId, unsentItems, {
+              auditAction: "payment_auto_send",
+            });
+          } catch (e) {
+            console.error("Payment auto-send error:", e);
+          }
+        }
+
         const updatedCheck = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),

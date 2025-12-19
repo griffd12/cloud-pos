@@ -60,6 +60,21 @@ The routing resolution (`resolveDevicesForMenuItem`) follows priority:
 2. Property-level routing
 3. Global/default routing (lowest priority)
 
+### KDS Order Flow
+The system supports two order modes configurable per RVC:
+
+**Standard Mode** (default):
+- Items are added to a check but don't appear on KDS
+- Cashier clicks "Send" to push all unsent items to KDS
+- Items also auto-send when a check is paid out
+
+**Dynamic Order Mode** (`dynamicOrderMode: true` on RVC):
+- Items appear on KDS immediately when added to the check
+- No "Send" action required - KDS sees items in real-time as they're rung in
+- Ideal for fast-casual environments where food prep starts immediately
+
+Payment auto-send: When a check is paid, any unsent items are automatically routed to KDS before the check closes.
+
 ### Real-time Communication
 - WebSocket server at `/ws` path for KDS ticket updates
 - Channel-based subscription model for RVC-specific or global updates

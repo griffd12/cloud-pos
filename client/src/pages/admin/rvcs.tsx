@@ -33,6 +33,11 @@ export default function RvcsPage() {
       header: "Fast Transaction",
       render: (value) => (value ? <Badge>Enabled</Badge> : <Badge variant="secondary">Disabled</Badge>),
     },
+    {
+      key: "dynamicOrderMode",
+      header: "Dynamic Order",
+      render: (value) => (value ? <Badge>Enabled</Badge> : <Badge variant="secondary">Disabled</Badge>),
+    },
     { key: "defaultOrderType", header: "Default Order Type" },
   ];
 
@@ -58,6 +63,13 @@ export default function RvcsPage() {
       label: "Fast Transaction Mode",
       type: "switch",
       description: "Enable fast transaction mode by default for this RVC",
+      defaultValue: false,
+    },
+    {
+      name: "dynamicOrderMode",
+      label: "Dynamic Order Mode",
+      type: "switch",
+      description: "Items appear on KDS immediately when added to check (no send required)",
       defaultValue: false,
     },
   ];

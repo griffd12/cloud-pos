@@ -32,6 +32,7 @@ export const rvcs = pgTable("rvcs", {
   fastTransactionDefault: boolean("fast_transaction_default").default(false),
   defaultOrderType: text("default_order_type").default("dine_in"),
   orderTypeDefault: text("order_type_default").default("dine_in"),
+  dynamicOrderMode: boolean("dynamic_order_mode").default(false),
   active: boolean("active").default(true),
 });
 
