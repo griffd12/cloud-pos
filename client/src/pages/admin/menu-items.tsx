@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,7 +33,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu } from "@shared/schema";
+import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, Upload, Unlink } from "lucide-react";
 
 export default function MenuItemsPage() {
@@ -60,6 +62,10 @@ export default function MenuItemsPage() {
 
   const { data: allMenuItemSlus = [] } = useQuery<MenuItemSlu[]>({
     queryKey: ["/api/menu-item-slus"],
+  });
+
+  const { data: modifierGroups = [] } = useQuery<ModifierGroup[]>({
+    queryKey: ["/api/modifier-groups"],
   });
 
   const columns: Column<MenuItem>[] = [
@@ -339,6 +345,7 @@ export default function MenuItemsPage() {
         printClasses={printClasses}
         slus={slus}
         existingSlus={allMenuItemSlus}
+        modifierGroups={modifierGroups}
       />
     </div>
   );
@@ -352,6 +359,7 @@ interface MenuItemFormDialogProps {
   printClasses: PrintClass[];
   slus: Slu[];
   existingSlus: MenuItemSlu[];
+  modifierGroups: ModifierGroup[];
 }
 
 function MenuItemFormDialog({
@@ -362,6 +370,7 @@ function MenuItemFormDialog({
   printClasses,
   slus,
   existingSlus,
+  modifierGroups,
 }: MenuItemFormDialogProps) {
   const { toast } = useToast();
   
@@ -370,7 +379,24 @@ function MenuItemFormDialog({
     : [];
     
   const [selectedSlus, setSelectedSlus] = useState<string[]>(initialSluIds);
+  const [selectedModifierGroups, setSelectedModifierGroups] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  const { data: existingModGroupLinks = [] } = useQuery<MenuItemModifierGroup[]>({
+    queryKey: ["/api/menu-items", editingItem?.id, "modifier-groups"],
+    queryFn: async () => {
+      if (!editingItem) return [];
+      const res = await fetch(`/api/menu-items/${editingItem.id}/modifier-groups`);
+      return res.json();
+    },
+    enabled: !!editingItem,
+  });
+
+  useEffect(() => {
+    if (existingModGroupLinks.length > 0) {
+      setSelectedModifierGroups(existingModGroupLinks.map(l => l.modifierGroupId));
+    }
+  }, [existingModGroupLinks]);
 
   const form = useForm<InsertMenuItem>({
     resolver: zodResolver(insertMenuItemSchema),
@@ -427,9 +453,11 @@ function MenuItemFormDialog({
       }
 
       await apiRequest("POST", `/api/menu-items/${menuItemId}/slus`, { sluIds: selectedSlus });
+      await apiRequest("PUT", `/api/menu-items/${menuItemId}/modifier-groups`, { modifierGroupIds: selectedModifierGroups });
 
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items"] });
       queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", menuItemId, "modifier-groups"] });
       
       toast({ title: editingItem ? "Menu item updated" : "Menu item created" });
       onClose();
@@ -443,7 +471,16 @@ function MenuItemFormDialog({
   const handleClose = () => {
     form.reset();
     setSelectedSlus([]);
+    setSelectedModifierGroups([]);
     onClose();
+  };
+
+  const toggleModifierGroup = (groupId: string) => {
+    setSelectedModifierGroups(prev => 
+      prev.includes(groupId)
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId]
+    );
   };
 
   return (
@@ -640,6 +677,52 @@ function MenuItemFormDialog({
                   {selectedSlus.length === 0 && slus.length > 0 && (
                     <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">
                       Warning: Item won't appear on POS without category assignment
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t">
+                  <Label className="text-base font-semibold">Required Modifier Groups</Label>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Select modifier groups that customers must choose from when ordering this item.
+                  </p>
+                  
+                  {modifierGroups.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">
+                      No modifier groups configured. Create Modifier Groups in the Modifier Groups section first.
+                    </p>
+                  ) : (
+                    <ScrollArea className="h-[180px] border rounded-md p-3">
+                      <div className="space-y-2">
+                        {modifierGroups.map(group => (
+                          <div
+                            key={group.id}
+                            className="flex items-center gap-3 p-2 rounded-md hover-elevate"
+                          >
+                            <Checkbox
+                              id={`modgroup-${group.id}`}
+                              checked={selectedModifierGroups.includes(group.id)}
+                              onCheckedChange={() => toggleModifierGroup(group.id)}
+                              data-testid={`checkbox-modgroup-${group.id}`}
+                            />
+                            <Label
+                              htmlFor={`modgroup-${group.id}`}
+                              className="flex-1 cursor-pointer flex items-center gap-2"
+                            >
+                              <span>{group.name}</span>
+                              {group.required && (
+                                <Badge variant="secondary" className="text-xs">Required</Badge>
+                              )}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                  
+                  {selectedModifierGroups.length > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {selectedModifierGroups.length} modifier group{selectedModifierGroups.length > 1 ? "s" : ""} linked
                     </p>
                   )}
                 </div>
