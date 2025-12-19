@@ -222,10 +222,20 @@ export default function PosPage() {
       return response.json();
     },
     onSuccess: (updatedItem: CheckItem) => {
-      setCheckItems(checkItems.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+      // Use functional update to get current state (avoids stale closure issue)
+      setCheckItems((prevItems) => {
+        const exists = prevItems.some((item) => item.id === updatedItem.id);
+        if (exists) {
+          return prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item));
+        }
+        // If item doesn't exist yet (race condition), add it
+        return [...prevItems, updatedItem];
+      });
       toast({ title: "Modifiers updated" });
       setEditingItem(null);
       setShowModifierModal(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
     },
     onError: () => {
       toast({ title: "Failed to update modifiers", variant: "destructive" });
