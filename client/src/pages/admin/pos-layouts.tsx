@@ -423,14 +423,14 @@ export default function PosLayoutsPage() {
                     <div className="space-y-2">
                       <Label>Menu Item</Label>
                       <Select
-                        value={selectedCellData.menuItemId || ""}
-                        onValueChange={(v) => updateCell(selectedCell!.row, selectedCell!.col, { menuItemId: v || null })}
+                        value={selectedCellData.menuItemId || "__empty__"}
+                        onValueChange={(v) => updateCell(selectedCell!.row, selectedCell!.col, { menuItemId: v === "__empty__" ? null : v })}
                       >
                         <SelectTrigger data-testid="select-cell-menu-item">
                           <SelectValue placeholder="Select item" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Empty</SelectItem>
+                          <SelectItem value="__empty__">Empty</SelectItem>
                           {menuItems.filter(m => m.active).map(item => (
                             <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
                           ))}
