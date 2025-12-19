@@ -25,6 +25,7 @@ import PropertiesPage from "./properties";
 import RvcsPage from "./rvcs";
 import SlusPage from "./slus";
 import MenuItemsPage from "./menu-items";
+import ModifiersPage from "./modifiers";
 import ModifierGroupsPage from "./modifier-groups";
 import EmployeesPage from "./employees";
 import RolesPage from "./roles";
@@ -239,6 +240,7 @@ export default function AdminLayout() {
               <Route path="/admin/rvcs" component={RvcsPage} />
               <Route path="/admin/slus" component={SlusPage} />
               <Route path="/admin/menu-items" component={MenuItemsPage} />
+              <Route path="/admin/modifiers" component={ModifiersPage} />
               <Route path="/admin/modifier-groups" component={ModifierGroupsPage} />
               <Route path="/admin/employees" component={EmployeesPage} />
               <Route path="/admin/roles" component={RolesPage} />

@@ -50,7 +50,8 @@ const menuGroups = [
     items: [
       { title: "SLUs (Categories)", url: "/admin/slus", icon: LayoutGrid },
       { title: "Menu Items", url: "/admin/menu-items", icon: UtensilsCrossed },
-      { title: "Modifier Groups", url: "/admin/modifier-groups", icon: Settings2 },
+      { title: "Modifiers", url: "/admin/modifiers", icon: Settings2 },
+      { title: "Modifier Groups", url: "/admin/modifier-groups", icon: LayoutGrid },
     ],
   },
   {
