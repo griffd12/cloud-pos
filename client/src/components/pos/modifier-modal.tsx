@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +11,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Check, AlertCircle } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import type { MenuItem, ModifierGroup, Modifier } from "@shared/schema";
 
 interface SelectedModifier {
@@ -31,6 +32,8 @@ interface ModifierModalProps {
   modifierGroups: (ModifierGroup & { modifiers: ModifierWithMeta[] })[];
   onConfirm: (modifiers: SelectedModifier[]) => void;
   initialModifiers?: SelectedModifier[];
+  pendingItemId?: string; // For real-time updates in dynamic mode
+  employeeId?: string; // For audit logging
 }
 
 export function ModifierModal({
@@ -40,10 +43,53 @@ export function ModifierModal({
   modifierGroups,
   onConfirm,
   initialModifiers,
+  pendingItemId,
+  employeeId,
 }: ModifierModalProps) {
   const [selectedModifiers, setSelectedModifiers] = useState<Map<string, SelectedModifier[]>>(
     new Map()
   );
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced function to send real-time modifier updates to server
+  const sendLiveUpdate = useCallback((modifiersMap: Map<string, SelectedModifier[]>) => {
+    if (!pendingItemId) return;
+    
+    // Clear any pending debounce
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce the update (300ms)
+    debounceTimerRef.current = setTimeout(async () => {
+      const allModifiers: SelectedModifier[] = [];
+      modifiersMap.forEach((mods) => {
+        allModifiers.push(...mods);
+      });
+
+      try {
+        await apiRequest(`/api/check-items/${pendingItemId}/modifiers`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            modifiers: allModifiers,
+            employeeId,
+            // Keep pending status - will be finalized on confirm
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to send live modifier update:", error);
+      }
+    }, 300);
+  }, [pendingItemId, employeeId]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (open && modifierGroups.length > 0) {
@@ -108,6 +154,11 @@ export function ModifierModal({
             },
           ]);
         }
+      }
+
+      // Send real-time update to server for dynamic mode
+      if (pendingItemId) {
+        sendLiveUpdate(updated);
       }
 
       return updated;

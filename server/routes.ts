@@ -1300,7 +1300,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Update check item modifiers (only for unsent items)
+  // Update check item modifiers (only for unsent items or pending items in dynamic mode)
   app.patch("/api/check-items/:id/modifiers", async (req, res) => {
     try {
       const itemId = req.params.id;
@@ -1309,7 +1309,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const item = await storage.getCheckItem(itemId);
       if (!item) return res.status(404).json({ message: "Item not found" });
 
-      if (item.sent) {
+      // Allow modifications if: item is not sent, OR item is in "pending" status (dynamic mode)
+      if (item.sent && item.itemStatus !== "pending") {
         return res.status(400).json({ message: "Cannot modify sent items" });
       }
 

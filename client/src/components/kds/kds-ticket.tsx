@@ -174,11 +174,15 @@ export function KdsTicket({
                 )}
               </div>
               {item.modifiers && item.modifiers.length > 0 && (
-                <div className="mt-0.5 space-y-0.5">
+                <div className={`mt-0.5 space-y-0.5 ${item.itemStatus === "pending" ? "animate-pulse" : ""}`}>
                   {item.modifiers.map((mod, idx) => (
                     <span
                       key={idx}
-                      className="block text-xs text-muted-foreground pl-1"
+                      className={`block text-xs pl-1 ${
+                        item.itemStatus === "pending" 
+                          ? "text-amber-600 dark:text-amber-400 font-medium" 
+                          : "text-muted-foreground"
+                      }`}
                     >
                       - {mod.name}
                     </span>

@@ -639,6 +639,8 @@ export default function PosPage() {
         modifierGroups={itemModifierGroups}
         onConfirm={handleConfirmModifiers}
         initialModifiers={editingItem?.modifiers as SelectedModifier[] | undefined}
+        pendingItemId={editingItem?.itemStatus === "pending" ? editingItem.id : undefined}
+        employeeId={currentEmployee?.id}
       />
 
       <ManagerApprovalModal
