@@ -30,6 +30,7 @@ interface ModifierModalProps {
   menuItem: MenuItem | null;
   modifierGroups: (ModifierGroup & { modifiers: ModifierWithMeta[] })[];
   onConfirm: (modifiers: SelectedModifier[]) => void;
+  initialModifiers?: SelectedModifier[];
 }
 
 export function ModifierModal({
@@ -38,6 +39,7 @@ export function ModifierModal({
   menuItem,
   modifierGroups,
   onConfirm,
+  initialModifiers,
 }: ModifierModalProps) {
   const [selectedModifiers, setSelectedModifiers] = useState<Map<string, SelectedModifier[]>>(
     new Map()
@@ -45,24 +47,35 @@ export function ModifierModal({
 
   useEffect(() => {
     if (open && modifierGroups.length > 0) {
-      const defaults = new Map<string, SelectedModifier[]>();
-      modifierGroups.forEach((group) => {
-        const defaultMods = group.modifiers
-          .filter((m) => m.isDefault)
-          .map((m) => ({
-            id: m.id,
-            name: m.name,
-            priceDelta: m.priceDelta || "0",
-          }));
-        if (defaultMods.length > 0) {
-          defaults.set(group.id, defaultMods);
-        }
-      });
-      setSelectedModifiers(defaults);
+      const newSelection = new Map<string, SelectedModifier[]>();
+      
+      if (initialModifiers && initialModifiers.length > 0) {
+        modifierGroups.forEach((group) => {
+          const groupModIds = new Set(group.modifiers.map((m) => m.id));
+          const matchingMods = initialModifiers.filter((m) => groupModIds.has(m.id));
+          if (matchingMods.length > 0) {
+            newSelection.set(group.id, matchingMods);
+          }
+        });
+      } else {
+        modifierGroups.forEach((group) => {
+          const defaultMods = group.modifiers
+            .filter((m) => m.isDefault)
+            .map((m) => ({
+              id: m.id,
+              name: m.name,
+              priceDelta: m.priceDelta || "0",
+            }));
+          if (defaultMods.length > 0) {
+            newSelection.set(group.id, defaultMods);
+          }
+        });
+      }
+      setSelectedModifiers(newSelection);
     } else {
       setSelectedModifiers(new Map());
     }
-  }, [open, modifierGroups]);
+  }, [open, modifierGroups, initialModifiers]);
 
   const toggleModifier = (group: ModifierGroup & { modifiers: ModifierWithMeta[] }, modifier: ModifierWithMeta) => {
     setSelectedModifiers((prev) => {

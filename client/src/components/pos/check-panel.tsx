@@ -4,7 +4,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Check, CheckItem, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Star, Plus, Minus } from "lucide-react";
+import { Trash2, Send, CreditCard, Star, Plus, Minus, Edit2 } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -12,6 +12,7 @@ interface CheckPanelProps {
   orderType?: OrderType;
   onSend: () => void;
   onVoidItem: (item: CheckItem) => void;
+  onEditModifiers?: (item: CheckItem) => void;
   onPay: () => void;
   onNewCheck: () => void;
   onChangeOrderType: () => void;
@@ -38,6 +39,7 @@ export function CheckPanel({
   orderType,
   onSend,
   onVoidItem,
+  onEditModifiers,
   onPay,
   onNewCheck,
   onChangeOrderType,
@@ -163,6 +165,17 @@ export function CheckPanel({
                         (item.quantity || 1)
                     )}
                   </span>
+                  {!item.sent && onEditModifiers && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => onEditModifiers(item)}
+                      data-testid={`button-edit-modifiers-${item.id}`}
+                    >
+                      <Edit2 className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                  )}
                   {canVoid && (
                     <Button
                       variant="ghost"

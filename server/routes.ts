@@ -1103,6 +1103,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Update check item modifiers (only for unsent items)
+  app.patch("/api/check-items/:id/modifiers", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const { modifiers, employeeId } = req.body;
+
+      const item = await storage.getCheckItem(itemId);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+
+      if (item.sent) {
+        return res.status(400).json({ message: "Cannot modify sent items" });
+      }
+
+      const updated = await storage.updateCheckItem(itemId, { modifiers });
+
+      const check = await storage.getCheck(item.checkId);
+      await storage.createAuditLog({
+        rvcId: check?.rvcId,
+        employeeId,
+        action: "modify_item",
+        targetType: "check_item",
+        targetId: itemId,
+        details: { menuItemName: item.menuItemName, modifiers },
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update modifiers error:", error);
+      res.status(400).json({ message: "Failed to update modifiers" });
+    }
+  });
+
   app.post("/api/check-items/:id/void", async (req, res) => {
     try {
       const itemId = req.params.id;

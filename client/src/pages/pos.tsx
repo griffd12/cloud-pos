@@ -52,6 +52,7 @@ export default function PosPage() {
   const [showOrderTypeModal, setShowOrderTypeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
+  const [editingItem, setEditingItem] = useState<CheckItem | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [cashChangeDue, setCashChangeDue] = useState<number | null>(null);
   const [pendingCashOverTender, setPendingCashOverTender] = useState<{ tenderId: string; amount: number } | null>(null);
@@ -189,6 +190,25 @@ export default function PosPage() {
     },
   });
 
+  const updateModifiersMutation = useMutation({
+    mutationFn: async (data: { itemId: string; modifiers: SelectedModifier[] }) => {
+      const response = await apiRequest("PATCH", "/api/check-items/" + data.itemId + "/modifiers", {
+        employeeId: currentEmployee?.id,
+        modifiers: data.modifiers,
+      });
+      return response.json();
+    },
+    onSuccess: (updatedItem: CheckItem) => {
+      setCheckItems(checkItems.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+      toast({ title: "Modifiers updated" });
+      setEditingItem(null);
+      setShowModifierModal(false);
+    },
+    onError: () => {
+      toast({ title: "Failed to update modifiers", variant: "destructive" });
+    },
+  });
+
   const paymentMutation = useMutation({
     mutationFn: async (data: { tenderId: string; amount: number; isCashOverTender?: boolean }) => {
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/payments", {
@@ -285,7 +305,9 @@ export default function PosPage() {
   };
 
   const handleConfirmModifiers = (modifiers: SelectedModifier[]) => {
-    if (pendingItem) {
+    if (editingItem) {
+      updateModifiersMutation.mutate({ itemId: editingItem.id, modifiers });
+    } else if (pendingItem) {
       addItemMutation.mutate({ menuItem: pendingItem, modifiers });
       setPendingItem(null);
     }
@@ -309,6 +331,26 @@ export default function PosPage() {
         managerPin,
       });
     }
+  };
+
+  const handleEditModifiers = async (item: CheckItem) => {
+    const menuItem = allMenuItems.find((mi) => mi.id === item.menuItemId);
+    if (!menuItem) {
+      toast({ title: "Menu item not found", variant: "destructive" });
+      return;
+    }
+    setEditingItem(item);
+    try {
+      const res = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include" });
+      if (res.ok) {
+        const groups = await res.json();
+        setItemModifierGroups(groups);
+      }
+    } catch (error) {
+      console.error("Failed to fetch modifier groups:", error);
+    }
+    setPendingItem(menuItem as any);
+    setShowModifierModal(true);
   };
 
   const handleOrderTypeSelect = async (orderType: OrderType) => {
@@ -437,6 +479,7 @@ export default function PosPage() {
             orderType={currentCheck?.orderType as OrderType}
             onSend={() => sendCheckMutation.mutate()}
             onVoidItem={handleVoidItem}
+            onEditModifiers={handleEditModifiers}
             onPay={() => setShowPaymentModal(true)}
             onNewCheck={() => setShowOrderTypeModal(true)}
             onChangeOrderType={() => setShowOrderTypeModal(true)}
@@ -457,11 +500,13 @@ export default function PosPage() {
         onClose={() => {
           setShowModifierModal(false);
           setPendingItem(null);
+          setEditingItem(null);
           setItemModifierGroups([]);
         }}
         menuItem={pendingItem}
         modifierGroups={itemModifierGroups}
         onConfirm={handleConfirmModifiers}
+        initialModifiers={editingItem?.modifiers as SelectedModifier[] | undefined}
       />
 
       <ManagerApprovalModal
