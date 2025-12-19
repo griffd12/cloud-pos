@@ -7,6 +7,7 @@ import {
   tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
+  posLayouts, posLayoutCells,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -36,6 +37,8 @@ import {
   type CheckPayment, type InsertCheckPayment,
   type AuditLog, type InsertAuditLog,
   type KdsTicket, type InsertKdsTicket,
+  type PosLayout, type InsertPosLayout,
+  type PosLayoutCell, type InsertPosLayoutCell,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -230,6 +233,18 @@ export interface IStorage {
 
   // Admin Stats
   getAdminStats(): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }>;
+
+  // POS Layouts
+  getPosLayouts(rvcId?: string): Promise<PosLayout[]>;
+  getPosLayout(id: string): Promise<PosLayout | undefined>;
+  getDefaultPosLayout(rvcId: string): Promise<PosLayout | undefined>;
+  createPosLayout(data: InsertPosLayout): Promise<PosLayout>;
+  updatePosLayout(id: string, data: Partial<InsertPosLayout>): Promise<PosLayout | undefined>;
+  deletePosLayout(id: string): Promise<boolean>;
+
+  // POS Layout Cells
+  getPosLayoutCells(layoutId: string): Promise<PosLayoutCell[]>;
+  setPosLayoutCells(layoutId: string, cells: InsertPosLayoutCell[]): Promise<PosLayoutCell[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1136,6 +1151,53 @@ export class DatabaseStorage implements IStorage {
       menuItems: Number(itemCount?.count || 0),
       activeChecks: Number(checkCount?.count || 0),
     };
+  }
+
+  // POS Layouts
+  async getPosLayouts(rvcId?: string): Promise<PosLayout[]> {
+    if (rvcId) {
+      return db.select().from(posLayouts).where(eq(posLayouts.rvcId, rvcId));
+    }
+    return db.select().from(posLayouts);
+  }
+
+  async getPosLayout(id: string): Promise<PosLayout | undefined> {
+    const [result] = await db.select().from(posLayouts).where(eq(posLayouts.id, id));
+    return result;
+  }
+
+  async getDefaultPosLayout(rvcId: string): Promise<PosLayout | undefined> {
+    const [result] = await db.select().from(posLayouts)
+      .where(and(eq(posLayouts.rvcId, rvcId), eq(posLayouts.isDefault, true), eq(posLayouts.active, true)));
+    return result;
+  }
+
+  async createPosLayout(data: InsertPosLayout): Promise<PosLayout> {
+    const [result] = await db.insert(posLayouts).values(data).returning();
+    return result;
+  }
+
+  async updatePosLayout(id: string, data: Partial<InsertPosLayout>): Promise<PosLayout | undefined> {
+    const [result] = await db.update(posLayouts).set(data).where(eq(posLayouts.id, id)).returning();
+    return result;
+  }
+
+  async deletePosLayout(id: string): Promise<boolean> {
+    await db.delete(posLayoutCells).where(eq(posLayoutCells.layoutId, id));
+    const result = await db.delete(posLayouts).where(eq(posLayouts.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // POS Layout Cells
+  async getPosLayoutCells(layoutId: string): Promise<PosLayoutCell[]> {
+    return db.select().from(posLayoutCells).where(eq(posLayoutCells.layoutId, layoutId));
+  }
+
+  async setPosLayoutCells(layoutId: string, cells: InsertPosLayoutCell[]): Promise<PosLayoutCell[]> {
+    await db.delete(posLayoutCells).where(eq(posLayoutCells.layoutId, layoutId));
+    if (cells.length === 0) return [];
+    const result = await db.insert(posLayoutCells).values(cells.map(c => ({ ...c, layoutId }))).returning();
+    return result;
   }
 }
 

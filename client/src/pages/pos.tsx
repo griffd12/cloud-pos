@@ -14,7 +14,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup } from "@shared/schema";
+import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings } from "lucide-react";
 import { Link, Redirect } from "wouter";
 
@@ -105,6 +105,27 @@ export default function PosPage() {
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
+  });
+
+  const { data: activeLayout } = useQuery<PosLayout | null>({
+    queryKey: ["/api/pos-layouts/default", currentRvc?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/pos-layouts/default/${currentRvc?.id}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!currentRvc?.id,
+  });
+
+  const { data: layoutCells = [] } = useQuery<PosLayoutCell[]>({
+    queryKey: ["/api/pos-layouts", activeLayout?.id, "cells"],
+    queryFn: async () => {
+      if (!activeLayout?.id) return [];
+      const res = await fetch(`/api/pos-layouts/${activeLayout.id}/cells`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!activeLayout?.id && activeLayout.mode === "custom_grid",
   });
 
   const createCheckMutation = useMutation({
@@ -475,30 +496,78 @@ export default function PosPage() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-48 lg:w-56 flex-shrink-0 border-r bg-muted/30">
-          <ScrollArea className="h-full">
-            <div className="p-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2 py-2">
-                Categories
-              </p>
-              <SluGrid
-                slus={slus}
-                selectedSluId={selectedSlu?.id || null}
-                onSelectSlu={handleSelectSlu}
-                isLoading={slusLoading}
-              />
-            </div>
-          </ScrollArea>
-        </div>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {activeLayout?.mode === "custom_grid" && layoutCells.length > 0 ? (
+            <ScrollArea className="flex-1">
+              <div
+                className="grid gap-2 p-4"
+                style={{
+                  gridTemplateColumns: `repeat(${activeLayout.gridCols || 6}, minmax(80px, 1fr))`,
+                  gridTemplateRows: `repeat(${activeLayout.gridRows || 4}, 80px)`,
+                }}
+              >
+                {layoutCells.map((cell) => {
+                  const menuItem = allMenuItems.find(m => m.id === cell.menuItemId);
+                  if (!menuItem) return null;
+                  return (
+                    <Button
+                      key={cell.id}
+                      className="h-full w-full flex flex-col items-center justify-center text-sm font-medium"
+                      style={{
+                        backgroundColor: cell.backgroundColor || "#3B82F6",
+                        color: cell.textColor || "#FFFFFF",
+                        gridRow: `${cell.rowIndex + 1} / span ${cell.rowSpan || 1}`,
+                        gridColumn: `${cell.colIndex + 1} / span ${cell.colSpan || 1}`,
+                      }}
+                      onClick={() => handleSelectItem(menuItem)}
+                      data-testid={`button-layout-cell-${cell.id}`}
+                    >
+                      <span className="truncate max-w-full">
+                        {cell.displayLabel || menuItem.shortName || menuItem.name}
+                      </span>
+                      <span className="text-xs opacity-70">
+                        ${parseFloat(menuItem.price || "0").toFixed(2)}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          ) : (
+            <>
+              <div className="flex-shrink-0 border-b bg-muted/30 px-2 pt-2 overflow-x-auto">
+                <div className="flex gap-1 pb-2">
+                  {slusLoading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-10 w-28 bg-muted animate-pulse rounded-md flex-shrink-0" />
+                    ))
+                  ) : slus.length === 0 ? (
+                    <span className="text-sm text-muted-foreground px-2 py-2">No categories</span>
+                  ) : (
+                    slus.map((slu) => (
+                      <Button
+                        key={slu.id}
+                        variant={selectedSlu?.id === slu.id ? "default" : "outline"}
+                        className="h-10 px-4 flex-shrink-0 whitespace-nowrap"
+                        onClick={() => handleSelectSlu(slu)}
+                        data-testid={`button-slu-tab-${slu.id}`}
+                      >
+                        {slu.name}
+                      </Button>
+                    ))
+                  )}
+                </div>
+              </div>
 
-        <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full">
-            <MenuItemGrid
-              items={menuItems}
-              onSelectItem={handleSelectItem}
-              isLoading={itemsLoading && !!selectedSlu}
-            />
-          </ScrollArea>
+              <ScrollArea className="flex-1">
+                <MenuItemGrid
+                  items={menuItems}
+                  onSelectItem={handleSelectItem}
+                  isLoading={itemsLoading && !!selectedSlu}
+                />
+              </ScrollArea>
+            </>
+          )}
         </div>
 
         <div className="w-80 lg:w-96 flex-shrink-0 border-l">

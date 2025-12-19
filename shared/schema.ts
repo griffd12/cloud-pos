@@ -622,6 +622,53 @@ export const PRIVILEGE_CODES = {
 export const ORDER_TYPES = ["dine_in", "take_out", "delivery", "pickup"] as const;
 export type OrderType = typeof ORDER_TYPES[number];
 
+// ============================================================================
+// POS LAYOUTS (SCREEN DESIGNER)
+// ============================================================================
+
+export const posLayouts = pgTable("pos_layouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull(),
+  mode: text("mode").notNull().default("slu_tabs"), // 'slu_tabs' or 'custom_grid'
+  gridRows: integer("grid_rows").default(4),
+  gridCols: integer("grid_cols").default(6),
+  isDefault: boolean("is_default").default(false),
+  active: boolean("active").default(true),
+});
+
+export const posLayoutCells = pgTable("pos_layout_cells", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  layoutId: varchar("layout_id").notNull().references(() => posLayouts.id),
+  rowIndex: integer("row_index").notNull(),
+  colIndex: integer("col_index").notNull(),
+  rowSpan: integer("row_span").default(1),
+  colSpan: integer("col_span").default(1),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id),
+  backgroundColor: text("background_color").default("#3B82F6"),
+  textColor: text("text_color").default("#FFFFFF"),
+  displayLabel: text("display_label"), // Optional override for button text
+});
+
+export const posLayoutCellsRelations = relations(posLayoutCells, ({ one }) => ({
+  layout: one(posLayouts, { fields: [posLayoutCells.layoutId], references: [posLayouts.id] }),
+  menuItem: one(menuItems, { fields: [posLayoutCells.menuItemId], references: [menuItems.id] }),
+}));
+
+export const posLayoutsRelations = relations(posLayouts, ({ many }) => ({
+  cells: many(posLayoutCells),
+}));
+
+export const insertPosLayoutSchema = createInsertSchema(posLayouts).omit({ id: true });
+export const insertPosLayoutCellSchema = createInsertSchema(posLayoutCells).omit({ id: true });
+
+export type PosLayout = typeof posLayouts.$inferSelect;
+export type InsertPosLayout = z.infer<typeof insertPosLayoutSchema>;
+export type PosLayoutCell = typeof posLayoutCells.$inferSelect;
+export type InsertPosLayoutCell = z.infer<typeof insertPosLayoutCellSchema>;
+
 // Void reason codes
 export const VOID_REASONS = [
   { code: "customer_request", label: "Customer Request" },

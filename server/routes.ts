@@ -11,6 +11,7 @@ import {
   insertModifierSchema, insertModifierGroupModifierSchema, insertMenuItemModifierGroupSchema,
   insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
+  insertPosLayoutSchema, insertPosLayoutCellSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -1307,6 +1308,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/stats", async (req, res) => {
     const stats = await storage.getAdminStats();
     res.json(stats);
+  });
+
+  // ============================================================================
+  // POS LAYOUT ROUTES
+  // ============================================================================
+
+  app.get("/api/pos-layouts", async (req, res) => {
+    const rvcId = req.query.rvcId as string | undefined;
+    const data = await storage.getPosLayouts(rvcId);
+    res.json(data);
+  });
+
+  app.get("/api/pos-layouts/default/:rvcId", async (req, res) => {
+    const layout = await storage.getDefaultPosLayout(req.params.rvcId);
+    res.json(layout || null);
+  });
+
+  app.get("/api/pos-layouts/:id", async (req, res) => {
+    const layout = await storage.getPosLayout(req.params.id);
+    if (!layout) return res.status(404).json({ message: "Layout not found" });
+    res.json(layout);
+  });
+
+  app.post("/api/pos-layouts", async (req, res) => {
+    try {
+      const data = insertPosLayoutSchema.parse(req.body);
+      const layout = await storage.createPosLayout(data);
+      res.status(201).json(layout);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid layout data" });
+    }
+  });
+
+  app.patch("/api/pos-layouts/:id", async (req, res) => {
+    try {
+      const data = insertPosLayoutSchema.partial().parse(req.body);
+      const layout = await storage.updatePosLayout(req.params.id, data);
+      if (!layout) return res.status(404).json({ message: "Layout not found" });
+      res.json(layout);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid layout data" });
+    }
+  });
+
+  app.delete("/api/pos-layouts/:id", async (req, res) => {
+    const deleted = await storage.deletePosLayout(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Layout not found" });
+    res.status(204).end();
+  });
+
+  app.get("/api/pos-layouts/:id/cells", async (req, res) => {
+    const cells = await storage.getPosLayoutCells(req.params.id);
+    res.json(cells);
+  });
+
+  app.put("/api/pos-layouts/:id/cells", async (req, res) => {
+    try {
+      const layoutId = req.params.id;
+      const cellSchema = insertPosLayoutCellSchema.omit({ layoutId: true });
+      const cellsData = z.array(cellSchema).parse(req.body);
+      const cellsWithLayoutId = cellsData.map(c => ({ ...c, layoutId }));
+      const cells = await storage.setPosLayoutCells(layoutId, cellsWithLayoutId);
+      res.json(cells);
+    } catch (error) {
+      console.error("Error saving cells:", error);
+      res.status(400).json({ message: "Invalid cells data" });
+    }
   });
 
   return httpServer;
