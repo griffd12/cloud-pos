@@ -213,10 +213,11 @@ export default function PosPage() {
   });
 
   const updateModifiersMutation = useMutation({
-    mutationFn: async (data: { itemId: string; modifiers: SelectedModifier[] }) => {
+    mutationFn: async (data: { itemId: string; modifiers: SelectedModifier[]; finalize?: boolean }) => {
       const response = await apiRequest("PATCH", "/api/check-items/" + data.itemId + "/modifiers", {
         employeeId: currentEmployee?.id,
         modifiers: data.modifiers,
+        itemStatus: data.finalize ? "active" : undefined, // Set to active when finalizing pending item
       });
       return response.json();
     },
@@ -304,6 +305,22 @@ export default function PosPage() {
       const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
       
       if (hasRequiredModifiers) {
+        // In dynamic order mode, create a pending item immediately so it shows on KDS
+        if (currentRvc?.dynamicOrderMode) {
+          const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
+            menuItemId: item.id,
+            menuItemName: item.name,
+            unitPrice: item.price,
+            modifiers: [],
+            quantity: 1,
+            itemStatus: "pending", // Mark as pending until modifiers are selected
+          });
+          const pendingCheckItem = await response.json();
+          setCheckItems([...checkItems, pendingCheckItem]);
+          setEditingItem(pendingCheckItem); // Set as editing so we update it rather than create new
+          queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+        }
+        
         setItemModifierGroups(groups);
         setPendingItem(item);
         setShowModifierModal(true);
@@ -328,11 +345,28 @@ export default function PosPage() {
 
   const handleConfirmModifiers = (modifiers: SelectedModifier[]) => {
     if (editingItem) {
-      updateModifiersMutation.mutate({ itemId: editingItem.id, modifiers });
+      // Check if this is a pending item being finalized
+      const isPendingItem = editingItem.itemStatus === "pending";
+      updateModifiersMutation.mutate({ 
+        itemId: editingItem.id, 
+        modifiers, 
+        finalize: isPendingItem 
+      });
     } else if (pendingItem) {
       addItemMutation.mutate({ menuItem: pendingItem, modifiers });
       setPendingItem(null);
     }
+  };
+
+  const handleModifierModalClose = () => {
+    // If there's a pending item being edited (created in dynamic mode), void it on cancel
+    if (editingItem && editingItem.itemStatus === "pending" && currentRvc?.dynamicOrderMode) {
+      voidItemMutation.mutate({ itemId: editingItem.id });
+    }
+    setShowModifierModal(false);
+    setPendingItem(null);
+    setEditingItem(null);
+    setItemModifierGroups([]);
   };
 
   const handleVoidItem = (item: CheckItem) => {
@@ -600,12 +634,7 @@ export default function PosPage() {
 
       <ModifierModal
         open={showModifierModal}
-        onClose={() => {
-          setShowModifierModal(false);
-          setPendingItem(null);
-          setEditingItem(null);
-          setItemModifierGroups([]);
-        }}
+        onClose={handleModifierModalClose}
         menuItem={pendingItem}
         modifierGroups={itemModifierGroups}
         onConfirm={handleConfirmModifiers}

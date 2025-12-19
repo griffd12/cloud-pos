@@ -1237,7 +1237,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks/:id/items", async (req, res) => {
     try {
       const checkId = req.params.id;
-      const { menuItemId, menuItemName, unitPrice, modifiers, quantity } = req.body;
+      const { menuItemId, menuItemName, unitPrice, modifiers, quantity, itemStatus } = req.body;
 
       const item = await storage.createCheckItem({
         checkId,
@@ -1246,6 +1246,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         unitPrice,
         modifiers: modifiers || [],
         quantity: quantity || 1,
+        itemStatus: itemStatus || "active", // 'pending' for items awaiting modifiers
         sent: false,
         voided: false,
       });
@@ -1256,9 +1257,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (check && menuItemId) {
         const rvc = await storage.getRvc(check.rvcId);
         if (rvc && rvc.dynamicOrderMode) {
-          // RVC has dynamic order mode enabled - send item immediately to KDS (no round)
+          // RVC has dynamic order mode enabled - send item immediately to KDS
           try {
-            const updatedItem = await sendItemDynamic(checkId, item, rvc);
+            const updatedItem = await sendItemDynamic(checkId, item, rvc, check.employeeId || undefined);
             if (updatedItem) {
               finalItem = updatedItem;
             }
@@ -1303,7 +1304,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/check-items/:id/modifiers", async (req, res) => {
     try {
       const itemId = req.params.id;
-      const { modifiers, employeeId } = req.body;
+      const { modifiers, employeeId, itemStatus } = req.body;
 
       const item = await storage.getCheckItem(itemId);
       if (!item) return res.status(404).json({ message: "Item not found" });
@@ -1312,17 +1313,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Cannot modify sent items" });
       }
 
-      const updated = await storage.updateCheckItem(itemId, { modifiers });
+      // Update modifiers and optionally itemStatus (for finalizing pending items)
+      const updateData: { modifiers: any; itemStatus?: string } = { modifiers };
+      if (itemStatus) {
+        updateData.itemStatus = itemStatus;
+      }
+      const updated = await storage.updateCheckItem(itemId, updateData);
 
       const check = await storage.getCheck(item.checkId);
+      
+      // Broadcast KDS update if item was already sent (for dynamic mode updates)
+      if (item.sent) {
+        broadcastKdsUpdate(check?.rvcId || undefined);
+      }
+
       await storage.createAuditLog({
         rvcId: check?.rvcId,
         employeeId,
-        action: "modify_item",
+        action: itemStatus === "active" && item.itemStatus === "pending" ? "finalize_pending_item" : "modify_item",
         targetType: "check_item",
         targetId: itemId,
-        details: { menuItemName: item.menuItemName, modifiers },
+        details: { menuItemName: item.menuItemName, modifiers, itemStatus },
       });
+
+      // Broadcast KDS update so pending items update in real-time
+      broadcastKdsUpdate(check?.rvcId || undefined);
 
       res.json(updated);
     } catch (error) {

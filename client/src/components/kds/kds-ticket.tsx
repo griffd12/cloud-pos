@@ -11,6 +11,7 @@ interface KdsItem {
   quantity: number;
   modifiers?: { name: string }[];
   status: "pending" | "bumped" | "voided";
+  itemStatus?: "pending" | "active"; // 'pending' = awaiting modifiers
 }
 
 interface KdsTicketProps {
@@ -136,13 +137,15 @@ export function KdsTicket({
         {activeItems.map((item) => (
           <div
             key={item.id}
-            className="flex items-start gap-2"
+            className={`flex items-start gap-2 ${item.itemStatus === "pending" ? "animate-pulse" : ""}`}
             data-testid={`kds-item-${item.id}`}
           >
             <div
               className={`w-7 h-7 flex-shrink-0 rounded-md flex items-center justify-center text-sm font-bold ${
                 item.status === "bumped"
                   ? "bg-green-500/20 text-green-600"
+                  : item.itemStatus === "pending"
+                  ? "bg-amber-500/20 text-amber-600"
                   : "bg-muted text-muted-foreground"
               }`}
             >
@@ -157,11 +160,18 @@ export function KdsTicket({
                   className={`font-medium ${
                     item.status === "bumped"
                       ? "line-through text-muted-foreground"
+                      : item.itemStatus === "pending"
+                      ? "text-amber-600 dark:text-amber-400"
                       : ""
                   }`}
                 >
                   {item.name}
                 </span>
+                {item.itemStatus === "pending" && (
+                  <Badge variant="outline" className="text-[10px] py-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                    MODIFYING
+                  </Badge>
+                )}
               </div>
               {item.modifiers && item.modifiers.length > 0 && (
                 <div className="mt-0.5 space-y-0.5">

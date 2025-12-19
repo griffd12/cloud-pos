@@ -1119,6 +1119,7 @@ export class DatabaseStorage implements IStorage {
             quantity: checkItem.quantity || 1,
             modifiers: checkItem.modifiers,
             status: item.status,
+            itemStatus: checkItem.itemStatus, // 'pending' or 'active'
           });
         }
       }
