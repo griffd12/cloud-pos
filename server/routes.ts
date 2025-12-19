@@ -1379,6 +1379,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         voidedAt: new Date(),
       });
 
+      // Update KDS ticket item status to voided so KDS reflects the void in real-time
+      await storage.voidKdsTicketItem(itemId);
+
       const check = await storage.getCheck(item.checkId);
       await storage.createAuditLog({
         rvcId: check?.rvcId,
@@ -1391,7 +1394,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         managerApprovalId,
       });
 
-      broadcastKdsUpdate();
+      broadcastKdsUpdate(check?.rvcId || undefined);
       res.json(updated);
     } catch (error) {
       console.error("Void error:", error);

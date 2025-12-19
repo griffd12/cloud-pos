@@ -232,6 +232,7 @@ export interface IStorage {
   updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined>;
   createKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
   removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
+  voidKdsTicketItem(checkItemId: string): Promise<void>;
   bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
   recallKdsTicket(id: string): Promise<KdsTicket | undefined>;
   getPreviewTicket(checkId: string): Promise<KdsTicket | undefined>;
@@ -1171,6 +1172,12 @@ export class DatabaseStorage implements IStorage {
   async removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void> {
     await db.delete(kdsTicketItems)
       .where(and(eq(kdsTicketItems.kdsTicketId, kdsTicketId), eq(kdsTicketItems.checkItemId, checkItemId)));
+  }
+
+  async voidKdsTicketItem(checkItemId: string): Promise<void> {
+    await db.update(kdsTicketItems)
+      .set({ status: "voided" })
+      .where(eq(kdsTicketItems.checkItemId, checkItemId));
   }
 
   async bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined> {
