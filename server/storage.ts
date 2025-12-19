@@ -231,8 +231,12 @@ export interface IStorage {
   createKdsTicket(data: InsertKdsTicket): Promise<KdsTicket>;
   updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined>;
   createKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
+  removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
   bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
   recallKdsTicket(id: string): Promise<KdsTicket | undefined>;
+  getPreviewTicket(checkId: string): Promise<KdsTicket | undefined>;
+  getKdsTicketsByCheck(checkId: string): Promise<KdsTicket[]>;
+  markKdsTicketsPaid(checkId: string): Promise<void>;
 
   // Admin Stats
   getAdminStats(): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }>;
@@ -1154,7 +1158,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void> {
-    await db.insert(kdsTicketItems).values({ kdsTicketId, checkItemId, status: "pending" });
+    // Check if this item is already on the ticket to avoid duplicates
+    const existing = await db.select().from(kdsTicketItems)
+      .where(and(eq(kdsTicketItems.kdsTicketId, kdsTicketId), eq(kdsTicketItems.checkItemId, checkItemId)));
+    if (existing.length === 0) {
+      await db.insert(kdsTicketItems).values({ kdsTicketId, checkItemId, status: "pending" });
+    }
+  }
+
+  async removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void> {
+    await db.delete(kdsTicketItems)
+      .where(and(eq(kdsTicketItems.kdsTicketId, kdsTicketId), eq(kdsTicketItems.checkItemId, checkItemId)));
   }
 
   async bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined> {
@@ -1183,6 +1197,20 @@ export class DatabaseStorage implements IStorage {
         .where(eq(kdsTicketItems.kdsTicketId, id));
     }
     return result;
+  }
+
+  async getPreviewTicket(checkId: string): Promise<KdsTicket | undefined> {
+    const [result] = await db.select().from(kdsTickets)
+      .where(and(eq(kdsTickets.checkId, checkId), eq(kdsTickets.isPreview, true)));
+    return result;
+  }
+
+  async getKdsTicketsByCheck(checkId: string): Promise<KdsTicket[]> {
+    return db.select().from(kdsTickets).where(eq(kdsTickets.checkId, checkId));
+  }
+
+  async markKdsTicketsPaid(checkId: string): Promise<void> {
+    await db.update(kdsTickets).set({ paid: true }).where(eq(kdsTickets.checkId, checkId));
   }
 
   // Admin Stats
