@@ -53,6 +53,7 @@ export default function PosPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [editingItem, setEditingItem] = useState<CheckItem | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [cashChangeDue, setCashChangeDue] = useState<number | null>(null);
   const [pendingCashOverTender, setPendingCashOverTender] = useState<{ tenderId: string; amount: number } | null>(null);
@@ -334,6 +335,10 @@ export default function PosPage() {
   };
 
   const handleEditModifiers = async (item: CheckItem) => {
+    if (item.sent) {
+      toast({ title: "Cannot modify sent items", variant: "destructive" });
+      return;
+    }
     const menuItem = allMenuItems.find((mi) => mi.id === item.menuItemId);
     if (!menuItem) {
       toast({ title: "Menu item not found", variant: "destructive" });
@@ -342,15 +347,24 @@ export default function PosPage() {
     setEditingItem(item);
     try {
       const res = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include" });
-      if (res.ok) {
-        const groups = await res.json();
-        setItemModifierGroups(groups);
+      if (!res.ok) {
+        toast({ title: "Failed to load modifiers", variant: "destructive" });
+        setEditingItem(null);
+        return;
       }
+      const groups = await res.json();
+      setItemModifierGroups(groups);
+      setPendingItem(menuItem as any);
+      setShowModifierModal(true);
     } catch (error) {
       console.error("Failed to fetch modifier groups:", error);
+      toast({ title: "Failed to load modifiers", variant: "destructive" });
+      setEditingItem(null);
     }
-    setPendingItem(menuItem as any);
-    setShowModifierModal(true);
+  };
+
+  const handleSelectCheckItem = (item: CheckItem | null) => {
+    setSelectedItemId(item?.id || null);
   };
 
   const handleOrderTypeSelect = async (orderType: OrderType) => {
@@ -478,8 +492,13 @@ export default function PosPage() {
             items={checkItems}
             orderType={currentCheck?.orderType as OrderType}
             onSend={() => sendCheckMutation.mutate()}
-            onVoidItem={handleVoidItem}
+            onVoidItem={(item) => {
+              handleVoidItem(item);
+              setSelectedItemId(null);
+            }}
             onEditModifiers={handleEditModifiers}
+            onSelectItem={handleSelectCheckItem}
+            selectedItemId={selectedItemId}
             onPay={() => setShowPaymentModal(true)}
             onNewCheck={() => setShowOrderTypeModal(true)}
             onChangeOrderType={() => setShowOrderTypeModal(true)}

@@ -4,7 +4,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Check, CheckItem, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Star, Plus, Minus, Edit2 } from "lucide-react";
+import { Trash2, Send, CreditCard, Star, Plus, Minus } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -13,6 +13,8 @@ interface CheckPanelProps {
   onSend: () => void;
   onVoidItem: (item: CheckItem) => void;
   onEditModifiers?: (item: CheckItem) => void;
+  onSelectItem?: (item: CheckItem | null) => void;
+  selectedItemId?: string | null;
   onPay: () => void;
   onNewCheck: () => void;
   onChangeOrderType: () => void;
@@ -40,6 +42,8 @@ export function CheckPanel({
   onSend,
   onVoidItem,
   onEditModifiers,
+  onSelectItem,
+  selectedItemId,
   onPay,
   onNewCheck,
   onChangeOrderType,
@@ -120,28 +124,60 @@ export function CheckPanel({
               No items on this check
             </p>
           ) : (
-            activeItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-2 p-2 rounded-md hover-elevate group"
-                data-testid={`check-item-${item.id}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    {item.sent && (
-                      <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" />
-                    )}
-                    <span className="font-medium text-sm truncate">
-                      {item.quantity && item.quantity > 1 ? `${item.quantity}x ` : ""}
-                      {item.menuItemName}
-                    </span>
+            activeItems.map((item) => {
+              const isSelected = selectedItemId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-md ${isSelected ? "bg-accent" : ""}`}
+                  data-testid={`check-item-${item.id}`}
+                >
+                  <div
+                    className="flex items-start gap-2 p-2 cursor-pointer hover-elevate active-elevate-2"
+                    onClick={() => onSelectItem?.(isSelected ? null : item)}
+                    data-testid={`button-select-item-${item.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {item.sent && (
+                          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" />
+                        )}
+                        <span className="font-medium text-sm truncate">
+                          {item.quantity && item.quantity > 1 ? `${item.quantity}x ` : ""}
+                          {item.menuItemName}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium tabular-nums">
+                        {formatPrice(
+                          (parseFloat(item.unitPrice || "0") +
+                            (item.modifiers || []).reduce(
+                              (sum, m) => sum + parseFloat(m.priceDelta || "0"),
+                              0
+                            )) *
+                            (item.quantity || 1)
+                        )}
+                      </span>
+                    </div>
                   </div>
                   {item.modifiers && item.modifiers.length > 0 && (
-                    <div className="ml-5 mt-0.5 space-y-0.5">
+                    <div className="ml-6 pb-2 space-y-0.5">
                       {item.modifiers.map((mod, idx) => (
-                        <span
+                        <button
                           key={idx}
-                          className="block text-xs text-muted-foreground"
+                          type="button"
+                          className={`block w-full text-left text-xs px-2 py-1 rounded hover-elevate active-elevate-2 ${
+                            !item.sent ? "cursor-pointer text-muted-foreground" : "text-muted-foreground/70 cursor-default"
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!item.sent && onEditModifiers) {
+                              onEditModifiers(item);
+                            }
+                          }}
+                          disabled={!!item.sent}
+                          data-testid={`button-modifier-${item.id}-${idx}`}
                         >
                           + {mod.name}
                           {parseFloat(mod.priceDelta) > 0 && (
@@ -149,47 +185,30 @@ export function CheckPanel({
                               (+{formatPrice(mod.priceDelta)})
                             </span>
                           )}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium tabular-nums">
-                    {formatPrice(
-                      (parseFloat(item.unitPrice || "0") +
-                        (item.modifiers || []).reduce(
-                          (sum, m) => sum + parseFloat(m.priceDelta || "0"),
-                          0
-                        )) *
-                        (item.quantity || 1)
-                    )}
-                  </span>
-                  {!item.sent && onEditModifiers && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => onEditModifiers(item)}
-                      data-testid={`button-edit-modifiers-${item.id}`}
-                    >
-                      <Edit2 className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                  )}
-                  {canVoid && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => onVoidItem(item)}
-                      data-testid={`button-void-item-${item.id}`}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                  {isSelected && canVoid && (
+                    <div className="px-2 pb-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onVoidItem(item);
+                        }}
+                        data-testid={`button-void-item-${item.id}`}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Void Item
+                      </Button>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </CardContent>
       </ScrollArea>
