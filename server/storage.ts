@@ -1135,6 +1135,8 @@ export class DatabaseStorage implements IStorage {
         kdsDeviceId: ticket.kdsDeviceId,
         items: checkItemsList,
         isDraft: ticket.status === 'draft',
+        isPreview: ticket.isPreview || false,
+        isPaid: ticket.paid || false,
         status: ticket.status,
         createdAt: ticket.createdAt,
       });

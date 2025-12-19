@@ -21,6 +21,8 @@ interface Ticket {
   stationType?: string;
   items: KdsItem[];
   isDraft: boolean;
+  isPreview?: boolean;
+  isPaid?: boolean;
   status: string;
   createdAt: Date;
 }
@@ -146,6 +148,8 @@ export function KdsDisplay({
                   stationType={ticket.stationType}
                   items={ticket.items}
                   isDraft={false}
+                  isPreview={ticket.isPreview}
+                  isPaid={ticket.isPaid}
                   createdAt={ticket.createdAt}
                   onBump={onBump}
                   onRecall={onRecall}
@@ -160,6 +164,8 @@ export function KdsDisplay({
                   stationType={ticket.stationType}
                   items={ticket.items}
                   isDraft={true}
+                  isPreview={ticket.isPreview}
+                  isPaid={ticket.isPaid}
                   createdAt={ticket.createdAt}
                   onBump={onBump}
                   onRecall={onRecall}

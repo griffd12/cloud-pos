@@ -65,6 +65,8 @@ export function KdsTicket({
   stationType,
   items,
   isDraft,
+  isPreview = false,
+  isPaid = false,
   createdAt,
   onBump,
   onRecall,
@@ -116,6 +118,16 @@ export function KdsTicket({
           {isDraft && (
             <Badge variant="secondary" className="text-xs">
               DRAFT
+            </Badge>
+          )}
+          {isPreview && !isDraft && (
+            <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+              PREVIEW
+            </Badge>
+          )}
+          {isPaid && (
+            <Badge className="text-xs bg-green-500 text-white">
+              PAID
             </Badge>
           )}
         </div>
@@ -219,7 +231,7 @@ export function KdsTicket({
       </CardContent>
 
       <CardFooter className="pt-2">
-        {!isDraft && !activeItems.some((i) => i.itemStatus === "pending") && (
+        {isPaid && !activeItems.some((i) => i.itemStatus === "pending") && (
           <Button
             className="w-full h-12 text-base font-semibold"
             onClick={() => onBump(ticketId)}
@@ -230,9 +242,19 @@ export function KdsTicket({
             BUMP
           </Button>
         )}
+        {!isPaid && !isDraft && !isPreview && !activeItems.some((i) => i.itemStatus === "pending") && (
+          <div className="w-full h-12 flex items-center justify-center text-muted-foreground text-sm">
+            Awaiting payment...
+          </div>
+        )}
         {!isDraft && activeItems.some((i) => i.itemStatus === "pending") && (
           <div className="w-full h-12 flex items-center justify-center text-amber-600 dark:text-amber-400 text-sm font-medium animate-pulse">
             Item being configured...
+          </div>
+        )}
+        {isPreview && !activeItems.some((i) => i.itemStatus === "pending") && (
+          <div className="w-full h-12 flex items-center justify-center text-amber-600 dark:text-amber-400 text-sm font-medium">
+            Preview - awaiting send/payment
           </div>
         )}
         {isDraft && (
