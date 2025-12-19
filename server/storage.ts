@@ -810,7 +810,7 @@ export class DatabaseStorage implements IStorage {
       const linkages = await db.select().from(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, menuItemId)).orderBy(menuItemModifierGroups.displayOrder);
       const groupIds = linkages.map(l => l.modifierGroupId);
       if (groupIds.length === 0) return [];
-      groups = await db.select().from(modifierGroups).where(sql`${modifierGroups.id} = ANY(${groupIds})`);
+      groups = await db.select().from(modifierGroups).where(inArray(modifierGroups.id, groupIds));
     } else {
       groups = await db.select().from(modifierGroups).where(eq(modifierGroups.active, true)).orderBy(modifierGroups.displayOrder);
     }
@@ -826,7 +826,7 @@ export class DatabaseStorage implements IStorage {
         continue;
       }
       
-      const mods = await db.select().from(modifiers).where(sql`${modifiers.id} = ANY(${modifierIds}) AND ${modifiers.active} = true`);
+      const mods = await db.select().from(modifiers).where(and(inArray(modifiers.id, modifierIds), eq(modifiers.active, true)));
       // Add isDefault and displayOrder from the linkage
       const modsWithMeta = mods.map(m => {
         const linkage = linkages.find(l => l.modifierId === m.id);
