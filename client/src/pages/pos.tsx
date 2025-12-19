@@ -90,10 +90,7 @@ export default function PosPage() {
     enabled: !!currentRvc,
   });
 
-  const { data: modifierGroups = [] } = useQuery<(ModifierGroup & { modifiers: Modifier[] })[]>({
-    queryKey: ["/api/modifier-groups", pendingItem?.id],
-    enabled: !!pendingItem,
-  });
+  const [itemModifierGroups, setItemModifierGroups] = useState<(ModifierGroup & { modifiers: Modifier[] })[]>([]);
 
   const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
     queryKey: ["/api/tax-groups"],
@@ -256,11 +253,20 @@ export default function PosPage() {
       }
     }
 
-    if (item.hasRequiredModifiers && modifierGroups.length > 0) {
-      setPendingItem(item);
-      setShowModifierModal(true);
-    } else {
-      try {
+    // Fetch modifier groups for this specific item
+    try {
+      const res = await fetch(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include" });
+      const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
+      
+      // Check if any groups have modifiers AND are required (or have at least minSelect > 0)
+      const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
+      
+      if (hasRequiredModifiers) {
+        setItemModifierGroups(groups);
+        setPendingItem(item);
+        setShowModifierModal(true);
+      } else {
+        // No required modifiers, add item directly
         const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
           menuItemId: item.id,
           menuItemName: item.name,
@@ -272,9 +278,9 @@ export default function PosPage() {
         setCheckItems([...checkItems, newItem]);
         queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
         queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-      } catch {
-        toast({ title: "Failed to add item", variant: "destructive" });
       }
+    } catch {
+      toast({ title: "Failed to add item", variant: "destructive" });
     }
   };
 
@@ -451,9 +457,10 @@ export default function PosPage() {
         onClose={() => {
           setShowModifierModal(false);
           setPendingItem(null);
+          setItemModifierGroups([]);
         }}
         menuItem={pendingItem}
-        modifierGroups={modifierGroups}
+        modifierGroups={itemModifierGroups}
         onConfirm={handleConfirmModifiers}
       />
 

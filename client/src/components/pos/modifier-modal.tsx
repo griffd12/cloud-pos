@@ -19,11 +19,16 @@ interface SelectedModifier {
   priceDelta: string;
 }
 
+interface ModifierWithMeta extends Modifier {
+  isDefault?: boolean;
+  displayOrder?: number;
+}
+
 interface ModifierModalProps {
   open: boolean;
   onClose: () => void;
   menuItem: MenuItem | null;
-  modifierGroups: (ModifierGroup & { modifiers: Modifier[] })[];
+  modifierGroups: (ModifierGroup & { modifiers: ModifierWithMeta[] })[];
   onConfirm: (modifiers: SelectedModifier[]) => void;
 }
 
@@ -59,7 +64,7 @@ export function ModifierModal({
     }
   }, [open, modifierGroups]);
 
-  const toggleModifier = (group: ModifierGroup & { modifiers: Modifier[] }, modifier: Modifier) => {
+  const toggleModifier = (group: ModifierGroup & { modifiers: ModifierWithMeta[] }, modifier: ModifierWithMeta) => {
     setSelectedModifiers((prev) => {
       const updated = new Map(prev);
       const groupMods = updated.get(group.id) || [];
