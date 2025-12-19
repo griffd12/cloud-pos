@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode, type Dispatch, type SetStateAction } from "react";
 import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType } from "@shared/schema";
 
 interface SelectedModifier {
@@ -20,7 +20,7 @@ interface PosContextType {
   setCurrentEmployee: (employee: Employee | null) => void;
   setCurrentRvc: (rvc: Rvc | null) => void;
   setCurrentCheck: (check: Check | null) => void;
-  setCheckItems: (items: CheckItem[]) => void;
+  setCheckItems: Dispatch<SetStateAction<CheckItem[]>>;
   setSelectedSlu: (slu: Slu | null) => void;
   setPendingItem: (item: MenuItem | null) => void;
   setPendingModifiers: (modifiers: SelectedModifier[]) => void;

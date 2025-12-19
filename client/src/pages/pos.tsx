@@ -160,6 +160,9 @@ export default function PosPage() {
     },
     onSuccess: (newItem: CheckItem) => {
       setCheckItems([...checkItems, newItem]);
+      setShowModifierModal(false);
+      setPendingItem(null);
+      setItemModifierGroups([]);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
     },
@@ -223,10 +226,10 @@ export default function PosPage() {
     },
     onSuccess: (updatedItem: CheckItem) => {
       // Use functional update to get current state (avoids stale closure issue)
-      setCheckItems((prevItems) => {
-        const exists = prevItems.some((item) => item.id === updatedItem.id);
+      setCheckItems((prevItems: CheckItem[]) => {
+        const exists = prevItems.some((item: CheckItem) => item.id === updatedItem.id);
         if (exists) {
-          return prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item));
+          return prevItems.map((item: CheckItem) => (item.id === updatedItem.id ? updatedItem : item));
         }
         // If item doesn't exist yet (race condition), add it
         return [...prevItems, updatedItem];
@@ -234,6 +237,8 @@ export default function PosPage() {
       toast({ title: "Modifiers updated" });
       setEditingItem(null);
       setShowModifierModal(false);
+      setPendingItem(null);
+      setItemModifierGroups([]);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
     },
@@ -362,9 +367,10 @@ export default function PosPage() {
         modifiers, 
         finalize: isPendingItem 
       });
+      // Modal is closed and state cleaned up in onSuccess
     } else if (pendingItem) {
       addItemMutation.mutate({ menuItem: pendingItem, modifiers });
-      setPendingItem(null);
+      // Modal is closed and state cleaned up in onSuccess
     }
   };
 

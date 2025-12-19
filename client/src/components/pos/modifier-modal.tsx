@@ -177,7 +177,9 @@ export function ModifierModal({
       allModifiers.push(...mods);
     });
     onConfirm(allModifiers);
-    onClose();
+    // Don't call onClose() here - let the parent handle closing
+    // This prevents the race condition where onClose voids a pending item
+    // before the confirm mutation completes
   };
 
   const formatPrice = (price: string | null) => {
