@@ -21,6 +21,8 @@ interface KdsTicketProps {
   stationType?: string;
   items: KdsItem[];
   isDraft: boolean;
+  isPreview?: boolean;
+  isPaid?: boolean;
   createdAt: Date;
   onBump: (ticketId: string) => void;
   onRecall?: (ticketId: string) => void;
