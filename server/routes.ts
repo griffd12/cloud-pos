@@ -189,7 +189,7 @@ async function finalizePreviewTicket(
 
   // Get items linked to preview ticket
   const items = await storage.getCheckItems(checkId);
-  const unsentItems = items.filter(i => !i.sent && i.status !== 'voided');
+  const unsentItems = items.filter(i => !i.sent && !i.voided);
   
   if (unsentItems.length === 0) {
     // No items to send, just remove preview status
@@ -1457,22 +1457,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
       
       if (paidAmount >= total - 0.01) {
+        // Check if RVC has dynamic order mode enabled
+        const rvc = await storage.getRvc(check?.rvcId || "");
+        const isDynamicMode = rvc?.dynamicOrderMode || false;
+
         // First, finalize any preview ticket (dynamic order mode)
-        try {
-          await finalizePreviewTicket(checkId, employeeId);
-        } catch (e) {
-          console.error("Payment preview finalize error:", e);
+        let previewFinalized = false;
+        if (isDynamicMode) {
+          try {
+            const result = await finalizePreviewTicket(checkId, employeeId);
+            previewFinalized = result !== null;
+          } catch (e) {
+            console.error("Payment preview finalize error:", e);
+          }
         }
 
-        // Auto-send any unsent items to KDS before closing check
-        const unsentItems = activeItems.filter((i) => !i.sent);
-        if (unsentItems.length > 0 && check) {
-          try {
-            await sendItemsToKds(checkId, employeeId, unsentItems, {
-              auditAction: "payment_auto_send",
-            });
-          } catch (e) {
-            console.error("Payment auto-send error:", e);
+        // Only auto-send to KDS if NOT in dynamic mode or no preview was finalized
+        // In dynamic mode, the preview ticket already contains all items
+        if (!previewFinalized) {
+          const unsentItems = activeItems.filter((i) => !i.sent);
+          if (unsentItems.length > 0 && check) {
+            try {
+              await sendItemsToKds(checkId, employeeId, unsentItems, {
+                auditAction: "payment_auto_send",
+              });
+            } catch (e) {
+              console.error("Payment auto-send error:", e);
+            }
           }
         }
 
