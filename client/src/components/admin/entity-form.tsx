@@ -152,12 +152,13 @@ export function EntityForm<T extends z.ZodTypeAny>({
                           <FormControl>
                             <Input
                               type="number"
+                              step="0.01"
                               placeholder={fieldConfig.placeholder}
                               {...field}
                               value={field.value ?? ""}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                field.onChange(val === "" ? null : parseFloat(val));
+                                field.onChange(val === "" ? null : val);
                               }}
                               data-testid={`input-${fieldConfig.name}`}
                             />
