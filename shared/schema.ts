@@ -429,6 +429,7 @@ export const checkItems = pgTable("check_items", {
   quantity: integer("quantity").default(1),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   modifiers: jsonb("modifiers").$type<{ name: string; priceDelta: string }[]>(),
+  itemStatus: text("item_status").notNull().default("active"), // 'pending' = awaiting modifiers, 'active' = ready
   sent: boolean("sent").default(false),
   voided: boolean("voided").default(false),
   voidReason: text("void_reason"),
