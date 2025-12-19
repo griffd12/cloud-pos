@@ -346,13 +346,28 @@ export default function PosPage() {
     }
     setEditingItem(item);
     try {
-      const res = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include" });
-      if (!res.ok) {
+      // Fetch the link records for this menu item
+      const linksRes = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include" });
+      if (!linksRes.ok) {
         toast({ title: "Failed to load modifiers", variant: "destructive" });
         setEditingItem(null);
         return;
       }
-      const groups = await res.json();
+      const links = await linksRes.json();
+      
+      // Fetch all modifier groups with their modifiers
+      const groupsRes = await fetch("/api/modifier-groups", { credentials: "include" });
+      if (!groupsRes.ok) {
+        toast({ title: "Failed to load modifier groups", variant: "destructive" });
+        setEditingItem(null);
+        return;
+      }
+      const allGroups = await groupsRes.json();
+      
+      // Filter to only the groups linked to this menu item
+      const linkedGroupIds = new Set(links.map((l: any) => l.modifierGroupId));
+      const groups = allGroups.filter((g: any) => linkedGroupIds.has(g.id));
+      
       setItemModifierGroups(groups);
       setPendingItem(menuItem as any);
       setShowModifierModal(true);

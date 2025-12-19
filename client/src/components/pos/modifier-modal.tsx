@@ -115,6 +115,7 @@ export function ModifierModal({
   };
 
   const isValid = () => {
+    if (!modifierGroups || modifierGroups.length === 0) return true;
     return modifierGroups.every((group) => {
       const selected = selectedModifiers.get(group.id) || [];
       const minSelect = group.minSelect || 0;
@@ -137,7 +138,7 @@ export function ModifierModal({
     return numPrice > 0 ? `+$${numPrice.toFixed(2)}` : `-$${Math.abs(numPrice).toFixed(2)}`;
   };
 
-  if (!menuItem) return null;
+  if (!menuItem || !modifierGroups || modifierGroups.length === 0) return null;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
