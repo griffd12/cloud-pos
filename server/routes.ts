@@ -142,106 +142,100 @@ async function sendItemsToKds(
   return { round, updatedItems };
 }
 
-// Helper for dynamic order mode - sends single item immediately to KDS
-// Creates a new round for each dynamic send to maintain clean tracking
-async function sendItemDynamic(
+// Helper for dynamic order mode - adds item to a preview ticket for real-time KDS display
+// Items remain unsent (sent=false) until explicit Send or Pay action
+// All items for a check are consolidated onto a single preview ticket
+async function addItemToPreviewTicket(
   checkId: string,
   item: any,
-  rvc: any,
-  employeeId?: string
+  rvc: any
 ): Promise<any> {
   const check = await storage.getCheck(checkId);
   if (!check) return item;
 
-  // Use provided employeeId, or fall back to check's employee
-  const actualEmployeeId = employeeId || check.employeeId;
-  if (!actualEmployeeId) {
-    // Skip round/audit creation if no employee context - just mark sent and route
-    const updatedItem = await storage.updateCheckItem(item.id, { sent: true });
-    
-    if (item.menuItemId) {
-      const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined);
-      for (const target of targets) {
-        const kdsTicket = await storage.createKdsTicket({
-          checkId,
-          kdsDeviceId: target.kdsDeviceId,
-          orderDeviceId: target.orderDeviceId,
-          stationType: target.stationType,
-          rvcId: check.rvcId,
-          status: "active",
-        });
-        await storage.createKdsTicketItem(kdsTicket.id, item.id);
-      }
-      if (targets.length === 0) {
-        const fallbackTicket = await storage.createKdsTicket({
-          checkId,
-          rvcId: check.rvcId,
-          status: "active",
-        });
-        await storage.createKdsTicketItem(fallbackTicket.id, item.id);
-      }
-    }
-    broadcastKdsUpdate(check.rvcId || undefined);
-    return updatedItem;
+  // Get or create preview ticket for this check
+  let previewTicket = await storage.getPreviewTicket(checkId);
+  if (!previewTicket) {
+    previewTicket = await storage.createKdsTicket({
+      checkId,
+      rvcId: check.rvcId,
+      status: "active",
+      isPreview: true,
+      paid: false,
+    });
   }
 
-  // Create new round for this dynamic send
+  // Add item to the preview ticket (createKdsTicketItem now handles duplicates)
+  await storage.createKdsTicketItem(previewTicket.id, item.id);
+
+  broadcastKdsUpdate(check.rvcId || undefined);
+  return item;
+}
+
+// Helper to convert preview ticket to final when Send is pressed
+// This creates a proper round, marks items as sent, and removes preview flag
+async function finalizePreviewTicket(
+  checkId: string,
+  employeeId: string
+): Promise<{ round: any; updatedItems: any[] } | null> {
+  const check = await storage.getCheck(checkId);
+  if (!check) return null;
+
+  const previewTicket = await storage.getPreviewTicket(checkId);
+  if (!previewTicket) return null;
+
+  const rvc = await storage.getRvc(check.rvcId);
+  if (!rvc) return null;
+
+  // Get items linked to preview ticket
+  const items = await storage.getCheckItems(checkId);
+  const unsentItems = items.filter(i => !i.sent && i.status !== 'voided');
+  
+  if (unsentItems.length === 0) {
+    // No items to send, just remove preview status
+    await storage.updateKdsTicket(previewTicket.id, { isPreview: false });
+    return null;
+  }
+
+  // Create round for this send
   const existingRounds = await storage.getRounds(checkId);
   const roundNumber = existingRounds.length + 1;
 
   const round = await storage.createRound({
     checkId,
     roundNumber,
-    sentByEmployeeId: actualEmployeeId,
+    sentByEmployeeId: employeeId,
   });
 
-  // Mark item as sent with round linkage
-  const updatedItem = await storage.updateCheckItem(item.id, { 
-    sent: true,
+  // Mark items as sent with round ID
+  const updatedItems = [];
+  for (const item of unsentItems) {
+    const updated = await storage.updateCheckItem(item.id, {
+      sent: true,
+      roundId: round.id,
+    });
+    if (updated) updatedItems.push(updated);
+  }
+
+  // Update preview ticket to be a regular ticket with round linkage
+  await storage.updateKdsTicket(previewTicket.id, {
+    isPreview: false,
     roundId: round.id,
   });
 
-  // Route item to KDS devices
-  if (item.menuItemId) {
-    const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined);
-    
-    for (const target of targets) {
-      const kdsTicket = await storage.createKdsTicket({
-        checkId,
-        roundId: round.id,
-        kdsDeviceId: target.kdsDeviceId,
-        orderDeviceId: target.orderDeviceId,
-        stationType: target.stationType,
-        rvcId: check.rvcId,
-        status: "active",
-      });
-      await storage.createKdsTicketItem(kdsTicket.id, item.id);
-    }
-
-    // Fallback for unrouted items
-    if (targets.length === 0) {
-      const fallbackTicket = await storage.createKdsTicket({
-        checkId,
-        roundId: round.id,
-        rvcId: check.rvcId,
-        status: "active",
-      });
-      await storage.createKdsTicketItem(fallbackTicket.id, item.id);
-    }
-  }
-
-  // Create audit log for dynamic send
+  // Create audit log
   await storage.createAuditLog({
     rvcId: check.rvcId,
-    employeeId: actualEmployeeId,
-    action: "dynamic_order_send",
-    targetType: "check_item",
-    targetId: item.id,
-    details: { menuItemName: item.menuItemName, checkId, roundId: round.id, roundNumber },
+    employeeId,
+    action: "send_to_kitchen",
+    targetType: "check",
+    targetId: checkId,
+    details: { roundNumber, itemCount: unsentItems.length },
   });
 
   broadcastKdsUpdate(check.rvcId || undefined);
-  return updatedItem;
+
+  return { round, updatedItems };
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -1251,20 +1245,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         voided: false,
       });
 
-      // Check for dynamic order mode - auto-send if RVC has dynamicOrderMode enabled
+      // Check for dynamic order mode - add to preview ticket if RVC has dynamicOrderMode enabled
+      // Items stay unsent until explicit Send action or payment
       let finalItem = item;
       const check = await storage.getCheck(checkId);
       if (check && menuItemId) {
         const rvc = await storage.getRvc(check.rvcId);
         if (rvc && rvc.dynamicOrderMode) {
-          // RVC has dynamic order mode enabled - send item immediately to KDS
+          // RVC has dynamic order mode enabled - add item to preview ticket for real-time KDS display
           try {
-            const updatedItem = await sendItemDynamic(checkId, item, rvc, check.employeeId || undefined);
-            if (updatedItem) {
-              finalItem = updatedItem;
-            }
+            await addItemToPreviewTicket(checkId, item, rvc);
           } catch (e) {
-            console.error("Dynamic order send error:", e);
+            console.error("Dynamic order preview error:", e);
           }
         }
       }
@@ -1281,6 +1273,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkId = req.params.id;
       const { employeeId } = req.body;
 
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+
+      const rvc = await storage.getRvc(check.rvcId);
+      
+      // Check if there's a preview ticket (dynamic order mode)
+      const previewResult = await finalizePreviewTicket(checkId, employeeId);
+      if (previewResult) {
+        // Preview ticket was finalized, return updated items
+        const allItems = await storage.getCheckItems(checkId);
+        return res.json({ round: previewResult.round, updatedItems: allItems });
+      }
+
+      // Standard mode - send unsent items normally
       const items = await storage.getCheckItems(checkId);
       const unsentItems = items.filter((item) => !item.sent && !item.voided);
 
@@ -1449,6 +1457,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
       
       if (paidAmount >= total - 0.01) {
+        // First, finalize any preview ticket (dynamic order mode)
+        try {
+          await finalizePreviewTicket(checkId, employeeId);
+        } catch (e) {
+          console.error("Payment preview finalize error:", e);
+        }
+
         // Auto-send any unsent items to KDS before closing check
         const unsentItems = activeItems.filter((i) => !i.sent);
         if (unsentItems.length > 0 && check) {
@@ -1459,6 +1474,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           } catch (e) {
             console.error("Payment auto-send error:", e);
           }
+        }
+
+        // Mark all KDS tickets for this check as paid
+        try {
+          await storage.markKdsTicketsPaid(checkId);
+          broadcastKdsUpdate(check?.rvcId || undefined);
+        } catch (e) {
+          console.error("Mark tickets paid error:", e);
         }
 
         const updatedCheck = await storage.updateCheck(checkId, {
