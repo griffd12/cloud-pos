@@ -491,6 +491,8 @@ export const kdsTickets = pgTable("kds_tickets", {
   stationType: text("station_type"), // cached from KDS device for fast filtering
   rvcId: varchar("rvc_id").references(() => rvcs.id),
   status: text("status").notNull().default("draft"), // 'draft', 'active', 'bumped'
+  isPreview: boolean("is_preview").default(false), // True for Dynamic Order Mode preview tickets
+  paid: boolean("paid").default(false), // True when the check has been fully paid
   bumpedAt: timestamp("bumped_at"),
   bumpedByEmployeeId: varchar("bumped_by_employee_id").references(() => employees.id),
   createdAt: timestamp("created_at").defaultNow(),
