@@ -179,10 +179,14 @@ export default function PosPage() {
       return response.json();
     },
     onSuccess: (data: { round: any; updatedItems: CheckItem[] }) => {
-      setCheckItems(data.updatedItems);
       toast({ title: "Order sent to kitchen" });
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+      // Clear check state and sign out - check remains open for later pickup
+      setCurrentCheck(null);
+      setCheckItems([]);
+      logout();
     },
     onError: () => {
       toast({ title: "Failed to send order", variant: "destructive" });
