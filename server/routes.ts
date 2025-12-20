@@ -1802,26 +1802,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Clear sales data for a specific property - requires admin authorization code
+  // Clear sales data for a specific property - requires Admin role + PIN
   app.post("/api/admin/clear-sales-data", async (req, res) => {
     try {
-      const { authCode, employeeId, confirmText, propertyId } = req.body;
+      const { pin, confirmText, propertyId } = req.body;
       
       // Require property ID
       if (!propertyId) {
         return res.status(400).json({ message: "Property ID is required" });
       }
       
-      // Require employee ID for audit logging
-      if (!employeeId) {
-        return res.status(400).json({ message: "Employee ID required for audit logging" });
+      // Require PIN for authentication
+      if (!pin) {
+        return res.status(400).json({ message: "Employee PIN is required" });
       }
       
-      // Validate authorization code (stored in env or use default for dev)
-      const validCode = process.env.ADMIN_RESET_CODE || "RESETADMIN";
-      if (!authCode || authCode !== validCode) {
-        return res.status(403).json({ message: "Invalid authorization code" });
+      // Authenticate employee by PIN
+      const employee = await storage.getEmployeeByPin(pin);
+      if (!employee) {
+        return res.status(401).json({ message: "Invalid PIN" });
       }
+      
+      // Check if employee has admin_access privilege
+      if (!employee.roleId) {
+        return res.status(403).json({ message: "Employee has no assigned role" });
+      }
+      
+      const privileges = await storage.getRolePrivileges(employee.roleId);
+      if (!privileges.includes("admin_access")) {
+        return res.status(403).json({ message: "You do not have admin access privileges" });
+      }
+      
+      const employeeId = employee.id;
       
       // Require explicit confirmation
       if (confirmText !== "RESET") {

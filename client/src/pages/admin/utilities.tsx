@@ -9,7 +9,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { usePosContext } from "@/lib/pos-context";
 import { AlertTriangle, Trash2, Database, ShieldAlert, FileText, Loader2, Building2 } from "lucide-react";
 import {
   Dialog,
@@ -47,10 +46,9 @@ interface ClearResult {
 
 export default function UtilitiesPage() {
   const { toast } = useToast();
-  const { currentEmployee } = usePosContext();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showResetDialog, setShowResetDialog] = useState(false);
-  const [authCode, setAuthCode] = useState("");
+  const [pin, setPin] = useState("");
   const [confirmText, setConfirmText] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [lastResult, setLastResult] = useState<ClearResult | null>(null);
@@ -69,14 +67,14 @@ export default function UtilitiesPage() {
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
   const clearMutation = useMutation({
-    mutationFn: async (data: { authCode: string; confirmText: string; employeeId: string; propertyId: string }) => {
+    mutationFn: async (data: { pin: string; confirmText: string; propertyId: string }) => {
       const response = await apiRequest("POST", "/api/admin/clear-sales-data", data);
       return response.json() as Promise<ClearResult>;
     },
     onSuccess: (result) => {
       setLastResult(result);
       setShowResetDialog(false);
-      setAuthCode("");
+      setPin("");
       setConfirmText("");
       setAcknowledged(false);
       refetchSummary();
@@ -101,18 +99,13 @@ export default function UtilitiesPage() {
       toast({ title: "Please acknowledge the warning", variant: "destructive" });
       return;
     }
-    if (!currentEmployee?.id) {
-      toast({ title: "Employee session required for audit logging", variant: "destructive" });
-      return;
-    }
     if (!selectedPropertyId) {
       toast({ title: "Please select a property", variant: "destructive" });
       return;
     }
     clearMutation.mutate({
-      authCode,
+      pin,
       confirmText,
-      employeeId: currentEmployee.id,
       propertyId: selectedPropertyId,
     });
   };
@@ -121,7 +114,7 @@ export default function UtilitiesPage() {
     ? summary.checks + summary.checkItems + summary.payments + summary.rounds + summary.kdsTickets + summary.auditLogs
     : 0;
 
-  const canSubmit = acknowledged && authCode.length > 0 && confirmText === "RESET" && selectedPropertyId;
+  const canSubmit = acknowledged && pin.length > 0 && confirmText === "RESET" && selectedPropertyId;
 
   return (
     <div className="p-6 space-y-6">
@@ -340,17 +333,17 @@ export default function UtilitiesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="authCode">Admin Authorization Code</Label>
+              <Label htmlFor="pin">Employee PIN (Admin Role Required)</Label>
               <Input
-                id="authCode"
+                id="pin"
                 type="password"
-                value={authCode}
-                onChange={(e) => setAuthCode(e.target.value)}
-                placeholder="Enter admin code"
-                data-testid="input-auth-code"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="Enter your PIN"
+                data-testid="input-pin"
               />
               <p className="text-xs text-muted-foreground">
-                Default code: RESETADMIN (can be changed via ADMIN_RESET_CODE env variable)
+                Only employees with Admin access privileges can perform this action.
               </p>
             </div>
 

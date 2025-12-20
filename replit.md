@@ -89,10 +89,10 @@ Payment auto-send: When a check is paid, any unsent items are automatically rout
 - Clears all transactional data for a specific property (not enterprise-wide)
 - Deletes: checks (including open checks), check items, payments, discounts, rounds, KDS tickets, audit logs
 - Scoped via RVC relationship (property → RVCs → checks/tickets)
-- Multi-layer safety confirmations: property selector, acknowledge checkbox, admin auth code, type "RESET"
+- Multi-layer safety confirmations: property selector, acknowledge checkbox, employee PIN, type "RESET"
+- Authorization: Requires employee with "admin_access" privilege (typically Manager role)
 - Transactional: uses database transaction for atomic all-or-nothing deletion
 - Mandatory audit logging with employee ID for accountability
-- Admin code configurable via `ADMIN_RESET_CODE` env variable (default: "RESETADMIN")
 
 ## External Dependencies
 
