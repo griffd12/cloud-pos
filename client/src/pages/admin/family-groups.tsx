@@ -54,7 +54,7 @@ export default function FamilyGroupsPage() {
       label: "Major Group",
       type: "select",
       options: [
-        { value: "", label: "None" },
+        { value: "__none__", label: "None" },
         ...majorGroups.map(g => ({ value: g.id, label: g.name })),
       ],
     },
@@ -64,7 +64,7 @@ export default function FamilyGroupsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertFamilyGroup) => {
-      const payload = { ...data, majorGroupId: data.majorGroupId || null };
+      const payload = { ...data, majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null) };
       const response = await apiRequest("POST", "/api/family-groups", payload);
       return response.json();
     },
@@ -80,7 +80,7 @@ export default function FamilyGroupsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: FamilyGroup) => {
-      const payload = { ...data, majorGroupId: data.majorGroupId || null };
+      const payload = { ...data, majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null) };
       const response = await apiRequest("PUT", "/api/family-groups/" + data.id, payload);
       return response.json();
     },
