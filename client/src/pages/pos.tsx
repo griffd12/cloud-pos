@@ -10,6 +10,7 @@ import { ModifierModal } from "@/components/pos/modifier-modal";
 import { ManagerApprovalModal } from "@/components/pos/manager-approval-modal";
 import { OrderTypeModal } from "@/components/pos/order-type-modal";
 import { PaymentModal } from "@/components/pos/payment-modal";
+import { OpenChecksModal } from "@/components/pos/open-checks-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -51,6 +52,7 @@ export default function PosPage() {
   const [showManagerApproval, setShowManagerApproval] = useState(false);
   const [showOrderTypeModal, setShowOrderTypeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showOpenChecksModal, setShowOpenChecksModal] = useState(false);
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [editingItem, setEditingItem] = useState<CheckItem | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -297,6 +299,19 @@ export default function PosPage() {
     toast({ title: "Check closed successfully" });
   };
 
+  const handlePickupCheck = async (checkId: string) => {
+    try {
+      const res = await fetch(`/api/checks/${checkId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load check");
+      const data = await res.json();
+      setCurrentCheck(data.check);
+      setCheckItems(data.items);
+      toast({ title: `Picked up Check #${data.check.checkNumber}` });
+    } catch (error) {
+      toast({ title: "Failed to pick up check", variant: "destructive" });
+    }
+  };
+
   const handleSelectSlu = (slu: Slu) => {
     setSelectedSlu(slu);
   };
@@ -526,6 +541,15 @@ export default function PosPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowOpenChecksModal(true)}
+            data-testid="button-open-checks"
+          >
+            <Clock className="w-4 h-4 mr-2" />
+            Open Checks
+          </Button>
           {hasPrivilege("admin_access") && (
             <Link href="/admin">
               <Button variant="ghost" size="sm" data-testid="button-admin">
@@ -702,6 +726,13 @@ export default function PosPage() {
         isLoading={paymentMutation.isPending}
         changeDue={cashChangeDue}
         onReadyForNextOrder={handleReadyForNextOrder}
+      />
+
+      <OpenChecksModal
+        open={showOpenChecksModal}
+        onClose={() => setShowOpenChecksModal(false)}
+        onSelect={handlePickupCheck}
+        rvcId={currentRvc?.id}
       />
     </div>
   );
