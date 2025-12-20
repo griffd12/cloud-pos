@@ -1426,14 +1426,44 @@ export class DatabaseStorage implements IStorage {
 
     // Use transaction to ensure atomicity - either all tables are cleared or none
     return await db.transaction(async (tx) => {
-      // Get check IDs for this property to delete related records
+      // STEP 1: Gather all affected IDs upfront
+      // Get check IDs for this property
       const propertyChecks = await tx.select({ id: checks.id }).from(checks).where(inArray(checks.rvcId, rvcIds));
       const checkIds = propertyChecks.map(c => c.id);
 
-      // Get KDS ticket IDs for this property
-      const propertyKdsTickets = await tx.select({ id: kdsTickets.id }).from(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
-      const kdsTicketIds = propertyKdsTickets.map(k => k.id);
+      // Get check item IDs for these checks
+      let checkItemIds: string[] = [];
+      if (checkIds.length > 0) {
+        const propertyCheckItems = await tx.select({ id: checkItems.id }).from(checkItems).where(inArray(checkItems.checkId, checkIds));
+        checkItemIds = propertyCheckItems.map(ci => ci.id);
+      }
 
+      // Get round IDs for these checks
+      let roundIds: string[] = [];
+      if (checkIds.length > 0) {
+        const propertyRounds = await tx.select({ id: rounds.id }).from(rounds).where(inArray(rounds.checkId, checkIds));
+        roundIds = propertyRounds.map(r => r.id);
+      }
+
+      // Get ALL KDS ticket IDs - by rvcId, checkId, OR roundId (deduplicated)
+      const kdsTicketIdSet = new Set<string>();
+      
+      const kdsTicketsByRvc = await tx.select({ id: kdsTickets.id }).from(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
+      kdsTicketsByRvc.forEach(k => kdsTicketIdSet.add(k.id));
+      
+      if (checkIds.length > 0) {
+        const kdsTicketsByCheck = await tx.select({ id: kdsTickets.id }).from(kdsTickets).where(inArray(kdsTickets.checkId, checkIds));
+        kdsTicketsByCheck.forEach(k => kdsTicketIdSet.add(k.id));
+      }
+      
+      if (roundIds.length > 0) {
+        const kdsTicketsByRound = await tx.select({ id: kdsTickets.id }).from(kdsTickets).where(inArray(kdsTickets.roundId, roundIds));
+        kdsTicketsByRound.forEach(k => kdsTicketIdSet.add(k.id));
+      }
+      
+      const allKdsTicketIds = Array.from(kdsTicketIdSet);
+
+      // STEP 2: Delete in FK-safe order
       let kdsItemsResult = { rowCount: 0 };
       let kdsResult = { rowCount: 0 };
       let paymentsResult = { rowCount: 0 };
@@ -1441,21 +1471,38 @@ export class DatabaseStorage implements IStorage {
       let itemsResult = { rowCount: 0 };
       let roundsResult = { rowCount: 0 };
 
-      // Delete KDS ticket items first
-      if (kdsTicketIds.length > 0) {
-        kdsItemsResult = await tx.delete(kdsTicketItems).where(inArray(kdsTicketItems.kdsTicketId, kdsTicketIds));
-        kdsResult = await tx.delete(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
+      // 1. Delete kds_ticket_items (references kdsTickets and checkItems)
+      if (allKdsTicketIds.length > 0) {
+        kdsItemsResult = await tx.delete(kdsTicketItems).where(inArray(kdsTicketItems.kdsTicketId, allKdsTicketIds));
+      }
+      // Also delete by checkItemId to catch any stragglers
+      if (checkItemIds.length > 0) {
+        const additionalKdsItems = await tx.delete(kdsTicketItems).where(inArray(kdsTicketItems.checkItemId, checkItemIds));
+        kdsItemsResult = { rowCount: (kdsItemsResult.rowCount || 0) + (additionalKdsItems.rowCount || 0) };
       }
 
-      // Delete check-related records
+      // 2. Delete kds_tickets (references rounds and checks)
+      if (allKdsTicketIds.length > 0) {
+        kdsResult = await tx.delete(kdsTickets).where(inArray(kdsTickets.id, allKdsTicketIds));
+      }
+
+      // 3. Delete check_payments and check_discounts
       if (checkIds.length > 0) {
         paymentsResult = await tx.delete(checkPayments).where(inArray(checkPayments.checkId, checkIds));
         discountsResult = await tx.delete(checkDiscounts).where(inArray(checkDiscounts.checkId, checkIds));
+      }
+
+      // 4. Delete check_items (after kds_ticket_items are gone)
+      if (checkIds.length > 0) {
         itemsResult = await tx.delete(checkItems).where(inArray(checkItems.checkId, checkIds));
+      }
+
+      // 5. Delete rounds (after kds_tickets are gone)
+      if (checkIds.length > 0) {
         roundsResult = await tx.delete(rounds).where(inArray(rounds.checkId, checkIds));
       }
 
-      // Delete audit logs and checks for this property's RVCs
+      // 6. Delete audit logs and checks
       const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
       const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
 
