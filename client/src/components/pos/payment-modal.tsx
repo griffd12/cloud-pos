@@ -139,6 +139,30 @@ export function PaymentModal({
               Ready for Next Order
             </Button>
           </div>
+        ) : remainingBalance <= 0 ? (
+        <div className="p-4">
+          <div className="bg-green-600 text-white rounded-lg p-4 text-center mb-4">
+            <p className="text-sm opacity-90 mb-1">Balance</p>
+            <p className="text-4xl font-bold tabular-nums" data-testid="text-amount-due">
+              $0.00
+            </p>
+          </div>
+
+          <Button
+            variant="default"
+            className="w-full h-16 text-xl font-semibold"
+            onClick={() => {
+              if (cashTender) {
+                onPayment(cashTender.id, 0, false);
+              }
+            }}
+            disabled={isLoading || !cashTender}
+            data-testid="button-close-check"
+          >
+            <CheckIcon className="w-6 h-6 mr-2" />
+            Close Check
+          </Button>
+        </div>
         ) : (
         <div className="p-4">
           <div className="bg-primary text-primary-foreground rounded-lg p-4 text-center mb-4">

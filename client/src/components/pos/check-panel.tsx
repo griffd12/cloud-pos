@@ -263,11 +263,11 @@ export function CheckPanel({
           <Button
             className="h-12"
             onClick={onPay}
-            disabled={activeItems.length === 0 || !paymentsReady}
+            disabled={!paymentsReady}
             data-testid="button-pay"
           >
             <CreditCard className="w-4 h-4 mr-2" />
-            {paymentsReady ? "Pay" : "Loading..."}
+            {paymentsReady ? (activeItems.length === 0 ? "Close" : "Pay") : "Loading..."}
           </Button>
         </div>
       </CardFooter>
