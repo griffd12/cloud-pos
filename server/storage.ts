@@ -272,9 +272,9 @@ export interface IStorage {
   getPosLayoutCells(layoutId: string): Promise<PosLayoutCell[]>;
   setPosLayoutCells(layoutId: string, cells: InsertPosLayoutCell[]): Promise<PosLayoutCell[]>;
 
-  // Admin Sales Reset
-  getSalesDataSummary(): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
-  clearSalesData(): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }>;
+  // Admin Sales Reset (property-specific)
+  getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
+  clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1374,14 +1374,36 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Admin Sales Reset
-  async getSalesDataSummary(): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }> {
-    const [checksCount] = await db.select({ count: sql<number>`count(*)` }).from(checks);
-    const [itemsCount] = await db.select({ count: sql<number>`count(*)` }).from(checkItems);
-    const [paymentsCount] = await db.select({ count: sql<number>`count(*)` }).from(checkPayments);
-    const [roundsCount] = await db.select({ count: sql<number>`count(*)` }).from(rounds);
-    const [kdsCount] = await db.select({ count: sql<number>`count(*)` }).from(kdsTickets);
-    const [auditCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs);
+  // Admin Sales Reset (property-specific)
+  async getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }> {
+    // Get all RVCs for this property
+    const propertyRvcs = await db.select({ id: rvcs.id }).from(rvcs).where(eq(rvcs.propertyId, propertyId));
+    const rvcIds = propertyRvcs.map(r => r.id);
+
+    if (rvcIds.length === 0) {
+      return { checks: 0, checkItems: 0, payments: 0, rounds: 0, kdsTickets: 0, auditLogs: 0 };
+    }
+
+    // Count checks for this property's RVCs
+    const [checksCount] = await db.select({ count: sql<number>`count(*)` }).from(checks).where(inArray(checks.rvcId, rvcIds));
+    
+    // Get check IDs to count related records
+    const propertyChecks = await db.select({ id: checks.id }).from(checks).where(inArray(checks.rvcId, rvcIds));
+    const checkIds = propertyChecks.map(c => c.id);
+    
+    let itemsCount = { count: 0 };
+    let paymentsCount = { count: 0 };
+    let roundsCount = { count: 0 };
+    
+    if (checkIds.length > 0) {
+      [itemsCount] = await db.select({ count: sql<number>`count(*)` }).from(checkItems).where(inArray(checkItems.checkId, checkIds));
+      [paymentsCount] = await db.select({ count: sql<number>`count(*)` }).from(checkPayments).where(inArray(checkPayments.checkId, checkIds));
+      [roundsCount] = await db.select({ count: sql<number>`count(*)` }).from(rounds).where(inArray(rounds.checkId, checkIds));
+    }
+
+    // KDS tickets and audit logs for this property's RVCs
+    const [kdsCount] = await db.select({ count: sql<number>`count(*)` }).from(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
+    const [auditCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
 
     return {
       checks: Number(checksCount?.count || 0),
@@ -1393,18 +1415,49 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async clearSalesData(): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }> {
+  async clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }> {
+    // Get all RVCs for this property
+    const propertyRvcs = await db.select({ id: rvcs.id }).from(rvcs).where(eq(rvcs.propertyId, propertyId));
+    const rvcIds = propertyRvcs.map(r => r.id);
+
+    if (rvcIds.length === 0) {
+      return { deleted: { checks: 0, checkItems: 0, payments: 0, discounts: 0, rounds: 0, kdsTicketItems: 0, kdsTickets: 0, auditLogs: 0 } };
+    }
+
     // Use transaction to ensure atomicity - either all tables are cleared or none
     return await db.transaction(async (tx) => {
-      // Delete in FK-safe order (child tables first)
-      const kdsItemsResult = await tx.delete(kdsTicketItems);
-      const kdsResult = await tx.delete(kdsTickets);
-      const paymentsResult = await tx.delete(checkPayments);
-      const discountsResult = await tx.delete(checkDiscounts);
-      const itemsResult = await tx.delete(checkItems);
-      const roundsResult = await tx.delete(rounds);
-      const auditResult = await tx.delete(auditLogs);
-      const checksResult = await tx.delete(checks);
+      // Get check IDs for this property to delete related records
+      const propertyChecks = await tx.select({ id: checks.id }).from(checks).where(inArray(checks.rvcId, rvcIds));
+      const checkIds = propertyChecks.map(c => c.id);
+
+      // Get KDS ticket IDs for this property
+      const propertyKdsTickets = await tx.select({ id: kdsTickets.id }).from(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
+      const kdsTicketIds = propertyKdsTickets.map(k => k.id);
+
+      let kdsItemsResult = { rowCount: 0 };
+      let kdsResult = { rowCount: 0 };
+      let paymentsResult = { rowCount: 0 };
+      let discountsResult = { rowCount: 0 };
+      let itemsResult = { rowCount: 0 };
+      let roundsResult = { rowCount: 0 };
+
+      // Delete KDS ticket items first
+      if (kdsTicketIds.length > 0) {
+        kdsItemsResult = await tx.delete(kdsTicketItems).where(inArray(kdsTicketItems.kdsTicketId, kdsTicketIds));
+        kdsResult = await tx.delete(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
+      }
+
+      // Delete check-related records
+      if (checkIds.length > 0) {
+        paymentsResult = await tx.delete(checkPayments).where(inArray(checkPayments.checkId, checkIds));
+        discountsResult = await tx.delete(checkDiscounts).where(inArray(checkDiscounts.checkId, checkIds));
+        itemsResult = await tx.delete(checkItems).where(inArray(checkItems.checkId, checkIds));
+        roundsResult = await tx.delete(rounds).where(inArray(rounds.checkId, checkIds));
+      }
+
+      // Delete audit logs and checks for this property's RVCs
+      const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
+      const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
 
       return {
         deleted: {

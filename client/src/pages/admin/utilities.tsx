@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import { AlertTriangle, Trash2, Database, ShieldAlert, FileText, Loader2 } from "lucide-react";
+import { AlertTriangle, Trash2, Database, ShieldAlert, FileText, Loader2, Building2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { Property } from "@shared/schema";
 
 interface SalesDataSummary {
   checks: number;
@@ -46,18 +48,28 @@ interface ClearResult {
 export default function UtilitiesPage() {
   const { toast } = useToast();
   const { currentEmployee } = usePosContext();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [authCode, setAuthCode] = useState("");
   const [confirmText, setConfirmText] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [lastResult, setLastResult] = useState<ClearResult | null>(null);
 
-  const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<SalesDataSummary>({
-    queryKey: ["/api/admin/sales-data-summary"],
+  // Fetch all properties for selection
+  const { data: properties, isLoading: propertiesLoading } = useQuery<Property[]>({
+    queryKey: ["/api/properties"],
   });
 
+  // Fetch summary for selected property
+  const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<SalesDataSummary>({
+    queryKey: ["/api/admin/sales-data-summary", selectedPropertyId],
+    enabled: !!selectedPropertyId,
+  });
+
+  const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
+
   const clearMutation = useMutation({
-    mutationFn: async (data: { authCode: string; confirmText: string; employeeId: string | null }) => {
+    mutationFn: async (data: { authCode: string; confirmText: string; employeeId: string; propertyId: string }) => {
       const response = await apiRequest("POST", "/api/admin/clear-sales-data", data);
       return response.json() as Promise<ClearResult>;
     },
@@ -71,8 +83,8 @@ export default function UtilitiesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       toast({
-        title: "Sales Data Cleared",
-        description: result.message,
+        title: "Property Sales Data Cleared",
+        description: `${result.message} for ${selectedProperty?.name}`,
       });
     },
     onError: (error: Error) => {
@@ -93,10 +105,15 @@ export default function UtilitiesPage() {
       toast({ title: "Employee session required for audit logging", variant: "destructive" });
       return;
     }
+    if (!selectedPropertyId) {
+      toast({ title: "Please select a property", variant: "destructive" });
+      return;
+    }
     clearMutation.mutate({
       authCode,
       confirmText,
       employeeId: currentEmployee.id,
+      propertyId: selectedPropertyId,
     });
   };
 
@@ -104,7 +121,7 @@ export default function UtilitiesPage() {
     ? summary.checks + summary.checkItems + summary.payments + summary.rounds + summary.kdsTickets + summary.auditLogs
     : 0;
 
-  const canSubmit = acknowledged && authCode.length > 0 && confirmText === "RESET";
+  const canSubmit = acknowledged && authCode.length > 0 && confirmText === "RESET" && selectedPropertyId;
 
   return (
     <div className="p-6 space-y-6">
@@ -125,74 +142,117 @@ export default function UtilitiesPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trash2 className="w-5 h-5" />
-            Clear All Sales Data
+            Clear Property Sales Data
           </CardTitle>
           <CardDescription>
-            Reset all transactional data to zero. This removes all checks, payments, KDS tickets, and unlocks menu items for deletion.
+            Reset all transactional data for a specific property. This removes all checks (including open checks), 
+            payments, KDS tickets, and unlocks menu items for deletion. Only affects the selected property.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="text-center p-4 bg-muted rounded-md">
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-checks">
-                {summaryLoading ? "-" : summary?.checks || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">Checks</div>
-            </div>
-            <div className="text-center p-4 bg-muted rounded-md">
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-items">
-                {summaryLoading ? "-" : summary?.checkItems || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">Check Items</div>
-            </div>
-            <div className="text-center p-4 bg-muted rounded-md">
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-payments">
-                {summaryLoading ? "-" : summary?.payments || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">Payments</div>
-            </div>
-            <div className="text-center p-4 bg-muted rounded-md">
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-rounds">
-                {summaryLoading ? "-" : summary?.rounds || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">Rounds</div>
-            </div>
-            <div className="text-center p-4 bg-muted rounded-md">
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-kds">
-                {summaryLoading ? "-" : summary?.kdsTickets || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">KDS Tickets</div>
-            </div>
-            <div className="text-center p-4 bg-muted rounded-md">
-              <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-audit">
-                {summaryLoading ? "-" : summary?.auditLogs || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">Audit Logs</div>
-            </div>
+          {/* Property Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="property-select" className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Select Property
+            </Label>
+            <Select 
+              value={selectedPropertyId} 
+              onValueChange={setSelectedPropertyId}
+              disabled={propertiesLoading}
+            >
+              <SelectTrigger id="property-select" data-testid="select-property">
+                <SelectValue placeholder="Choose a property to clear..." />
+              </SelectTrigger>
+              <SelectContent>
+                {properties?.map((property) => (
+                  <SelectItem 
+                    key={property.id} 
+                    value={property.id}
+                    data-testid={`select-property-${property.id}`}
+                  >
+                    {property.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedPropertyId && (
+              <p className="text-sm text-muted-foreground">
+                Select a property to view and clear its sales data
+              </p>
+            )}
           </div>
 
-          <div className="flex items-center justify-between p-4 border rounded-md">
-            <div>
-              <div className="font-medium">Total Records to Delete</div>
-              <div className="text-sm text-muted-foreground">
-                This action cannot be undone
+          {selectedPropertyId && (
+            <>
+              <div className="p-4 bg-muted/50 rounded-md">
+                <div className="font-medium text-sm text-muted-foreground mb-2">Selected Property</div>
+                <div className="text-lg font-semibold">{selectedProperty?.name}</div>
               </div>
-            </div>
-            <div className="text-3xl font-bold tabular-nums text-destructive" data-testid="text-total-records">
-              {totalRecords.toLocaleString()}
-            </div>
-          </div>
 
-          <Button
-            variant="destructive"
-            className="w-full"
-            onClick={() => setShowResetDialog(true)}
-            disabled={totalRecords === 0}
-            data-testid="button-open-reset-dialog"
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Clear All Sales Data
-          </Button>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="text-center p-4 bg-muted rounded-md">
+                  <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-checks">
+                    {summaryLoading ? "-" : summary?.checks || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Checks</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-md">
+                  <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-items">
+                    {summaryLoading ? "-" : summary?.checkItems || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Check Items</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-md">
+                  <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-payments">
+                    {summaryLoading ? "-" : summary?.payments || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Payments</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-md">
+                  <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-rounds">
+                    {summaryLoading ? "-" : summary?.rounds || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Rounds</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-md">
+                  <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-kds">
+                    {summaryLoading ? "-" : summary?.kdsTickets || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">KDS Tickets</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-md">
+                  <div className="text-2xl font-bold tabular-nums" data-testid="text-summary-audit">
+                    {summaryLoading ? "-" : summary?.auditLogs || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Audit Logs</div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-md">
+                <div>
+                  <div className="font-medium">Total Records to Delete</div>
+                  <div className="text-sm text-muted-foreground">
+                    This action cannot be undone
+                  </div>
+                </div>
+                <div className="text-3xl font-bold tabular-nums text-destructive" data-testid="text-total-records">
+                  {totalRecords.toLocaleString()}
+                </div>
+              </div>
+
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={() => setShowResetDialog(true)}
+                disabled={totalRecords === 0}
+                data-testid="button-open-reset-dialog"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear Sales Data for {selectedProperty?.name}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -251,8 +311,8 @@ export default function UtilitiesPage() {
               Confirm Sales Data Reset
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete all sales transactions, payments, and KDS tickets.
-              Menu items will be unlocked for deletion.
+              This will permanently delete all sales transactions, payments, and KDS tickets 
+              for <strong>{selectedProperty?.name}</strong>.
             </DialogDescription>
           </DialogHeader>
 
@@ -261,8 +321,8 @@ export default function UtilitiesPage() {
               <Database className="h-4 w-4" />
               <AlertTitle>Warning</AlertTitle>
               <AlertDescription>
-                {totalRecords.toLocaleString()} records will be permanently deleted.
-                This action cannot be undone.
+                {totalRecords.toLocaleString()} records will be permanently deleted from {selectedProperty?.name}.
+                This includes all open and closed checks. This action cannot be undone.
               </AlertDescription>
             </Alert>
 
@@ -274,7 +334,8 @@ export default function UtilitiesPage() {
                 data-testid="checkbox-acknowledge"
               />
               <Label htmlFor="acknowledge" className="text-sm leading-tight">
-                I understand that this will permanently delete all sales data and this action cannot be reversed.
+                I understand that this will permanently delete all sales data for this property 
+                and this action cannot be reversed.
               </Label>
             </div>
 
@@ -327,7 +388,7 @@ export default function UtilitiesPage() {
               ) : (
                 <>
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Clear All Data
+                  Clear Data
                 </>
               )}
             </Button>

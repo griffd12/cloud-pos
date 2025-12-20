@@ -1788,20 +1788,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ADMIN SALES RESET ROUTES
   // ============================================================================
 
-  // Get summary of sales data that would be deleted
-  app.get("/api/admin/sales-data-summary", async (req, res) => {
+  // Get summary of sales data that would be deleted for a specific property
+  app.get("/api/admin/sales-data-summary/:propertyId", async (req, res) => {
     try {
-      const summary = await storage.getSalesDataSummary();
+      const { propertyId } = req.params;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const summary = await storage.getSalesDataSummary(propertyId);
       res.json(summary);
     } catch (error: any) {
       res.status(500).json({ message: error.message || "Failed to get summary" });
     }
   });
 
-  // Clear all sales data - requires admin authorization code
+  // Clear sales data for a specific property - requires admin authorization code
   app.post("/api/admin/clear-sales-data", async (req, res) => {
     try {
-      const { authCode, employeeId, confirmText } = req.body;
+      const { authCode, employeeId, confirmText, propertyId } = req.body;
+      
+      // Require property ID
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
       
       // Require employee ID for audit logging
       if (!employeeId) {
@@ -1819,20 +1828,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Please type RESET to confirm" });
       }
       
+      // Verify property exists
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
       // Get summary before deletion for audit log
-      const beforeSummary = await storage.getSalesDataSummary();
+      const beforeSummary = await storage.getSalesDataSummary(propertyId);
       
       // Perform the deletion (wrapped in transaction inside storage method)
-      const result = await storage.clearSalesData();
+      const result = await storage.clearSalesData(propertyId);
       
       // Create audit log entry for this action (recorded AFTER clearing)
       await storage.createAuditLog({
         rvcId: null,
         employeeId,
         action: "sales_reset",
-        targetType: "system",
-        targetId: "all",
+        targetType: "property",
+        targetId: propertyId,
         details: {
+          propertyId,
+          propertyName: property.name,
           beforeCounts: beforeSummary,
           deletedCounts: result.deleted,
           timestamp: new Date().toISOString(),
