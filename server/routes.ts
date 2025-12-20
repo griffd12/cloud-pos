@@ -648,11 +648,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const majorGroups = await storage.getMajorGroups();
       const familyGroups = await storage.getFamilyGroups();
-      const imported: any[] = [];
+      const existingMenuItems = await storage.getMenuItems();
+      
+      let created = 0;
+      let updated = 0;
+      const results: any[] = [];
+      
       for (const item of items) {
         const { id, majorGroup, familyGroup, ...data } = item;
         let majorGroupId = data.majorGroupId || null;
         let familyGroupId = data.familyGroupId || null;
+        
         if (majorGroup && typeof majorGroup === 'string' && majorGroup.trim() && !majorGroupId) {
           const found = majorGroups.find(g => g.name.toLowerCase() === majorGroup.trim().toLowerCase());
           majorGroupId = found?.id || null;
@@ -661,7 +667,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const found = familyGroups.find(g => g.name.toLowerCase() === familyGroup.trim().toLowerCase());
           familyGroupId = found?.id || null;
         }
-        const newItem = await storage.createMenuItem({
+        
+        const itemData = {
           name: data.name,
           shortName: data.shortName || null,
           price: data.price,
@@ -671,13 +678,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           familyGroupId,
           color: data.color || "#3B82F6",
           active: data.active !== false,
-          enterpriseId: null,
-          propertyId: null,
-          rvcId: null,
-        });
-        imported.push(newItem);
+        };
+        
+        let existingItem = null;
+        if (id && typeof id === 'string' && id.trim()) {
+          existingItem = existingMenuItems.find(m => m.id === id.trim());
+        }
+        if (!existingItem && data.name) {
+          existingItem = existingMenuItems.find(m => m.name.toLowerCase() === data.name.toLowerCase());
+        }
+        
+        if (existingItem) {
+          const updatedItem = await storage.updateMenuItem(existingItem.id, itemData);
+          results.push(updatedItem);
+          updated++;
+        } else {
+          const newItem = await storage.createMenuItem({
+            ...itemData,
+            enterpriseId: null,
+            propertyId: null,
+            rvcId: null,
+          });
+          results.push(newItem);
+          created++;
+        }
       }
-      res.status(201).json({ imported: imported.length, items: imported });
+      
+      res.status(201).json({ 
+        imported: results.length, 
+        created, 
+        updated, 
+        message: `Processed ${results.length} items: ${created} created, ${updated} updated`,
+        items: results 
+      });
     } catch (error: any) {
       res.status(400).json({ message: error.message || "Import failed" });
     }

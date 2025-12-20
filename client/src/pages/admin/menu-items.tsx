@@ -160,7 +160,10 @@ export default function MenuItemsPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items"] });
-      toast({ title: `Imported ${data.imported} menu items` });
+      toast({ 
+        title: "Import Complete",
+        description: data.message || `Processed ${data.imported} items: ${data.created || 0} created, ${data.updated || 0} updated`
+      });
     },
     onError: () => {
       toast({ title: "Failed to import menu items", variant: "destructive" });
@@ -183,13 +186,14 @@ export default function MenuItemsPage() {
   });
 
   const handleExport = () => {
-    const headers = ["name", "shortName", "price", "color", "active", "majorGroup", "familyGroup"];
+    const headers = ["id", "name", "shortName", "price", "color", "active", "majorGroup", "familyGroup"];
     const csvRows = [headers.join(",")];
     
     for (const item of menuItems) {
       const majorGroupName = majorGroups.find(g => g.id === item.majorGroupId)?.name || "";
       const familyGroupName = familyGroups.find(g => g.id === item.familyGroupId)?.name || "";
       const row = [
+        `"${item.id}"`,
         `"${(item.name || "").replace(/"/g, '""')}"`,
         `"${(item.shortName || "").replace(/"/g, '""')}"`,
         item.price || "0",
