@@ -204,7 +204,6 @@ export default function PosLayoutsPage() {
     if (!editingLayout) return;
     const filledCells = cells.filter(c => c.menuItemId);
     saveCellsMutation.mutate({ layoutId: editingLayout.id, cells: filledCells });
-    setDesignerOpen(false);
   };
 
   const getMenuItem = (id: string | null) => {
@@ -502,10 +501,10 @@ export default function PosLayoutsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDesignerOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveDesign} data-testid="button-save-design">
+            <Button variant="outline" onClick={() => setDesignerOpen(false)} data-testid="button-close-designer">Close</Button>
+            <Button onClick={handleSaveDesign} disabled={saveCellsMutation.isPending} data-testid="button-save-design">
               <Save className="w-4 h-4 mr-2" />
-              Save Layout
+              {saveCellsMutation.isPending ? "Saving..." : "Save Layout"}
             </Button>
           </DialogFooter>
         </DialogContent>
