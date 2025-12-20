@@ -235,11 +235,11 @@ export function KdsTicket({
           <Button
             className="w-full h-12 text-base font-semibold"
             onClick={() => onBump(ticketId)}
-            disabled={activeItems.every((i) => i.status === "bumped")}
+            disabled={activeItems.length > 0 && activeItems.every((i) => i.status === "bumped")}
             data-testid={`button-bump-${ticketId}`}
           >
             <CheckIcon className="w-5 h-5 mr-2" />
-            BUMP
+            {activeItems.length === 0 ? "DISMISS" : "BUMP"}
           </Button>
         )}
         {!isDraft && activeItems.some((i) => i.itemStatus === "pending") && (
