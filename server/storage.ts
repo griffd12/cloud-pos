@@ -271,6 +271,10 @@ export interface IStorage {
   // POS Layout Cells
   getPosLayoutCells(layoutId: string): Promise<PosLayoutCell[]>;
   setPosLayoutCells(layoutId: string, cells: InsertPosLayoutCell[]): Promise<PosLayoutCell[]>;
+
+  // Admin Sales Reset
+  getSalesDataSummary(): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
+  clearSalesData(): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1368,6 +1372,53 @@ export class DatabaseStorage implements IStorage {
     if (cells.length === 0) return [];
     const result = await db.insert(posLayoutCells).values(cells.map(c => ({ ...c, layoutId }))).returning();
     return result;
+  }
+
+  // Admin Sales Reset
+  async getSalesDataSummary(): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }> {
+    const [checksCount] = await db.select({ count: sql<number>`count(*)` }).from(checks);
+    const [itemsCount] = await db.select({ count: sql<number>`count(*)` }).from(checkItems);
+    const [paymentsCount] = await db.select({ count: sql<number>`count(*)` }).from(checkPayments);
+    const [roundsCount] = await db.select({ count: sql<number>`count(*)` }).from(rounds);
+    const [kdsCount] = await db.select({ count: sql<number>`count(*)` }).from(kdsTickets);
+    const [auditCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs);
+
+    return {
+      checks: Number(checksCount?.count || 0),
+      checkItems: Number(itemsCount?.count || 0),
+      payments: Number(paymentsCount?.count || 0),
+      rounds: Number(roundsCount?.count || 0),
+      kdsTickets: Number(kdsCount?.count || 0),
+      auditLogs: Number(auditCount?.count || 0),
+    };
+  }
+
+  async clearSalesData(): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }> {
+    // Use transaction to ensure atomicity - either all tables are cleared or none
+    return await db.transaction(async (tx) => {
+      // Delete in FK-safe order (child tables first)
+      const kdsItemsResult = await tx.delete(kdsTicketItems);
+      const kdsResult = await tx.delete(kdsTickets);
+      const paymentsResult = await tx.delete(checkPayments);
+      const discountsResult = await tx.delete(checkDiscounts);
+      const itemsResult = await tx.delete(checkItems);
+      const roundsResult = await tx.delete(rounds);
+      const auditResult = await tx.delete(auditLogs);
+      const checksResult = await tx.delete(checks);
+
+      return {
+        deleted: {
+          checks: checksResult.rowCount || 0,
+          checkItems: itemsResult.rowCount || 0,
+          payments: paymentsResult.rowCount || 0,
+          discounts: discountsResult.rowCount || 0,
+          rounds: roundsResult.rowCount || 0,
+          kdsTicketItems: kdsItemsResult.rowCount || 0,
+          kdsTickets: kdsResult.rowCount || 0,
+          auditLogs: auditResult.rowCount || 0,
+        }
+      };
+    });
   }
 }
 

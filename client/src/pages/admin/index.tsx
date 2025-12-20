@@ -41,6 +41,7 @@ import KdsDevicesPage from "./kds-devices";
 import PosLayoutsPage from "./pos-layouts";
 import MajorGroupsPage from "./major-groups";
 import FamilyGroupsPage from "./family-groups";
+import UtilitiesPage from "./utilities";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -259,6 +260,7 @@ export default function AdminLayout() {
               <Route path="/admin/pos-layouts" component={PosLayoutsPage} />
               <Route path="/admin/major-groups" component={MajorGroupsPage} />
               <Route path="/admin/family-groups" component={FamilyGroupsPage} />
+              <Route path="/admin/utilities" component={UtilitiesPage} />
             </Switch>
           </main>
         </div>

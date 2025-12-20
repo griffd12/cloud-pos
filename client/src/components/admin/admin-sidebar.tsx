@@ -30,6 +30,7 @@ import {
   ChefHat,
   MonitorSmartphone,
   Tv2,
+  Wrench,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -81,6 +82,12 @@ const menuGroups = [
     items: [
       { title: "Employees", url: "/admin/employees", icon: Users },
       { title: "Roles & Privileges", url: "/admin/roles", icon: Shield },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { title: "Utilities", url: "/admin/utilities", icon: Wrench },
     ],
   },
 ];

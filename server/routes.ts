@@ -1785,6 +1785,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // ADMIN SALES RESET ROUTES
+  // ============================================================================
+
+  // Get summary of sales data that would be deleted
+  app.get("/api/admin/sales-data-summary", async (req, res) => {
+    try {
+      const summary = await storage.getSalesDataSummary();
+      res.json(summary);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to get summary" });
+    }
+  });
+
+  // Clear all sales data - requires admin authorization code
+  app.post("/api/admin/clear-sales-data", async (req, res) => {
+    try {
+      const { authCode, employeeId, confirmText } = req.body;
+      
+      // Require employee ID for audit logging
+      if (!employeeId) {
+        return res.status(400).json({ message: "Employee ID required for audit logging" });
+      }
+      
+      // Validate authorization code (stored in env or use default for dev)
+      const validCode = process.env.ADMIN_RESET_CODE || "RESETADMIN";
+      if (!authCode || authCode !== validCode) {
+        return res.status(403).json({ message: "Invalid authorization code" });
+      }
+      
+      // Require explicit confirmation
+      if (confirmText !== "RESET") {
+        return res.status(400).json({ message: "Please type RESET to confirm" });
+      }
+      
+      // Get summary before deletion for audit log
+      const beforeSummary = await storage.getSalesDataSummary();
+      
+      // Perform the deletion (wrapped in transaction inside storage method)
+      const result = await storage.clearSalesData();
+      
+      // Create audit log entry for this action (recorded AFTER clearing)
+      await storage.createAuditLog({
+        rvcId: null,
+        employeeId,
+        action: "sales_reset",
+        targetType: "system",
+        targetId: "all",
+        details: {
+          beforeCounts: beforeSummary,
+          deletedCounts: result.deleted,
+          timestamp: new Date().toISOString(),
+        },
+        reasonCode: "admin_reset",
+        managerApprovalId: null,
+      });
+      
+      res.json({
+        success: true,
+        message: "All sales data has been cleared",
+        deleted: result.deleted,
+      });
+    } catch (error: any) {
+      console.error("Sales reset error:", error);
+      res.status(500).json({ message: error.message || "Failed to clear sales data" });
+    }
+  });
+
+  // ============================================================================
   // POS LAYOUT ROUTES
   // ============================================================================
 
