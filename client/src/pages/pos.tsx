@@ -181,7 +181,6 @@ export default function PosPage() {
       return response.json();
     },
     onSuccess: (data: { round: any; updatedItems: CheckItem[] }) => {
-      toast({ title: "Order sent to kitchen" });
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
@@ -206,7 +205,6 @@ export default function PosPage() {
     },
     onSuccess: (voidedItem: CheckItem) => {
       setCheckItems(checkItems.map((item) => (item.id === voidedItem.id ? voidedItem : item)));
-      toast({ title: "Item voided" });
       setShowManagerApproval(false);
       setPendingVoidItem(null);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
@@ -240,7 +238,6 @@ export default function PosPage() {
         // If item doesn't exist yet (race condition), add it
         return [...prevItems, updatedItem];
       });
-      toast({ title: "Modifiers updated" });
       setEditingItem(null);
       setShowModifierModal(false);
       setPendingItem(null);
@@ -279,10 +276,8 @@ export default function PosPage() {
         setShowPaymentModal(false);
         setCurrentCheck(null);
         setCheckItems([]);
-        toast({ title: "Check closed successfully" });
       } else {
         setCurrentCheck(result);
-        toast({ title: "Payment applied" });
       }
     },
     onError: () => {
@@ -296,7 +291,6 @@ export default function PosPage() {
     setShowPaymentModal(false);
     setCurrentCheck(null);
     setCheckItems([]);
-    toast({ title: "Check closed successfully" });
   };
 
   const handlePickupCheck = async (checkId: string) => {
@@ -306,7 +300,6 @@ export default function PosPage() {
       const data = await res.json();
       setCurrentCheck(data.check);
       setCheckItems(data.items);
-      toast({ title: `Picked up Check #${data.check.checkNumber}` });
     } catch (error) {
       toast({ title: "Failed to pick up check", variant: "destructive" });
     }

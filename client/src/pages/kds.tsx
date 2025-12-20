@@ -120,7 +120,6 @@ export default function KdsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-      toast({ title: "Ticket bumped" });
     },
     onError: () => {
       toast({ title: "Failed to bump ticket", variant: "destructive" });
@@ -134,7 +133,6 @@ export default function KdsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-      toast({ title: "Ticket recalled" });
     },
     onError: () => {
       toast({ title: "Failed to recall ticket", variant: "destructive" });
@@ -152,7 +150,6 @@ export default function KdsPage() {
     },
     onSuccess: (data: { bumped: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-      toast({ title: `Cleared ${data.bumped} tickets` });
     },
     onError: () => {
       toast({ title: "Failed to clear tickets", variant: "destructive" });
