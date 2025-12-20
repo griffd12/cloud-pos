@@ -12,8 +12,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X } from "lucide-react";
+import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical } from "lucide-react";
 import type { PosLayout, PosLayoutCell, MenuItem, Rvc } from "@shared/schema";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDndMonitor, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 interface LayoutWithCells extends PosLayout {
   cells?: PosLayoutCell[];
@@ -30,6 +32,70 @@ interface CellData {
   displayLabel: string | null;
 }
 
+interface DraggableCellProps {
+  id: string;
+  cell: CellData;
+  menuItem: MenuItem | null | undefined;
+  isSelected: boolean;
+  isDragging: boolean;
+  onClick: () => void;
+}
+
+function DraggableDroppableCell({ id, cell, menuItem, isSelected, isDragging, onClick }: DraggableCellProps) {
+  const { attributes, listeners, setNodeRef: setDragRef, transform } = useDraggable({ id });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id });
+
+  const setRef = (node: HTMLElement | null) => {
+    setDragRef(node);
+    setDropRef(node);
+  };
+
+  const style = {
+    backgroundColor: cell.menuItemId ? cell.backgroundColor : "transparent",
+    color: cell.menuItemId ? cell.textColor : "inherit",
+    borderColor: isOver ? "hsl(var(--primary))" : cell.menuItemId ? cell.backgroundColor : "hsl(var(--border))",
+    borderStyle: cell.menuItemId ? "solid" : "dashed",
+    opacity: isDragging ? 0.5 : 1,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+  };
+
+  return (
+    <button
+      ref={setRef}
+      className={`rounded-md border-2 transition-all flex items-center justify-center text-sm font-medium relative ${
+        isSelected ? "ring-2 ring-primary ring-offset-2" : ""
+      } ${isOver ? "ring-2 ring-primary" : ""} ${cell.menuItemId ? "cursor-grab active:cursor-grabbing" : ""}`}
+      style={style}
+      onClick={onClick}
+      data-testid={`cell-${cell.rowIndex}-${cell.colIndex}`}
+      {...(cell.menuItemId ? { ...attributes, ...listeners } : {})}
+    >
+      {cell.displayLabel || menuItem?.shortName || menuItem?.name || ""}
+      {cell.menuItemId && (
+        <GripVertical className="absolute top-1 right-1 w-3 h-3 opacity-50" />
+      )}
+    </button>
+  );
+}
+
+function DragOverlayCell({ cell, menuItem }: { cell: CellData | null | undefined; menuItem: MenuItem | null | undefined }) {
+  if (!cell) return null;
+  return (
+    <div
+      className="rounded-md border-2 flex items-center justify-center text-sm font-medium shadow-lg"
+      style={{
+        backgroundColor: cell.backgroundColor,
+        color: cell.textColor,
+        borderColor: cell.backgroundColor,
+        width: 80,
+        height: 80,
+      }}
+    >
+      {cell.displayLabel || menuItem?.shortName || menuItem?.name || ""}
+    </div>
+  );
+}
+
 export default function PosLayoutsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
@@ -43,6 +109,63 @@ export default function PosLayoutsPage() {
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
   const [cells, setCells] = useState<CellData[]>([]);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    
+    if (!over || active.id === over.id) return;
+    
+    const [srcRow, srcCol] = (active.id as string).split("-").map(Number);
+    const [destRow, destCol] = (over.id as string).split("-").map(Number);
+    
+    setCells(prev => {
+      const newCells = [...prev];
+      const srcIndex = newCells.findIndex(c => c.rowIndex === srcRow && c.colIndex === srcCol);
+      const destIndex = newCells.findIndex(c => c.rowIndex === destRow && c.colIndex === destCol);
+      
+      if (srcIndex === -1 || destIndex === -1) return prev;
+      
+      const srcPayload = {
+        menuItemId: newCells[srcIndex].menuItemId,
+        backgroundColor: newCells[srcIndex].backgroundColor,
+        textColor: newCells[srcIndex].textColor,
+        displayLabel: newCells[srcIndex].displayLabel,
+        rowSpan: newCells[srcIndex].rowSpan,
+        colSpan: newCells[srcIndex].colSpan,
+      };
+      const destPayload = {
+        menuItemId: newCells[destIndex].menuItemId,
+        backgroundColor: newCells[destIndex].backgroundColor,
+        textColor: newCells[destIndex].textColor,
+        displayLabel: newCells[destIndex].displayLabel,
+        rowSpan: newCells[destIndex].rowSpan,
+        colSpan: newCells[destIndex].colSpan,
+      };
+      
+      newCells[srcIndex] = { ...newCells[srcIndex], ...destPayload };
+      newCells[destIndex] = { ...newCells[destIndex], ...srcPayload };
+      
+      return newCells;
+    });
+    
+    toast({ title: "Cell moved" });
+  };
+
+  const getActiveDragCell = () => {
+    if (!activeDragId) return null;
+    const [row, col] = activeDragId.split("-").map(Number);
+    return cells.find(c => c.rowIndex === row && c.colIndex === col);
+  };
 
   const { data: layouts = [], isLoading } = useQuery<PosLayout[]>({
     queryKey: ["/api/pos-layouts"],
@@ -380,39 +503,41 @@ export default function PosLayoutsPage() {
         <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Screen Designer - {editingLayout?.name}</DialogTitle>
+            <p className="text-sm text-muted-foreground">Drag cells to rearrange items</p>
           </DialogHeader>
           <div className="flex-1 flex gap-4 overflow-hidden">
             <div className="flex-1 overflow-auto">
-              <div
-                className="grid gap-2 p-4 bg-muted/30 rounded-lg"
-                style={{
-                  gridTemplateColumns: `repeat(${gridCols}, minmax(80px, 1fr))`,
-                  gridTemplateRows: `repeat(${gridRows}, 80px)`,
-                }}
-              >
-                {cells.map((cell) => {
-                  const menuItem = getMenuItem(cell.menuItemId);
-                  const isSelected = selectedCell?.row === cell.rowIndex && selectedCell?.col === cell.colIndex;
-                  return (
-                    <button
-                      key={`${cell.rowIndex}-${cell.colIndex}`}
-                      className={`rounded-md border-2 transition-all flex items-center justify-center text-sm font-medium ${
-                        isSelected ? "ring-2 ring-primary ring-offset-2" : ""
-                      }`}
-                      style={{
-                        backgroundColor: cell.menuItemId ? cell.backgroundColor : "transparent",
-                        color: cell.menuItemId ? cell.textColor : "inherit",
-                        borderColor: cell.menuItemId ? cell.backgroundColor : "hsl(var(--border))",
-                        borderStyle: cell.menuItemId ? "solid" : "dashed",
-                      }}
-                      onClick={() => handleCellClick(cell.rowIndex, cell.colIndex)}
-                      data-testid={`cell-${cell.rowIndex}-${cell.colIndex}`}
-                    >
-                      {cell.displayLabel || menuItem?.shortName || menuItem?.name || ""}
-                    </button>
-                  );
-                })}
-              </div>
+              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <div
+                  className="grid gap-2 p-4 bg-muted/30 rounded-lg"
+                  style={{
+                    gridTemplateColumns: `repeat(${gridCols}, minmax(80px, 1fr))`,
+                    gridTemplateRows: `repeat(${gridRows}, 80px)`,
+                  }}
+                >
+                  {cells.map((cell) => {
+                    const menuItem = getMenuItem(cell.menuItemId);
+                    const isSelected = selectedCell?.row === cell.rowIndex && selectedCell?.col === cell.colIndex;
+                    const cellId = `${cell.rowIndex}-${cell.colIndex}`;
+                    return (
+                      <DraggableDroppableCell
+                        key={cellId}
+                        id={cellId}
+                        cell={cell}
+                        menuItem={menuItem}
+                        isSelected={isSelected}
+                        isDragging={activeDragId === cellId}
+                        onClick={() => handleCellClick(cell.rowIndex, cell.colIndex)}
+                      />
+                    );
+                  })}
+                </div>
+                <DragOverlay>
+                  {activeDragId ? (
+                    <DragOverlayCell cell={getActiveDragCell()} menuItem={getMenuItem(getActiveDragCell()?.menuItemId || null)} />
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             </div>
             <div className="w-72 border-l pl-4">
               <ScrollArea className="h-full">
