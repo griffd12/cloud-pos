@@ -2,6 +2,7 @@ import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees,
+  majorGroups, familyGroups,
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
   tenders, discounts, serviceCharges,
@@ -13,6 +14,8 @@ import {
   type Rvc, type InsertRvc,
   type Role, type InsertRole,
   type Employee, type InsertEmployee,
+  type MajorGroup, type InsertMajorGroup,
+  type FamilyGroup, type InsertFamilyGroup,
   type Slu, type InsertSlu,
   type TaxGroup, type InsertTaxGroup,
   type PrintClass, type InsertPrintClass,
@@ -78,6 +81,20 @@ export interface IStorage {
   createEmployee(data: InsertEmployee): Promise<Employee>;
   updateEmployee(id: string, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
   deleteEmployee(id: string): Promise<boolean>;
+
+  // Major Groups
+  getMajorGroups(): Promise<MajorGroup[]>;
+  getMajorGroup(id: string): Promise<MajorGroup | undefined>;
+  createMajorGroup(data: InsertMajorGroup): Promise<MajorGroup>;
+  updateMajorGroup(id: string, data: Partial<InsertMajorGroup>): Promise<MajorGroup | undefined>;
+  deleteMajorGroup(id: string): Promise<boolean>;
+
+  // Family Groups
+  getFamilyGroups(majorGroupId?: string): Promise<FamilyGroup[]>;
+  getFamilyGroup(id: string): Promise<FamilyGroup | undefined>;
+  createFamilyGroup(data: InsertFamilyGroup): Promise<FamilyGroup>;
+  updateFamilyGroup(id: string, data: Partial<InsertFamilyGroup>): Promise<FamilyGroup | undefined>;
+  deleteFamilyGroup(id: string): Promise<boolean>;
 
   // SLUs
   getSlus(rvcId?: string): Promise<Slu[]>;
@@ -395,6 +412,64 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEmployee(id: string): Promise<boolean> {
     const result = await db.delete(employees).where(eq(employees.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Major Groups
+  async getMajorGroups(): Promise<MajorGroup[]> {
+    return db.select().from(majorGroups).orderBy(majorGroups.displayOrder);
+  }
+
+  async getMajorGroup(id: string): Promise<MajorGroup | undefined> {
+    const [result] = await db.select().from(majorGroups).where(eq(majorGroups.id, id));
+    return result;
+  }
+
+  async createMajorGroup(data: InsertMajorGroup): Promise<MajorGroup> {
+    const [result] = await db.insert(majorGroups).values(data).returning();
+    return result;
+  }
+
+  async updateMajorGroup(id: string, data: Partial<InsertMajorGroup>): Promise<MajorGroup | undefined> {
+    const [result] = await db.update(majorGroups).set(data).where(eq(majorGroups.id, id)).returning();
+    return result;
+  }
+
+  async deleteMajorGroup(id: string): Promise<boolean> {
+    // Clear references in family groups and menu items first
+    await db.update(familyGroups).set({ majorGroupId: null }).where(eq(familyGroups.majorGroupId, id));
+    await db.update(menuItems).set({ majorGroupId: null }).where(eq(menuItems.majorGroupId, id));
+    const result = await db.delete(majorGroups).where(eq(majorGroups.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Family Groups
+  async getFamilyGroups(majorGroupId?: string): Promise<FamilyGroup[]> {
+    if (majorGroupId) {
+      return db.select().from(familyGroups).where(eq(familyGroups.majorGroupId, majorGroupId)).orderBy(familyGroups.displayOrder);
+    }
+    return db.select().from(familyGroups).orderBy(familyGroups.displayOrder);
+  }
+
+  async getFamilyGroup(id: string): Promise<FamilyGroup | undefined> {
+    const [result] = await db.select().from(familyGroups).where(eq(familyGroups.id, id));
+    return result;
+  }
+
+  async createFamilyGroup(data: InsertFamilyGroup): Promise<FamilyGroup> {
+    const [result] = await db.insert(familyGroups).values(data).returning();
+    return result;
+  }
+
+  async updateFamilyGroup(id: string, data: Partial<InsertFamilyGroup>): Promise<FamilyGroup | undefined> {
+    const [result] = await db.update(familyGroups).set(data).where(eq(familyGroups.id, id)).returning();
+    return result;
+  }
+
+  async deleteFamilyGroup(id: string): Promise<boolean> {
+    // Clear references in menu items first
+    await db.update(menuItems).set({ familyGroupId: null }).where(eq(menuItems.familyGroupId, id));
+    const result = await db.delete(familyGroups).where(eq(familyGroups.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
 

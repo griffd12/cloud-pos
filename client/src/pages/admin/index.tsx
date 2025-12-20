@@ -39,6 +39,8 @@ import WorkstationsPage from "./workstations";
 import PrintersPage from "./printers";
 import KdsDevicesPage from "./kds-devices";
 import PosLayoutsPage from "./pos-layouts";
+import MajorGroupsPage from "./major-groups";
+import FamilyGroupsPage from "./family-groups";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -255,6 +257,8 @@ export default function AdminLayout() {
               <Route path="/admin/printers" component={PrintersPage} />
               <Route path="/admin/kds-devices" component={KdsDevicesPage} />
               <Route path="/admin/pos-layouts" component={PosLayoutsPage} />
+              <Route path="/admin/major-groups" component={MajorGroupsPage} />
+              <Route path="/admin/family-groups" component={FamilyGroupsPage} />
             </Switch>
           </main>
         </div>

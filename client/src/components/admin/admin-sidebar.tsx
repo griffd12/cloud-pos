@@ -72,6 +72,8 @@ const menuGroups = [
       { title: "Discounts", url: "/admin/discounts", icon: Percent },
       { title: "Tenders", url: "/admin/tenders", icon: CreditCard },
       { title: "Service Charges", url: "/admin/service-charges", icon: DollarSign },
+      { title: "Major Groups", url: "/admin/major-groups", icon: LayoutGrid },
+      { title: "Family Groups", url: "/admin/family-groups", icon: LayoutGrid },
     ],
   },
   {

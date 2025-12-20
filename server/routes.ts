@@ -5,7 +5,8 @@ import { storage } from "./storage";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
-  insertEmployeeSchema, insertSluSchema, insertTaxGroupSchema, insertPrintClassSchema,
+  insertEmployeeSchema, insertMajorGroupSchema, insertFamilyGroupSchema,
+  insertSluSchema, insertTaxGroupSchema, insertPrintClassSchema,
   insertWorkstationSchema, insertPrinterSchema, insertKdsDeviceSchema,
   insertOrderDeviceSchema, insertOrderDevicePrinterSchema, insertOrderDeviceKdsSchema,
   insertPrintClassRoutingSchema, insertMenuItemSchema, insertModifierGroupSchema,
@@ -472,6 +473,89 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/employees/:id", async (req, res) => {
     await storage.deleteEmployee(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // MAJOR GROUP ROUTES (for reporting)
+  // ============================================================================
+
+  app.get("/api/major-groups", async (req, res) => {
+    const data = await storage.getMajorGroups();
+    res.json(data);
+  });
+
+  app.get("/api/major-groups/:id", async (req, res) => {
+    const data = await storage.getMajorGroup(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.post("/api/major-groups", async (req, res) => {
+    try {
+      const validated = insertMajorGroupSchema.parse(req.body);
+      const data = await storage.createMajorGroup(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/major-groups/:id", async (req, res) => {
+    try {
+      const validated = insertMajorGroupSchema.partial().parse(req.body);
+      const data = await storage.updateMajorGroup(req.params.id, validated);
+      if (!data) return res.status(404).json({ message: "Not found" });
+      res.json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/major-groups/:id", async (req, res) => {
+    await storage.deleteMajorGroup(req.params.id);
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // FAMILY GROUP ROUTES (for reporting)
+  // ============================================================================
+
+  app.get("/api/family-groups", async (req, res) => {
+    const majorGroupId = req.query.majorGroupId as string | undefined;
+    const data = await storage.getFamilyGroups(majorGroupId);
+    res.json(data);
+  });
+
+  app.get("/api/family-groups/:id", async (req, res) => {
+    const data = await storage.getFamilyGroup(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  });
+
+  app.post("/api/family-groups", async (req, res) => {
+    try {
+      const validated = insertFamilyGroupSchema.parse(req.body);
+      const data = await storage.createFamilyGroup(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/family-groups/:id", async (req, res) => {
+    try {
+      const validated = insertFamilyGroupSchema.partial().parse(req.body);
+      const data = await storage.updateFamilyGroup(req.params.id, validated);
+      if (!data) return res.status(404).json({ message: "Not found" });
+      res.json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/family-groups/:id", async (req, res) => {
+    await storage.deleteFamilyGroup(req.params.id);
     res.status(204).send();
   });
 

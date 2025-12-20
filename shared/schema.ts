@@ -98,6 +98,39 @@ export const employeesRelations = relations(employees, ({ one }) => ({
 }));
 
 // ============================================================================
+// REPORTING GROUPS (for Major/Family Group reporting)
+// ============================================================================
+
+export const majorGroups = pgTable("major_groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  displayOrder: integer("display_order").default(0),
+  active: boolean("active").default(true),
+});
+
+export const familyGroups = pgTable("family_groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  majorGroupId: varchar("major_group_id").references(() => majorGroups.id),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  displayOrder: integer("display_order").default(0),
+  active: boolean("active").default(true),
+});
+
+export const majorGroupsRelations = relations(majorGroups, ({ many }) => ({
+  familyGroups: many(familyGroups),
+}));
+
+export const familyGroupsRelations = relations(familyGroups, ({ one }) => ({
+  majorGroup: one(majorGroups, { fields: [familyGroups.majorGroupId], references: [majorGroups.id] }),
+}));
+
+// ============================================================================
 // MENU STRUCTURE
 // ============================================================================
 
@@ -285,6 +318,8 @@ export const menuItems = pgTable("menu_items", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   taxGroupId: varchar("tax_group_id").references(() => taxGroups.id),
   printClassId: varchar("print_class_id").references(() => printClasses.id),
+  majorGroupId: varchar("major_group_id").references(() => majorGroups.id),
+  familyGroupId: varchar("family_group_id").references(() => familyGroups.id),
   color: text("color").default("#3B82F6"),
   active: boolean("active").default(true),
 });
@@ -515,6 +550,8 @@ export const insertRvcSchema = createInsertSchema(rvcs).omit({ id: true });
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
 export const insertPrivilegeSchema = createInsertSchema(privileges).omit({ id: true });
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
+export const insertMajorGroupSchema = createInsertSchema(majorGroups).omit({ id: true });
+export const insertFamilyGroupSchema = createInsertSchema(familyGroups).omit({ id: true });
 export const insertSluSchema = createInsertSchema(slus).omit({ id: true });
 export const insertTaxGroupSchema = createInsertSchema(taxGroups).omit({ id: true }).extend({
   rate: z.coerce.string(),
@@ -558,6 +595,10 @@ export type InsertRole = z.infer<typeof insertRoleSchema>;
 export type Privilege = typeof privileges.$inferSelect;
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type MajorGroup = typeof majorGroups.$inferSelect;
+export type InsertMajorGroup = z.infer<typeof insertMajorGroupSchema>;
+export type FamilyGroup = typeof familyGroups.$inferSelect;
+export type InsertFamilyGroup = z.infer<typeof insertFamilyGroupSchema>;
 export type Slu = typeof slus.$inferSelect;
 export type InsertSlu = z.infer<typeof insertSluSchema>;
 export type TaxGroup = typeof taxGroups.$inferSelect;

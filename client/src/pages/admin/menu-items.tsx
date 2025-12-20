@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup } from "@shared/schema";
+import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup, type MajorGroup, type FamilyGroup } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, Upload, Unlink } from "lucide-react";
@@ -66,6 +66,14 @@ export default function MenuItemsPage() {
 
   const { data: modifierGroups = [] } = useQuery<ModifierGroup[]>({
     queryKey: ["/api/modifier-groups"],
+  });
+
+  const { data: majorGroups = [] } = useQuery<MajorGroup[]>({
+    queryKey: ["/api/major-groups"],
+  });
+
+  const { data: familyGroups = [] } = useQuery<FamilyGroup[]>({
+    queryKey: ["/api/family-groups"],
   });
 
   const columns: Column<MenuItem>[] = [
@@ -109,6 +117,16 @@ export default function MenuItemsPage() {
       key: "printClassId",
       header: "Print Class",
       render: (value) => printClasses.find((p) => p.id === value)?.name || "-",
+    },
+    {
+      key: "majorGroupId",
+      header: "Major Group",
+      render: (value) => majorGroups.find((g) => g.id === value)?.name || "-",
+    },
+    {
+      key: "familyGroupId",
+      header: "Family Group",
+      render: (value) => familyGroups.find((g) => g.id === value)?.name || "-",
     },
     {
       key: "active",
@@ -346,6 +364,8 @@ export default function MenuItemsPage() {
         slus={slus}
         existingSlus={allMenuItemSlus}
         modifierGroups={modifierGroups}
+        majorGroups={majorGroups}
+        familyGroups={familyGroups}
       />
     </div>
   );
@@ -360,6 +380,8 @@ interface MenuItemFormDialogProps {
   slus: Slu[];
   existingSlus: MenuItemSlu[];
   modifierGroups: ModifierGroup[];
+  majorGroups: MajorGroup[];
+  familyGroups: FamilyGroup[];
 }
 
 function MenuItemFormDialog({
@@ -371,6 +393,8 @@ function MenuItemFormDialog({
   slus,
   existingSlus,
   modifierGroups,
+  majorGroups,
+  familyGroups,
 }: MenuItemFormDialogProps) {
   const { toast } = useToast();
   
@@ -406,6 +430,8 @@ function MenuItemFormDialog({
       price: editingItem.price,
       taxGroupId: editingItem.taxGroupId || "__none__",
       printClassId: editingItem.printClassId || "__none__",
+      majorGroupId: editingItem.majorGroupId || "__none__",
+      familyGroupId: editingItem.familyGroupId || "__none__",
       color: editingItem.color || "#3B82F6",
       active: editingItem.active ?? true,
       enterpriseId: editingItem.enterpriseId,
@@ -417,6 +443,8 @@ function MenuItemFormDialog({
       price: "",
       taxGroupId: "__none__",
       printClassId: "__none__",
+      majorGroupId: "__none__",
+      familyGroupId: "__none__",
       color: "#3B82F6",
       active: true,
     },
@@ -438,6 +466,8 @@ function MenuItemFormDialog({
         price: String(data.price),
         taxGroupId: data.taxGroupId === "__none__" ? null : (data.taxGroupId || null),
         printClassId: data.printClassId === "__none__" ? null : (data.printClassId || null),
+        majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null),
+        familyGroupId: data.familyGroupId === "__none__" ? null : (data.familyGroupId || null),
       };
 
       let menuItemId: string;
@@ -583,6 +613,56 @@ function MenuItemFormDialog({
                         </SelectContent>
                       </Select>
                       <FormDescription>Routes items to kitchen printers/KDS</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="majorGroupId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Major Group</FormLabel>
+                      <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-majorGroupId">
+                            <SelectValue placeholder="Select major group..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {majorGroups.map(g => (
+                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>High-level reporting category</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="familyGroupId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Family Group</FormLabel>
+                      <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-familyGroupId">
+                            <SelectValue placeholder="Select family group..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {familyGroups.map(g => (
+                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Sub-category for detailed reporting</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
