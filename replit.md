@@ -84,6 +84,16 @@ Payment auto-send: When a check is paid, any unsent items are automatically rout
 - Role-based privilege system for operation authorization
 - Manager approval flow for privileged operations (voids, discounts)
 
+### Admin Utilities
+**Property Sales Reset** (`/admin/utilities`):
+- Clears all transactional data for a specific property (not enterprise-wide)
+- Deletes: checks (including open checks), check items, payments, discounts, rounds, KDS tickets, audit logs
+- Scoped via RVC relationship (property → RVCs → checks/tickets)
+- Multi-layer safety confirmations: property selector, acknowledge checkbox, admin auth code, type "RESET"
+- Transactional: uses database transaction for atomic all-or-nothing deletion
+- Mandatory audit logging with employee ID for accountability
+- Admin code configurable via `ADMIN_RESET_CODE` env variable (default: "RESETADMIN")
+
 ## External Dependencies
 
 ### Database
