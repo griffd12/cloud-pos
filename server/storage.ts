@@ -867,8 +867,10 @@ export class DatabaseStorage implements IStorage {
     if (usedInOrders.length > 0) {
       throw new Error("This menu item has transaction history and cannot be deleted. To remove it from the POS, use 'Unlink from Categories' or set it to Inactive.");
     }
-    // First delete related SLU linkages
+    // Delete all related linkages first
     await db.delete(menuItemSlus).where(eq(menuItemSlus.menuItemId, id));
+    await db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, id));
+    await db.delete(posLayoutCells).where(eq(posLayoutCells.menuItemId, id));
     // Then delete the menu item
     const result = await db.delete(menuItems).where(eq(menuItems.id, id));
     return result.rowCount !== null && result.rowCount > 0;
