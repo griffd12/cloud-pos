@@ -1201,6 +1201,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(checks);
   });
 
+  // Get open checks for pickup - includes item count and last activity info
+  app.get("/api/checks/open", async (req, res) => {
+    try {
+      const rvcId = req.query.rvcId as string;
+      if (!rvcId) {
+        return res.status(400).json({ message: "rvcId is required" });
+      }
+      
+      const openChecks = await storage.getOpenChecks(rvcId);
+      
+      // Enrich each check with item count and last round info
+      const enrichedChecks = await Promise.all(
+        openChecks.map(async (check) => {
+          const items = await storage.getCheckItems(check.id);
+          const activeItems = items.filter((i) => !i.voided);
+          const rounds = await storage.getRounds(check.id);
+          const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+          
+          return {
+            ...check,
+            itemCount: activeItems.length,
+            unsentCount: activeItems.filter((i) => !i.sent).length,
+            roundCount: rounds.length,
+            lastRoundAt: lastRound?.sentAt || null,
+          };
+        })
+      );
+      
+      res.json(enrichedChecks);
+    } catch (error) {
+      console.error("Get open checks error:", error);
+      res.status(400).json({ message: "Failed to get open checks" });
+    }
+  });
+
   app.get("/api/checks/:id", async (req, res) => {
     const check = await storage.getCheck(req.params.id);
     if (!check) return res.status(404).json({ message: "Check not found" });
