@@ -203,6 +203,7 @@ export interface IStorage {
   // Checks
   getChecks(rvcId?: string, status?: string): Promise<Check[]>;
   getCheck(id: string): Promise<Check | undefined>;
+  getOpenChecks(rvcId: string): Promise<Check[]>;
   createCheck(data: InsertCheck): Promise<Check>;
   updateCheck(id: string, data: Partial<Check>): Promise<Check | undefined>;
   getNextCheckNumber(rvcId: string): Promise<number>;
@@ -1020,6 +1021,12 @@ export class DatabaseStorage implements IStorage {
   async getCheck(id: string): Promise<Check | undefined> {
     const [result] = await db.select().from(checks).where(eq(checks.id, id));
     return result;
+  }
+
+  async getOpenChecks(rvcId: string): Promise<Check[]> {
+    return db.select().from(checks)
+      .where(and(eq(checks.rvcId, rvcId), eq(checks.status, "open")))
+      .orderBy(checks.openedAt);
   }
 
   async createCheck(data: InsertCheck): Promise<Check> {
