@@ -5,7 +5,7 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertFamilyGroupSchema, type FamilyGroup, type InsertFamilyGroup, type MajorGroup } from "@shared/schema";
+import { insertFamilyGroupSchema, type FamilyGroup, type InsertFamilyGroup } from "@shared/schema";
 
 export default function FamilyGroupsPage() {
   const { toast } = useToast();
@@ -16,24 +16,9 @@ export default function FamilyGroupsPage() {
     queryKey: ["/api/family-groups"],
   });
 
-  const { data: majorGroups = [] } = useQuery<MajorGroup[]>({
-    queryKey: ["/api/major-groups"],
-  });
-
-  const getMajorGroupName = (majorGroupId: string | null) => {
-    if (!majorGroupId) return "-";
-    const group = majorGroups.find(g => g.id === majorGroupId);
-    return group?.name || "-";
-  };
-
   const columns: Column<FamilyGroup>[] = [
     { key: "name", header: "Name", sortable: true },
     { key: "code", header: "Code", sortable: true },
-    {
-      key: "majorGroupId",
-      header: "Major Group",
-      render: (value) => getMajorGroupName(value),
-    },
     {
       key: "displayOrder",
       header: "Order",
@@ -49,23 +34,13 @@ export default function FamilyGroupsPage() {
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Family Group Name", type: "text", placeholder: "e.g., Appetizers", required: true },
     { name: "code", label: "Code", type: "text", placeholder: "e.g., APPS", required: true },
-    {
-      name: "majorGroupId",
-      label: "Major Group",
-      type: "select",
-      options: [
-        { value: "__none__", label: "None" },
-        ...majorGroups.map(g => ({ value: g.id, label: g.name })),
-      ],
-    },
     { name: "displayOrder", label: "Display Order", type: "number", defaultValue: 0 },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertFamilyGroup) => {
-      const payload = { ...data, majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null) };
-      const response = await apiRequest("POST", "/api/family-groups", payload);
+      const response = await apiRequest("POST", "/api/family-groups", data);
       return response.json();
     },
     onSuccess: () => {
@@ -80,8 +55,7 @@ export default function FamilyGroupsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: FamilyGroup) => {
-      const payload = { ...data, majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null) };
-      const response = await apiRequest("PUT", "/api/family-groups/" + data.id, payload);
+      const response = await apiRequest("PUT", "/api/family-groups/" + data.id, data);
       return response.json();
     },
     onSuccess: () => {

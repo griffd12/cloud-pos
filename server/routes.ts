@@ -646,15 +646,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!Array.isArray(items)) {
         return res.status(400).json({ message: "Expected an array of menu items" });
       }
+      const majorGroups = await storage.getMajorGroups();
+      const familyGroups = await storage.getFamilyGroups();
       const imported: any[] = [];
       for (const item of items) {
-        const { id, ...data } = item;
+        const { id, majorGroup, familyGroup, ...data } = item;
+        let majorGroupId = data.majorGroupId || null;
+        let familyGroupId = data.familyGroupId || null;
+        if (majorGroup && typeof majorGroup === 'string' && majorGroup.trim() && !majorGroupId) {
+          const found = majorGroups.find(g => g.name.toLowerCase() === majorGroup.trim().toLowerCase());
+          majorGroupId = found?.id || null;
+        }
+        if (familyGroup && typeof familyGroup === 'string' && familyGroup.trim() && !familyGroupId) {
+          const found = familyGroups.find(g => g.name.toLowerCase() === familyGroup.trim().toLowerCase());
+          familyGroupId = found?.id || null;
+        }
         const newItem = await storage.createMenuItem({
           name: data.name,
           shortName: data.shortName || null,
           price: data.price,
           taxGroupId: data.taxGroupId || null,
           printClassId: data.printClassId || null,
+          majorGroupId,
+          familyGroupId,
           color: data.color || "#3B82F6",
           active: data.active !== false,
           enterpriseId: null,

@@ -183,16 +183,20 @@ export default function MenuItemsPage() {
   });
 
   const handleExport = () => {
-    const headers = ["name", "shortName", "price", "color", "active"];
+    const headers = ["name", "shortName", "price", "color", "active", "majorGroup", "familyGroup"];
     const csvRows = [headers.join(",")];
     
     for (const item of menuItems) {
+      const majorGroupName = majorGroups.find(g => g.id === item.majorGroupId)?.name || "";
+      const familyGroupName = familyGroups.find(g => g.id === item.familyGroupId)?.name || "";
       const row = [
         `"${(item.name || "").replace(/"/g, '""')}"`,
         `"${(item.shortName || "").replace(/"/g, '""')}"`,
         item.price || "0",
         `"${item.color || "#3B82F6"}"`,
         item.active ? "true" : "false",
+        `"${majorGroupName.replace(/"/g, '""')}"`,
+        `"${familyGroupName.replace(/"/g, '""')}"`,
       ];
       csvRows.push(row.join(","));
     }
