@@ -16,6 +16,9 @@ import { type Property, type Rvc } from "@shared/schema";
 
 interface SalesSummary {
   grossSales: number;
+  itemSales: number;
+  serviceChargeTotal: number;
+  otherCharges: number;
   discountTotal: number;
   netSales: number;
   taxTotal: number;
@@ -455,6 +458,52 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">Sales Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Menu Item Sales</p>
+                  <p className="font-medium text-lg" data-testid="text-item-sales">
+                    {formatCurrency(salesSummary?.itemSales || 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Service Charges</p>
+                  <p className="font-medium text-lg" data-testid="text-service-charges">
+                    {formatCurrency(salesSummary?.serviceChargeTotal || 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Other</p>
+                  <p className="font-medium text-lg" data-testid="text-other-charges">
+                    {formatCurrency(salesSummary?.otherCharges || 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Net Sales</p>
+                  <p className="font-medium text-lg" data-testid="text-breakdown-net-sales">
+                    {formatCurrency(salesSummary?.netSales || 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Tax</p>
+                  <p className="font-medium text-lg" data-testid="text-tax-total">
+                    {formatCurrency(salesSummary?.taxTotal || 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Total Collected</p>
+                  <p className="font-semibold text-lg" data-testid="text-total-with-tax">
+                    {formatCurrency(salesSummary?.totalWithTax || 0)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>

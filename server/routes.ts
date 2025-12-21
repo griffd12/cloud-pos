@@ -2127,8 +2127,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const closedChecks = filteredChecks.filter(c => c.status === "closed");
       const openChecks = filteredChecks.filter(c => c.status === "open");
+      const closedCheckIds = closedChecks.map(c => c.id);
+      
+      // Get all check items to calculate actual item sales
+      const allCheckItems = await storage.getAllCheckItems();
+      const menuItemsInChecks = allCheckItems.filter(ci => 
+        closedCheckIds.includes(ci.checkId) && !ci.voided
+      );
+      const itemSales = menuItemsInChecks.reduce((sum, ci) => 
+        sum + parseFloat(ci.unitPrice || "0") * (ci.quantity || 1), 0
+      );
       
       const grossSales = closedChecks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0"), 0);
+      const serviceChargeTotal = closedChecks.reduce((sum, c) => sum + parseFloat(c.serviceChargeTotal || "0"), 0);
+      const otherCharges = grossSales - itemSales - serviceChargeTotal;
       const totalDiscounts = closedChecks.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0);
       const netSales = grossSales - totalDiscounts;
       const totalTax = closedChecks.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0);
@@ -2140,6 +2152,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       res.json({
         grossSales,
+        itemSales,
+        serviceChargeTotal,
+        otherCharges,
         discountTotal: totalDiscounts,
         netSales,
         taxTotal: totalTax,
