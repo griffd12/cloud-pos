@@ -67,12 +67,16 @@ function formatHour(hour: number): string {
 export default function ReportsPage() {
   const [location, setLocation] = useLocation();
   
+  console.log("[ReportsPage] Current location:", location);
+  
   const getActiveTab = () => {
     if (location.includes("/reports/sales")) return "sales";
     if (location.includes("/reports/operations")) return "operations";
     return "dashboard";
   };
   const activeTab = getActiveTab();
+  
+  console.log("[ReportsPage] Active tab:", activeTab);
   
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("all");
