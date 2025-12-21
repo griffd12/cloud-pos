@@ -2562,6 +2562,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
+      const allProperties = await storage.getProperties();
+      
+      // Determine the timezone to use for hour conversion
+      let timezone = "America/Los_Angeles"; // Default to PST
+      if (propertyId) {
+        const property = allProperties.find(p => p.id === propertyId);
+        if (property?.timezone) {
+          timezone = property.timezone;
+        }
+      }
       
       let filteredChecks = allChecks.filter(c => {
         const checkDate = c.closedAt ? new Date(c.closedAt) : null;
@@ -2586,7 +2596,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       for (const check of filteredChecks) {
-        const hour = new Date(check.closedAt!).getHours();
+        // Convert UTC time to local timezone to get correct hour
+        const closedDate = new Date(check.closedAt!);
+        const localTimeStr = closedDate.toLocaleString("en-US", { timeZone: timezone, hour: "numeric", hour12: false });
+        const hour = parseInt(localTimeStr, 10);
         const netSales = parseFloat(check.subtotal || "0") - parseFloat(check.discountTotal || "0");
         hourlyData[hour].sales += netSales;
         hourlyData[hour].checkCount += 1;
