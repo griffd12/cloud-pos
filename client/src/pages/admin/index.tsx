@@ -43,9 +43,6 @@ import MajorGroupsPage from "./major-groups";
 import FamilyGroupsPage from "./family-groups";
 import UtilitiesPage from "./utilities";
 import ReportsPage from "./reports";
-import TenderDetailReport from "./reports/tender-detail";
-import MenuItemSalesReport from "./reports/menu-item-sales";
-import CategorySalesReport from "./reports/category-sales";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -265,9 +262,6 @@ export default function AdminLayout() {
               <Route path="/admin/major-groups" component={MajorGroupsPage} />
               <Route path="/admin/family-groups" component={FamilyGroupsPage} />
               <Route path="/admin/utilities" component={UtilitiesPage} />
-              <Route path="/admin/reports/tenders" component={TenderDetailReport} />
-              <Route path="/admin/reports/menu-items" component={MenuItemSalesReport} />
-              <Route path="/admin/reports/categories" component={CategorySalesReport} />
               <Route path="/admin/reports" component={ReportsPage} />
             </Switch>
           </main>
