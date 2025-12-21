@@ -172,6 +172,28 @@ export default function RolesPage() {
     );
   };
 
+  const toggleAllInDomain = (domain: string, privs: Privilege[]) => {
+    const domainCodes = privs.map(p => p.code);
+    const allSelected = domainCodes.every(code => selectedPrivileges.includes(code));
+    
+    if (allSelected) {
+      setSelectedPrivileges(prev => prev.filter(code => !domainCodes.includes(code)));
+    } else {
+      setSelectedPrivileges(prev => {
+        const combined = [...prev, ...domainCodes];
+        return Array.from(new Set(combined));
+      });
+    }
+  };
+
+  const selectAllPrivileges = () => {
+    setSelectedPrivileges(privileges.map(p => p.code));
+  };
+
+  const clearAllPrivileges = () => {
+    setSelectedPrivileges([]);
+  };
+
   const privilegesByDomain = privileges.reduce((acc, priv) => {
     const domain = priv.domain || "other";
     if (!acc[domain]) acc[domain] = [];
@@ -310,35 +332,75 @@ export default function RolesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Privileges</Label>
+              <div className="flex items-center justify-between">
+                <Label>Privileges</Label>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={selectAllPrivileges}
+                    data-testid="button-select-all-privileges"
+                  >
+                    Select All
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={clearAllPrivileges}
+                    data-testid="button-clear-all-privileges"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
               <Accordion type="multiple" className="border rounded-md">
-                {Object.entries(privilegesByDomain).map(([domain, privs]) => (
-                  <AccordionItem key={domain} value={domain}>
-                    <AccordionTrigger className="px-4 py-2 text-sm">
-                      {domainLabels[domain] || domain}
-                      <Badge variant="secondary" className="ml-2">
-                        {privs.filter(p => selectedPrivileges.includes(p.code)).length}/{privs.length}
-                      </Badge>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        {privs.map((priv) => (
-                          <div key={priv.id} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`priv-${priv.code}`}
-                              data-testid={`checkbox-priv-${priv.code}`}
-                              checked={selectedPrivileges.includes(priv.code)}
-                              onCheckedChange={() => togglePrivilege(priv.code)}
-                            />
-                            <Label htmlFor={`priv-${priv.code}`} className="text-sm font-normal cursor-pointer">
-                              {priv.name}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
+                {Object.entries(privilegesByDomain).map(([domain, privs]) => {
+                  const allDomainSelected = privs.every(p => selectedPrivileges.includes(p.code));
+                  
+                  return (
+                    <AccordionItem key={domain} value={domain}>
+                      <AccordionTrigger className="px-4 py-2 text-sm">
+                        {domainLabels[domain] || domain}
+                        <Badge variant="secondary" className="ml-2">
+                          {privs.filter(p => selectedPrivileges.includes(p.code)).length}/{privs.length}
+                        </Badge>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pb-3">
+                        <div className="mb-3 pb-2 border-b flex items-center space-x-2">
+                          <Checkbox 
+                            id={`select-all-${domain}`}
+                            data-testid={`checkbox-select-all-${domain}`}
+                            checked={allDomainSelected}
+                            onCheckedChange={() => toggleAllInDomain(domain, privs)}
+                          />
+                          <Label 
+                            htmlFor={`select-all-${domain}`} 
+                            className="text-sm font-medium cursor-pointer"
+                          >
+                            Select All {domainLabels[domain] || domain}
+                          </Label>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {privs.map((priv) => (
+                            <div key={priv.id} className="flex items-center space-x-2">
+                              <Checkbox 
+                                id={`priv-${priv.code}`}
+                                data-testid={`checkbox-priv-${priv.code}`}
+                                checked={selectedPrivileges.includes(priv.code)}
+                                onCheckedChange={() => togglePrivilege(priv.code)}
+                              />
+                              <Label htmlFor={`priv-${priv.code}`} className="text-sm font-normal cursor-pointer">
+                                {priv.name}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
               </Accordion>
             </div>
 
