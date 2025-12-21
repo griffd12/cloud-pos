@@ -107,24 +107,30 @@ export default function ReportsPage() {
     return params.toString();
   };
 
+  const queryParams = buildQueryParams();
+  
   const { data: salesSummary, isLoading: summaryLoading } = useQuery<SalesSummary>({
-    queryKey: ["/api/reports/sales-summary", buildQueryParams()],
+    queryKey: [`/api/reports/sales-summary?${queryParams}`],
   });
 
   const { data: categorySales = [] } = useQuery<CategorySale[]>({
-    queryKey: ["/api/reports/sales-by-category", buildQueryParams()],
+    queryKey: [`/api/reports/sales-by-category?${queryParams}`],
   });
 
   const { data: topItems = [] } = useQuery<TopItem[]>({
-    queryKey: ["/api/reports/top-items", buildQueryParams()],
+    queryKey: [`/api/reports/top-items?${queryParams}`],
   });
 
   const { data: tenderMix = [] } = useQuery<TenderMix[]>({
-    queryKey: ["/api/reports/tender-mix", buildQueryParams()],
+    queryKey: [`/api/reports/tender-mix?${queryParams}`],
   });
 
+  const hourlyParams = new URLSearchParams();
+  hourlyParams.set("date", new Date().toISOString().split("T")[0]);
+  if (selectedPropertyId !== "all") hourlyParams.set("propertyId", selectedPropertyId);
+  
   const { data: hourlySales = [] } = useQuery<HourlySale[]>({
-    queryKey: ["/api/reports/hourly-sales", `date=${new Date().toISOString().split("T")[0]}&${selectedPropertyId !== "all" ? `propertyId=${selectedPropertyId}` : ""}`],
+    queryKey: [`/api/reports/hourly-sales?${hourlyParams.toString()}`],
   });
 
   const filteredRvcs = selectedPropertyId !== "all" 

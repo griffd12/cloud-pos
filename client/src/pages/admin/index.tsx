@@ -265,6 +265,14 @@ export default function AdminLayout() {
               <Route path="/admin/reports/sales" component={ReportsPage} />
               <Route path="/admin/reports/operations" component={ReportsPage} />
               <Route path="/admin/reports" component={ReportsPage} />
+              <Route>
+                {() => (
+                  <div className="p-6">
+                    <h1 className="text-xl font-semibold">Page not found</h1>
+                    <p className="text-muted-foreground">The requested admin page does not exist.</p>
+                  </div>
+                )}
+              </Route>
             </Switch>
           </main>
         </div>
