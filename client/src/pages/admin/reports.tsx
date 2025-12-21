@@ -107,30 +107,72 @@ export default function ReportsPage() {
     return params.toString();
   };
 
-  const queryParams = buildQueryParams();
+  const { startDate, endDate } = getDateParams();
+  const filterParams = { startDate, endDate, propertyId: selectedPropertyId, rvcId: selectedRvcId };
+  
+  const buildUrl = (endpoint: string) => {
+    const params = new URLSearchParams();
+    params.set("startDate", startDate);
+    params.set("endDate", endDate);
+    if (selectedPropertyId !== "all") params.set("propertyId", selectedPropertyId);
+    if (selectedRvcId !== "all") params.set("rvcId", selectedRvcId);
+    return `${endpoint}?${params.toString()}`;
+  };
   
   const { data: salesSummary, isLoading: summaryLoading } = useQuery<SalesSummary>({
-    queryKey: [`/api/reports/sales-summary?${queryParams}`],
+    queryKey: ["/api/reports/sales-summary", filterParams],
+    queryFn: async () => {
+      const res = await fetch(buildUrl("/api/reports/sales-summary"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch sales summary");
+      return res.json();
+    },
+    staleTime: 0,
   });
 
   const { data: categorySales = [] } = useQuery<CategorySale[]>({
-    queryKey: [`/api/reports/sales-by-category?${queryParams}`],
+    queryKey: ["/api/reports/sales-by-category", filterParams],
+    queryFn: async () => {
+      const res = await fetch(buildUrl("/api/reports/sales-by-category"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch category sales");
+      return res.json();
+    },
+    staleTime: 0,
   });
 
   const { data: topItems = [] } = useQuery<TopItem[]>({
-    queryKey: [`/api/reports/top-items?${queryParams}`],
+    queryKey: ["/api/reports/top-items", filterParams],
+    queryFn: async () => {
+      const res = await fetch(buildUrl("/api/reports/top-items"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch top items");
+      return res.json();
+    },
+    staleTime: 0,
   });
 
   const { data: tenderMix = [] } = useQuery<TenderMix[]>({
-    queryKey: [`/api/reports/tender-mix?${queryParams}`],
+    queryKey: ["/api/reports/tender-mix", filterParams],
+    queryFn: async () => {
+      const res = await fetch(buildUrl("/api/reports/tender-mix"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tender mix");
+      return res.json();
+    },
+    staleTime: 0,
   });
 
-  const hourlyParams = new URLSearchParams();
-  hourlyParams.set("date", new Date().toISOString().split("T")[0]);
-  if (selectedPropertyId !== "all") hourlyParams.set("propertyId", selectedPropertyId);
+  const todayDate = new Date().toISOString().split("T")[0];
+  const hourlyFilterParams = { date: todayDate, propertyId: selectedPropertyId };
   
   const { data: hourlySales = [] } = useQuery<HourlySale[]>({
-    queryKey: [`/api/reports/hourly-sales?${hourlyParams.toString()}`],
+    queryKey: ["/api/reports/hourly-sales", hourlyFilterParams],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("date", todayDate);
+      if (selectedPropertyId !== "all") params.set("propertyId", selectedPropertyId);
+      const res = await fetch(`/api/reports/hourly-sales?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch hourly sales");
+      return res.json();
+    },
+    staleTime: 0,
   });
 
   const filteredRvcs = selectedPropertyId !== "all" 
