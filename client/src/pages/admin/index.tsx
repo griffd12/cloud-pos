@@ -265,10 +265,10 @@ export default function AdminLayout() {
               <Route path="/admin/major-groups" component={MajorGroupsPage} />
               <Route path="/admin/family-groups" component={FamilyGroupsPage} />
               <Route path="/admin/utilities" component={UtilitiesPage} />
-              <Route path="/admin/reports" component={ReportsPage} />
               <Route path="/admin/reports/tenders" component={TenderDetailReport} />
               <Route path="/admin/reports/menu-items" component={MenuItemSalesReport} />
               <Route path="/admin/reports/categories" component={CategorySalesReport} />
+              <Route path="/admin/reports" component={ReportsPage} />
             </Switch>
           </main>
         </div>
