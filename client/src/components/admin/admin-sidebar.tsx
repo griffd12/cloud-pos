@@ -87,9 +87,7 @@ const menuGroups = [
   {
     label: "Reports",
     items: [
-      { title: "Dashboard", url: "/admin/reports", icon: LayoutGrid },
-      { title: "Sales Reports", url: "/admin/reports/sales", icon: DollarSign },
-      { title: "Operations Reports", url: "/admin/reports/operations", icon: Receipt },
+      { title: "Reports Dashboard", url: "/admin/reports", icon: LayoutGrid },
     ],
   },
   {
