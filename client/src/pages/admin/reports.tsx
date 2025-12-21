@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, 
   Banknote, Smartphone, Package, Layers, ChevronDown, ChevronRight, BarChart3
@@ -157,42 +156,40 @@ function getTenderIcon(type: string) {
   }
 }
 
-function CategoryRow({ category, totalSales }: { category: CategorySaleDetail; totalSales: number }) {
+function CategoryRows({ category, totalSales }: { category: CategorySaleDetail; totalSales: number }) {
   const [isOpen, setIsOpen] = useState(false);
   const pctOfTotal = totalSales > 0 ? (category.totalSales / totalSales * 100) : 0;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
-        <TableRow className="cursor-pointer hover-elevate" data-testid={`row-category-${category.id}`}>
-          <TableCell>
-            <div className="flex items-center gap-2">
-              {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              <span className="font-medium">{category.name}</span>
-              <Badge variant="secondary" className="text-xs">{category.items.length} items</Badge>
-            </div>
-          </TableCell>
-          <TableCell className="text-right">{category.totalQuantity}</TableCell>
-          <TableCell className="text-right font-medium">{formatCurrency(category.totalSales)}</TableCell>
-          <TableCell className="text-right text-muted-foreground">{pctOfTotal.toFixed(1)}%</TableCell>
-        </TableRow>
-      </CollapsibleTrigger>
-      <CollapsibleContent asChild>
-        <>
-          {category.items.map((item) => {
-            const itemPct = category.totalSales > 0 ? (item.sales / category.totalSales * 100) : 0;
-            return (
-              <TableRow key={item.id} className="bg-muted/30" data-testid={`row-item-${item.id}`}>
-                <TableCell className="pl-10">{item.name}</TableCell>
-                <TableCell className="text-right text-muted-foreground">{item.quantity}</TableCell>
-                <TableCell className="text-right text-muted-foreground">{formatCurrency(item.sales)}</TableCell>
-                <TableCell className="text-right text-muted-foreground text-xs">{itemPct.toFixed(1)}%</TableCell>
-              </TableRow>
-            );
-          })}
-        </>
-      </CollapsibleContent>
-    </Collapsible>
+    <>
+      <TableRow 
+        className="cursor-pointer hover-elevate" 
+        data-testid={`row-category-${category.id}`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <TableCell>
+          <div className="flex items-center gap-2">
+            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <span className="font-medium">{category.name}</span>
+            <Badge variant="secondary" className="text-xs">{category.items.length} items</Badge>
+          </div>
+        </TableCell>
+        <TableCell className="text-right">{category.totalQuantity}</TableCell>
+        <TableCell className="text-right font-medium">{formatCurrency(category.totalSales)}</TableCell>
+        <TableCell className="text-right text-muted-foreground">{pctOfTotal.toFixed(1)}%</TableCell>
+      </TableRow>
+      {isOpen && category.items.map((item) => {
+        const itemPct = category.totalSales > 0 ? (item.sales / category.totalSales * 100) : 0;
+        return (
+          <TableRow key={item.id} className="bg-muted/30" data-testid={`row-item-${item.id}`}>
+            <TableCell className="pl-10">{item.name}</TableCell>
+            <TableCell className="text-right text-muted-foreground">{item.quantity}</TableCell>
+            <TableCell className="text-right text-muted-foreground">{formatCurrency(item.sales)}</TableCell>
+            <TableCell className="text-right text-muted-foreground text-xs">{itemPct.toFixed(1)}%</TableCell>
+          </TableRow>
+        );
+      })}
+    </>
   );
 }
 
@@ -871,7 +868,7 @@ export default function ReportsPage() {
                 </TableHeader>
                 <TableBody>
                   {(categoryData?.categories || []).map((category) => (
-                    <CategoryRow 
+                    <CategoryRows 
                       key={category.id} 
                       category={category} 
                       totalSales={categoryData?.totalSales || 0} 
