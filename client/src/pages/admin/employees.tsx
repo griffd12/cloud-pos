@@ -50,7 +50,8 @@ export default function EmployeesPage() {
       name: "roleId",
       label: "Role",
       type: "select",
-      options: [{ value: "", label: "None" }, ...roles.map((r) => ({ value: r.id, label: r.name }))],
+      options: roles.map((r) => ({ value: r.id, label: r.name })),
+      required: true,
     },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
