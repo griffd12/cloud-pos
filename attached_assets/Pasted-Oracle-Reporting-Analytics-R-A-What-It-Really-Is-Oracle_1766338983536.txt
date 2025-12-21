@@ -1,0 +1,236 @@
+Oracle Reporting & Analytics (R&A) — What It Really Is
+
+Oracle Reporting & Analytics (R&A) is a separate, cloud-hosted reporting platform that sits outside the core Simphony POS transaction engine.
+
+Think of it as:
+
+Read-optimized analytics layer fed by Simphony transactional data
+
+It is not part of the EMC.
+It has its own users, roles, permissions, and security model.
+
+High-Level Architecture
+Data Flow (Simplified)
+Simphony POS (Transactions)
+   ↓
+Oracle Data Services / ETL
+   ↓
+Oracle Reporting & Analytics (R&A)
+   ↓
+Dashboards / Reports / Exports
+
+
+Key implications:
+
+R&A is near-real-time, not always real-time
+
+If R&A is down, POS still runs
+
+If POS is down, R&A becomes stale but still accessible
+
+User & Security Model (This Is Where People Get Burned)
+❗ R&A DOES NOT USE SIMPHONY EMPLOYEES
+
+This is critical.
+
+POS employees ≠ R&A users
+
+R&A users are created and managed separately
+
+There is no automatic inheritance from EMC roles
+
+R&A User Types
+
+Individual named users
+
+Group-based assignments (recommended for scale)
+
+Each user is assigned:
+
+Data Scope
+
+Functional Permissions
+
+Report Access
+
+Data Scope Hierarchy (Very Important)
+
+R&A respects the Simphony enterprise hierarchy, but only for filtering, not security inheritance.
+
+Typical hierarchy:
+
+Enterprise
+ └─ Property
+     └─ Revenue Center (RVC)
+
+
+You explicitly define:
+
+Which properties
+
+Which RVCs
+
+Which regions (if enabled)
+
+A user can:
+
+See multiple properties
+
+Be restricted to a single RVC
+
+Be cross-property but read-only
+
+Permission Model (Actual Structure)
+1️⃣ Functional Permissions (What they can do)
+
+Examples:
+
+View dashboards
+
+Run standard reports
+
+Export data (CSV / Excel)
+
+Schedule reports
+
+Create custom dashboards (advanced users)
+
+Administer users (very limited group)
+
+These are orthogonal to data scope.
+
+2️⃣ Data Access Permissions (What data they see)
+
+Controlled by:
+
+Property access
+
+RVC access
+
+Business date ranges
+
+Sometimes tender visibility (depending on report)
+
+This prevents:
+
+Franchisees seeing corporate data
+
+Managers seeing other locations
+
+Vendors seeing sensitive metrics
+
+3️⃣ Report-Level Permissions (What reports they see)
+
+Reports are grouped by folders:
+
+Sales
+
+Labor
+
+Financial
+
+Operations
+
+Enterprise summaries
+
+Users can be allowed:
+
+Folder access
+
+Individual report access
+
+Dashboard-only access (no raw reports)
+
+Standard Report Categories
+Sales & Revenue
+
+Net / Gross sales
+
+Category & item sales
+
+Discounts & voids
+
+Check averages
+
+Order type mix
+
+Labor
+
+Hours worked
+
+Labor % of sales
+
+Overtime
+
+Clock-in/out compliance
+
+Cash & Financial
+
+Cash over/short
+
+Tender mix
+
+Paid ins/outs
+
+Refund totals
+
+Operations
+
+Open checks
+
+Voids by employee
+
+Discounts by employee
+
+Service charge activity
+
+Enterprise / Multi-Property
+
+Roll-ups
+
+Comparisons
+
+Trend analysis
+
+Dashboards vs Reports (Important Distinction)
+Reports
+
+Static
+
+Parameter-driven
+
+Exportable
+
+Often operational or audit-focused
+
+Dashboards
+
+Visual
+
+Aggregated
+
+Often executive-focused
+
+Not always exportable at detail level
+
+Good operators limit dashboard creation to avoid metric chaos.
+
+Scheduling & Distribution
+
+R&A supports:
+
+Scheduled report delivery
+
+Email distribution
+
+Multiple formats (PDF, XLS, CSV)
+
+Time-based automation (daily close, weekly summaries)
+
+Best practice:
+
+Let managers consume dashboards
+
+Let finance consume scheduled exports
+
+Avoid letting everyone self-export (data leakage risk)
