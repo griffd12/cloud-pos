@@ -186,14 +186,6 @@ export default function RolesPage() {
     }
   };
 
-  const selectAllPrivileges = () => {
-    setSelectedPrivileges(privileges.map(p => p.code));
-  };
-
-  const clearAllPrivileges = () => {
-    setSelectedPrivileges([]);
-  };
-
   const privilegesByDomain = privileges.reduce((acc, priv) => {
     const domain = priv.domain || "other";
     if (!acc[domain]) acc[domain] = [];
@@ -332,29 +324,7 @@ export default function RolesPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Privileges</Label>
-                <div className="flex gap-2">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={selectAllPrivileges}
-                    data-testid="button-select-all-privileges"
-                  >
-                    Select All
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={clearAllPrivileges}
-                    data-testid="button-clear-all-privileges"
-                  >
-                    Clear All
-                  </Button>
-                </div>
-              </div>
+              <Label>Privileges</Label>
               <Accordion type="multiple" className="border rounded-md">
                 {Object.entries(privilegesByDomain).map(([domain, privs]) => {
                   const allDomainSelected = privs.every(p => selectedPrivileges.includes(p.code));
