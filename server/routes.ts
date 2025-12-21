@@ -2550,6 +2550,292 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Tender Detail Report - Individual payment transactions
+  app.get("/api/reports/tender-detail", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate, tenderId } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allPayments = await storage.getPayments();
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const allTenders = await storage.getTenders();
+      const employees = await storage.getEmployees();
+      
+      // Filter checks by date range and location
+      let filteredCheckIds = allChecks.filter(c => {
+        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      }).map(c => c.id);
+      
+      if (propertyId && propertyId !== "all") {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        const propertyChecks = allChecks.filter(c => propertyRvcs.includes(c.rvcId)).map(c => c.id);
+        filteredCheckIds = filteredCheckIds.filter(id => propertyChecks.includes(id));
+      }
+      if (rvcId && rvcId !== "all") {
+        const rvcChecks = allChecks.filter(c => c.rvcId === rvcId).map(c => c.id);
+        filteredCheckIds = filteredCheckIds.filter(id => rvcChecks.includes(id));
+      }
+      
+      // Get payments for those checks
+      let payments = allPayments.filter(p => filteredCheckIds.includes(p.checkId));
+      
+      // Filter by specific tender if provided
+      if (tenderId) {
+        payments = payments.filter(p => p.tenderId === tenderId);
+      }
+      
+      const result = payments.map(p => {
+        const check = allChecks.find(c => c.id === p.checkId);
+        const tender = allTenders.find(t => t.id === p.tenderId);
+        const rvc = check ? allRvcs.find(r => r.id === check.rvcId) : null;
+        const emp = check ? employees.find(e => e.id === check.employeeId) : null;
+        
+        return {
+          id: p.id,
+          checkNumber: check?.checkNumber || 0,
+          tenderName: tender?.name || "Unknown",
+          tenderType: tender?.type || "unknown",
+          amount: parseFloat(p.amount || "0"),
+          tipAmount: parseFloat(p.tipAmount || "0"),
+          employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+          rvcName: rvc?.name || "Unknown",
+          paidAt: p.paidAt,
+        };
+      }).sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
+      
+      // Summary by tender type
+      const summary: Record<string, { count: number; amount: number; tips: number }> = {};
+      for (const p of payments) {
+        const tender = allTenders.find(t => t.id === p.tenderId);
+        const name = tender?.name || "Unknown";
+        if (!summary[name]) {
+          summary[name] = { count: 0, amount: 0, tips: 0 };
+        }
+        summary[name].count += 1;
+        summary[name].amount += parseFloat(p.amount || "0");
+        summary[name].tips += parseFloat(p.tipAmount || "0");
+      }
+      
+      res.json({
+        transactions: result,
+        summary: Object.entries(summary).map(([name, data]) => ({ name, ...data })),
+        totalAmount: result.reduce((sum, p) => sum + p.amount, 0),
+        totalTips: result.reduce((sum, p) => sum + p.tipAmount, 0),
+        transactionCount: result.length,
+      });
+    } catch (error) {
+      console.error("Tender detail error:", error);
+      res.status(500).json({ message: "Failed to generate tender detail report" });
+    }
+  });
+
+  // Menu Item Sales Report - Detailed item-level sales
+  app.get("/api/reports/menu-item-sales", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate, itemId } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allCheckItems = await storage.getCheckItems();
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const menuItems = await storage.getMenuItems();
+      const slus = await storage.getSlus();
+      
+      // Filter checks by date and location
+      let filteredCheckIds = allChecks.filter(c => {
+        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      }).map(c => c.id);
+      
+      if (propertyId && propertyId !== "all") {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        const propertyChecks = allChecks.filter(c => propertyRvcs.includes(c.rvcId)).map(c => c.id);
+        filteredCheckIds = filteredCheckIds.filter(id => propertyChecks.includes(id));
+      }
+      if (rvcId && rvcId !== "all") {
+        const rvcChecks = allChecks.filter(c => c.rvcId === rvcId).map(c => c.id);
+        filteredCheckIds = filteredCheckIds.filter(id => rvcChecks.includes(id));
+      }
+      
+      // Get check items
+      let checkItems = allCheckItems.filter(ci => filteredCheckIds.includes(ci.checkId) && !ci.voided);
+      
+      // Aggregate by menu item
+      const itemSales: Record<string, { 
+        name: string; 
+        category: string;
+        quantity: number; 
+        grossSales: number; 
+        netSales: number;
+        avgPrice: number;
+      }> = {};
+      
+      for (const ci of checkItems) {
+        const menuItem = menuItems.find(m => m.id === ci.menuItemId);
+        if (!menuItem) continue;
+        
+        // Filter by specific item if provided
+        if (itemId && ci.menuItemId !== itemId) continue;
+        
+        const slu = slus.find(s => s.id === (menuItem as any).sluId);
+        const itemName = menuItem.name;
+        const categoryName = slu?.name || "Uncategorized";
+        
+        if (!itemSales[ci.menuItemId]) {
+          itemSales[ci.menuItemId] = { 
+            name: itemName, 
+            category: categoryName,
+            quantity: 0, 
+            grossSales: 0, 
+            netSales: 0,
+            avgPrice: 0,
+          };
+        }
+        
+        const qty = ci.quantity || 1;
+        const price = parseFloat(ci.price || "0");
+        
+        itemSales[ci.menuItemId].quantity += qty;
+        itemSales[ci.menuItemId].grossSales += price * qty;
+        itemSales[ci.menuItemId].netSales += price * qty; // Could subtract discounts if tracked per item
+      }
+      
+      // Calculate averages
+      Object.values(itemSales).forEach(item => {
+        item.avgPrice = item.quantity > 0 ? item.grossSales / item.quantity : 0;
+      });
+      
+      const result = Object.entries(itemSales)
+        .map(([id, data]) => ({ id, ...data }))
+        .sort((a, b) => b.netSales - a.netSales);
+      
+      res.json({
+        items: result,
+        totalQuantity: result.reduce((sum, i) => sum + i.quantity, 0),
+        totalSales: result.reduce((sum, i) => sum + i.netSales, 0),
+        itemCount: result.length,
+      });
+    } catch (error) {
+      console.error("Menu item sales error:", error);
+      res.status(500).json({ message: "Failed to generate menu item sales report" });
+    }
+  });
+
+  // Category Sales Report - Detailed sales by SLU/category
+  app.get("/api/reports/category-sales", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate, categoryId } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allCheckItems = await storage.getCheckItems();
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const menuItems = await storage.getMenuItems();
+      const slus = await storage.getSlus();
+      
+      // Filter checks by date and location
+      let filteredCheckIds = allChecks.filter(c => {
+        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      }).map(c => c.id);
+      
+      if (propertyId && propertyId !== "all") {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        const propertyChecks = allChecks.filter(c => propertyRvcs.includes(c.rvcId)).map(c => c.id);
+        filteredCheckIds = filteredCheckIds.filter(id => propertyChecks.includes(id));
+      }
+      if (rvcId && rvcId !== "all") {
+        const rvcChecks = allChecks.filter(c => c.rvcId === rvcId).map(c => c.id);
+        filteredCheckIds = filteredCheckIds.filter(id => rvcChecks.includes(id));
+      }
+      
+      // Get check items
+      const checkItems = allCheckItems.filter(ci => filteredCheckIds.includes(ci.checkId) && !ci.voided);
+      
+      // Build category -> items mapping
+      const categoryData: Record<string, { 
+        name: string; 
+        totalQuantity: number; 
+        totalSales: number;
+        items: { id: string; name: string; quantity: number; sales: number }[];
+      }> = {};
+      
+      for (const ci of checkItems) {
+        const menuItem = menuItems.find(m => m.id === ci.menuItemId);
+        if (!menuItem) continue;
+        
+        const slu = slus.find(s => s.id === (menuItem as any).sluId);
+        const sluId = slu?.id || "uncategorized";
+        const sluName = slu?.name || "Uncategorized";
+        
+        // Filter by specific category if provided
+        if (categoryId && sluId !== categoryId) continue;
+        
+        if (!categoryData[sluId]) {
+          categoryData[sluId] = { 
+            name: sluName, 
+            totalQuantity: 0, 
+            totalSales: 0,
+            items: [],
+          };
+        }
+        
+        const qty = ci.quantity || 1;
+        const price = parseFloat(ci.price || "0");
+        const sales = price * qty;
+        
+        categoryData[sluId].totalQuantity += qty;
+        categoryData[sluId].totalSales += sales;
+        
+        // Add to items list
+        const existingItem = categoryData[sluId].items.find(i => i.id === ci.menuItemId);
+        if (existingItem) {
+          existingItem.quantity += qty;
+          existingItem.sales += sales;
+        } else {
+          categoryData[sluId].items.push({
+            id: ci.menuItemId,
+            name: menuItem.name,
+            quantity: qty,
+            sales: sales,
+          });
+        }
+      }
+      
+      // Sort items within each category
+      Object.values(categoryData).forEach(cat => {
+        cat.items.sort((a, b) => b.sales - a.sales);
+      });
+      
+      const result = Object.entries(categoryData)
+        .map(([id, data]) => ({ id, ...data }))
+        .sort((a, b) => b.totalSales - a.totalSales);
+      
+      res.json({
+        categories: result,
+        totalSales: result.reduce((sum, c) => sum + c.totalSales, 0),
+        totalQuantity: result.reduce((sum, c) => sum + c.totalQuantity, 0),
+      });
+    } catch (error) {
+      console.error("Category sales error:", error);
+      res.status(500).json({ message: "Failed to generate category sales report" });
+    }
+  });
+
   // Hourly Sales
   app.get("/api/reports/hourly-sales", async (req, res) => {
     try {

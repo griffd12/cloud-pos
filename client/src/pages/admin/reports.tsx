@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, Percent, AlertTriangle, XCircle } from "lucide-react";
+import { DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, Percent, AlertTriangle, XCircle, ExternalLink } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { type Property, type Rvc } from "@shared/schema";
 
@@ -331,8 +332,14 @@ export default function ReportsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="py-3">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
             <CardTitle className="text-sm">Tender Mix</CardTitle>
+            <Link href={`/admin/reports/tenders?dateRange=${dateRange}&propertyId=${selectedPropertyId}&rvcId=${selectedRvcId}`}>
+              <Button variant="ghost" size="sm" data-testid="button-view-tender-detail">
+                <ExternalLink className="h-4 w-4 mr-1" />
+                View Details
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             <div className="h-64 flex items-center">
@@ -382,8 +389,14 @@ export default function ReportsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="py-3">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
             <CardTitle className="text-sm">Sales by Category</CardTitle>
+            <Link href={`/admin/reports/categories?dateRange=${dateRange}&propertyId=${selectedPropertyId}&rvcId=${selectedRvcId}`}>
+              <Button variant="ghost" size="sm" data-testid="button-view-category-detail">
+                <ExternalLink className="h-4 w-4 mr-1" />
+                View Details
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -411,8 +424,14 @@ export default function ReportsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="py-3">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
             <CardTitle className="text-sm">Top Selling Items</CardTitle>
+            <Link href={`/admin/reports/menu-items?dateRange=${dateRange}&propertyId=${selectedPropertyId}&rvcId=${selectedRvcId}`}>
+              <Button variant="ghost" size="sm" data-testid="button-view-item-detail">
+                <ExternalLink className="h-4 w-4 mr-1" />
+                View Details
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
