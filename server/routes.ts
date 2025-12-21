@@ -2134,9 +2134,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const menuItemsInChecks = allCheckItems.filter(ci => 
         closedCheckIds.includes(ci.checkId) && !ci.voided
       );
-      const itemSales = menuItemsInChecks.reduce((sum, ci) => 
+      
+      // Calculate base item sales
+      const baseItemSales = menuItemsInChecks.reduce((sum, ci) => 
         sum + parseFloat(ci.unitPrice || "0") * (ci.quantity || 1), 0
       );
+      
+      // Calculate modifier upcharges from JSON modifiers field
+      const modifierTotal = menuItemsInChecks.reduce((sum, ci) => {
+        if (!ci.modifiers || !Array.isArray(ci.modifiers)) return sum;
+        const modSum = (ci.modifiers as any[]).reduce((mSum, mod) => {
+          return mSum + parseFloat(mod.priceDelta || "0");
+        }, 0);
+        return sum + modSum * (ci.quantity || 1);
+      }, 0);
+      
+      const itemSales = baseItemSales + modifierTotal;
       
       const grossSales = closedChecks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0"), 0);
       const serviceChargeTotal = closedChecks.reduce((sum, c) => sum + parseFloat(c.serviceChargeTotal || "0"), 0);
@@ -2153,6 +2166,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({
         grossSales,
         itemSales,
+        baseItemSales,
+        modifierTotal,
         serviceChargeTotal,
         otherCharges,
         discountTotal: totalDiscounts,
@@ -2218,8 +2233,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (!categoryTotals[categoryId]) {
             categoryTotals[categoryId] = { name: categoryName, quantity: 0, sales: 0 };
           }
-          categoryTotals[categoryId].quantity += item.quantity || 1;
-          categoryTotals[categoryId].sales += parseFloat(item.unitPrice) * (item.quantity || 1);
+          
+          const qty = item.quantity || 1;
+          const basePrice = parseFloat(item.unitPrice);
+          
+          // Calculate modifier upcharges
+          let modifierUpcharge = 0;
+          if (item.modifiers && Array.isArray(item.modifiers)) {
+            modifierUpcharge = (item.modifiers as any[]).reduce((mSum, mod) => {
+              return mSum + parseFloat(mod.priceDelta || "0");
+            }, 0);
+          }
+          
+          categoryTotals[categoryId].quantity += qty;
+          categoryTotals[categoryId].sales += (basePrice + modifierUpcharge) * qty;
         }
       }
       
@@ -2271,8 +2298,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (!itemTotals[id]) {
             itemTotals[id] = { name: item.menuItemName, quantity: 0, sales: 0 };
           }
-          itemTotals[id].quantity += item.quantity || 1;
-          itemTotals[id].sales += parseFloat(item.unitPrice) * (item.quantity || 1);
+          const qty = item.quantity || 1;
+          const basePrice = parseFloat(item.unitPrice);
+          
+          // Calculate modifier upcharges
+          let modifierUpcharge = 0;
+          if (item.modifiers && Array.isArray(item.modifiers)) {
+            modifierUpcharge = (item.modifiers as any[]).reduce((mSum, mod) => {
+              return mSum + parseFloat(mod.priceDelta || "0");
+            }, 0);
+          }
+          
+          itemTotals[id].quantity += qty;
+          itemTotals[id].sales += (basePrice + modifierUpcharge) * qty;
         }
       }
       
@@ -2723,9 +2761,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const qty = ci.quantity || 1;
         const price = parseFloat(ci.unitPrice || "0");
         
+        // Calculate modifier upcharges
+        let modifierUpcharge = 0;
+        if (ci.modifiers && Array.isArray(ci.modifiers)) {
+          modifierUpcharge = (ci.modifiers as any[]).reduce((mSum, mod) => {
+            return mSum + parseFloat(mod.priceDelta || "0");
+          }, 0);
+        }
+        
+        const totalPrice = (price + modifierUpcharge) * qty;
+        
         itemSales[ci.menuItemId].quantity += qty;
-        itemSales[ci.menuItemId].grossSales += price * qty;
-        itemSales[ci.menuItemId].netSales += price * qty; // Could subtract discounts if tracked per item
+        itemSales[ci.menuItemId].grossSales += totalPrice;
+        itemSales[ci.menuItemId].netSales += totalPrice;
       }
       
       // Calculate averages
@@ -2737,10 +2785,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .map(([id, data]) => ({ id, ...data }))
         .sort((a, b) => b.netSales - a.netSales);
       
+      // Calculate total modifier upcharges for the response
+      const totalModifiers = checkItems.reduce((sum, ci) => {
+        if (!ci.modifiers || !Array.isArray(ci.modifiers)) return sum;
+        const modSum = (ci.modifiers as any[]).reduce((mSum, mod) => {
+          return mSum + parseFloat(mod.priceDelta || "0");
+        }, 0);
+        return sum + modSum * (ci.quantity || 1);
+      }, 0);
+      
       res.json({
         items: result,
         totalQuantity: result.reduce((sum, i) => sum + i.quantity, 0),
         totalSales: result.reduce((sum, i) => sum + i.netSales, 0),
+        totalModifiers,
         itemCount: result.length,
       });
     } catch (error) {
@@ -2817,7 +2875,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         const qty = ci.quantity || 1;
         const price = parseFloat(ci.unitPrice || "0");
-        const sales = price * qty;
+        
+        // Calculate modifier upcharges
+        let modifierUpcharge = 0;
+        if (ci.modifiers && Array.isArray(ci.modifiers)) {
+          modifierUpcharge = (ci.modifiers as any[]).reduce((mSum, mod) => {
+            return mSum + parseFloat(mod.priceDelta || "0");
+          }, 0);
+        }
+        
+        const sales = (price + modifierUpcharge) * qty;
         
         categoryData[sluId].totalQuantity += qty;
         categoryData[sluId].totalSales += sales;
