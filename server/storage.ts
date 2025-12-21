@@ -251,6 +251,8 @@ export interface IStorage {
   // Payments
   createPayment(data: InsertCheckPayment): Promise<CheckPayment>;
   getPayments(checkId: string): Promise<CheckPayment[]>;
+  getAllPayments(): Promise<CheckPayment[]>;
+  getAllCheckItems(): Promise<CheckItem[]>;
 
   // Audit Logs
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
@@ -1247,6 +1249,14 @@ export class DatabaseStorage implements IStorage {
 
   async getPayments(checkId: string): Promise<CheckPayment[]> {
     return db.select().from(checkPayments).where(eq(checkPayments.checkId, checkId));
+  }
+
+  async getAllPayments(): Promise<CheckPayment[]> {
+    return db.select().from(checkPayments);
+  }
+
+  async getAllCheckItems(): Promise<CheckItem[]> {
+    return db.select().from(checkItems);
   }
 
   // Audit Logs

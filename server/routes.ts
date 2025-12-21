@@ -2557,15 +2557,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
-      const allPayments = await storage.getPayments();
+      const allPayments = await storage.getAllPayments();
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
       const allTenders = await storage.getTenders();
       const employees = await storage.getEmployees();
       
-      // Filter checks by date range and location
+      // Filter checks by date range and location - use openedAt for date filter
       let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2642,15 +2642,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
-      const allCheckItems = await storage.getCheckItems();
+      const allCheckItems = await storage.getAllCheckItems();
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
       const menuItems = await storage.getMenuItems();
       const slus = await storage.getSlus();
+      const menuItemSlus = await storage.getMenuItemSlus();
       
-      // Filter checks by date and location
+      // Filter checks by date and location - use openedAt for date filter
       let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2687,7 +2688,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Filter by specific item if provided
         if (itemId && ci.menuItemId !== itemId) continue;
         
-        const slu = slus.find(s => s.id === (menuItem as any).sluId);
+        // Find category via menu_item_slus join table
+        const menuItemSlu = menuItemSlus.find(mis => mis.menuItemId === ci.menuItemId);
+        const slu = menuItemSlu ? slus.find(s => s.id === menuItemSlu.sluId) : null;
         const itemName = menuItem.name;
         const categoryName = slu?.name || "Uncategorized";
         
@@ -2703,7 +2706,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         
         const qty = ci.quantity || 1;
-        const price = parseFloat(ci.price || "0");
+        const price = parseFloat(ci.unitPrice || "0");
         
         itemSales[ci.menuItemId].quantity += qty;
         itemSales[ci.menuItemId].grossSales += price * qty;
@@ -2738,15 +2741,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
-      const allCheckItems = await storage.getCheckItems();
+      const allCheckItems = await storage.getAllCheckItems();
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
       const menuItems = await storage.getMenuItems();
       const slus = await storage.getSlus();
+      const menuItemSlus = await storage.getMenuItemSlus();
       
-      // Filter checks by date and location
+      // Filter checks by date and location - use openedAt for date filter
       let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2778,7 +2782,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const menuItem = menuItems.find(m => m.id === ci.menuItemId);
         if (!menuItem) continue;
         
-        const slu = slus.find(s => s.id === (menuItem as any).sluId);
+        // Find category via menu_item_slus join table
+        const menuItemSlu = menuItemSlus.find(mis => mis.menuItemId === ci.menuItemId);
+        const slu = menuItemSlu ? slus.find(s => s.id === menuItemSlu.sluId) : null;
         const sluId = slu?.id || "uncategorized";
         const sluName = slu?.name || "Uncategorized";
         
@@ -2795,7 +2801,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         
         const qty = ci.quantity || 1;
-        const price = parseFloat(ci.price || "0");
+        const price = parseFloat(ci.unitPrice || "0");
         const sales = price * qty;
         
         categoryData[sluId].totalQuantity += qty;
