@@ -19,6 +19,21 @@ export default function PropertiesPage() {
     queryKey: ["/api/enterprises"],
   });
 
+  const timezoneOptions = [
+    { value: "America/New_York", label: "Eastern (New York)" },
+    { value: "America/Chicago", label: "Central (Chicago)" },
+    { value: "America/Denver", label: "Mountain (Denver)" },
+    { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
+    { value: "America/Anchorage", label: "Alaska" },
+    { value: "Pacific/Honolulu", label: "Hawaii" },
+  ];
+
+  const getTimezoneLabel = (tz: string | null | undefined) => {
+    if (!tz) return "Not Set";
+    const option = timezoneOptions.find(o => o.value === tz);
+    return option?.label || tz;
+  };
+
   const columns: Column<Property>[] = [
     { key: "name", header: "Name", sortable: true },
     { key: "code", header: "Code", sortable: true },
@@ -26,6 +41,11 @@ export default function PropertiesPage() {
       key: "enterpriseId",
       header: "Enterprise",
       render: (value) => enterprises.find((e) => e.id === value)?.name || "-",
+    },
+    { 
+      key: "timezone", 
+      header: "Timezone",
+      render: (value) => getTimezoneLabel(value as string),
     },
     { key: "address", header: "Address" },
   ];
@@ -38,6 +58,13 @@ export default function PropertiesPage() {
       label: "Enterprise",
       type: "select",
       options: enterprises.map((e) => ({ value: e.id, label: e.name })),
+      required: true,
+    },
+    {
+      name: "timezone",
+      label: "Timezone",
+      type: "select",
+      options: timezoneOptions,
       required: true,
     },
     { name: "address", label: "Address", type: "textarea", placeholder: "Enter address" },
