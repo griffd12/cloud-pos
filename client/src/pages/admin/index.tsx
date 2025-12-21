@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Switch, Route, useLocation, Link, Router } from "wouter";
+import { Switch, Route, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
@@ -238,35 +238,34 @@ export default function AdminLayout() {
           />
 
           <main className="flex-1 overflow-auto">
-            <Router base="/admin">
-              <Switch>
-                <Route path="/" component={AdminDashboard} />
-                <Route path="/enterprises" component={EnterprisesPage} />
-                <Route path="/properties" component={PropertiesPage} />
-                <Route path="/rvcs" component={RvcsPage} />
-                <Route path="/slus" component={SlusPage} />
-                <Route path="/menu-items" component={MenuItemsPage} />
-                <Route path="/modifiers" component={ModifiersPage} />
-                <Route path="/modifier-groups" component={ModifierGroupsPage} />
-                <Route path="/employees" component={EmployeesPage} />
-                <Route path="/roles" component={RolesPage} />
-                <Route path="/tax-groups" component={TaxGroupsPage} />
-                <Route path="/tenders" component={TendersPage} />
-                <Route path="/discounts" component={DiscountsPage} />
-                <Route path="/service-charges" component={ServiceChargesPage} />
-                <Route path="/print-classes" component={PrintClassesPage} />
-                <Route path="/order-devices" component={OrderDevicesPage} />
-                <Route path="/workstations" component={WorkstationsPage} />
-                <Route path="/printers" component={PrintersPage} />
-                <Route path="/kds-devices" component={KdsDevicesPage} />
-                <Route path="/pos-layouts" component={PosLayoutsPage} />
-                <Route path="/major-groups" component={MajorGroupsPage} />
-                <Route path="/family-groups" component={FamilyGroupsPage} />
-                <Route path="/utilities" component={UtilitiesPage} />
-                <Route path="/reports" component={ReportsPage} />
-                <Route path="/reports/:tab" component={ReportsPage} />
-              </Switch>
-            </Router>
+            <Switch>
+              <Route path="/admin" component={AdminDashboard} />
+              <Route path="/admin/enterprises" component={EnterprisesPage} />
+              <Route path="/admin/properties" component={PropertiesPage} />
+              <Route path="/admin/rvcs" component={RvcsPage} />
+              <Route path="/admin/slus" component={SlusPage} />
+              <Route path="/admin/menu-items" component={MenuItemsPage} />
+              <Route path="/admin/modifiers" component={ModifiersPage} />
+              <Route path="/admin/modifier-groups" component={ModifierGroupsPage} />
+              <Route path="/admin/employees" component={EmployeesPage} />
+              <Route path="/admin/roles" component={RolesPage} />
+              <Route path="/admin/tax-groups" component={TaxGroupsPage} />
+              <Route path="/admin/tenders" component={TendersPage} />
+              <Route path="/admin/discounts" component={DiscountsPage} />
+              <Route path="/admin/service-charges" component={ServiceChargesPage} />
+              <Route path="/admin/print-classes" component={PrintClassesPage} />
+              <Route path="/admin/order-devices" component={OrderDevicesPage} />
+              <Route path="/admin/workstations" component={WorkstationsPage} />
+              <Route path="/admin/printers" component={PrintersPage} />
+              <Route path="/admin/kds-devices" component={KdsDevicesPage} />
+              <Route path="/admin/pos-layouts" component={PosLayoutsPage} />
+              <Route path="/admin/major-groups" component={MajorGroupsPage} />
+              <Route path="/admin/family-groups" component={FamilyGroupsPage} />
+              <Route path="/admin/utilities" component={UtilitiesPage} />
+              <Route path="/admin/reports" component={ReportsPage} />
+              <Route path="/admin/reports/sales" component={ReportsPage} />
+              <Route path="/admin/reports/operations" component={ReportsPage} />
+            </Switch>
           </main>
         </div>
       </div>

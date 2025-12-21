@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -65,9 +65,14 @@ function formatHour(hour: number): string {
 }
 
 export default function ReportsPage() {
-  const params = useParams<{ tab?: string }>();
-  const [, setLocation] = useLocation();
-  const activeTab = params.tab || "dashboard";
+  const [location, setLocation] = useLocation();
+  
+  const getActiveTab = () => {
+    if (location.includes("/reports/sales")) return "sales";
+    if (location.includes("/reports/operations")) return "operations";
+    return "dashboard";
+  };
+  const activeTab = getActiveTab();
   
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("all");
