@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, Percent } from "lucide-react";
+import { DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, Percent, AlertTriangle, XCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { type Property, type Rvc } from "@shared/schema";
 
@@ -64,9 +65,21 @@ function formatHour(hour: number): string {
 }
 
 export default function ReportsPage() {
+  const params = useParams<{ tab?: string }>();
+  const [, setLocation] = useLocation();
+  const activeTab = params.tab || "dashboard";
+  
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("all");
   const [dateRange, setDateRange] = useState<string>("today");
+
+  const handleTabChange = (tab: string) => {
+    if (tab === "dashboard") {
+      setLocation("/admin/reports");
+    } else {
+      setLocation(`/admin/reports/${tab}`);
+    }
+  };
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -182,11 +195,19 @@ export default function ReportsPage() {
     ? rvcs.filter(r => r.propertyId === selectedPropertyId) 
     : rvcs;
 
+  const getPageTitle = () => {
+    switch (activeTab) {
+      case "sales": return "Sales Reports";
+      case "operations": return "Operations Reports";
+      default: return "Reports Dashboard";
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Reports Dashboard</h1>
+          <h1 className="text-2xl font-bold">{getPageTitle()}</h1>
           <p className="text-muted-foreground">Real-time sales and operations analytics</p>
         </div>
         
@@ -238,7 +259,15 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList>
+          <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="sales" data-testid="tab-sales">Sales Reports</TabsTrigger>
+          <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="dashboard" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
             <CardTitle className="text-sm font-medium">Net Sales</CardTitle>
@@ -380,9 +409,7 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="py-3">
             <CardTitle className="text-sm">Sales by Category</CardTitle>
@@ -440,6 +467,199 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="sales" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Gross Sales</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(salesSummary?.grossSales || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Discounts</CardTitle>
+                <Percent className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(salesSummary?.discountTotal || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Net Sales</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(salesSummary?.netSales || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Tax Collected</CardTitle>
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(salesSummary?.taxTotal || 0)}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Sales by Category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {categorySales.length > 0 ? (
+                    categorySales.map((cat, index) => (
+                      <div key={cat.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-2 h-8 rounded-sm" 
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <div>
+                            <p className="font-medium text-sm">{cat.name}</p>
+                            <p className="text-xs text-muted-foreground">{cat.quantity} items sold</p>
+                          </div>
+                        </div>
+                        <span className="font-medium">{formatCurrency(cat.sales)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground text-center py-4">No category data</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Tender Mix Detail</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {tenderMix.length > 0 ? (
+                    tenderMix.map((tender) => (
+                      <div key={tender.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <CreditCard className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium text-sm">{tender.name}</p>
+                            <p className="text-xs text-muted-foreground">{tender.count} transactions</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-medium">{formatCurrency(tender.amount)}</span>
+                          <p className="text-xs text-muted-foreground">{tender.percentage.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground text-center py-4">No tender data</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="operations" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Total Checks</CardTitle>
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{salesSummary?.checkCount || 0}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Open Checks</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{salesSummary?.openCheckCount || 0}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Total Guests</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{salesSummary?.guestCount || 0}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+                <CardTitle className="text-sm font-medium">Avg Per Guest</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(salesSummary?.avgPerGuest || 0)}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Top Selling Items</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {topItems.length > 0 ? (
+                    topItems.map((item, index) => (
+                      <div key={item.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="secondary" className="w-6 h-6 flex items-center justify-center p-0">
+                            {index + 1}
+                          </Badge>
+                          <div>
+                            <p className="font-medium text-sm">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">{item.quantity} sold</p>
+                          </div>
+                        </div>
+                        <span className="font-medium">{formatCurrency(item.sales)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground text-center py-4">No item data</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Hourly Activity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={hourlySales.filter(h => h.sales > 0 || h.checkCount > 0)}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="hour" tickFormatter={formatHour} className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <Tooltip labelFormatter={(hour) => formatHour(hour as number)} />
+                      <Bar dataKey="checkCount" fill="#10B981" radius={[4, 4, 0, 0]} name="Checks" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
