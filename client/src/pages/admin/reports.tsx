@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -76,44 +76,47 @@ export default function ReportsPage() {
     queryKey: ["/api/rvcs"],
   });
 
-  const getDateParams = () => {
+  const dateParams = useMemo(() => {
     const now = new Date();
-    let startDate = new Date(now);
-    startDate.setHours(0, 0, 0, 0);
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
     
     switch (dateRange) {
-      case "yesterday":
-        startDate.setDate(startDate.getDate() - 1);
-        const endYesterday = new Date(startDate);
-        endYesterday.setHours(23, 59, 59, 999);
-        return { startDate: startDate.toISOString(), endDate: endYesterday.toISOString() };
-      case "week":
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case "month":
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
+      case "yesterday": {
+        const start = new Date(todayStart);
+        start.setDate(start.getDate() - 1);
+        const end = new Date(start);
+        end.setHours(23, 59, 59, 999);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      case "week": {
+        const start = new Date(todayStart);
+        start.setDate(start.getDate() - 7);
+        return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
+      }
+      case "month": {
+        const start = new Date(todayStart);
+        start.setMonth(start.getMonth() - 1);
+        return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
+      }
+      default:
+        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString() };
     }
-    return { startDate: startDate.toISOString(), endDate: now.toISOString() };
-  };
+  }, [dateRange]);
 
-  const buildQueryParams = () => {
-    const params = new URLSearchParams();
-    const { startDate, endDate } = getDateParams();
-    params.set("startDate", startDate);
-    params.set("endDate", endDate);
-    if (selectedPropertyId !== "all") params.set("propertyId", selectedPropertyId);
-    if (selectedRvcId !== "all") params.set("rvcId", selectedRvcId);
-    return params.toString();
-  };
-
-  const { startDate, endDate } = getDateParams();
-  const filterParams = { startDate, endDate, propertyId: selectedPropertyId, rvcId: selectedRvcId };
+  const filterParams = useMemo(() => ({
+    startDate: dateParams.startDate,
+    endDate: dateParams.endDate,
+    propertyId: selectedPropertyId,
+    rvcId: selectedRvcId,
+  }), [dateParams, selectedPropertyId, selectedRvcId]);
   
   const buildUrl = (endpoint: string) => {
     const params = new URLSearchParams();
-    params.set("startDate", startDate);
-    params.set("endDate", endDate);
+    params.set("startDate", dateParams.startDate);
+    params.set("endDate", dateParams.endDate);
     if (selectedPropertyId !== "all") params.set("propertyId", selectedPropertyId);
     if (selectedRvcId !== "all") params.set("rvcId", selectedRvcId);
     return `${endpoint}?${params.toString()}`;
