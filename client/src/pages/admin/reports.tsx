@@ -306,7 +306,6 @@ export default function ReportsPage() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    enabled: activeTab === "tenders",
   });
 
   const { data: menuItemData } = useQuery<MenuItemSalesData>({
@@ -316,7 +315,6 @@ export default function ReportsPage() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    enabled: activeTab === "items",
   });
 
   const { data: categoryData } = useQuery<CategorySalesData>({
@@ -326,7 +324,6 @@ export default function ReportsPage() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    enabled: activeTab === "categories",
   });
 
   const avgItemPrice = menuItemData && menuItemData.totalQuantity > 0 
