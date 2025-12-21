@@ -42,6 +42,7 @@ import PosLayoutsPage from "./pos-layouts";
 import MajorGroupsPage from "./major-groups";
 import FamilyGroupsPage from "./family-groups";
 import UtilitiesPage from "./utilities";
+import ReportsPage from "./reports";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -261,6 +262,9 @@ export default function AdminLayout() {
               <Route path="/admin/major-groups" component={MajorGroupsPage} />
               <Route path="/admin/family-groups" component={FamilyGroupsPage} />
               <Route path="/admin/utilities" component={UtilitiesPage} />
+              <Route path="/admin/reports" component={ReportsPage} />
+              <Route path="/admin/reports/sales" component={ReportsPage} />
+              <Route path="/admin/reports/operations" component={ReportsPage} />
             </Switch>
           </main>
         </div>

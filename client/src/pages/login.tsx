@@ -90,8 +90,13 @@ export default function LoginPage() {
     }
   }, [rvcs, selectedRvcId]);
 
+  useEffect(() => {
+    if (currentEmployee && currentRvc) {
+      navigate("/pos");
+    }
+  }, [currentEmployee, currentRvc, navigate]);
+
   if (currentEmployee && currentRvc) {
-    navigate("/pos");
     return null;
   }
 

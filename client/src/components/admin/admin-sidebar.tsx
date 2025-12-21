@@ -85,6 +85,14 @@ const menuGroups = [
     ],
   },
   {
+    label: "Reports",
+    items: [
+      { title: "Dashboard", url: "/admin/reports", icon: LayoutGrid },
+      { title: "Sales Reports", url: "/admin/reports/sales", icon: DollarSign },
+      { title: "Operations Reports", url: "/admin/reports/operations", icon: Receipt },
+    ],
+  },
+  {
     label: "System",
     items: [
       { title: "Utilities", url: "/admin/utilities", icon: Wrench },

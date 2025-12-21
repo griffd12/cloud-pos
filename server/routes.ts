@@ -531,6 +531,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Reporting
       { code: "view_sales_reports", name: "View Sales Reports", domain: "reporting" },
       { code: "view_labor_reports", name: "View Labor Reports", domain: "reporting" },
+      { code: "view_operations_reports", name: "View Operations Reports", domain: "reporting" },
+      { code: "view_financial_reports", name: "View Financial Reports", domain: "reporting" },
+      { code: "view_dashboard", name: "View Dashboard", domain: "reporting" },
       { code: "export_reports", name: "Export Reports", domain: "reporting" },
       { code: "view_audit_logs", name: "View Audit Logs", domain: "reporting" },
       // Admin & Operations
@@ -610,7 +613,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const createdRoles = [];
     for (const roleData of rolesData) {
       const role = await storage.upsertRole({ name: roleData.name, code: roleData.code, active: true });
-      await storage.setRolePrivileges(role.id, [...new Set(roleData.privileges)]); // Remove duplicates
+      await storage.setRolePrivileges(role.id, Array.from(new Set(roleData.privileges))); // Remove duplicates
       createdRoles.push(role);
     }
 
@@ -2086,6 +2089,513 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error saving cells:", error);
       res.status(400).json({ message: "Invalid cells data" });
+    }
+  });
+
+  // ============================================================================
+  // REPORTING & ANALYTICS
+  // ============================================================================
+
+  // Sales Dashboard Summary
+  app.get("/api/reports/sales-summary", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      
+      // Filter checks by date and property/rvc
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        return true;
+      });
+      
+      // Apply property filter
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      
+      // Apply RVC filter
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const closedChecks = filteredChecks.filter(c => c.status === "closed");
+      const openChecks = filteredChecks.filter(c => c.status === "open");
+      
+      const grossSales = closedChecks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0"), 0);
+      const totalDiscounts = closedChecks.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0);
+      const netSales = grossSales - totalDiscounts;
+      const totalTax = closedChecks.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0);
+      const totalWithTax = closedChecks.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
+      const checkCount = closedChecks.length;
+      const guestCount = closedChecks.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      const avgCheck = checkCount > 0 ? netSales / checkCount : 0;
+      const avgPerGuest = guestCount > 0 ? netSales / guestCount : 0;
+      
+      res.json({
+        grossSales,
+        discountTotal: totalDiscounts,
+        netSales,
+        taxTotal: totalTax,
+        totalWithTax,
+        checkCount,
+        guestCount,
+        avgCheck,
+        avgPerGuest,
+        openCheckCount: openChecks.length,
+      });
+    } catch (error) {
+      console.error("Sales summary error:", error);
+      res.status(500).json({ message: "Failed to generate sales summary" });
+    }
+  });
+
+  // Sales by Category (SLU)
+  app.get("/api/reports/sales-by-category", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const allMenuItems = await storage.getMenuItems();
+      const allSlus = await storage.getSlus();
+      const menuItemSluLinks = await storage.getMenuItemSlus();
+      
+      // Filter checks
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      // Get all check items for filtered checks
+      const categoryTotals: Record<string, { name: string; quantity: number; sales: number }> = {};
+      
+      for (const check of filteredChecks) {
+        const items = await storage.getCheckItems(check.id);
+        for (const item of items) {
+          if (item.voided) continue;
+          
+          // Find SLU for this menu item
+          const sluLink = menuItemSluLinks.find((l: any) => l.menuItemId === item.menuItemId);
+          const slu = sluLink ? allSlus.find(s => s.id === sluLink.sluId) : null;
+          const categoryName = slu?.name || "Uncategorized";
+          const categoryId = slu?.id || "uncategorized";
+          
+          if (!categoryTotals[categoryId]) {
+            categoryTotals[categoryId] = { name: categoryName, quantity: 0, sales: 0 };
+          }
+          categoryTotals[categoryId].quantity += item.quantity || 1;
+          categoryTotals[categoryId].sales += parseFloat(item.unitPrice) * (item.quantity || 1);
+        }
+      }
+      
+      const result = Object.entries(categoryTotals)
+        .map(([id, data]) => ({ id, ...data }))
+        .sort((a, b) => b.sales - a.sales);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Sales by category error:", error);
+      res.status(500).json({ message: "Failed to generate category sales" });
+    }
+  });
+
+  // Top Selling Items
+  app.get("/api/reports/top-items", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate, limit: limitParam } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      const limit = parseInt(limitParam as string) || 10;
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const itemTotals: Record<string, { name: string; quantity: number; sales: number }> = {};
+      
+      for (const check of filteredChecks) {
+        const items = await storage.getCheckItems(check.id);
+        for (const item of items) {
+          if (item.voided) continue;
+          const id = item.menuItemId;
+          if (!itemTotals[id]) {
+            itemTotals[id] = { name: item.menuItemName, quantity: 0, sales: 0 };
+          }
+          itemTotals[id].quantity += item.quantity || 1;
+          itemTotals[id].sales += parseFloat(item.unitPrice) * (item.quantity || 1);
+        }
+      }
+      
+      const result = Object.entries(itemTotals)
+        .map(([id, data]) => ({ id, ...data }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, limit);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Top items error:", error);
+      res.status(500).json({ message: "Failed to generate top items" });
+    }
+  });
+
+  // Tender Mix Report
+  app.get("/api/reports/tender-mix", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const tenderTotals: Record<string, { name: string; count: number; amount: number }> = {};
+      
+      for (const check of filteredChecks) {
+        const payments = await storage.getPayments(check.id);
+        for (const payment of payments) {
+          const id = payment.tenderId;
+          if (!tenderTotals[id]) {
+            tenderTotals[id] = { name: payment.tenderName, count: 0, amount: 0 };
+          }
+          tenderTotals[id].count += 1;
+          tenderTotals[id].amount += parseFloat(payment.amount);
+        }
+      }
+      
+      const totalAmount = Object.values(tenderTotals).reduce((sum, t) => sum + t.amount, 0);
+      
+      const result = Object.entries(tenderTotals)
+        .map(([id, data]) => ({ 
+          id, 
+          ...data, 
+          percentage: totalAmount > 0 ? (data.amount / totalAmount) * 100 : 0 
+        }))
+        .sort((a, b) => b.amount - a.amount);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Tender mix error:", error);
+      res.status(500).json({ message: "Failed to generate tender mix" });
+    }
+  });
+
+  // Voids Report
+  app.get("/api/reports/voids", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const employees = await storage.getEmployees();
+      
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const voidsByEmployee: Record<string, { name: string; count: number; amount: number }> = {};
+      
+      for (const check of filteredChecks) {
+        const items = await storage.getCheckItems(check.id);
+        for (const item of items) {
+          if (!item.voided) continue;
+          const empId = item.voidedByEmployeeId || check.employeeId;
+          const emp = employees.find(e => e.id === empId);
+          const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+          
+          if (!voidsByEmployee[empId]) {
+            voidsByEmployee[empId] = { name: empName, count: 0, amount: 0 };
+          }
+          voidsByEmployee[empId].count += 1;
+          voidsByEmployee[empId].amount += parseFloat(item.unitPrice) * (item.quantity || 1);
+        }
+      }
+      
+      const result = Object.entries(voidsByEmployee)
+        .map(([id, data]) => ({ employeeId: id, ...data }))
+        .sort((a, b) => b.amount - a.amount);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Voids report error:", error);
+      res.status(500).json({ message: "Failed to generate voids report" });
+    }
+  });
+
+  // Discounts Report
+  app.get("/api/reports/discounts", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const employees = await storage.getEmployees();
+      
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const discountsByEmployee: Record<string, { name: string; count: number; amount: number }> = {};
+      let totalDiscountAmount = 0;
+      let totalDiscountCount = 0;
+      
+      for (const check of filteredChecks) {
+        const discountAmount = parseFloat(check.discountTotal || "0");
+        if (discountAmount > 0) {
+          totalDiscountAmount += discountAmount;
+          totalDiscountCount += 1;
+          
+          // By employee who rang the check
+          const empId = check.employeeId;
+          const emp = employees.find(e => e.id === empId);
+          const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+          if (!discountsByEmployee[empId]) {
+            discountsByEmployee[empId] = { name: empName, count: 0, amount: 0 };
+          }
+          discountsByEmployee[empId].count += 1;
+          discountsByEmployee[empId].amount += discountAmount;
+        }
+      }
+      
+      res.json({
+        totalAmount: totalDiscountAmount,
+        totalCount: totalDiscountCount,
+        byEmployee: Object.entries(discountsByEmployee)
+          .map(([id, data]) => ({ employeeId: id, ...data }))
+          .sort((a, b) => b.amount - a.amount),
+      });
+    } catch (error) {
+      console.error("Discounts report error:", error);
+      res.status(500).json({ message: "Failed to generate discounts report" });
+    }
+  });
+
+  // Open Checks Report
+  app.get("/api/reports/open-checks", async (req, res) => {
+    try {
+      const { propertyId, rvcId } = req.query;
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const employees = await storage.getEmployees();
+      
+      let openChecks = allChecks.filter(c => c.status === "open");
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        openChecks = openChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        openChecks = openChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const result = openChecks.map(check => {
+        const emp = employees.find(e => e.id === check.employeeId);
+        const rvc = allRvcs.find(r => r.id === check.rvcId);
+        const ageMinutes = check.openedAt 
+          ? Math.floor((Date.now() - new Date(check.openedAt).getTime()) / 60000)
+          : 0;
+        
+        return {
+          id: check.id,
+          checkNumber: check.checkNumber,
+          employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+          rvcName: rvc?.name || "Unknown",
+          tableNumber: check.tableNumber,
+          total: parseFloat(check.total || "0"),
+          ageMinutes,
+          openedAt: check.openedAt,
+        };
+      }).sort((a, b) => b.ageMinutes - a.ageMinutes);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Open checks error:", error);
+      res.status(500).json({ message: "Failed to generate open checks report" });
+    }
+  });
+
+  // Sales by Employee
+  app.get("/api/reports/sales-by-employee", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const employees = await storage.getEmployees();
+      
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < start || checkDate > end) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      const salesByEmployee: Record<string, { name: string; checkCount: number; netSales: number; avgCheck: number }> = {};
+      
+      for (const check of filteredChecks) {
+        const empId = check.employeeId;
+        const emp = employees.find(e => e.id === empId);
+        const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+        const netSales = parseFloat(check.subtotal || "0") - parseFloat(check.discountTotal || "0");
+        
+        if (!salesByEmployee[empId]) {
+          salesByEmployee[empId] = { name: empName, checkCount: 0, netSales: 0, avgCheck: 0 };
+        }
+        salesByEmployee[empId].checkCount += 1;
+        salesByEmployee[empId].netSales += netSales;
+      }
+      
+      // Calculate averages
+      Object.values(salesByEmployee).forEach(emp => {
+        emp.avgCheck = emp.checkCount > 0 ? emp.netSales / emp.checkCount : 0;
+      });
+      
+      const result = Object.entries(salesByEmployee)
+        .map(([id, data]) => ({ employeeId: id, ...data }))
+        .sort((a, b) => b.netSales - a.netSales);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Sales by employee error:", error);
+      res.status(500).json({ message: "Failed to generate sales by employee" });
+    }
+  });
+
+  // Hourly Sales
+  app.get("/api/reports/hourly-sales", async (req, res) => {
+    try {
+      const { propertyId, rvcId, date } = req.query;
+      const targetDate = date ? new Date(date as string) : new Date();
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      
+      let filteredChecks = allChecks.filter(c => {
+        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
+        if (!checkDate) return false;
+        if (checkDate < startOfDay || checkDate > endOfDay) return false;
+        if (c.status !== "closed") return false;
+        return true;
+      });
+      
+      if (propertyId) {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId) {
+        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      // Initialize hourly buckets (0-23)
+      const hourlyData: { hour: number; sales: number; checkCount: number }[] = [];
+      for (let h = 0; h < 24; h++) {
+        hourlyData.push({ hour: h, sales: 0, checkCount: 0 });
+      }
+      
+      for (const check of filteredChecks) {
+        const hour = new Date(check.closedAt!).getHours();
+        const netSales = parseFloat(check.subtotal || "0") - parseFloat(check.discountTotal || "0");
+        hourlyData[hour].sales += netSales;
+        hourlyData[hour].checkCount += 1;
+      }
+      
+      res.json(hourlyData);
+    } catch (error) {
+      console.error("Hourly sales error:", error);
+      res.status(500).json({ message: "Failed to generate hourly sales" });
     }
   });
 
