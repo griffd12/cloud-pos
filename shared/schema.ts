@@ -68,6 +68,7 @@ export const privileges = pgTable("privileges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   name: text("name").notNull(),
+  domain: text("domain"), // e.g., 'check_control', 'item_control', 'payment_control', 'manager_override', 'reporting'
   description: text("description"),
 });
 
@@ -93,8 +94,26 @@ export const employees = pgTable("employees", {
   active: boolean("active").default(true),
 });
 
-export const employeesRelations = relations(employees, ({ one }) => ({
+export const employeesRelations = relations(employees, ({ one, many }) => ({
   role: one(roles, { fields: [employees.roleId], references: [roles.id] }),
+  assignments: many(employeeAssignments),
+}));
+
+// Employee multi-property/RVC assignments
+export const employeeAssignments = pgTable("employee_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  isPrimary: boolean("is_primary").default(false),
+});
+
+export const employeeAssignmentsRelations = relations(employeeAssignments, ({ one }) => ({
+  employee: one(employees, { fields: [employeeAssignments.employeeId], references: [employees.id] }),
+  enterprise: one(enterprises, { fields: [employeeAssignments.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [employeeAssignments.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [employeeAssignments.rvcId], references: [rvcs.id] }),
 }));
 
 // ============================================================================
@@ -550,6 +569,7 @@ export const insertRvcSchema = createInsertSchema(rvcs).omit({ id: true });
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
 export const insertPrivilegeSchema = createInsertSchema(privileges).omit({ id: true });
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
+export const insertEmployeeAssignmentSchema = createInsertSchema(employeeAssignments).omit({ id: true });
 export const insertMajorGroupSchema = createInsertSchema(majorGroups).omit({ id: true });
 export const insertFamilyGroupSchema = createInsertSchema(familyGroups).omit({ id: true });
 export const insertSluSchema = createInsertSchema(slus).omit({ id: true });
@@ -593,8 +613,11 @@ export type InsertRvc = z.infer<typeof insertRvcSchema>;
 export type Role = typeof roles.$inferSelect;
 export type InsertRole = z.infer<typeof insertRoleSchema>;
 export type Privilege = typeof privileges.$inferSelect;
+export type InsertPrivilege = z.infer<typeof insertPrivilegeSchema>;
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type EmployeeAssignment = typeof employeeAssignments.$inferSelect;
+export type InsertEmployeeAssignment = z.infer<typeof insertEmployeeAssignmentSchema>;
 export type MajorGroup = typeof majorGroups.$inferSelect;
 export type InsertMajorGroup = z.infer<typeof insertMajorGroupSchema>;
 export type FamilyGroup = typeof familyGroups.$inferSelect;

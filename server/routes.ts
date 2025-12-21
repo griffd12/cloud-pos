@@ -476,6 +476,147 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  // Employee Assignments (multi-property)
+  app.get("/api/employees/:id/assignments", async (req, res) => {
+    const data = await storage.getEmployeeAssignments(req.params.id);
+    res.json(data);
+  });
+
+  app.put("/api/employees/:id/assignments", async (req, res) => {
+    const propertyIds = req.body.propertyIds || [];
+    const data = await storage.setEmployeeAssignments(req.params.id, propertyIds);
+    res.json(data);
+  });
+
+  // ============================================================================
+  // PRIVILEGES ROUTES
+  // ============================================================================
+
+  app.get("/api/privileges", async (req, res) => {
+    const data = await storage.getPrivileges();
+    res.json(data);
+  });
+
+  app.post("/api/privileges/seed", async (req, res) => {
+    // Seed all 28+ privileges from the POS roles matrix
+    const privilegeList = [
+      // Check Control
+      { code: "open_check", name: "Open Check", domain: "check_control" },
+      { code: "close_check", name: "Close Check", domain: "check_control" },
+      { code: "split_check", name: "Split Check", domain: "check_control" },
+      { code: "merge_checks", name: "Merge Checks", domain: "check_control" },
+      { code: "transfer_check", name: "Transfer Check", domain: "check_control" },
+      { code: "reopen_check", name: "Reopen Closed Check", domain: "check_control" },
+      { code: "change_order_type", name: "Change Order Type", domain: "check_control" },
+      { code: "assign_table", name: "Assign/Reassign Table", domain: "check_control" },
+      // Item Control
+      { code: "add_item", name: "Add Item", domain: "item_control" },
+      { code: "void_item", name: "Void Item", domain: "item_control" },
+      { code: "void_item_no_reason", name: "Void Item w/o Reason", domain: "item_control" },
+      { code: "modify_price", name: "Modify Price", domain: "item_control" },
+      { code: "add_modifier", name: "Add Modifier", domain: "item_control" },
+      { code: "remove_modifier", name: "Remove Modifier", domain: "item_control" },
+      // Payment Control
+      { code: "apply_tender", name: "Apply Tender", domain: "payment_control" },
+      { code: "split_payment", name: "Split Payment", domain: "payment_control" },
+      { code: "refund", name: "Refund", domain: "payment_control" },
+      { code: "force_tender", name: "Force Tender", domain: "payment_control" },
+      { code: "offline_payment", name: "Offline Payment", domain: "payment_control" },
+      // Manager Override
+      { code: "approve_void", name: "Approve Void", domain: "manager_override" },
+      { code: "approve_discount", name: "Approve Discount", domain: "manager_override" },
+      { code: "approve_refund", name: "Approve Refund", domain: "manager_override" },
+      { code: "approve_price_override", name: "Approve Price Override", domain: "manager_override" },
+      { code: "manager_approval", name: "Manager Approval", domain: "manager_override" },
+      // Reporting
+      { code: "view_sales_reports", name: "View Sales Reports", domain: "reporting" },
+      { code: "view_labor_reports", name: "View Labor Reports", domain: "reporting" },
+      { code: "export_reports", name: "Export Reports", domain: "reporting" },
+      { code: "view_audit_logs", name: "View Audit Logs", domain: "reporting" },
+      // Admin & Operations
+      { code: "admin_access", name: "Admin Access", domain: "admin" },
+      { code: "kds_access", name: "KDS Access", domain: "operations" },
+      // Legacy codes for backward compatibility
+      { code: "fast_transaction", name: "Fast Transaction Mode", domain: "operations" },
+      { code: "send_to_kitchen", name: "Send to Kitchen", domain: "operations" },
+      { code: "void_unsent", name: "Void Unsent Items", domain: "item_control" },
+      { code: "void_sent", name: "Void Sent Items", domain: "item_control" },
+      { code: "apply_discount", name: "Apply Discount", domain: "payment_control" },
+    ];
+    await storage.upsertPrivileges(privilegeList);
+    res.json({ message: "Privileges seeded successfully", count: privilegeList.length });
+  });
+
+  app.post("/api/roles/seed", async (req, res) => {
+    // Seed 6 roles from the POS roles matrix with privilege assignments
+    // Privilege codes matching the matrix
+    const allPrivileges = [
+      "open_check", "close_check", "split_check", "merge_checks", "transfer_check", "reopen_check", "change_order_type", "assign_table",
+      "add_item", "void_item", "void_item_no_reason", "modify_price", "add_modifier", "remove_modifier",
+      "apply_tender", "split_payment", "refund", "force_tender", "offline_payment",
+      "approve_void", "approve_discount", "approve_refund", "approve_price_override", "manager_approval",
+      "view_sales_reports", "view_labor_reports", "export_reports", "view_audit_logs",
+      "admin_access", "kds_access", "fast_transaction", "send_to_kitchen", "void_unsent", "void_sent", "apply_discount"
+    ];
+
+    // Staff privileges (most limited)
+    const staffPrivileges = [
+      "open_check", "close_check", "split_check", "merge_checks", "change_order_type", "assign_table",
+      "add_item", "add_modifier",
+      "apply_tender", "split_payment",
+      "fast_transaction", "send_to_kitchen", "kds_access"
+    ];
+
+    // Supervisor privileges (Staff + more)
+    const supervisorPrivileges = [
+      ...staffPrivileges,
+      "transfer_check", "reopen_check",
+      "void_item", "remove_modifier",
+      "approve_void", "approve_discount",
+      "view_sales_reports"
+    ];
+
+    // Ops Manager privileges (Supervisor + more)
+    const opsMgrPrivileges = [
+      ...supervisorPrivileges,
+      "void_item_no_reason", "modify_price",
+      "refund", "force_tender", "offline_payment",
+      "approve_refund", "approve_price_override", "manager_approval",
+      "view_labor_reports",
+      "void_unsent", "void_sent", "apply_discount"
+    ];
+
+    // Property Admin privileges (Ops Mgr + reports)
+    const propAdminPrivileges = [
+      ...opsMgrPrivileges,
+      "export_reports", "view_audit_logs"
+    ];
+
+    // Enterprise Admin privileges (all)
+    const entAdminPrivileges = [...allPrivileges, "admin_access"];
+
+    // System Admin privileges (all)
+    const sysAdminPrivileges = [...allPrivileges, "admin_access"];
+
+    const rolesData = [
+      { code: "SYS_ADMIN", name: "System Admin", privileges: sysAdminPrivileges },
+      { code: "ENT_ADMIN", name: "Enterprise Admin", privileges: entAdminPrivileges },
+      { code: "PROP_ADMIN", name: "Property Admin", privileges: propAdminPrivileges },
+      { code: "OPS_MGR", name: "Operations Manager", privileges: opsMgrPrivileges },
+      { code: "SUPERVISOR", name: "Supervisor", privileges: supervisorPrivileges },
+      { code: "STAFF", name: "Staff", privileges: staffPrivileges },
+    ];
+
+    const createdRoles = [];
+    for (const roleData of rolesData) {
+      const role = await storage.upsertRole({ name: roleData.name, code: roleData.code, active: true });
+      await storage.setRolePrivileges(role.id, [...new Set(roleData.privileges)]); // Remove duplicates
+      createdRoles.push(role);
+    }
+
+    res.json({ message: "Roles seeded successfully", roles: createdRoles });
+  });
+
   // ============================================================================
   // MAJOR GROUP ROUTES (for reporting)
   // ============================================================================

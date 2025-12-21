@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import {
-  enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees,
+  enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees, employeeAssignments,
   majorGroups, familyGroups,
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
@@ -13,7 +13,9 @@ import {
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
   type Role, type InsertRole,
+  type Privilege, type InsertPrivilege,
   type Employee, type InsertEmployee,
+  type EmployeeAssignment, type InsertEmployeeAssignment,
   type MajorGroup, type InsertMajorGroup,
   type FamilyGroup, type InsertFamilyGroup,
   type Slu, type InsertSlu,
@@ -73,6 +75,8 @@ export interface IStorage {
   updateRole(id: string, data: Partial<InsertRole>): Promise<Role | undefined>;
   deleteRole(id: string): Promise<boolean>;
   getRolePrivileges(roleId: string): Promise<string[]>;
+  setRolePrivileges(roleId: string, privilegeCodes: string[]): Promise<void>;
+  upsertRole(data: InsertRole): Promise<Role>;
 
   // Employees
   getEmployees(): Promise<Employee[]>;
@@ -81,6 +85,15 @@ export interface IStorage {
   createEmployee(data: InsertEmployee): Promise<Employee>;
   updateEmployee(id: string, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
   deleteEmployee(id: string): Promise<boolean>;
+
+  // Employee Assignments (multi-property)
+  getEmployeeAssignments(employeeId: string): Promise<EmployeeAssignment[]>;
+  setEmployeeAssignments(employeeId: string, propertyIds: string[]): Promise<EmployeeAssignment[]>;
+
+  // Privileges
+  getPrivileges(): Promise<Privilege[]>;
+  createPrivilege(data: InsertPrivilege): Promise<Privilege>;
+  upsertPrivileges(privileges: InsertPrivilege[]): Promise<void>;
 
   // Major Groups
   getMajorGroups(): Promise<MajorGroup[]>;
@@ -389,6 +402,31 @@ export class DatabaseStorage implements IStorage {
     return result.map(rp => rp.privilegeCode);
   }
 
+  async setRolePrivileges(roleId: string, privilegeCodes: string[]): Promise<void> {
+    // Delete existing privileges for this role
+    await db.delete(rolePrivileges).where(eq(rolePrivileges.roleId, roleId));
+    
+    // Insert new privileges
+    if (privilegeCodes.length === 0) return;
+    
+    const inserts = privilegeCodes.map(code => ({
+      roleId,
+      privilegeCode: code,
+    }));
+    await db.insert(rolePrivileges).values(inserts);
+  }
+
+  async upsertRole(data: InsertRole): Promise<Role> {
+    // Try to find existing role by code
+    const existing = await db.select().from(roles).where(eq(roles.code, data.code)).limit(1);
+    if (existing.length > 0) {
+      const [updated] = await db.update(roles).set(data).where(eq(roles.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(roles).values(data).returning();
+    return created;
+  }
+
   // Employees
   async getEmployees(): Promise<Employee[]> {
     return db.select().from(employees);
@@ -415,8 +453,52 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteEmployee(id: string): Promise<boolean> {
+    // Delete employee assignments first
+    await db.delete(employeeAssignments).where(eq(employeeAssignments.employeeId, id));
     const result = await db.delete(employees).where(eq(employees.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Employee Assignments (multi-property)
+  async getEmployeeAssignments(employeeId: string): Promise<EmployeeAssignment[]> {
+    return db.select().from(employeeAssignments).where(eq(employeeAssignments.employeeId, employeeId));
+  }
+
+  async setEmployeeAssignments(employeeId: string, propertyIds: string[]): Promise<EmployeeAssignment[]> {
+    // Delete existing assignments
+    await db.delete(employeeAssignments).where(eq(employeeAssignments.employeeId, employeeId));
+    
+    // Insert new assignments
+    if (propertyIds.length === 0) return [];
+    
+    const assignments = propertyIds.map((propertyId, index) => ({
+      employeeId,
+      propertyId,
+      isPrimary: index === 0, // First property is primary
+    }));
+    
+    return db.insert(employeeAssignments).values(assignments).returning();
+  }
+
+  // Privileges
+  async getPrivileges(): Promise<Privilege[]> {
+    return db.select().from(privileges);
+  }
+
+  async createPrivilege(data: InsertPrivilege): Promise<Privilege> {
+    const [result] = await db.insert(privileges).values(data).returning();
+    return result;
+  }
+
+  async upsertPrivileges(privilegeList: InsertPrivilege[]): Promise<void> {
+    for (const priv of privilegeList) {
+      await db.insert(privileges)
+        .values(priv)
+        .onConflictDoUpdate({
+          target: privileges.code,
+          set: { name: priv.name, domain: priv.domain, description: priv.description }
+        });
+    }
   }
 
   // Major Groups

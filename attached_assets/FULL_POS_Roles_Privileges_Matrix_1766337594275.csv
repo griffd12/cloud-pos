@@ -1,0 +1,28 @@
+Domain,Privilege,Sys Admin,Ent Admin,Prop Admin,Ops Mgr,Supervisor,Staff
+Check Control,Open Check,1,1,1,1,1,1
+Check Control,Close Check,1,1,1,1,1,1
+Check Control,Split Check,1,1,1,1,1,1
+Check Control,Merge Checks,1,1,1,1,1,1
+Check Control,Transfer Check,1,1,1,1,1,0
+Check Control,Reopen Closed Check,1,1,1,1,1,0
+Check Control,Change Order Type,1,1,1,1,1,1
+Check Control,Assign/Reassign Table,1,1,1,1,1,1
+Item Control,Add Item,1,1,1,1,1,1
+Item Control,Void Item,1,1,1,1,1,0
+Item Control,Void Item w/o Reason,1,1,1,1,0,0
+Item Control,Modify Price,1,1,1,1,0,0
+Item Control,Add Modifier,1,1,1,1,1,1
+Item Control,Remove Modifier,1,1,1,1,1,0
+Payment Control,Apply Tender,1,1,1,1,1,1
+Payment Control,Split Payment,1,1,1,1,1,1
+Payment Control,Refund,1,1,1,1,0,0
+Payment Control,Force Tender,1,1,1,1,0,0
+Payment Control,Offline Payment,1,1,1,1,0,0
+Manager Override,Approve Void,1,1,1,1,1,0
+Manager Override,Approve Discount,1,1,1,1,1,0
+Manager Override,Approve Refund,1,1,1,1,0,0
+Manager Override,Approve Price Override,1,1,1,1,0,0
+Reporting,View Sales Reports,1,1,1,1,1,0
+Reporting,View Labor Reports,1,1,1,1,0,0
+Reporting,Export Reports,1,1,1,0,0,0
+Reporting,View Audit Logs,1,1,1,0,0,0
