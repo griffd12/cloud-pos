@@ -2114,14 +2114,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      // Apply property filter
-      if (propertyId) {
+      // Apply property filter (skip if "all" or empty)
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
       
-      // Apply RVC filter
-      if (rvcId) {
+      // Apply RVC filter (skip if "all" or empty)
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2208,11 +2208,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2280,11 +2280,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2344,11 +2344,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2401,11 +2401,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2457,11 +2457,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2511,11 +2511,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       let openChecks = allChecks.filter(c => c.status === "open");
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         openChecks = openChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         openChecks = openChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2564,11 +2564,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
@@ -2940,7 +2940,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Determine the timezone to use for hour conversion
       let timezone = "America/Los_Angeles"; // Default to PST
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const property = allProperties.find(p => p.id === propertyId);
         if (property?.timezone) {
           timezone = property.timezone;
@@ -2955,11 +2955,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return true;
       });
       
-      if (propertyId) {
+      if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
         filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
       }
-      if (rvcId) {
+      if (rvcId && rvcId !== "all") {
         filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
       }
       
