@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, Monitor, Tv, Server, RefreshCw, CheckCircle, XCircle, Clock, Key, Copy, Cpu, Activity } from "lucide-react";
+import { Plus, Edit, Trash2, Monitor, Tv, Server, RefreshCw, CheckCircle, XCircle, Clock, Key, Copy, Cpu, Activity, Download } from "lucide-react";
 import type { Device, DeviceEnrollmentToken, Enterprise, Property } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -39,6 +39,8 @@ export default function DevicesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [tokenFormOpen, setTokenFormOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPropertyId, setImportPropertyId] = useState<string>("");
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [filterEnterpriseId, setFilterEnterpriseId] = useState<string>("");
   const [filterPropertyId, setFilterPropertyId] = useState<string>("");
@@ -161,6 +163,57 @@ export default function DevicesPage() {
     onError: (err: Error) => toast({ title: "Failed to delete token", description: err.message, variant: "destructive" }),
   });
 
+  // Import preview query
+  const { data: importPreview, isLoading: importPreviewLoading, refetch: refetchImportPreview } = useQuery<{
+    property: { id: string; name: string };
+    enterprise: { id: string; name: string } | null;
+    items: Array<{
+      sourceId: string;
+      sourceType: string;
+      name: string;
+      deviceType: string;
+      deviceId: string;
+      ipAddress?: string;
+      alreadyExists: boolean;
+    }>;
+    summary: {
+      total: number;
+      workstations: number;
+      kdsDevices: number;
+      alreadyExists: number;
+      toImport: number;
+    };
+  }>({
+    queryKey: ["/api/devices/import-preview", importPropertyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/devices/import-preview/${importPropertyId}`);
+      if (!res.ok) throw new Error("Failed to fetch import preview");
+      return res.json();
+    },
+    enabled: !!importPropertyId && importOpen,
+  });
+
+  const importDevices = useMutation({
+    mutationFn: async (propertyId: string) => {
+      const res = await apiRequest("POST", "/api/devices/import-from-property", { propertyId });
+      return res.json() as Promise<{ imported: number; skipped: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      toast({ title: `Imported ${data.imported} devices`, description: data.skipped > 0 ? `${data.skipped} already existed` : undefined });
+      setImportOpen(false);
+      setImportPropertyId("");
+    },
+    onError: (err: Error) => toast({ title: "Failed to import devices", description: err.message, variant: "destructive" }),
+  });
+
+  // Refetch import preview when property changes
+  useEffect(() => {
+    if (importPropertyId && importOpen) {
+      refetchImportPreview();
+    }
+  }, [importPropertyId, importOpen]);
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -274,17 +327,27 @@ export default function DevicesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
               <CardTitle className="text-lg">Registered Devices</CardTitle>
-              <Button
-                onClick={() => {
-                  resetForm();
-                  setSelectedDevice(null);
-                  setFormOpen(true);
-                }}
-                data-testid="button-add-device"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Device
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setImportOpen(true)}
+                  data-testid="button-import-devices"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Import from Property
+                </Button>
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setSelectedDevice(null);
+                    setFormOpen(true);
+                  }}
+                  data-testid="button-add-device"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Device
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2 flex-wrap">
@@ -877,6 +940,116 @@ export default function DevicesPage() {
             >
               <Edit className="w-4 h-4 mr-2" />
               Edit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Import Devices from Property</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Import existing workstations and KDS devices from your property configuration into the device registry.
+            </p>
+            <div className="space-y-2">
+              <Label>Select Property</Label>
+              <Select 
+                value={importPropertyId || "_select"} 
+                onValueChange={(v) => setImportPropertyId(v === "_select" ? "" : v)}
+              >
+                <SelectTrigger data-testid="select-import-property">
+                  <SelectValue placeholder="Select a property" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_select">Select a property</SelectItem>
+                  {properties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {importPropertyId && (
+              <div className="space-y-3">
+                {importPreviewLoading ? (
+                  <div className="text-center py-4 text-muted-foreground">Loading preview...</div>
+                ) : importPreview ? (
+                  <>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Enterprise: </span>
+                        <span className="font-medium">{importPreview.enterprise?.name || "Unknown"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Property: </span>
+                        <span className="font-medium">{importPreview.property.name}</span>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 rounded-md bg-muted">
+                        <div className="text-2xl font-bold">{importPreview.summary.workstations}</div>
+                        <div className="text-xs text-muted-foreground">Workstations</div>
+                      </div>
+                      <div className="p-2 rounded-md bg-muted">
+                        <div className="text-2xl font-bold">{importPreview.summary.kdsDevices}</div>
+                        <div className="text-xs text-muted-foreground">KDS Devices</div>
+                      </div>
+                      <div className="p-2 rounded-md bg-muted">
+                        <div className="text-2xl font-bold">{importPreview.summary.toImport}</div>
+                        <div className="text-xs text-muted-foreground">To Import</div>
+                      </div>
+                    </div>
+                    {importPreview.summary.alreadyExists > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        {importPreview.summary.alreadyExists} device(s) already exist and will be skipped.
+                      </p>
+                    )}
+                    {importPreview.items.length > 0 && (
+                      <ScrollArea className="h-40 border rounded-md p-2">
+                        <div className="space-y-1">
+                          {importPreview.items.map((item) => {
+                            const typeConfig = DEVICE_TYPES.find((t) => t.value === item.deviceType);
+                            const TypeIcon = typeConfig?.icon || Monitor;
+                            return (
+                              <div
+                                key={item.sourceId}
+                                className={`flex items-center gap-2 p-2 rounded-md ${item.alreadyExists ? "opacity-50" : ""}`}
+                              >
+                                <TypeIcon className="w-4 h-4" />
+                                <span className="flex-1 text-sm">{item.name}</span>
+                                <Badge variant={item.alreadyExists ? "secondary" : "outline"} className="text-xs">
+                                  {item.alreadyExists ? "Exists" : item.sourceType === "workstation" ? "Workstation" : "KDS"}
+                                </Badge>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    )}
+                    {importPreview.summary.total === 0 && (
+                      <p className="text-center py-4 text-muted-foreground">
+                        No workstations or KDS devices configured for this property.
+                      </p>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setImportOpen(false); setImportPropertyId(""); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => importDevices.mutate(importPropertyId)}
+              disabled={!importPropertyId || importDevices.isPending || !importPreview || importPreview.summary.toImport === 0}
+              data-testid="button-confirm-import"
+            >
+              {importDevices.isPending ? "Importing..." : `Import ${importPreview?.summary.toImport || 0} Device(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
