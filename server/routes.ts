@@ -2135,6 +2135,186 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // DEVICE REGISTRY (CAL - Client Application Loader)
+  // ============================================================================
+
+  // Get all devices with optional filters
+  app.get("/api/devices", async (req, res) => {
+    const { enterpriseId, propertyId, deviceType, status } = req.query;
+    const filters: any = {};
+    if (enterpriseId) filters.enterpriseId = enterpriseId as string;
+    if (propertyId) filters.propertyId = propertyId as string;
+    if (deviceType) filters.deviceType = deviceType as string;
+    if (status) filters.status = status as string;
+    const devices = await storage.getDevices(Object.keys(filters).length > 0 ? filters : undefined);
+    res.json(devices);
+  });
+
+  // Get single device
+  app.get("/api/devices/:id", async (req, res) => {
+    const device = await storage.getDevice(req.params.id);
+    if (!device) return res.status(404).json({ message: "Device not found" });
+    res.json(device);
+  });
+
+  // Create device (manual registration)
+  app.post("/api/devices", async (req, res) => {
+    try {
+      const device = await storage.createDevice(req.body);
+      res.status(201).json(device);
+    } catch (error: any) {
+      console.error("Error creating device:", error);
+      res.status(400).json({ message: error.message || "Failed to create device" });
+    }
+  });
+
+  // Update device
+  app.patch("/api/devices/:id", async (req, res) => {
+    try {
+      const device = await storage.updateDevice(req.params.id, req.body);
+      if (!device) return res.status(404).json({ message: "Device not found" });
+      res.json(device);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Failed to update device" });
+    }
+  });
+
+  // Delete device
+  app.delete("/api/devices/:id", async (req, res) => {
+    const deleted = await storage.deleteDevice(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Device not found" });
+    res.status(204).end();
+  });
+
+  // Device heartbeat (called by client agents)
+  app.post("/api/devices/:id/heartbeat", async (req, res) => {
+    try {
+      const device = await storage.getDevice(req.params.id);
+      if (!device) return res.status(404).json({ message: "Device not found" });
+      
+      const heartbeat = await storage.createDeviceHeartbeat({
+        deviceId: req.params.id,
+        appVersion: req.body.appVersion,
+        osVersion: req.body.osVersion,
+        ipAddress: req.body.ipAddress,
+        cpuUsage: req.body.cpuUsage,
+        memoryUsage: req.body.memoryUsage,
+        diskUsage: req.body.diskUsage,
+      });
+      res.json(heartbeat);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Failed to record heartbeat" });
+    }
+  });
+
+  // Get device heartbeat history
+  app.get("/api/devices/:id/heartbeats", async (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const heartbeats = await storage.getDeviceHeartbeats(req.params.id, limit);
+    res.json(heartbeats);
+  });
+
+  // ============================================================================
+  // DEVICE ENROLLMENT TOKENS
+  // ============================================================================
+
+  // Get all enrollment tokens
+  app.get("/api/device-enrollment-tokens", async (req, res) => {
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const tokens = await storage.getDeviceEnrollmentTokens(enterpriseId);
+    res.json(tokens);
+  });
+
+  // Create enrollment token
+  app.post("/api/device-enrollment-tokens", async (req, res) => {
+    try {
+      // Generate a secure random token
+      const token = Array.from({ length: 32 }, () => 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(Math.random() * 62)]
+      ).join("");
+      
+      const enrollmentToken = await storage.createDeviceEnrollmentToken({
+        ...req.body,
+        token,
+      });
+      res.status(201).json(enrollmentToken);
+    } catch (error: any) {
+      console.error("Error creating enrollment token:", error);
+      res.status(400).json({ message: error.message || "Failed to create token" });
+    }
+  });
+
+  // Delete enrollment token
+  app.delete("/api/device-enrollment-tokens/:id", async (req, res) => {
+    const deleted = await storage.deleteDeviceEnrollmentToken(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Token not found" });
+    res.status(204).end();
+  });
+
+  // Enroll a device using a token
+  app.post("/api/devices/enroll", async (req, res) => {
+    try {
+      const { token, deviceId, name, deviceType, osType, osVersion, hardwareModel, serialNumber, ipAddress, macAddress } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ message: "Enrollment token is required" });
+      }
+      
+      // Validate and use the token
+      const enrollmentToken = await storage.useDeviceEnrollmentToken(token);
+      if (!enrollmentToken) {
+        return res.status(401).json({ message: "Invalid, expired, or exhausted enrollment token" });
+      }
+      
+      // Check if token restricts device type
+      if (enrollmentToken.deviceType && enrollmentToken.deviceType !== deviceType) {
+        return res.status(400).json({ message: `This token only allows ${enrollmentToken.deviceType} devices` });
+      }
+      
+      // Check if device already exists
+      const existingDevice = await storage.getDeviceByDeviceId(deviceId);
+      if (existingDevice) {
+        // Update existing device
+        const updated = await storage.updateDevice(existingDevice.id, {
+          name,
+          deviceType,
+          osType,
+          osVersion,
+          hardwareModel,
+          serialNumber,
+          ipAddress,
+          macAddress,
+          status: "active",
+          enrolledAt: new Date(),
+        });
+        return res.json(updated);
+      }
+      
+      // Create new device
+      const device = await storage.createDevice({
+        enterpriseId: enrollmentToken.enterpriseId,
+        propertyId: enrollmentToken.propertyId || undefined,
+        deviceId,
+        name,
+        deviceType,
+        osType,
+        osVersion,
+        hardwareModel,
+        serialNumber,
+        ipAddress,
+        macAddress,
+        status: "active",
+        enrolledAt: new Date(),
+      });
+      
+      res.status(201).json(device);
+    } catch (error: any) {
+      console.error("Error enrolling device:", error);
+      res.status(400).json({ message: error.message || "Failed to enroll device" });
+    }
+  });
+
+  // ============================================================================
   // REPORTING & ANALYTICS
   // ============================================================================
 
