@@ -8,7 +8,7 @@ import {
   tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
-  posLayouts, posLayoutCells,
+  posLayouts, posLayoutCells, posLayoutRvcAssignments,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -44,6 +44,7 @@ import {
   type KdsTicket, type InsertKdsTicket,
   type PosLayout, type InsertPosLayout,
   type PosLayoutCell, type InsertPosLayoutCell,
+  type PosLayoutRvcAssignment, type InsertPosLayoutRvcAssignment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -286,6 +287,11 @@ export interface IStorage {
   // POS Layout Cells
   getPosLayoutCells(layoutId: string): Promise<PosLayoutCell[]>;
   setPosLayoutCells(layoutId: string, cells: InsertPosLayoutCell[]): Promise<PosLayoutCell[]>;
+
+  // POS Layout RVC Assignments
+  getPosLayoutRvcAssignments(layoutId: string): Promise<PosLayoutRvcAssignment[]>;
+  setPosLayoutRvcAssignments(layoutId: string, assignments: { propertyId: string; rvcId: string }[]): Promise<PosLayoutRvcAssignment[]>;
+  getPosLayoutsForRvc(rvcId: string): Promise<PosLayout[]>;
 
   // Admin Sales Reset (property-specific)
   getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
@@ -1466,6 +1472,39 @@ export class DatabaseStorage implements IStorage {
     if (cells.length === 0) return [];
     const result = await db.insert(posLayoutCells).values(cells.map(c => ({ ...c, layoutId }))).returning();
     return result;
+  }
+
+  // POS Layout RVC Assignments
+  async getPosLayoutRvcAssignments(layoutId: string): Promise<PosLayoutRvcAssignment[]> {
+    return db.select().from(posLayoutRvcAssignments).where(eq(posLayoutRvcAssignments.layoutId, layoutId));
+  }
+
+  async setPosLayoutRvcAssignments(layoutId: string, assignments: { propertyId: string; rvcId: string }[]): Promise<PosLayoutRvcAssignment[]> {
+    // Delete existing assignments for this layout
+    await db.delete(posLayoutRvcAssignments).where(eq(posLayoutRvcAssignments.layoutId, layoutId));
+    if (assignments.length === 0) return [];
+    // Insert new assignments
+    const result = await db.insert(posLayoutRvcAssignments).values(
+      assignments.map(a => ({ layoutId, propertyId: a.propertyId, rvcId: a.rvcId }))
+    ).returning();
+    return result;
+  }
+
+  async getPosLayoutsForRvc(rvcId: string): Promise<PosLayout[]> {
+    // Get layouts assigned to this RVC via the join table or legacy rvcId field
+    const assignedLayoutIds = await db.select({ layoutId: posLayoutRvcAssignments.layoutId })
+      .from(posLayoutRvcAssignments)
+      .where(eq(posLayoutRvcAssignments.rvcId, rvcId));
+    const layoutIds = assignedLayoutIds.map(a => a.layoutId);
+    
+    // Get layouts either assigned via join table OR via legacy rvcId field
+    if (layoutIds.length > 0) {
+      return db.select().from(posLayouts).where(
+        sql`${posLayouts.id} = ANY(${layoutIds}) OR ${posLayouts.rvcId} = ${rvcId}`
+      );
+    }
+    // Fallback to just legacy rvcId
+    return db.select().from(posLayouts).where(eq(posLayouts.rvcId, rvcId));
   }
 
   // Admin Sales Reset (property-specific)
