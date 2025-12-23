@@ -2092,6 +2092,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // POS Layout RVC Assignments - get assignments for a layout
+  app.get("/api/pos-layouts/:id/rvc-assignments", async (req, res) => {
+    const assignments = await storage.getPosLayoutRvcAssignments(req.params.id);
+    res.json(assignments);
+  });
+
+  // POS Layout RVC Assignments - set assignments for a layout
+  app.put("/api/pos-layouts/:id/rvc-assignments", async (req, res) => {
+    try {
+      const layoutId = req.params.id;
+      const assignmentSchema = z.array(z.object({
+        propertyId: z.string(),
+        rvcId: z.string(),
+      }));
+      const assignments = assignmentSchema.parse(req.body);
+      const result = await storage.setPosLayoutRvcAssignments(layoutId, assignments);
+      res.json(result);
+    } catch (error) {
+      console.error("Error saving RVC assignments:", error);
+      res.status(400).json({ message: "Invalid assignments data" });
+    }
+  });
+
+  // Get layouts for a specific RVC (includes both legacy and new assignments)
+  app.get("/api/pos-layouts/for-rvc/:rvcId", async (req, res) => {
+    const layouts = await storage.getPosLayoutsForRvc(req.params.rvcId);
+    res.json(layouts);
+  });
+
   // ============================================================================
   // REPORTING & ANALYTICS
   // ============================================================================
