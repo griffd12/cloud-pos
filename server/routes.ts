@@ -2314,6 +2314,152 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Import devices from property configuration (workstations & KDS devices)
+  app.get("/api/devices/import-preview/:propertyId", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      
+      // Get property info
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Get enterprise for the property
+      const enterprise = await storage.getEnterprise(property.enterpriseId);
+      
+      // Get configured workstations and KDS devices
+      const workstations = await storage.getWorkstations();
+      const kdsDevices = await storage.getKdsDevices();
+      
+      const propertyWorkstations = workstations.filter(w => w.propertyId === propertyId);
+      const propertyKdsDevices = kdsDevices.filter(k => k.propertyId === propertyId);
+      
+      // Check which ones already exist in device registry
+      const existingDevices = await storage.getDevices();
+      const existingDeviceIds = new Set(existingDevices.map(d => d.deviceId));
+      
+      const workstationItems = propertyWorkstations.map(ws => ({
+        sourceId: ws.id,
+        sourceType: "workstation",
+        name: ws.name,
+        deviceType: ws.deviceType === "kiosk" ? "kiosk" : "pos_workstation",
+        deviceId: `WS-${ws.id.slice(0, 8)}`,
+        alreadyExists: existingDeviceIds.has(`WS-${ws.id.slice(0, 8)}`),
+      }));
+      
+      const kdsItems = propertyKdsDevices.map(kds => ({
+        sourceId: kds.id,
+        sourceType: "kds_device",
+        name: kds.name,
+        deviceType: "kds_display",
+        deviceId: `KDS-${kds.id.slice(0, 8)}`,
+        ipAddress: kds.ipAddress,
+        alreadyExists: existingDeviceIds.has(`KDS-${kds.id.slice(0, 8)}`),
+      }));
+      
+      res.json({
+        property: { id: property.id, name: property.name },
+        enterprise: enterprise ? { id: enterprise.id, name: enterprise.name } : null,
+        items: [...workstationItems, ...kdsItems],
+        summary: {
+          total: workstationItems.length + kdsItems.length,
+          workstations: workstationItems.length,
+          kdsDevices: kdsItems.length,
+          alreadyExists: [...workstationItems, ...kdsItems].filter(i => i.alreadyExists).length,
+          toImport: [...workstationItems, ...kdsItems].filter(i => !i.alreadyExists).length,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error previewing device import:", error);
+      res.status(500).json({ message: error.message || "Failed to preview import" });
+    }
+  });
+
+  app.post("/api/devices/import-from-property", async (req, res) => {
+    try {
+      const { propertyId, items } = req.body;
+      
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      
+      // Get property info
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Get configured workstations and KDS devices
+      const workstations = await storage.getWorkstations();
+      const kdsDevices = await storage.getKdsDevices();
+      
+      const propertyWorkstations = workstations.filter(w => w.propertyId === propertyId);
+      const propertyKdsDevices = kdsDevices.filter(k => k.propertyId === propertyId);
+      
+      // Check existing
+      const existingDevices = await storage.getDevices();
+      const existingDeviceIds = new Set(existingDevices.map(d => d.deviceId));
+      
+      const imported: any[] = [];
+      const skipped: any[] = [];
+      
+      // Import workstations
+      for (const ws of propertyWorkstations) {
+        const deviceId = `WS-${ws.id.slice(0, 8)}`;
+        if (existingDeviceIds.has(deviceId)) {
+          skipped.push({ name: ws.name, reason: "Already exists" });
+          continue;
+        }
+        
+        const device = await storage.createDevice({
+          enterpriseId: property.enterpriseId,
+          propertyId: property.id,
+          deviceId,
+          name: ws.name,
+          deviceType: ws.deviceType === "kiosk" ? "kiosk" : "pos_workstation",
+          status: "pending",
+          sourceConfigType: "workstation",
+          sourceConfigId: ws.id,
+        });
+        imported.push(device);
+      }
+      
+      // Import KDS devices
+      for (const kds of propertyKdsDevices) {
+        const deviceId = `KDS-${kds.id.slice(0, 8)}`;
+        if (existingDeviceIds.has(deviceId)) {
+          skipped.push({ name: kds.name, reason: "Already exists" });
+          continue;
+        }
+        
+        const device = await storage.createDevice({
+          enterpriseId: property.enterpriseId,
+          propertyId: property.id,
+          deviceId,
+          name: kds.name,
+          deviceType: "kds_display",
+          ipAddress: kds.ipAddress || undefined,
+          status: "pending",
+          sourceConfigType: "kds_device",
+          sourceConfigId: kds.id,
+        });
+        imported.push(device);
+      }
+      
+      res.json({
+        success: true,
+        imported: imported.length,
+        skipped: skipped.length,
+        devices: imported,
+        skippedDetails: skipped,
+      });
+    } catch (error: any) {
+      console.error("Error importing devices:", error);
+      res.status(500).json({ message: error.message || "Failed to import devices" });
+    }
+  });
+
   // ============================================================================
   // REPORTING & ANALYTICS
   // ============================================================================

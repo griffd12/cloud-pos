@@ -815,6 +815,10 @@ export const devices = pgTable("devices", {
   autoUpdate: boolean("auto_update").default(true),
   environment: text("environment").default("production"), // production, staging, lab
   
+  // Source configuration tracking (for devices imported from workstations/kds config)
+  sourceConfigType: text("source_config_type"), // workstation, kds_device
+  sourceConfigId: varchar("source_config_id"),
+  
   active: boolean("active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
