@@ -288,45 +288,45 @@ export default function DevicesPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2 flex-wrap">
-                <Select value={filterEnterpriseId} onValueChange={setFilterEnterpriseId}>
+                <Select value={filterEnterpriseId || "_all"} onValueChange={(v) => setFilterEnterpriseId(v === "_all" ? "" : v)}>
                   <SelectTrigger className="w-48" data-testid="select-filter-enterprise">
                     <SelectValue placeholder="All Enterprises" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Enterprises</SelectItem>
+                    <SelectItem value="_all">All Enterprises</SelectItem>
                     {enterprises.map((e) => (
                       <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={filterPropertyId} onValueChange={setFilterPropertyId}>
+                <Select value={filterPropertyId || "_all"} onValueChange={(v) => setFilterPropertyId(v === "_all" ? "" : v)}>
                   <SelectTrigger className="w-48" data-testid="select-filter-property">
                     <SelectValue placeholder="All Properties" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Properties</SelectItem>
+                    <SelectItem value="_all">All Properties</SelectItem>
                     {filterProperties.map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={filterDeviceType} onValueChange={setFilterDeviceType}>
+                <Select value={filterDeviceType || "_all"} onValueChange={(v) => setFilterDeviceType(v === "_all" ? "" : v)}>
                   <SelectTrigger className="w-48" data-testid="select-filter-type">
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="_all">All Types</SelectItem>
                     {DEVICE_TYPES.map((t) => (
                       <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <Select value={filterStatus || "_all"} onValueChange={(v) => setFilterStatus(v === "_all" ? "" : v)}>
                   <SelectTrigger className="w-40" data-testid="select-filter-status">
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Status</SelectItem>
+                    <SelectItem value="_all">All Status</SelectItem>
                     {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
                       <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
                     ))}
@@ -575,12 +575,12 @@ export default function DevicesPage() {
             </div>
             <div className="space-y-2">
               <Label>Property (Optional)</Label>
-              <Select value={formData.propertyId} onValueChange={(v) => setFormData({ ...formData, propertyId: v })} disabled={!formData.enterpriseId}>
+              <Select value={formData.propertyId || "_none"} onValueChange={(v) => setFormData({ ...formData, propertyId: v === "_none" ? "" : v })} disabled={!formData.enterpriseId}>
                 <SelectTrigger data-testid="select-device-property">
                   <SelectValue placeholder="Select property" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No specific property</SelectItem>
+                  <SelectItem value="_none">No specific property</SelectItem>
                   {filteredProperties.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -685,12 +685,12 @@ export default function DevicesPage() {
             </div>
             <div className="space-y-2">
               <Label>Property (Optional)</Label>
-              <Select value={tokenFormData.propertyId} onValueChange={(v) => setTokenFormData({ ...tokenFormData, propertyId: v })} disabled={!tokenFormData.enterpriseId}>
+              <Select value={tokenFormData.propertyId || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, propertyId: v === "_any" ? "" : v })} disabled={!tokenFormData.enterpriseId}>
                 <SelectTrigger data-testid="select-token-property">
                   <SelectValue placeholder="Any property" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any property</SelectItem>
+                  <SelectItem value="_any">Any property</SelectItem>
                   {tokenFilteredProperties.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -699,12 +699,12 @@ export default function DevicesPage() {
             </div>
             <div className="space-y-2">
               <Label>Device Type (Optional)</Label>
-              <Select value={tokenFormData.deviceType} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v })}>
+              <Select value={tokenFormData.deviceType || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v === "_any" ? "" : v })}>
                 <SelectTrigger data-testid="select-token-device-type">
                   <SelectValue placeholder="Any type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any type</SelectItem>
+                  <SelectItem value="_any">Any type</SelectItem>
                   {DEVICE_TYPES.map((t) => (
                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                   ))}
