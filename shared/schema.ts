@@ -728,17 +728,37 @@ export const posLayoutCellsRelations = relations(posLayoutCells, ({ one }) => ({
   menuItem: one(menuItems, { fields: [posLayoutCells.menuItemId], references: [menuItems.id] }),
 }));
 
+// Join table for assigning layouts to multiple RVCs across properties
+export const posLayoutRvcAssignments = pgTable("pos_layout_rvc_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  layoutId: varchar("layout_id").notNull().references(() => posLayouts.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").notNull().references(() => rvcs.id),
+}, (table) => [
+  // Unique constraint: a layout can only be assigned to an RVC once
+]);
+
 export const posLayoutsRelations = relations(posLayouts, ({ many }) => ({
   cells: many(posLayoutCells),
+  rvcAssignments: many(posLayoutRvcAssignments),
+}));
+
+export const posLayoutRvcAssignmentsRelations = relations(posLayoutRvcAssignments, ({ one }) => ({
+  layout: one(posLayouts, { fields: [posLayoutRvcAssignments.layoutId], references: [posLayouts.id] }),
+  property: one(properties, { fields: [posLayoutRvcAssignments.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [posLayoutRvcAssignments.rvcId], references: [rvcs.id] }),
 }));
 
 export const insertPosLayoutSchema = createInsertSchema(posLayouts).omit({ id: true });
 export const insertPosLayoutCellSchema = createInsertSchema(posLayoutCells).omit({ id: true });
+export const insertPosLayoutRvcAssignmentSchema = createInsertSchema(posLayoutRvcAssignments).omit({ id: true });
 
 export type PosLayout = typeof posLayouts.$inferSelect;
 export type InsertPosLayout = z.infer<typeof insertPosLayoutSchema>;
 export type PosLayoutCell = typeof posLayoutCells.$inferSelect;
 export type InsertPosLayoutCell = z.infer<typeof insertPosLayoutCellSchema>;
+export type PosLayoutRvcAssignment = typeof posLayoutRvcAssignments.$inferSelect;
+export type InsertPosLayoutRvcAssignment = z.infer<typeof insertPosLayoutRvcAssignmentSchema>;
 
 // Void reason codes
 export const VOID_REASONS = [
