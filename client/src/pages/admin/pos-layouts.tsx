@@ -13,7 +13,10 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical } from "lucide-react";
-import type { PosLayout, PosLayoutCell, MenuItem, Rvc } from "@shared/schema";
+import type { PosLayout, PosLayoutCell, MenuItem, Rvc, Property, PosLayoutRvcAssignment } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, ChevronRight, Building2 } from "lucide-react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDndMonitor, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -106,7 +109,9 @@ export default function PosLayoutsPage() {
   const [gridRows, setGridRows] = useState(4);
   const [gridCols, setGridCols] = useState(6);
   const [isDefault, setIsDefault] = useState(false);
-  const [selectedRvcId, setSelectedRvcId] = useState<string>("");
+  const [selectedRvcId, setSelectedRvcId] = useState<string>(""); // Legacy single RVC
+  const [selectedRvcAssignments, setSelectedRvcAssignments] = useState<{ propertyId: string; rvcId: string }[]>([]);
+  const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
   const [cells, setCells] = useState<CellData[]>([]);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -175,6 +180,10 @@ export default function PosLayoutsPage() {
     queryKey: ["/api/rvcs"],
   });
 
+  const { data: properties = [] } = useQuery<Property[]>({
+    queryKey: ["/api/properties"],
+  });
+
   const { data: menuItems = [] } = useQuery<MenuItem[]>({
     queryKey: ["/api/menu-items"],
   });
@@ -238,6 +247,16 @@ export default function PosLayoutsPage() {
     },
   });
 
+  const saveRvcAssignmentsMutation = useMutation({
+    mutationFn: async ({ layoutId, assignments }: { layoutId: string; assignments: { propertyId: string; rvcId: string }[] }) => {
+      const response = await apiRequest("PUT", `/api/pos-layouts/${layoutId}/rvc-assignments`, assignments);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts"] });
+    },
+  });
+
   const resetForm = () => {
     setLayoutName("");
     setLayoutMode("slu_tabs");
@@ -245,10 +264,12 @@ export default function PosLayoutsPage() {
     setGridCols(6);
     setIsDefault(false);
     setSelectedRvcId("");
+    setSelectedRvcAssignments([]);
+    setExpandedProperties(new Set());
     setEditingLayout(null);
   };
 
-  const handleOpenForm = (layout?: PosLayout) => {
+  const handleOpenForm = async (layout?: PosLayout) => {
     if (layout) {
       setEditingLayout(layout);
       setLayoutName(layout.name);
@@ -257,13 +278,24 @@ export default function PosLayoutsPage() {
       setGridCols(layout.gridCols || 6);
       setIsDefault(layout.isDefault || false);
       setSelectedRvcId(layout.rvcId || "");
+      // Load existing RVC assignments
+      try {
+        const res = await fetch(`/api/pos-layouts/${layout.id}/rvc-assignments`, { credentials: "include" });
+        const assignments: PosLayoutRvcAssignment[] = await res.json();
+        setSelectedRvcAssignments(assignments.map(a => ({ propertyId: a.propertyId, rvcId: a.rvcId })));
+        // Expand all properties that have assignments
+        const propIds = new Set(assignments.map(a => a.propertyId));
+        setExpandedProperties(propIds);
+      } catch {
+        setSelectedRvcAssignments([]);
+      }
     } else {
       resetForm();
     }
     setFormOpen(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const data = {
       name: layoutName,
       mode: layoutMode,
@@ -275,10 +307,91 @@ export default function PosLayoutsPage() {
     };
 
     if (editingLayout) {
-      updateMutation.mutate({ id: editingLayout.id, data });
+      updateMutation.mutate({ id: editingLayout.id, data }, {
+        onSuccess: () => {
+          // Save RVC assignments after updating layout
+          saveRvcAssignmentsMutation.mutate({ 
+            layoutId: editingLayout.id, 
+            assignments: selectedRvcAssignments 
+          });
+        }
+      });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(data, {
+        onSuccess: (newLayout: PosLayout) => {
+          // Save RVC assignments for the newly created layout
+          if (selectedRvcAssignments.length > 0) {
+            saveRvcAssignmentsMutation.mutate({ 
+              layoutId: newLayout.id, 
+              assignments: selectedRvcAssignments 
+            });
+          }
+        }
+      });
     }
+  };
+
+  // Toggle property expansion in the multi-select
+  const togglePropertyExpand = (propertyId: string) => {
+    setExpandedProperties(prev => {
+      const next = new Set(prev);
+      if (next.has(propertyId)) {
+        next.delete(propertyId);
+      } else {
+        next.add(propertyId);
+      }
+      return next;
+    });
+  };
+
+  // Toggle RVC selection
+  const toggleRvcSelection = (propertyId: string, rvcId: string) => {
+    setSelectedRvcAssignments(prev => {
+      const exists = prev.some(a => a.rvcId === rvcId);
+      if (exists) {
+        return prev.filter(a => a.rvcId !== rvcId);
+      } else {
+        return [...prev, { propertyId, rvcId }];
+      }
+    });
+  };
+
+  // Toggle all RVCs for a property
+  const toggleAllPropertyRvcs = (propertyId: string) => {
+    const propertyRvcs = rvcs.filter(r => r.propertyId === propertyId);
+    const allSelected = propertyRvcs.every(r => 
+      selectedRvcAssignments.some(a => a.rvcId === r.id)
+    );
+    
+    if (allSelected) {
+      // Deselect all RVCs for this property
+      setSelectedRvcAssignments(prev => 
+        prev.filter(a => a.propertyId !== propertyId)
+      );
+    } else {
+      // Select all RVCs for this property
+      const newAssignments = propertyRvcs
+        .filter(r => !selectedRvcAssignments.some(a => a.rvcId === r.id))
+        .map(r => ({ propertyId, rvcId: r.id }));
+      setSelectedRvcAssignments(prev => [...prev, ...newAssignments]);
+    }
+  };
+
+  // Check if all RVCs of a property are selected
+  const isPropertyFullySelected = (propertyId: string) => {
+    const propertyRvcs = rvcs.filter(r => r.propertyId === propertyId);
+    return propertyRvcs.length > 0 && propertyRvcs.every(r => 
+      selectedRvcAssignments.some(a => a.rvcId === r.id)
+    );
+  };
+
+  // Check if some (but not all) RVCs of a property are selected
+  const isPropertyPartiallySelected = (propertyId: string) => {
+    const propertyRvcs = rvcs.filter(r => r.propertyId === propertyId);
+    const selectedCount = propertyRvcs.filter(r => 
+      selectedRvcAssignments.some(a => a.rvcId === r.id)
+    ).length;
+    return selectedCount > 0 && selectedCount < propertyRvcs.length;
   };
 
   const handleOpenDesigner = async (layout: PosLayout) => {
@@ -431,17 +544,80 @@ export default function PosLayoutsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Revenue Center</Label>
-              <Select value={selectedRvcId} onValueChange={setSelectedRvcId}>
-                <SelectTrigger data-testid="select-rvc">
-                  <SelectValue placeholder="Select RVC (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {rvcs.map(rvc => (
-                    <SelectItem key={rvc.id} value={rvc.id}>{rvc.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Revenue Centers</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select which locations will use this layout
+              </p>
+              <div className="border rounded-md max-h-48 overflow-y-auto">
+                {properties.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No properties available</div>
+                ) : (
+                  properties.map(property => {
+                    const propertyRvcs = rvcs.filter(r => r.propertyId === property.id);
+                    const isExpanded = expandedProperties.has(property.id);
+                    const isFullySelected = isPropertyFullySelected(property.id);
+                    const isPartiallySelected = isPropertyPartiallySelected(property.id);
+                    
+                    return (
+                      <div key={property.id} className="border-b last:border-b-0">
+                        <div className="flex items-center gap-2 p-2 hover-elevate">
+                          <button
+                            type="button"
+                            className="p-0.5"
+                            onClick={() => togglePropertyExpand(property.id)}
+                            data-testid={`button-expand-property-${property.id}`}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+                          <Checkbox
+                            checked={isFullySelected}
+                            ref={(el) => {
+                              if (el) {
+                                (el as any).indeterminate = isPartiallySelected;
+                              }
+                            }}
+                            onCheckedChange={() => toggleAllPropertyRvcs(property.id)}
+                            data-testid={`checkbox-property-${property.id}`}
+                          />
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{property.name}</span>
+                          {(isFullySelected || isPartiallySelected) && (
+                            <Badge variant="secondary" className="ml-auto text-xs">
+                              {selectedRvcAssignments.filter(a => a.propertyId === property.id).length}/{propertyRvcs.length}
+                            </Badge>
+                          )}
+                        </div>
+                        {isExpanded && propertyRvcs.length > 0 && (
+                          <div className="pl-10 pb-2 space-y-1">
+                            {propertyRvcs.map(rvc => (
+                              <label
+                                key={rvc.id}
+                                className="flex items-center gap-2 px-2 py-1 cursor-pointer hover-elevate rounded"
+                              >
+                                <Checkbox
+                                  checked={selectedRvcAssignments.some(a => a.rvcId === rvc.id)}
+                                  onCheckedChange={() => toggleRvcSelection(property.id, rvc.id)}
+                                  data-testid={`checkbox-rvc-${rvc.id}`}
+                                />
+                                <span className="text-sm">{rvc.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              {selectedRvcAssignments.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {selectedRvcAssignments.length} revenue center{selectedRvcAssignments.length !== 1 ? 's' : ''} selected
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Layout Mode</Label>
