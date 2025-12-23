@@ -734,9 +734,8 @@ export const posLayoutRvcAssignments = pgTable("pos_layout_rvc_assignments", {
   layoutId: varchar("layout_id").notNull().references(() => posLayouts.id, { onDelete: "cascade" }),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
   rvcId: varchar("rvc_id").notNull().references(() => rvcs.id),
-}, (table) => [
-  // Unique constraint: a layout can only be assigned to an RVC once
-]);
+  isDefault: boolean("is_default").default(false),
+});
 
 export const posLayoutsRelations = relations(posLayouts, ({ many }) => ({
   cells: many(posLayoutCells),

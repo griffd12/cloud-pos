@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical } from "lucide-react";
+import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical, Star } from "lucide-react";
 import type { PosLayout, PosLayoutCell, MenuItem, Rvc, Property, PosLayoutRvcAssignment } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -110,7 +110,7 @@ export default function PosLayoutsPage() {
   const [gridCols, setGridCols] = useState(6);
   const [isDefault, setIsDefault] = useState(false);
   const [selectedRvcId, setSelectedRvcId] = useState<string>(""); // Legacy single RVC
-  const [selectedRvcAssignments, setSelectedRvcAssignments] = useState<{ propertyId: string; rvcId: string }[]>([]);
+  const [selectedRvcAssignments, setSelectedRvcAssignments] = useState<{ propertyId: string; rvcId: string; isDefault: boolean }[]>([]);
   const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
   const [cells, setCells] = useState<CellData[]>([]);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
@@ -282,7 +282,11 @@ export default function PosLayoutsPage() {
       try {
         const res = await fetch(`/api/pos-layouts/${layout.id}/rvc-assignments`, { credentials: "include" });
         const assignments: PosLayoutRvcAssignment[] = await res.json();
-        setSelectedRvcAssignments(assignments.map(a => ({ propertyId: a.propertyId, rvcId: a.rvcId })));
+        setSelectedRvcAssignments(assignments.map(a => ({ 
+          propertyId: a.propertyId, 
+          rvcId: a.rvcId, 
+          isDefault: a.isDefault ?? false 
+        })));
         // Expand all properties that have assignments
         const propIds = new Set(assignments.map(a => a.propertyId));
         setExpandedProperties(propIds);
@@ -351,9 +355,16 @@ export default function PosLayoutsPage() {
       if (exists) {
         return prev.filter(a => a.rvcId !== rvcId);
       } else {
-        return [...prev, { propertyId, rvcId }];
+        return [...prev, { propertyId, rvcId, isDefault: false }];
       }
     });
+  };
+
+  // Toggle default status for an RVC
+  const toggleRvcDefault = (rvcId: string) => {
+    setSelectedRvcAssignments(prev => 
+      prev.map(a => a.rvcId === rvcId ? { ...a, isDefault: !a.isDefault } : a)
+    );
   };
 
   // Toggle all RVCs for a property
@@ -372,7 +383,7 @@ export default function PosLayoutsPage() {
       // Select all RVCs for this property
       const newAssignments = propertyRvcs
         .filter(r => !selectedRvcAssignments.some(a => a.rvcId === r.id))
-        .map(r => ({ propertyId, rvcId: r.id }));
+        .map(r => ({ propertyId, rvcId: r.id, isDefault: false }));
       setSelectedRvcAssignments(prev => [...prev, ...newAssignments]);
     }
   };
@@ -593,19 +604,41 @@ export default function PosLayoutsPage() {
                         </div>
                         {isExpanded && propertyRvcs.length > 0 && (
                           <div className="pl-10 pb-2 space-y-1">
-                            {propertyRvcs.map(rvc => (
-                              <label
-                                key={rvc.id}
-                                className="flex items-center gap-2 px-2 py-1 cursor-pointer hover-elevate rounded"
-                              >
-                                <Checkbox
-                                  checked={selectedRvcAssignments.some(a => a.rvcId === rvc.id)}
-                                  onCheckedChange={() => toggleRvcSelection(property.id, rvc.id)}
-                                  data-testid={`checkbox-rvc-${rvc.id}`}
-                                />
-                                <span className="text-sm">{rvc.name}</span>
-                              </label>
-                            ))}
+                            {propertyRvcs.map(rvc => {
+                              const assignment = selectedRvcAssignments.find(a => a.rvcId === rvc.id);
+                              const isAssigned = !!assignment;
+                              const isDefaultForRvc = assignment?.isDefault ?? false;
+                              
+                              return (
+                                <div
+                                  key={rvc.id}
+                                  className="flex items-center gap-2 px-2 py-1 hover-elevate rounded"
+                                >
+                                  <Checkbox
+                                    checked={isAssigned}
+                                    onCheckedChange={() => toggleRvcSelection(property.id, rvc.id)}
+                                    data-testid={`checkbox-rvc-${rvc.id}`}
+                                  />
+                                  <span className="text-sm flex-1">{rvc.name}</span>
+                                  {isAssigned && (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className={`h-6 w-6 ${isDefaultForRvc ? "text-yellow-500" : "text-muted-foreground"}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleRvcDefault(rvc.id);
+                                      }}
+                                      title={isDefaultForRvc ? "Remove as default for this location" : "Set as default for this location"}
+                                      data-testid={`button-default-rvc-${rvc.id}`}
+                                    >
+                                      <Star className={`w-4 h-4 ${isDefaultForRvc ? "fill-current" : ""}`} />
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

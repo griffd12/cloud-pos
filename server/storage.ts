@@ -290,8 +290,10 @@ export interface IStorage {
 
   // POS Layout RVC Assignments
   getPosLayoutRvcAssignments(layoutId: string): Promise<PosLayoutRvcAssignment[]>;
-  setPosLayoutRvcAssignments(layoutId: string, assignments: { propertyId: string; rvcId: string }[]): Promise<PosLayoutRvcAssignment[]>;
+  setPosLayoutRvcAssignments(layoutId: string, assignments: { propertyId: string; rvcId: string; isDefault?: boolean }[]): Promise<PosLayoutRvcAssignment[]>;
   getPosLayoutsForRvc(rvcId: string): Promise<PosLayout[]>;
+  getDefaultLayoutForRvc(rvcId: string): Promise<PosLayout | undefined>;
+  setDefaultLayoutForRvc(rvcId: string, layoutId: string): Promise<void>;
 
   // Admin Sales Reset (property-specific)
   getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
@@ -1479,13 +1481,23 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(posLayoutRvcAssignments).where(eq(posLayoutRvcAssignments.layoutId, layoutId));
   }
 
-  async setPosLayoutRvcAssignments(layoutId: string, assignments: { propertyId: string; rvcId: string }[]): Promise<PosLayoutRvcAssignment[]> {
+  async setPosLayoutRvcAssignments(layoutId: string, assignments: { propertyId: string; rvcId: string; isDefault?: boolean }[]): Promise<PosLayoutRvcAssignment[]> {
     // Delete existing assignments for this layout
     await db.delete(posLayoutRvcAssignments).where(eq(posLayoutRvcAssignments.layoutId, layoutId));
     if (assignments.length === 0) return [];
+    
+    // For any RVC where isDefault=true, clear existing defaults first
+    for (const a of assignments) {
+      if (a.isDefault) {
+        await db.update(posLayoutRvcAssignments)
+          .set({ isDefault: false })
+          .where(eq(posLayoutRvcAssignments.rvcId, a.rvcId));
+      }
+    }
+    
     // Insert new assignments
     const result = await db.insert(posLayoutRvcAssignments).values(
-      assignments.map(a => ({ layoutId, propertyId: a.propertyId, rvcId: a.rvcId }))
+      assignments.map(a => ({ layoutId, propertyId: a.propertyId, rvcId: a.rvcId, isDefault: a.isDefault ?? false }))
     ).returning();
     return result;
   }
@@ -1505,6 +1517,40 @@ export class DatabaseStorage implements IStorage {
     }
     // Fallback to just legacy rvcId
     return db.select().from(posLayouts).where(eq(posLayouts.rvcId, rvcId));
+  }
+
+  async getDefaultLayoutForRvc(rvcId: string): Promise<PosLayout | undefined> {
+    // First check for a layout marked as default for this RVC in the assignments table
+    const [assignment] = await db.select()
+      .from(posLayoutRvcAssignments)
+      .where(and(
+        eq(posLayoutRvcAssignments.rvcId, rvcId),
+        eq(posLayoutRvcAssignments.isDefault, true)
+      ));
+    
+    if (assignment) {
+      const [layout] = await db.select().from(posLayouts).where(eq(posLayouts.id, assignment.layoutId));
+      return layout;
+    }
+    
+    // Fallback: check for global default layout
+    const [globalDefault] = await db.select().from(posLayouts).where(eq(posLayouts.isDefault, true));
+    return globalDefault;
+  }
+
+  async setDefaultLayoutForRvc(rvcId: string, layoutId: string): Promise<void> {
+    // Clear any existing default for this RVC
+    await db.update(posLayoutRvcAssignments)
+      .set({ isDefault: false })
+      .where(eq(posLayoutRvcAssignments.rvcId, rvcId));
+    
+    // Set the new default
+    await db.update(posLayoutRvcAssignments)
+      .set({ isDefault: true })
+      .where(and(
+        eq(posLayoutRvcAssignments.rvcId, rvcId),
+        eq(posLayoutRvcAssignments.layoutId, layoutId)
+      ));
   }
 
   // Admin Sales Reset (property-specific)

@@ -2036,7 +2036,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/pos-layouts/default/:rvcId", async (req, res) => {
-    const layout = await storage.getDefaultPosLayout(req.params.rvcId);
+    // First try per-RVC default, then fall back to global default
+    const layout = await storage.getDefaultLayoutForRvc(req.params.rvcId);
     res.json(layout || null);
   });
 
@@ -2105,6 +2106,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const assignmentSchema = z.array(z.object({
         propertyId: z.string(),
         rvcId: z.string(),
+        isDefault: z.boolean().optional(),
       }));
       const assignments = assignmentSchema.parse(req.body);
       const result = await storage.setPosLayoutRvcAssignments(layoutId, assignments);
@@ -2112,6 +2114,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error saving RVC assignments:", error);
       res.status(400).json({ message: "Invalid assignments data" });
+    }
+  });
+
+  // Set a layout as default for a specific RVC
+  app.put("/api/pos-layouts/:layoutId/set-default/:rvcId", async (req, res) => {
+    try {
+      await storage.setDefaultLayoutForRvc(req.params.rvcId, req.params.layoutId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error setting default layout:", error);
+      res.status(400).json({ message: "Failed to set default layout" });
     }
   });
 
