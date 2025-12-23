@@ -93,6 +93,7 @@ const menuGroups = [
   {
     label: "System",
     items: [
+      { title: "Device Management", url: "/admin/devices", icon: Monitor },
       { title: "Utilities", url: "/admin/utilities", icon: Wrench },
     ],
   },

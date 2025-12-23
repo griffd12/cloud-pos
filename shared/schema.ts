@@ -831,6 +831,7 @@ export const deviceEnrollmentTokens = pgTable("device_enrollment_tokens", {
   enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
   propertyId: varchar("property_id").references(() => properties.id),
   
+  name: text("name").notNull(), // Descriptive name for the token
   token: text("token").notNull().unique(),
   deviceType: text("device_type"), // Optional: restrict to specific device type
   maxUses: integer("max_uses").default(1),
