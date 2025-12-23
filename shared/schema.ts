@@ -769,3 +769,113 @@ export const VOID_REASONS = [
   { code: "manager_comp", label: "Manager Comp" },
   { code: "other", label: "Other" },
 ] as const;
+
+// ============================================================================
+// DEVICE REGISTRY (CAL - Client Application Loader)
+// ============================================================================
+
+export const DEVICE_TYPES = ["pos_workstation", "kds_display", "kds_controller", "service_host", "back_office"] as const;
+export type DeviceType = typeof DEVICE_TYPES[number];
+
+export const DEVICE_OS_TYPES = ["windows", "android", "linux", "ios"] as const;
+export type DeviceOsType = typeof DEVICE_OS_TYPES[number];
+
+export const DEVICE_STATUSES = ["pending", "active", "offline", "maintenance", "decommissioned"] as const;
+export type DeviceStatus = typeof DEVICE_STATUSES[number];
+
+export const devices = pgTable("devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  
+  // Device identity
+  deviceId: text("device_id").notNull().unique(), // UUID from device itself
+  name: text("name").notNull(),
+  deviceType: text("device_type").notNull(), // pos_workstation, kds_display, kds_controller, service_host, back_office
+  
+  // Hardware/OS info
+  osType: text("os_type"), // windows, android, linux
+  osVersion: text("os_version"),
+  hardwareModel: text("hardware_model"),
+  serialNumber: text("serial_number"),
+  ipAddress: text("ip_address"),
+  macAddress: text("mac_address"),
+  
+  // Software version tracking
+  currentAppVersion: text("current_app_version"),
+  targetAppVersion: text("target_app_version"), // Version it should be updated to
+  
+  // Status tracking
+  status: text("status").notNull().default("pending"), // pending, active, offline, maintenance, decommissioned
+  lastSeenAt: timestamp("last_seen_at"),
+  enrolledAt: timestamp("enrolled_at"),
+  
+  // Configuration
+  autoUpdate: boolean("auto_update").default(true),
+  environment: text("environment").default("production"), // production, staging, lab
+  
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const devicesRelations = relations(devices, ({ one }) => ({
+  enterprise: one(enterprises, { fields: [devices.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [devices.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [devices.rvcId], references: [rvcs.id] }),
+}));
+
+// Enrollment tokens for registering new devices
+export const deviceEnrollmentTokens = pgTable("device_enrollment_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  
+  token: text("token").notNull().unique(),
+  deviceType: text("device_type"), // Optional: restrict to specific device type
+  maxUses: integer("max_uses").default(1),
+  usedCount: integer("used_count").default(0),
+  expiresAt: timestamp("expires_at"),
+  
+  createdById: varchar("created_by_id").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  active: boolean("active").default(true),
+});
+
+export const deviceEnrollmentTokensRelations = relations(deviceEnrollmentTokens, ({ one }) => ({
+  enterprise: one(enterprises, { fields: [deviceEnrollmentTokens.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [deviceEnrollmentTokens.propertyId], references: [properties.id] }),
+  createdBy: one(employees, { fields: [deviceEnrollmentTokens.createdById], references: [employees.id] }),
+}));
+
+// Device activity/heartbeat log
+export const deviceHeartbeats = pgTable("device_heartbeats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deviceId: varchar("device_id").notNull().references(() => devices.id),
+  
+  appVersion: text("app_version"),
+  osVersion: text("os_version"),
+  ipAddress: text("ip_address"),
+  cpuUsage: decimal("cpu_usage", { precision: 5, scale: 2 }),
+  memoryUsage: decimal("memory_usage", { precision: 5, scale: 2 }),
+  diskUsage: decimal("disk_usage", { precision: 5, scale: 2 }),
+  
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const deviceHeartbeatsRelations = relations(deviceHeartbeats, ({ one }) => ({
+  device: one(devices, { fields: [deviceHeartbeats.deviceId], references: [devices.id] }),
+}));
+
+// Insert schemas
+export const insertDeviceSchema = createInsertSchema(devices).omit({ id: true, createdAt: true });
+export const insertDeviceEnrollmentTokenSchema = createInsertSchema(deviceEnrollmentTokens).omit({ id: true, createdAt: true, usedCount: true });
+export const insertDeviceHeartbeatSchema = createInsertSchema(deviceHeartbeats).omit({ id: true, timestamp: true });
+
+// Types
+export type Device = typeof devices.$inferSelect;
+export type InsertDevice = z.infer<typeof insertDeviceSchema>;
+export type DeviceEnrollmentToken = typeof deviceEnrollmentTokens.$inferSelect;
+export type InsertDeviceEnrollmentToken = z.infer<typeof insertDeviceEnrollmentTokenSchema>;
+export type DeviceHeartbeat = typeof deviceHeartbeats.$inferSelect;
+export type InsertDeviceHeartbeat = z.infer<typeof insertDeviceHeartbeatSchema>;

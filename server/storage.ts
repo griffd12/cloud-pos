@@ -9,6 +9,7 @@ import {
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
+  devices, deviceEnrollmentTokens, deviceHeartbeats,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -45,6 +46,9 @@ import {
   type PosLayout, type InsertPosLayout,
   type PosLayoutCell, type InsertPosLayoutCell,
   type PosLayoutRvcAssignment, type InsertPosLayoutRvcAssignment,
+  type Device, type InsertDevice,
+  type DeviceEnrollmentToken, type InsertDeviceEnrollmentToken,
+  type DeviceHeartbeat, type InsertDeviceHeartbeat,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -298,6 +302,27 @@ export interface IStorage {
   // Admin Sales Reset (property-specific)
   getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
   clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }>;
+
+  // Device Registry (CAL)
+  getDevices(filters?: { enterpriseId?: string; propertyId?: string; deviceType?: string; status?: string }): Promise<Device[]>;
+  getDevice(id: string): Promise<Device | undefined>;
+  getDeviceByDeviceId(deviceId: string): Promise<Device | undefined>;
+  createDevice(data: InsertDevice): Promise<Device>;
+  updateDevice(id: string, data: Partial<InsertDevice>): Promise<Device | undefined>;
+  deleteDevice(id: string): Promise<boolean>;
+  updateDeviceLastSeen(id: string): Promise<void>;
+
+  // Device Enrollment Tokens
+  getDeviceEnrollmentTokens(enterpriseId?: string): Promise<DeviceEnrollmentToken[]>;
+  getDeviceEnrollmentToken(id: string): Promise<DeviceEnrollmentToken | undefined>;
+  getDeviceEnrollmentTokenByToken(token: string): Promise<DeviceEnrollmentToken | undefined>;
+  createDeviceEnrollmentToken(data: InsertDeviceEnrollmentToken): Promise<DeviceEnrollmentToken>;
+  deleteDeviceEnrollmentToken(id: string): Promise<boolean>;
+  useDeviceEnrollmentToken(token: string): Promise<DeviceEnrollmentToken | undefined>;
+
+  // Device Heartbeats
+  createDeviceHeartbeat(data: InsertDeviceHeartbeat): Promise<DeviceHeartbeat>;
+  getDeviceHeartbeats(deviceId: string, limit?: number): Promise<DeviceHeartbeat[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1698,6 +1723,128 @@ export class DatabaseStorage implements IStorage {
         }
       };
     });
+  }
+
+  // ============================================================================
+  // DEVICE REGISTRY (CAL)
+  // ============================================================================
+
+  async getDevices(filters?: { enterpriseId?: string; propertyId?: string; deviceType?: string; status?: string }): Promise<Device[]> {
+    let query = db.select().from(devices);
+    const conditions = [];
+    
+    if (filters?.enterpriseId) {
+      conditions.push(eq(devices.enterpriseId, filters.enterpriseId));
+    }
+    if (filters?.propertyId) {
+      conditions.push(eq(devices.propertyId, filters.propertyId));
+    }
+    if (filters?.deviceType) {
+      conditions.push(eq(devices.deviceType, filters.deviceType));
+    }
+    if (filters?.status) {
+      conditions.push(eq(devices.status, filters.status));
+    }
+    
+    if (conditions.length > 0) {
+      return db.select().from(devices).where(and(...conditions)).orderBy(desc(devices.createdAt));
+    }
+    return db.select().from(devices).orderBy(desc(devices.createdAt));
+  }
+
+  async getDevice(id: string): Promise<Device | undefined> {
+    const [result] = await db.select().from(devices).where(eq(devices.id, id));
+    return result;
+  }
+
+  async getDeviceByDeviceId(deviceId: string): Promise<Device | undefined> {
+    const [result] = await db.select().from(devices).where(eq(devices.deviceId, deviceId));
+    return result;
+  }
+
+  async createDevice(data: InsertDevice): Promise<Device> {
+    const [result] = await db.insert(devices).values(data).returning();
+    return result;
+  }
+
+  async updateDevice(id: string, data: Partial<InsertDevice>): Promise<Device | undefined> {
+    const [result] = await db.update(devices).set(data).where(eq(devices.id, id)).returning();
+    return result;
+  }
+
+  async deleteDevice(id: string): Promise<boolean> {
+    const result = await db.delete(devices).where(eq(devices.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async updateDeviceLastSeen(id: string): Promise<void> {
+    await db.update(devices).set({ lastSeenAt: new Date(), status: "active" }).where(eq(devices.id, id));
+  }
+
+  // Device Enrollment Tokens
+  async getDeviceEnrollmentTokens(enterpriseId?: string): Promise<DeviceEnrollmentToken[]> {
+    if (enterpriseId) {
+      return db.select().from(deviceEnrollmentTokens).where(eq(deviceEnrollmentTokens.enterpriseId, enterpriseId)).orderBy(desc(deviceEnrollmentTokens.createdAt));
+    }
+    return db.select().from(deviceEnrollmentTokens).orderBy(desc(deviceEnrollmentTokens.createdAt));
+  }
+
+  async getDeviceEnrollmentToken(id: string): Promise<DeviceEnrollmentToken | undefined> {
+    const [result] = await db.select().from(deviceEnrollmentTokens).where(eq(deviceEnrollmentTokens.id, id));
+    return result;
+  }
+
+  async getDeviceEnrollmentTokenByToken(token: string): Promise<DeviceEnrollmentToken | undefined> {
+    const [result] = await db.select().from(deviceEnrollmentTokens).where(eq(deviceEnrollmentTokens.token, token));
+    return result;
+  }
+
+  async createDeviceEnrollmentToken(data: InsertDeviceEnrollmentToken): Promise<DeviceEnrollmentToken> {
+    const [result] = await db.insert(deviceEnrollmentTokens).values(data).returning();
+    return result;
+  }
+
+  async deleteDeviceEnrollmentToken(id: string): Promise<boolean> {
+    const result = await db.delete(deviceEnrollmentTokens).where(eq(deviceEnrollmentTokens.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async useDeviceEnrollmentToken(token: string): Promise<DeviceEnrollmentToken | undefined> {
+    const existing = await this.getDeviceEnrollmentTokenByToken(token);
+    if (!existing || !existing.active) return undefined;
+    
+    // Check if expired
+    if (existing.expiresAt && new Date(existing.expiresAt) < new Date()) {
+      return undefined;
+    }
+    
+    // Check if max uses reached
+    if (existing.maxUses && (existing.usedCount || 0) >= existing.maxUses) {
+      return undefined;
+    }
+    
+    // Increment used count
+    const [result] = await db.update(deviceEnrollmentTokens)
+      .set({ usedCount: (existing.usedCount || 0) + 1 })
+      .where(eq(deviceEnrollmentTokens.id, existing.id))
+      .returning();
+    
+    return result;
+  }
+
+  // Device Heartbeats
+  async createDeviceHeartbeat(data: InsertDeviceHeartbeat): Promise<DeviceHeartbeat> {
+    const [result] = await db.insert(deviceHeartbeats).values(data).returning();
+    // Also update the device's last seen timestamp
+    await this.updateDeviceLastSeen(data.deviceId);
+    return result;
+  }
+
+  async getDeviceHeartbeats(deviceId: string, limit: number = 100): Promise<DeviceHeartbeat[]> {
+    return db.select().from(deviceHeartbeats)
+      .where(eq(deviceHeartbeats.deviceId, deviceId))
+      .orderBy(desc(deviceHeartbeats.timestamp))
+      .limit(limit);
   }
 }
 
