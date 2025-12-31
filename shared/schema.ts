@@ -278,6 +278,19 @@ export const kdsDevices = pgTable("kds_devices", {
   allowRecall: boolean("allow_recall").default(true),
   allowVoidDisplay: boolean("allow_void_display").default(true),
   expoMode: boolean("expo_mode").default(false),
+  // New Order Notification Settings
+  newOrderSound: boolean("new_order_sound").default(true),
+  newOrderBlinkSeconds: integer("new_order_blink_seconds").default(5), // 0 = no blink
+  // Color Alert Settings (time-based color changes)
+  colorAlert1Enabled: boolean("color_alert_1_enabled").default(true),
+  colorAlert1Seconds: integer("color_alert_1_seconds").default(60), // After 1 minute
+  colorAlert1Color: text("color_alert_1_color").default("yellow"),
+  colorAlert2Enabled: boolean("color_alert_2_enabled").default(true),
+  colorAlert2Seconds: integer("color_alert_2_seconds").default(180), // After 3 minutes
+  colorAlert2Color: text("color_alert_2_color").default("orange"),
+  colorAlert3Enabled: boolean("color_alert_3_enabled").default(true),
+  colorAlert3Seconds: integer("color_alert_3_seconds").default(300), // After 5 minutes
+  colorAlert3Color: text("color_alert_3_color").default("red"),
   // Network
   wsChannel: text("ws_channel"),
   ipAddress: text("ip_address"),
@@ -547,6 +560,8 @@ export const kdsTickets = pgTable("kds_tickets", {
   status: text("status").notNull().default("draft"), // 'draft', 'active', 'bumped'
   isPreview: boolean("is_preview").default(false), // True for Dynamic Order Mode preview tickets
   paid: boolean("paid").default(false), // True when the check has been fully paid
+  isRecalled: boolean("is_recalled").default(false), // True when ticket has been recalled from bumped
+  recalledAt: timestamp("recalled_at"),
   bumpedAt: timestamp("bumped_at"),
   bumpedByEmployeeId: varchar("bumped_by_employee_id").references(() => employees.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -557,6 +572,8 @@ export const kdsTicketItems = pgTable("kds_ticket_items", {
   kdsTicketId: varchar("kds_ticket_id").notNull().references(() => kdsTickets.id),
   checkItemId: varchar("check_item_id").notNull().references(() => checkItems.id),
   status: text("status").notNull().default("pending"), // 'pending', 'bumped', 'voided'
+  isReady: boolean("is_ready").default(false), // True when item is marked as ready/made
+  readyAt: timestamp("ready_at"),
 });
 
 // ============================================================================
