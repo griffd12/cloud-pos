@@ -21,6 +21,10 @@ export const properties = pgTable("properties", {
   code: text("code").notNull(),
   address: text("address"),
   timezone: text("timezone").default("America/New_York"),
+  // Business Date Settings - when does the business day roll over to the next day
+  businessDateRolloverTime: text("business_date_rollover_time").default("04:00"), // HH:MM format, e.g., "04:00" for 4 AM
+  businessDateMode: text("business_date_mode").default("auto"), // 'auto' or 'manual'
+  currentBusinessDate: text("current_business_date"), // YYYY-MM-DD format, used for manual mode
   active: boolean("active").default(true),
 });
 
@@ -475,6 +479,7 @@ export const checks = pgTable("checks", {
   tableNumber: text("table_number"),
   openedAt: timestamp("opened_at").defaultNow(),
   closedAt: timestamp("closed_at"),
+  businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this check belongs to
 });
 
 // Rounds (each send creates a round)
@@ -503,6 +508,7 @@ export const checkItems = pgTable("check_items", {
   voidedByEmployeeId: varchar("voided_by_employee_id").references(() => employees.id),
   voidedAt: timestamp("voided_at"),
   addedAt: timestamp("added_at").defaultNow(),
+  businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this item was rung in
 });
 
 // Check Payments
@@ -514,6 +520,7 @@ export const checkPayments = pgTable("check_payments", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paidAt: timestamp("paid_at").defaultNow(),
   employeeId: varchar("employee_id").references(() => employees.id),
+  businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this payment was applied
 });
 
 // Check Discounts Applied
