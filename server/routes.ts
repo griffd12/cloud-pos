@@ -143,6 +143,53 @@ async function sendItemsToKds(
   return { round, updatedItems };
 }
 
+// Helper to recalculate and persist check totals from items
+// Called after every item add/update/void to maintain data integrity
+async function recalculateCheckTotals(checkId: string): Promise<void> {
+  const check = await storage.getCheck(checkId);
+  if (!check) return;
+
+  const items = await storage.getCheckItems(checkId);
+  const taxGroups = await storage.getTaxGroups();
+  const menuItems = await storage.getMenuItems();
+
+  const activeItems = items.filter((i) => !i.voided);
+  let displaySubtotal = 0;
+  let addOnTax = 0;
+
+  for (const item of activeItems) {
+    const unitPrice = parseFloat(item.unitPrice || "0");
+    const modifierTotal = (item.modifiers || []).reduce(
+      (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
+      0
+    );
+    const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
+
+    const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
+    const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
+    const taxRate = parseFloat(taxGroup?.rate || "0");
+    const taxMode = taxGroup?.taxMode || "add_on";
+
+    if (taxMode === "inclusive") {
+      displaySubtotal += itemTotal;
+    } else {
+      displaySubtotal += itemTotal;
+      addOnTax += itemTotal * taxRate;
+    }
+  }
+
+  // Round to 2 decimal places for financial accuracy
+  const subtotal = Math.round(displaySubtotal * 100) / 100;
+  const tax = Math.round(addOnTax * 100) / 100;
+  const total = Math.round((displaySubtotal + addOnTax) * 100) / 100;
+
+  await storage.updateCheck(checkId, {
+    subtotal: subtotal.toFixed(2),
+    taxTotal: tax.toFixed(2),
+    total: total.toFixed(2),
+  });
+}
+
 // Helper for dynamic order mode - adds item to a preview ticket for real-time KDS display
 // Items remain unsent (sent=false) until explicit Send or Pay action
 // All items for a check are consolidated onto a single preview ticket
@@ -1571,6 +1618,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      // Recalculate and persist check totals
+      await recalculateCheckTotals(checkId);
+
       res.status(201).json(finalItem);
     } catch (error) {
       console.error("Add item error:", error);
@@ -1658,6 +1708,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Broadcast KDS update so pending items update in real-time
       broadcastKdsUpdate(check?.rvcId || undefined);
 
+      // Recalculate and persist check totals (modifiers affect prices)
+      await recalculateCheckTotals(item.checkId);
+
       res.json(updated);
     } catch (error) {
       console.error("Update modifiers error:", error);
@@ -1704,6 +1757,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         managerApprovalId,
       });
 
+      // Recalculate and persist check totals (voiding affects total)
+      await recalculateCheckTotals(item.checkId);
+
       broadcastKdsUpdate(check?.rvcId || undefined);
       res.json(updated);
     } catch (error) {
@@ -1729,43 +1785,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const check = await storage.getCheck(checkId);
+      if (!check) return res.status(404).json({ message: "Check not found" });
+      
       const items = await storage.getCheckItems(checkId);
       const payments = await storage.getPayments(checkId);
-      const taxGroups = await storage.getTaxGroups();
-      const menuItems = await storage.getMenuItems();
-
       const activeItems = items.filter((i) => !i.voided);
-      let displaySubtotal = 0;  // What customer sees as subtotal
-      let addOnTax = 0;
-      
-      for (const item of activeItems) {
-        const unitPrice = parseFloat(item.unitPrice || "0");
-        const modifierTotal = (item.modifiers || []).reduce(
-          (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
-          0
-        );
-        const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
-        
-        const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
-        const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
-        const taxRate = parseFloat(taxGroup?.rate || "0");
-        const taxMode = taxGroup?.taxMode || "add_on";
-        
-        if (taxMode === "inclusive") {
-          // For inclusive tax, the item price already contains tax
-          // Customer sees the full price, no separate tax line added
-          displaySubtotal += itemTotal;
-        } else {
-          // For add-on tax, add item total and calculate tax separately
-          displaySubtotal += itemTotal;
-          addOnTax += itemTotal * taxRate;
-        }
-      }
-      
-      const subtotal = displaySubtotal;
-      const tax = addOnTax;
-      const total = displaySubtotal + addOnTax;
-      const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+
+      // Use persisted totals from check record (set by recalculateCheckTotals)
+      const total = parseFloat(check.total || "0");
+      const paidAmount = Math.round(payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0) * 100) / 100;
 
       console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
       
@@ -1808,12 +1836,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           console.error("Mark tickets paid error:", e);
         }
 
+        // Totals are already persisted via recalculateCheckTotals, just update status
         const updatedCheck = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),
-          subtotal: subtotal.toString(),
-          taxTotal: tax.toString(),
-          total: total.toString(),
         });
 
         await storage.createAuditLog({

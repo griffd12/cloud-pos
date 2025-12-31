@@ -508,8 +508,12 @@ export default function PosPage() {
       }
     });
 
-    // Total = subtotal + add-on taxes (inclusive taxes are already in the item prices)
-    return { subtotal: displaySubtotal, tax: addOnTax, total: displaySubtotal + addOnTax };
+    // Round to 2 decimal places for financial accuracy
+    const roundedSubtotal = Math.round(displaySubtotal * 100) / 100;
+    const roundedTax = Math.round(addOnTax * 100) / 100;
+    const roundedTotal = Math.round((displaySubtotal + addOnTax) * 100) / 100;
+    
+    return { subtotal: roundedSubtotal, tax: roundedTax, total: roundedTotal };
   };
 
   const { subtotal, tax, total } = calculateTotals();
