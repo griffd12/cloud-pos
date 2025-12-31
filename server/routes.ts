@@ -3538,8 +3538,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       for (const item of itemsInPeriod) {
         const itemDate = new Date(item.addedAt!);
-        const localTimeStr = itemDate.toLocaleString("en-US", { timeZone: timezone, hour: "numeric", hour12: false });
-        const hour = parseInt(localTimeStr, 10);
+        // Use getHours() on a Date object adjusted for timezone
+        const localDateStr = itemDate.toLocaleString("en-US", { timeZone: timezone });
+        const localDate = new Date(localDateStr);
+        let hour = localDate.getHours();
+        
+        // Ensure hour is valid (0-23)
+        if (isNaN(hour) || hour < 0 || hour > 23) {
+          hour = 0;
+        }
         
         const qty = item.quantity || 1;
         const basePrice = parseFloat(item.unitPrice || "0");
