@@ -538,6 +538,70 @@ export const checkDiscounts = pgTable("check_discounts", {
 });
 
 // ============================================================================
+// REFUNDS
+// ============================================================================
+
+export const refunds = pgTable("refunds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  refundNumber: integer("refund_number").notNull(),
+  rvcId: varchar("rvc_id").notNull().references(() => rvcs.id),
+  originalCheckId: varchar("original_check_id").notNull().references(() => checks.id),
+  originalCheckNumber: integer("original_check_number").notNull(),
+  refundType: text("refund_type").notNull(), // 'full' or 'partial'
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  taxTotal: decimal("tax_total", { precision: 10, scale: 2 }).notNull(),
+  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason"),
+  processedByEmployeeId: varchar("processed_by_employee_id").notNull().references(() => employees.id),
+  managerApprovalId: varchar("manager_approval_id").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  businessDate: text("business_date"), // YYYY-MM-DD format
+});
+
+// Refund Items (tracks which items from the original check were refunded)
+export const refundItems = pgTable("refund_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  refundId: varchar("refund_id").notNull().references(() => refunds.id),
+  originalCheckItemId: varchar("original_check_item_id").notNull().references(() => checkItems.id),
+  menuItemName: text("menu_item_name").notNull(),
+  quantity: integer("quantity").default(1),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  modifiers: jsonb("modifiers").$type<{ name: string; priceDelta: string }[]>(),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  refundAmount: decimal("refund_amount", { precision: 10, scale: 2 }).notNull(),
+});
+
+// Refund Payments (tracks how refunds were applied back to original payment methods)
+export const refundPayments = pgTable("refund_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  refundId: varchar("refund_id").notNull().references(() => refunds.id),
+  originalPaymentId: varchar("original_payment_id").notNull().references(() => checkPayments.id),
+  tenderId: varchar("tender_id").notNull().references(() => tenders.id),
+  tenderName: text("tender_name").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+});
+
+export const refundsRelations = relations(refunds, ({ one, many }) => ({
+  rvc: one(rvcs, { fields: [refunds.rvcId], references: [rvcs.id] }),
+  originalCheck: one(checks, { fields: [refunds.originalCheckId], references: [checks.id] }),
+  processedBy: one(employees, { fields: [refunds.processedByEmployeeId], references: [employees.id] }),
+  managerApproval: one(employees, { fields: [refunds.managerApprovalId], references: [employees.id] }),
+  items: many(refundItems),
+  payments: many(refundPayments),
+}));
+
+export const refundItemsRelations = relations(refundItems, ({ one }) => ({
+  refund: one(refunds, { fields: [refundItems.refundId], references: [refunds.id] }),
+  originalCheckItem: one(checkItems, { fields: [refundItems.originalCheckItemId], references: [checkItems.id] }),
+}));
+
+export const refundPaymentsRelations = relations(refundPayments, ({ one }) => ({
+  refund: one(refunds, { fields: [refundPayments.refundId], references: [refunds.id] }),
+  originalPayment: one(checkPayments, { fields: [refundPayments.originalPaymentId], references: [checkPayments.id] }),
+  tender: one(tenders, { fields: [refundPayments.tenderId], references: [tenders.id] }),
+}));
+
+// ============================================================================
 // AUDIT LOGGING
 // ============================================================================
 
@@ -628,6 +692,9 @@ export const insertCheckItemSchema = createInsertSchema(checkItems).omit({ id: t
 export const insertCheckPaymentSchema = createInsertSchema(checkPayments).omit({ id: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true });
 export const insertKdsTicketSchema = createInsertSchema(kdsTickets).omit({ id: true });
+export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true });
+export const insertRefundItemSchema = createInsertSchema(refundItems).omit({ id: true });
+export const insertRefundPaymentSchema = createInsertSchema(refundPayments).omit({ id: true });
 
 // Types
 export type Enterprise = typeof enterprises.$inferSelect;
@@ -697,6 +764,12 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type KdsTicket = typeof kdsTickets.$inferSelect;
 export type InsertKdsTicket = z.infer<typeof insertKdsTicketSchema>;
+export type Refund = typeof refunds.$inferSelect;
+export type InsertRefund = z.infer<typeof insertRefundSchema>;
+export type RefundItem = typeof refundItems.$inferSelect;
+export type InsertRefundItem = z.infer<typeof insertRefundItemSchema>;
+export type RefundPayment = typeof refundPayments.$inferSelect;
+export type InsertRefundPayment = z.infer<typeof insertRefundPaymentSchema>;
 
 // Privilege codes as constants
 export const PRIVILEGE_CODES = {
@@ -714,6 +787,7 @@ export const PRIVILEGE_CODES = {
   MANAGER_APPROVAL: "manager_approval",
   ADMIN_ACCESS: "admin_access",
   KDS_ACCESS: "kds_access",
+  PROCESS_REFUNDS: "process_refunds",
 } as const;
 
 export const ORDER_TYPES = ["dine_in", "take_out", "delivery", "pickup"] as const;

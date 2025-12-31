@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees, employeeAssignments,
   majorGroups, familyGroups,
@@ -10,6 +10,7 @@ import {
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
   devices, deviceEnrollmentTokens, deviceHeartbeats,
+  refunds, refundItems, refundPayments,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -49,6 +50,9 @@ import {
   type Device, type InsertDevice,
   type DeviceEnrollmentToken, type InsertDeviceEnrollmentToken,
   type DeviceHeartbeat, type InsertDeviceHeartbeat,
+  type Refund, type InsertRefund,
+  type RefundItem, type InsertRefundItem,
+  type RefundPayment, type InsertRefundPayment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -327,6 +331,16 @@ export interface IStorage {
   // Device Heartbeats
   createDeviceHeartbeat(data: InsertDeviceHeartbeat): Promise<DeviceHeartbeat>;
   getDeviceHeartbeats(deviceId: string, limit?: number): Promise<DeviceHeartbeat[]>;
+
+  // Refunds
+  getRefunds(rvcId?: string): Promise<Refund[]>;
+  getRefundsForCheck(checkId: string): Promise<Refund[]>;
+  getRefund(id: string): Promise<Refund | undefined>;
+  getRefundWithDetails(id: string): Promise<{ refund: Refund; items: RefundItem[]; payments: RefundPayment[] } | undefined>;
+  createRefund(data: InsertRefund, items: Omit<InsertRefundItem, 'refundId'>[], payments: Omit<InsertRefundPayment, 'refundId'>[]): Promise<Refund>;
+  getNextRefundNumber(rvcId: string): Promise<number>;
+  getClosedChecks(rvcId: string, options?: { businessDate?: string; checkNumber?: number; limit?: number }): Promise<Check[]>;
+  getCheckWithPaymentsAndItems(checkId: string): Promise<{ check: Check; items: CheckItem[]; payments: CheckPayment[] } | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1965,6 +1979,90 @@ export class DatabaseStorage implements IStorage {
       .where(eq(deviceHeartbeats.deviceId, deviceId))
       .orderBy(desc(deviceHeartbeats.timestamp))
       .limit(limit);
+  }
+
+  // Refunds
+  async getRefunds(rvcId?: string): Promise<Refund[]> {
+    if (rvcId) {
+      return db.select().from(refunds).where(eq(refunds.rvcId, rvcId)).orderBy(desc(refunds.createdAt));
+    }
+    return db.select().from(refunds).orderBy(desc(refunds.createdAt));
+  }
+
+  async getRefundsForCheck(checkId: string): Promise<Refund[]> {
+    return db.select().from(refunds).where(eq(refunds.originalCheckId, checkId)).orderBy(desc(refunds.createdAt));
+  }
+
+  async getRefund(id: string): Promise<Refund | undefined> {
+    const [result] = await db.select().from(refunds).where(eq(refunds.id, id));
+    return result;
+  }
+
+  async getRefundWithDetails(id: string): Promise<{ refund: Refund; items: RefundItem[]; payments: RefundPayment[] } | undefined> {
+    const refund = await this.getRefund(id);
+    if (!refund) return undefined;
+
+    const items = await db.select().from(refundItems).where(eq(refundItems.refundId, id));
+    const payments = await db.select().from(refundPayments).where(eq(refundPayments.refundId, id));
+
+    return { refund, items, payments };
+  }
+
+  async createRefund(
+    data: InsertRefund,
+    items: Omit<InsertRefundItem, 'refundId'>[],
+    payments: Omit<InsertRefundPayment, 'refundId'>[]
+  ): Promise<Refund> {
+    const [refund] = await db.insert(refunds).values(data).returning();
+
+    if (items.length > 0) {
+      await db.insert(refundItems).values(
+        items.map(item => ({ ...item, refundId: refund.id }))
+      );
+    }
+
+    if (payments.length > 0) {
+      await db.insert(refundPayments).values(
+        payments.map(payment => ({ ...payment, refundId: refund.id }))
+      );
+    }
+
+    return refund;
+  }
+
+  async getNextRefundNumber(rvcId: string): Promise<number> {
+    const result = await db.select({ maxNumber: sql<number>`COALESCE(MAX(${refunds.refundNumber}), 0)` })
+      .from(refunds)
+      .where(eq(refunds.rvcId, rvcId));
+    return (result[0]?.maxNumber || 0) + 1;
+  }
+
+  async getClosedChecks(rvcId: string, options?: { businessDate?: string; checkNumber?: number; limit?: number }): Promise<Check[]> {
+    const conditions = [eq(checks.rvcId, rvcId), eq(checks.status, "closed")];
+    
+    if (options?.businessDate) {
+      conditions.push(eq(checks.businessDate, options.businessDate));
+    }
+    if (options?.checkNumber) {
+      conditions.push(eq(checks.checkNumber, options.checkNumber));
+    }
+
+    let query = db.select().from(checks).where(and(...conditions)).orderBy(desc(checks.closedAt));
+    
+    if (options?.limit) {
+      return query.limit(options.limit);
+    }
+    return query;
+  }
+
+  async getCheckWithPaymentsAndItems(checkId: string): Promise<{ check: Check; items: CheckItem[]; payments: CheckPayment[] } | undefined> {
+    const [check] = await db.select().from(checks).where(eq(checks.id, checkId));
+    if (!check) return undefined;
+
+    const items = await db.select().from(checkItems).where(eq(checkItems.checkId, checkId));
+    const payments = await db.select().from(checkPayments).where(eq(checkPayments.checkId, checkId));
+
+    return { check, items, payments };
   }
 }
 

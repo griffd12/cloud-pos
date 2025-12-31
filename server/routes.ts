@@ -1930,6 +1930,250 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // REFUND ROUTES
+  // ============================================================================
+
+  // Get closed checks for transaction lookup
+  app.get("/api/rvcs/:rvcId/closed-checks", async (req, res) => {
+    try {
+      const { rvcId } = req.params;
+      const { businessDate, checkNumber, limit } = req.query;
+      
+      const options: { businessDate?: string; checkNumber?: number; limit?: number } = {};
+      if (businessDate) options.businessDate = businessDate as string;
+      if (checkNumber) options.checkNumber = parseInt(checkNumber as string);
+      if (limit) options.limit = parseInt(limit as string);
+
+      const closedChecks = await storage.getClosedChecks(rvcId, options);
+      res.json(closedChecks);
+    } catch (error) {
+      console.error("Get closed checks error:", error);
+      res.status(500).json({ message: "Failed to get closed checks" });
+    }
+  });
+
+  // Get check with full details (items and payments) for refund preview
+  app.get("/api/checks/:id/full-details", async (req, res) => {
+    try {
+      const result = await storage.getCheckWithPaymentsAndItems(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Get check details error:", error);
+      res.status(500).json({ message: "Failed to get check details" });
+    }
+  });
+
+  // Get refunds for an RVC
+  app.get("/api/rvcs/:rvcId/refunds", async (req, res) => {
+    try {
+      const refundList = await storage.getRefunds(req.params.rvcId);
+      res.json(refundList);
+    } catch (error) {
+      console.error("Get refunds error:", error);
+      res.status(500).json({ message: "Failed to get refunds" });
+    }
+  });
+
+  // Get refund details
+  app.get("/api/refunds/:id", async (req, res) => {
+    try {
+      const result = await storage.getRefundWithDetails(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Refund not found" });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Get refund error:", error);
+      res.status(500).json({ message: "Failed to get refund details" });
+    }
+  });
+
+  // Create a refund
+  app.post("/api/refunds", async (req, res) => {
+    try {
+      const {
+        rvcId,
+        originalCheckId,
+        refundType,
+        reason,
+        processedByEmployeeId,
+        managerApprovalId,
+        items,
+        businessDate,
+      } = req.body;
+
+      // Validate employee has PROCESS_REFUNDS privilege
+      if (processedByEmployeeId) {
+        const employee = await storage.getEmployee(processedByEmployeeId);
+        if (!employee) {
+          return res.status(400).json({ message: "Employee not found" });
+        }
+        const role = await storage.getRole(employee.roleId);
+        const privileges = role?.privileges || [];
+        if (!privileges.includes("process_refunds") && !privileges.includes("admin_access")) {
+          return res.status(403).json({ message: "Employee does not have refund privileges" });
+        }
+      }
+
+      // Validate manager approval if provided
+      if (managerApprovalId) {
+        const manager = await storage.getEmployee(managerApprovalId);
+        if (!manager) {
+          return res.status(400).json({ message: "Manager not found" });
+        }
+        const managerRole = await storage.getRole(manager.roleId);
+        const managerPrivileges = managerRole?.privileges || [];
+        if (!managerPrivileges.includes("approve_refunds") && !managerPrivileges.includes("admin_access")) {
+          return res.status(403).json({ message: "Manager does not have refund approval privileges" });
+        }
+      }
+
+      // Get original check
+      const originalCheck = await storage.getCheck(originalCheckId);
+      if (!originalCheck) {
+        return res.status(404).json({ message: "Original check not found" });
+      }
+      if (originalCheck.status !== "closed") {
+        return res.status(400).json({ message: "Can only refund closed checks" });
+      }
+
+      // Check for existing refunds on this check to prevent double-refunding
+      const existingRefunds = await storage.getRefundsForCheck(originalCheckId);
+      const existingFullRefund = existingRefunds.find(r => r.refundType === "full");
+      if (existingFullRefund) {
+        return res.status(400).json({ message: "This check has already been fully refunded" });
+      }
+
+      // Get check details
+      const checkDetails = await storage.getCheckWithPaymentsAndItems(originalCheckId);
+      if (!checkDetails) {
+        return res.status(404).json({ message: "Check details not found" });
+      }
+
+      // Calculate refund amounts
+      let refundSubtotal = 0;
+      let refundTaxTotal = 0;
+      const refundItemsData: any[] = [];
+
+      if (refundType === "full") {
+        // Refund all items
+        for (const item of checkDetails.items.filter(i => !i.voided)) {
+          const modifierTotal = (item.modifiers || []).reduce(
+            (sum: number, m: any) => sum + parseFloat(m.priceDelta || "0"), 0
+          );
+          const itemTotal = (parseFloat(item.unitPrice) + modifierTotal) * (item.quantity || 1);
+          refundSubtotal += itemTotal;
+
+          refundItemsData.push({
+            originalCheckItemId: item.id,
+            menuItemName: item.menuItemName,
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice,
+            modifiers: item.modifiers,
+            taxAmount: "0", // Will calculate below
+            refundAmount: itemTotal.toFixed(2),
+          });
+        }
+        refundTaxTotal = parseFloat(originalCheck.taxTotal || "0");
+      } else {
+        // Partial refund - use provided items
+        for (const itemData of items || []) {
+          const originalItem = checkDetails.items.find(i => i.id === itemData.originalCheckItemId);
+          if (!originalItem) continue;
+
+          const modifierTotal = (originalItem.modifiers || []).reduce(
+            (sum: number, m: any) => sum + parseFloat(m.priceDelta || "0"), 0
+          );
+          const itemTotal = (parseFloat(originalItem.unitPrice) + modifierTotal) * (itemData.quantity || 1);
+          refundSubtotal += itemTotal;
+
+          refundItemsData.push({
+            originalCheckItemId: originalItem.id,
+            menuItemName: originalItem.menuItemName,
+            quantity: itemData.quantity || 1,
+            unitPrice: originalItem.unitPrice,
+            modifiers: originalItem.modifiers,
+            taxAmount: "0",
+            refundAmount: itemTotal.toFixed(2),
+          });
+        }
+        // Calculate proportional tax for partial refund
+        const originalSubtotal = parseFloat(originalCheck.subtotal || "0");
+        const originalTax = parseFloat(originalCheck.taxTotal || "0");
+        if (originalSubtotal > 0) {
+          refundTaxTotal = (refundSubtotal / originalSubtotal) * originalTax;
+        }
+      }
+
+      const refundTotal = refundSubtotal + refundTaxTotal;
+
+      // Distribute refund amount across original payment methods proportionally
+      const refundPaymentsData: any[] = [];
+      const totalPaid = checkDetails.payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+      
+      for (const payment of checkDetails.payments) {
+        const paymentAmount = parseFloat(payment.amount || "0");
+        const proportionalRefund = totalPaid > 0 ? (paymentAmount / totalPaid) * refundTotal : 0;
+
+        if (proportionalRefund > 0) {
+          refundPaymentsData.push({
+            originalPaymentId: payment.id,
+            tenderId: payment.tenderId,
+            tenderName: payment.tenderName,
+            amount: proportionalRefund.toFixed(2),
+          });
+        }
+      }
+
+      // Get next refund number
+      const refundNumber = await storage.getNextRefundNumber(rvcId);
+
+      // Create the refund
+      const refund = await storage.createRefund(
+        {
+          refundNumber,
+          rvcId,
+          originalCheckId,
+          originalCheckNumber: originalCheck.checkNumber,
+          refundType,
+          subtotal: refundSubtotal.toFixed(2),
+          taxTotal: refundTaxTotal.toFixed(2),
+          total: refundTotal.toFixed(2),
+          reason,
+          processedByEmployeeId,
+          managerApprovalId,
+          businessDate: businessDate || originalCheck.businessDate,
+        },
+        refundItemsData,
+        refundPaymentsData
+      );
+
+      // Create audit log
+      await storage.createAuditLog({
+        rvcId,
+        employeeId: processedByEmployeeId,
+        action: "process_refund",
+        targetType: "refund",
+        targetId: refund.id,
+        details: {
+          originalCheckNumber: originalCheck.checkNumber,
+          refundType,
+          total: refundTotal,
+          managerApprovalId,
+        },
+      });
+
+      res.json(refund);
+    } catch (error) {
+      console.error("Create refund error:", error);
+      res.status(500).json({ message: "Failed to create refund" });
+    }
+  });
+
+  // ============================================================================
   // KDS ROUTES
   // ============================================================================
 

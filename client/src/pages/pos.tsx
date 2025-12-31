@@ -11,12 +11,14 @@ import { ManagerApprovalModal } from "@/components/pos/manager-approval-modal";
 import { OrderTypeModal } from "@/components/pos/order-type-modal";
 import { PaymentModal } from "@/components/pos/payment-modal";
 import { OpenChecksModal } from "@/components/pos/open-checks-modal";
+import { TransactionLookupModal } from "@/components/pos/transaction-lookup-modal";
+import { RefundModal } from "@/components/pos/refund-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search } from "lucide-react";
 import { Link, Redirect } from "wouter";
 
 interface MenuItemWithModifiers extends MenuItem {
@@ -53,6 +55,11 @@ export default function PosPage() {
   const [showOrderTypeModal, setShowOrderTypeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showOpenChecksModal, setShowOpenChecksModal] = useState(false);
+  const [showTransactionLookup, setShowTransactionLookup] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [selectedRefundCheck, setSelectedRefundCheck] = useState<Check | null>(null);
+  const [refundManagerApprovalId, setRefundManagerApprovalId] = useState<string | undefined>(undefined);
+  const [pendingRefundAction, setPendingRefundAction] = useState(false);
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [editingItem, setEditingItem] = useState<CheckItem | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -305,6 +312,54 @@ export default function PosPage() {
     }
   };
 
+  const handleLookupClick = () => {
+    if (!hasPrivilege("process_refunds")) {
+      toast({ title: "You do not have permission to process refunds", variant: "destructive" });
+      return;
+    }
+    setShowTransactionLookup(true);
+  };
+
+  const handleSelectCheckForRefund = (check: Check) => {
+    setSelectedRefundCheck(check);
+    setShowTransactionLookup(false);
+    setPendingRefundAction(true);
+    setShowManagerApproval(true);
+  };
+
+  const handleRefundManagerApproval = async (managerPin: string) => {
+    try {
+      const res = await fetch("/api/auth/manager-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          pin: managerPin,
+          requiredPrivilege: "approve_refunds",
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        setApprovalError(error.message || "Manager approval failed");
+        return;
+      }
+      const { approvedById } = await res.json();
+      setRefundManagerApprovalId(approvedById);
+      setShowManagerApproval(false);
+      setPendingRefundAction(false);
+      setApprovalError(null);
+      setShowRefundModal(true);
+    } catch {
+      setApprovalError("Failed to verify manager credentials");
+    }
+  };
+
+  const handleRefundComplete = () => {
+    setSelectedRefundCheck(null);
+    setRefundManagerApprovalId(undefined);
+    toast({ title: "Refund processed successfully" });
+  };
+
   const handleSelectSlu = (slu: Slu) => {
     setSelectedSlu(slu);
   };
@@ -547,6 +602,15 @@ export default function PosPage() {
             <Clock className="w-4 h-4 mr-2" />
             Open Checks
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLookupClick}
+            data-testid="button-transaction-lookup"
+          >
+            <Search className="w-4 h-4 mr-2" />
+            Lookup
+          </Button>
           {hasPrivilege("admin_access") && (
             <Link href="/admin">
               <Button variant="ghost" size="sm" data-testid="button-admin">
@@ -689,12 +753,16 @@ export default function PosPage() {
         onClose={() => {
           setShowManagerApproval(false);
           setPendingVoidItem(null);
+          setPendingRefundAction(false);
+          setSelectedRefundCheck(null);
           setApprovalError(null);
         }}
-        onApprove={handleManagerApproval}
-        action="Void Sent Item"
-        targetDescription={pendingVoidItem ? `${pendingVoidItem.menuItemName}` : ""}
-        isLoading={voidItemMutation.isPending}
+        onApprove={pendingRefundAction ? handleRefundManagerApproval : handleManagerApproval}
+        action={pendingRefundAction ? "Process Refund" : "Void Sent Item"}
+        targetDescription={pendingRefundAction 
+          ? `Check #${selectedRefundCheck?.checkNumber}` 
+          : pendingVoidItem ? `${pendingVoidItem.menuItemName}` : ""}
+        isLoading={pendingRefundAction ? false : voidItemMutation.isPending}
         error={approvalError}
       />
 
@@ -730,6 +798,23 @@ export default function PosPage() {
         onClose={() => setShowOpenChecksModal(false)}
         onSelect={handlePickupCheck}
         rvcId={currentRvc?.id}
+      />
+
+      <TransactionLookupModal
+        open={showTransactionLookup}
+        onOpenChange={setShowTransactionLookup}
+        rvcId={currentRvc?.id || ""}
+        onSelectCheck={handleSelectCheckForRefund}
+      />
+
+      <RefundModal
+        open={showRefundModal}
+        onOpenChange={setShowRefundModal}
+        check={selectedRefundCheck}
+        rvcId={currentRvc?.id || ""}
+        employeeId={currentEmployee?.id || ""}
+        managerApprovalId={refundManagerApprovalId}
+        onComplete={handleRefundComplete}
       />
     </div>
   );
