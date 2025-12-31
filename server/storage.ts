@@ -273,6 +273,9 @@ export interface IStorage {
   voidKdsTicketItem(checkItemId: string): Promise<void>;
   bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
   recallKdsTicket(id: string): Promise<KdsTicket | undefined>;
+  getBumpedKdsTickets(filters: { rvcId?: string; stationType?: string; limit?: number }): Promise<any[]>;
+  markKdsItemReady(ticketItemId: string): Promise<void>;
+  unmarkKdsItemReady(ticketItemId: string): Promise<void>;
   getPreviewTicket(checkId: string): Promise<KdsTicket | undefined>;
   getKdsTicketsByCheck(checkId: string): Promise<KdsTicket[]>;
   markKdsTicketsPaid(checkId: string): Promise<void>;
@@ -1323,8 +1326,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(kdsTickets.createdAt);
 
+    // Sort so recalled tickets appear first (in creation order among themselves)
+    const sortedTickets = tickets.sort((a, b) => {
+      if (a.isRecalled && !b.isRecalled) return -1;
+      if (!a.isRecalled && b.isRecalled) return 1;
+      return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime();
+    });
+
     const result = [];
-    for (const ticket of tickets) {
+    for (const ticket of sortedTickets) {
       const check = await this.getCheck(ticket.checkId);
       const items = await db.select().from(kdsTicketItems).where(eq(kdsTicketItems.kdsTicketId, ticket.id));
       const checkItemsList = [];
@@ -1332,12 +1342,14 @@ export class DatabaseStorage implements IStorage {
         const checkItem = await this.getCheckItem(item.checkItemId);
         if (checkItem) {
           checkItemsList.push({
-            id: checkItem.id,
+            id: item.id, // Use the kdsTicketItem id for marking ready
+            checkItemId: checkItem.id,
             name: checkItem.menuItemName,
             quantity: checkItem.quantity || 1,
             modifiers: checkItem.modifiers,
             status: item.status,
             itemStatus: checkItem.itemStatus, // 'pending' or 'active'
+            isReady: item.isReady || false,
           });
         }
       }
@@ -1351,6 +1363,7 @@ export class DatabaseStorage implements IStorage {
         isDraft: ticket.status === 'draft',
         isPreview: ticket.isPreview || false,
         isPaid: ticket.paid || false,
+        isRecalled: ticket.isRecalled || false,
         status: ticket.status,
         createdAt: ticket.createdAt,
       });
@@ -1410,15 +1423,73 @@ export class DatabaseStorage implements IStorage {
   async recallKdsTicket(id: string): Promise<KdsTicket | undefined> {
     const [result] = await db.update(kdsTickets).set({
       status: "active",
+      isRecalled: true,
+      recalledAt: new Date(),
       bumpedAt: null,
       bumpedByEmployeeId: null,
     }).where(eq(kdsTickets.id, id)).returning();
     
     if (result) {
-      await db.update(kdsTicketItems).set({ status: "pending" })
+      // Reset item ready states as well
+      await db.update(kdsTicketItems).set({ status: "pending", isReady: false, readyAt: null })
         .where(eq(kdsTicketItems.kdsTicketId, id));
     }
     return result;
+  }
+
+  async getBumpedKdsTickets(filters: { rvcId?: string; stationType?: string; limit?: number }): Promise<any[]> {
+    const allTickets = await db.select().from(kdsTickets)
+      .where(eq(kdsTickets.status, "bumped"))
+      .orderBy(desc(kdsTickets.bumpedAt));
+    
+    let filtered = allTickets;
+    if (filters.rvcId) {
+      filtered = filtered.filter((t) => t.rvcId === filters.rvcId);
+    }
+    if (filters.stationType) {
+      filtered = filtered.filter((t) => t.stationType === filters.stationType);
+    }
+    
+    const limited = filters.limit ? filtered.slice(0, filters.limit) : filtered.slice(0, 50);
+    
+    // Load check details for each ticket
+    const enriched = await Promise.all(limited.map(async (ticket) => {
+      const check = await this.getCheck(ticket.checkId);
+      const ticketItems = await db.select().from(kdsTicketItems)
+        .where(eq(kdsTicketItems.kdsTicketId, ticket.id));
+      
+      const items = await Promise.all(ticketItems.map(async (ti) => {
+        const checkItem = await this.getCheckItem(ti.checkItemId);
+        return checkItem ? {
+          id: ti.id,
+          name: checkItem.menuItemName,
+          quantity: checkItem.quantity,
+          status: ti.status,
+          isReady: ti.isReady,
+        } : null;
+      }));
+      
+      return {
+        ...ticket,
+        checkNumber: check?.checkNumber,
+        orderType: check?.orderType,
+        items: items.filter(Boolean),
+      };
+    }));
+    
+    return enriched;
+  }
+
+  async markKdsItemReady(ticketItemId: string): Promise<void> {
+    await db.update(kdsTicketItems)
+      .set({ isReady: true, readyAt: new Date() })
+      .where(eq(kdsTicketItems.id, ticketItemId));
+  }
+
+  async unmarkKdsItemReady(ticketItemId: string): Promise<void> {
+    await db.update(kdsTicketItems)
+      .set({ isReady: false, readyAt: null })
+      .where(eq(kdsTicketItems.id, ticketItemId));
   }
 
   async getPreviewTicket(checkId: string): Promise<KdsTicket | undefined> {

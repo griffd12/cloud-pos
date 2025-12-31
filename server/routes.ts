@@ -1919,6 +1919,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Get bumped tickets for recall modal
+  app.get("/api/kds-tickets/bumped", async (req, res) => {
+    try {
+      const filters = {
+        rvcId: req.query.rvcId as string | undefined,
+        stationType: req.query.stationType as string | undefined,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
+      };
+      const tickets = await storage.getBumpedKdsTickets(filters);
+      res.json(tickets);
+    } catch (error) {
+      console.error("Get bumped tickets error:", error);
+      res.status(400).json({ message: "Failed to get bumped tickets" });
+    }
+  });
+
+  // Mark an individual KDS item as ready
+  app.post("/api/kds-items/:id/ready", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      await storage.markKdsItemReady(itemId);
+      broadcastKdsUpdate();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark item ready error:", error);
+      res.status(400).json({ message: "Failed to mark item ready" });
+    }
+  });
+
+  // Unmark an individual KDS item as ready
+  app.post("/api/kds-items/:id/unready", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      await storage.unmarkKdsItemReady(itemId);
+      broadcastKdsUpdate();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Unmark item ready error:", error);
+      res.status(400).json({ message: "Failed to unmark item ready" });
+    }
+  });
+
   // ============================================================================
   // ADMIN STATS ROUTE
   // ============================================================================
