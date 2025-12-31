@@ -3261,12 +3261,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         openChecks = openChecks.filter(c => c.rvcId === rvcId);
       }
       
-      const result = openChecks.map(check => {
+      const allCheckItems = await storage.getCheckItems();
+      
+      const checksWithDetails = openChecks.map(check => {
         const emp = employees.find(e => e.id === check.employeeId);
         const rvc = allRvcs.find(r => r.id === check.rvcId);
         const ageMinutes = check.openedAt 
           ? Math.floor((Date.now() - new Date(check.openedAt).getTime()) / 60000)
           : 0;
+        const itemCount = allCheckItems.filter(ci => ci.checkId === check.id && !ci.voided).length;
         
         return {
           id: check.id,
@@ -3274,13 +3277,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
           rvcName: rvc?.name || "Unknown",
           tableNumber: check.tableNumber,
+          itemCount,
           total: parseFloat(check.total || "0"),
-          ageMinutes,
+          durationMinutes: ageMinutes,
           openedAt: check.openedAt,
         };
-      }).sort((a, b) => b.ageMinutes - a.ageMinutes);
+      }).sort((a, b) => b.durationMinutes - a.durationMinutes);
       
-      res.json(result);
+      // Calculate summary
+      const totalValue = checksWithDetails.reduce((sum, c) => sum + c.total, 0);
+      const avgDuration = checksWithDetails.length > 0 
+        ? checksWithDetails.reduce((sum, c) => sum + c.durationMinutes, 0) / checksWithDetails.length 
+        : 0;
+      
+      res.json({
+        checks: checksWithDetails,
+        summary: {
+          count: checksWithDetails.length,
+          totalValue,
+          avgDuration,
+        }
+      });
     } catch (error) {
       console.error("Open checks error:", error);
       res.status(500).json({ message: "Failed to generate open checks report" });
@@ -4220,10 +4237,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const currentSales = calculateSales(currentPeriod.start, currentPeriod.end);
       const previousSales = calculateSales(previousPeriod.start, previousPeriod.end);
       
-      // Calculate variances
-      const calculateVariance = (current: number, previous: number) => {
-        if (previous === 0) return current > 0 ? 100 : 0;
-        return ((current - previous) / previous) * 100;
+      // Calculate variances with value and percentage
+      const calculateChange = (current: number, previous: number) => {
+        const value = current - previous;
+        let percentage = 0;
+        if (previous === 0) {
+          percentage = current > 0 ? 100 : 0;
+        } else {
+          percentage = ((current - previous) / previous) * 100;
+        }
+        return { value, percentage };
       };
       
       res.json({
@@ -4231,20 +4254,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           label: currentPeriod.label,
           startDate: currentPeriod.start.toISOString(),
           endDate: currentPeriod.end.toISOString(),
-          ...currentSales,
+          data: currentSales,
         },
         previousPeriod: {
           label: previousPeriod.label,
           startDate: previousPeriod.start.toISOString(),
           endDate: previousPeriod.end.toISOString(),
-          ...previousSales,
+          data: previousSales,
         },
-        variance: {
-          checkCount: calculateVariance(currentSales.checkCount, previousSales.checkCount),
-          grossSales: calculateVariance(currentSales.grossSales, previousSales.grossSales),
-          netSales: calculateVariance(currentSales.netSales, previousSales.netSales),
-          total: calculateVariance(currentSales.total, previousSales.total),
-          avgCheck: calculateVariance(currentSales.avgCheck, previousSales.avgCheck),
+        changes: {
+          checkCount: calculateChange(currentSales.checkCount, previousSales.checkCount),
+          grossSales: calculateChange(currentSales.grossSales, previousSales.grossSales),
+          netSales: calculateChange(currentSales.netSales, previousSales.netSales),
+          total: calculateChange(currentSales.total, previousSales.total),
+          avgCheck: calculateChange(currentSales.avgCheck, previousSales.avgCheck),
         },
       });
     } catch (error) {
