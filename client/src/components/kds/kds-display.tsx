@@ -1,17 +1,23 @@
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { KdsTicket } from "./kds-ticket";
-import { RefreshCw, Monitor, Flame, Snowflake, PackageCheck, UtensilsCrossed, GlassWater, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { KdsTicket, ColorAlertSettings } from "./kds-ticket";
+import { RefreshCw, Monitor, Flame, Snowflake, PackageCheck, UtensilsCrossed, GlassWater, Trash2, RotateCcw, List, Volume2, VolumeX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface KdsItem {
   id: string;
+  checkItemId?: string;
   name: string;
   quantity: number;
   modifiers?: { name: string }[];
   status: "pending" | "bumped" | "voided";
+  isReady?: boolean;
 }
 
 interface Ticket {
@@ -23,8 +29,18 @@ interface Ticket {
   isDraft: boolean;
   isPreview?: boolean;
   isPaid?: boolean;
+  isRecalled?: boolean;
   status: string;
   createdAt: Date;
+}
+
+interface BumpedTicket {
+  id: string;
+  checkNumber?: number;
+  orderType?: string;
+  stationType?: string;
+  bumpedAt: Date;
+  items: { id: string; name: string; quantity: number; status: string }[];
 }
 
 interface KdsDisplayProps {
@@ -38,6 +54,10 @@ interface KdsDisplayProps {
   onBumpAll?: () => void;
   isLoading?: boolean;
   isBumpingAll?: boolean;
+  colorAlerts?: ColorAlertSettings;
+  newOrderSound?: boolean;
+  blinkDuration?: number;
+  rvcId?: string;
 }
 
 const STATION_ICONS: Record<string, LucideIcon> = {
@@ -56,6 +76,12 @@ const STATION_LABELS: Record<string, string> = {
   bar: "Bar",
 };
 
+const DEFAULT_COLOR_ALERTS: ColorAlertSettings = {
+  yellowThreshold: 60,
+  orangeThreshold: 180,
+  redThreshold: 300,
+};
+
 export function KdsDisplay({
   tickets,
   stationTypes,
@@ -67,15 +93,115 @@ export function KdsDisplay({
   onBumpAll,
   isLoading = false,
   isBumpingAll = false,
+  colorAlerts = DEFAULT_COLOR_ALERTS,
+  newOrderSound = true,
+  blinkDuration = 5,
+  rvcId,
 }: KdsDisplayProps) {
+  const [showAllDay, setShowAllDay] = useState(false);
+  const [showRecallModal, setShowRecallModal] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(newOrderSound);
+  const [blinkingTickets, setBlinkingTickets] = useState<Set<string>>(new Set());
+  const previousTicketIdsRef = useRef<Set<string>>(new Set());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const activeTickets = tickets.filter((t) => t.status === "active");
   const draftTickets = tickets.filter((t) => t.status === "draft");
+
+  const { data: bumpedTickets = [] } = useQuery<BumpedTicket[]>({
+    queryKey: ["/api/kds-tickets/bumped", rvcId, selectedStation],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (rvcId) params.append("rvcId", rvcId);
+      if (selectedStation !== "all") params.append("stationType", selectedStation);
+      params.append("limit", "50");
+      const response = await fetch(`/api/kds-tickets/bumped?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch bumped tickets");
+      return response.json();
+    },
+    enabled: showRecallModal,
+    refetchInterval: showRecallModal ? 5000 : false,
+  });
+
+  const recallMutation = useMutation({
+    mutationFn: async (ticketId: string) => {
+      await apiRequest("POST", `/api/kds-tickets/${ticketId}/recall`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets/bumped"] });
+      setShowRecallModal(false);
+    },
+  });
+
+  useEffect(() => {
+    const currentTicketIds = new Set(activeTickets.map((t) => t.id));
+    const previousIds = previousTicketIdsRef.current;
+
+    const newTicketIds: string[] = [];
+    currentTicketIds.forEach((id) => {
+      if (!previousIds.has(id)) {
+        newTicketIds.push(id);
+      }
+    });
+
+    if (newTicketIds.length > 0 && previousIds.size > 0) {
+      if (soundEnabled) {
+        playNotificationSound();
+      }
+
+      setBlinkingTickets((prev) => {
+        const next = new Set(prev);
+        newTicketIds.forEach((id) => next.add(id));
+        return next;
+      });
+
+      setTimeout(() => {
+        setBlinkingTickets((prev) => {
+          const next = new Set(prev);
+          newTicketIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, blinkDuration * 1000);
+    }
+
+    previousTicketIdsRef.current = currentTicketIds;
+  }, [activeTickets, soundEnabled, blinkDuration]);
+
+  const playNotificationSound = useCallback(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp6clJWRkZaenZqSlox/f4WLi4N8d3h8gYODgYKDgYCAgICAgICAgICAgICAgICAgH5/gIGBf319fn+AgYKCgoODg4ODg4ODg4ODg4ODg4ODg4OCgoKCgoKCgoKCgoKCgoKCgn9/f39/f3+AgICAgICAgICAgICAgH9/f39/f39/f39/f3+AgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYF/f39/f39/f3+AgICAgICAgICAgICAgICAgICAgICAgICAgIB/f39/f39/f39/f39/f4CAgICAgICAgICAgICAf39/f39/gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIB/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/");
+      audioRef.current.volume = 0.5;
+    }
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
+  }, []);
+
+  const getAllDaySummary = useCallback(() => {
+    const summary: Record<string, { name: string; totalQty: number; readyQty: number }> = {};
+    
+    activeTickets.forEach((ticket) => {
+      ticket.items.forEach((item) => {
+        if (item.status === "voided") return;
+        
+        if (!summary[item.name]) {
+          summary[item.name] = { name: item.name, totalQty: 0, readyQty: 0 };
+        }
+        summary[item.name].totalQty += item.quantity || 1;
+        if (item.isReady) {
+          summary[item.name].readyQty += item.quantity || 1;
+        }
+      });
+    });
+    
+    return Object.values(summary).sort((a, b) => b.totalQty - a.totalQty);
+  }, [activeTickets]);
 
   return (
     <div className="h-full flex flex-col bg-background">
       <header className="flex-shrink-0 border-b px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
             <h1 className="text-xl font-bold" data-testid="text-kds-title">
               Kitchen Display
             </h1>
@@ -89,7 +215,77 @@ export function KdsDisplay({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant={soundEnabled ? "secondary" : "ghost"}
+              size="icon"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              data-testid="button-kds-sound-toggle"
+              title={soundEnabled ? "Sound enabled" : "Sound muted"}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </Button>
+
+            <Button
+              variant={showAllDay ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAllDay(!showAllDay)}
+              data-testid="button-kds-all-day"
+            >
+              <List className="w-4 h-4 mr-1" />
+              All Day
+            </Button>
+
+            <Dialog open={showRecallModal} onOpenChange={setShowRecallModal}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-kds-recall-open">
+                  <RotateCcw className="w-4 h-4 mr-1" />
+                  Recall
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+                <DialogHeader>
+                  <DialogTitle>Recall Bumped Order</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2">
+                  {bumpedTickets.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No bumped orders to recall
+                    </div>
+                  ) : (
+                    bumpedTickets.map((ticket) => (
+                      <div
+                        key={ticket.id}
+                        className="flex items-center justify-between p-3 border rounded-md hover-elevate"
+                      >
+                        <div>
+                          <div className="font-bold">
+                            #{ticket.checkNumber} - {ticket.orderType?.replace("_", " ")}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {ticket.items?.slice(0, 3).map((item) => `${item.quantity}x ${item.name}`).join(", ")}
+                            {ticket.items && ticket.items.length > 3 && ` +${ticket.items.length - 3} more`}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Bumped: {new Date(ticket.bumpedAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => recallMutation.mutate(ticket.id)}
+                          disabled={recallMutation.isPending}
+                          data-testid={`button-recall-${ticket.id}`}
+                        >
+                          <RotateCcw className="w-4 h-4 mr-1" />
+                          Recall
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+
             <Tabs value={selectedStation} onValueChange={onStationChange}>
               <TabsList>
                 <TabsTrigger
@@ -146,6 +342,38 @@ export function KdsDisplay({
         </div>
       </header>
 
+      {showAllDay && (
+        <div className="flex-shrink-0 border-b bg-muted/30 p-4">
+          <h2 className="text-lg font-semibold mb-3">All Day Summary</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+            {getAllDaySummary().map((item) => (
+              <div
+                key={item.name}
+                className={`p-2 rounded-md border text-center ${
+                  item.readyQty === item.totalQty ? "bg-green-500/10 border-green-500/30" : "bg-card"
+                }`}
+                data-testid={`all-day-item-${item.name}`}
+              >
+                <div className="text-2xl font-bold tabular-nums">
+                  {item.readyQty > 0 && (
+                    <span className="text-green-600">{item.readyQty}/</span>
+                  )}
+                  {item.totalQty}
+                </div>
+                <div className="text-xs text-muted-foreground truncate" title={item.name}>
+                  {item.name}
+                </div>
+              </div>
+            ))}
+            {getAllDaySummary().length === 0 && (
+              <div className="col-span-full text-center text-muted-foreground py-4">
+                No items to display
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <ScrollArea className="flex-1">
         <div className="p-4">
           {tickets.length === 0 ? (
@@ -157,20 +385,26 @@ export function KdsDisplay({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {activeTickets.map((ticket) => (
-                <KdsTicket
+                <div
                   key={ticket.id}
-                  ticketId={ticket.id}
-                  checkNumber={ticket.checkNumber}
-                  orderType={ticket.orderType}
-                  stationType={ticket.stationType}
-                  items={ticket.items}
-                  isDraft={false}
-                  isPreview={ticket.isPreview}
-                  isPaid={ticket.isPaid}
-                  createdAt={ticket.createdAt}
-                  onBump={onBump}
-                  onRecall={onRecall}
-                />
+                  className={blinkingTickets.has(ticket.id) ? "animate-pulse" : ""}
+                >
+                  <KdsTicket
+                    ticketId={ticket.id}
+                    checkNumber={ticket.checkNumber}
+                    orderType={ticket.orderType}
+                    stationType={ticket.stationType}
+                    items={ticket.items}
+                    isDraft={false}
+                    isPreview={ticket.isPreview}
+                    isPaid={ticket.isPaid}
+                    isRecalled={ticket.isRecalled}
+                    createdAt={ticket.createdAt}
+                    colorAlerts={colorAlerts}
+                    onBump={onBump}
+                    onRecall={onRecall}
+                  />
+                </div>
               ))}
               {draftTickets.map((ticket) => (
                 <KdsTicket
@@ -184,6 +418,7 @@ export function KdsDisplay({
                   isPreview={ticket.isPreview}
                   isPaid={ticket.isPaid}
                   createdAt={ticket.createdAt}
+                  colorAlerts={colorAlerts}
                   onBump={onBump}
                   onRecall={onRecall}
                 />
