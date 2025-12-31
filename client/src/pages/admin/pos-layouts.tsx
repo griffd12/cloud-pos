@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical, Star } from "lucide-react";
+import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical, Star, Upload, Image } from "lucide-react";
 import type { PosLayout, PosLayoutCell, MenuItem, Rvc, Property, PosLayoutRvcAssignment } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -96,6 +96,123 @@ function DragOverlayCell({ cell, menuItem }: { cell: CellData | null | undefined
     >
       {cell.displayLabel || menuItem?.shortName || menuItem?.name || ""}
     </div>
+  );
+}
+
+// Property Branding Section Component
+function PropertyBrandingSection({ properties, toast }: { properties: Property[]; toast: ReturnType<typeof useToast>["toast"] }) {
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const updateLogoMutation = useMutation({
+    mutationFn: async ({ propertyId, logoUrl }: { propertyId: string; logoUrl: string | null }) => {
+      const response = await apiRequest("PUT", `/api/properties/${propertyId}`, { signInLogoUrl: logoUrl });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      toast({ title: "Logo updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update logo", variant: "destructive" });
+    },
+  });
+
+  const handleFileChange = async (propertyId: string, file: File) => {
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "File too large. Maximum size is 2MB.", variant: "destructive" });
+      return;
+    }
+    
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please select an image file.", variant: "destructive" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      updateLogoMutation.mutate({ propertyId, logoUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = (propertyId: string) => {
+    updateLogoMutation.mutate({ propertyId, logoUrl: null });
+  };
+
+  if (properties.length === 0) return null;
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Image className="w-5 h-5" />
+          Property Sign-In Logos
+        </CardTitle>
+        <CardDescription>
+          Upload custom logos for each property to display on the employee sign-in screen
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {properties.map((property) => (
+            <div key={property.id} className="border rounded-lg p-4 space-y-3">
+              <div className="font-medium text-sm">{property.name}</div>
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
+                  {property.signInLogoUrl ? (
+                    <img
+                      src={property.signInLogoUrl}
+                      alt={`${property.name} logo`}
+                      className="w-full h-full object-contain"
+                      data-testid={`img-logo-preview-${property.id}`}
+                    />
+                  ) : (
+                    <Building2 className="w-8 h-8 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input
+                    ref={(el) => { fileInputRefs.current[property.id] = el; }}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileChange(property.id, file);
+                      e.target.value = "";
+                    }}
+                    data-testid={`input-logo-file-${property.id}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fileInputRefs.current[property.id]?.click()}
+                    disabled={updateLogoMutation.isPending}
+                    data-testid={`button-upload-logo-${property.id}`}
+                  >
+                    <Upload className="w-3 h-3 mr-1" />
+                    {property.signInLogoUrl ? "Change" : "Upload"}
+                  </Button>
+                  {property.signInLogoUrl && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleRemoveLogo(property.id)}
+                      disabled={updateLogoMutation.isPending}
+                      data-testid={`button-remove-logo-${property.id}`}
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -468,7 +585,21 @@ export default function PosLayoutsPage() {
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">POS Screen Layouts</h1>
           <p className="text-sm text-muted-foreground">
-            Create custom layouts for the POS transaction screen
+            Configure custom layouts and branding for the POS screens
+          </p>
+        </div>
+      </div>
+
+      {/* Property Branding Section */}
+      <PropertyBrandingSection properties={properties} toast={toast} />
+
+      <Separator className="my-8" />
+
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-xl font-semibold">Screen Layouts</h2>
+          <p className="text-sm text-muted-foreground">
+            Create custom layouts for the transaction screen
           </p>
         </div>
         <Button onClick={() => handleOpenForm()} data-testid="button-add-layout">
