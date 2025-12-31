@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -8,13 +9,16 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { 
   DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, 
   Banknote, Smartphone, Package, Layers, ChevronDown, ChevronRight, BarChart3,
-  FileText, UserCheck, Timer, GitCompare
+  FileText, UserCheck, Timer, GitCompare, X
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { type Property, type Rvc } from "@shared/schema";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { type Property, type Rvc, type CheckItem } from "@shared/schema";
 
 interface SalesSummary {
   grossSales: number;
@@ -332,13 +336,44 @@ function CategoryRows({ category, totalSales }: { category: CategorySaleDetail; 
   );
 }
 
+interface CheckDetailData {
+  check: {
+    id: string;
+    checkNumber: number;
+    employeeId: string;
+    rvcId: string;
+    status: string;
+    tableNumber?: string | null;
+    orderType?: string;
+    subtotal?: string;
+    taxTotal?: string;
+    discountTotal?: string;
+    total?: string;
+    openedAt?: string | null;
+    closedAt?: string | null;
+    paidAmount?: number;
+  };
+  items: CheckItem[];
+}
+
 export default function ReportsPage() {
+  const searchParams = useSearch();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("all");
   const [dateRange, setDateRange] = useState<string>("today");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [selectedCheckId, setSelectedCheckId] = useState<string | null>(null);
+  const [checkModalOpen, setCheckModalOpen] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    const tab = params.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -545,6 +580,48 @@ export default function ReportsPage() {
       return res.json();
     },
   });
+
+  const { data: checkDetailData, isLoading: checkDetailLoading } = useQuery<CheckDetailData>({
+    queryKey: ["/api/checks", selectedCheckId],
+    queryFn: async () => {
+      if (!selectedCheckId) throw new Error("No check selected");
+      const res = await fetch(`/api/checks/${selectedCheckId}`);
+      if (!res.ok) throw new Error("Failed to fetch check details");
+      return res.json();
+    },
+    enabled: !!selectedCheckId && checkModalOpen,
+  });
+
+  const handleViewCheck = (checkId: string) => {
+    setSelectedCheckId(checkId);
+    setCheckModalOpen(true);
+  };
+
+  const comparisonChartData = useMemo(() => {
+    if (!comparisonData) return [];
+    return [
+      { 
+        name: "Checks", 
+        current: comparisonData.currentPeriod.data.checkCount, 
+        previous: comparisonData.previousPeriod.data.checkCount 
+      },
+      { 
+        name: "Gross Sales", 
+        current: comparisonData.currentPeriod.data.grossSales, 
+        previous: comparisonData.previousPeriod.data.grossSales 
+      },
+      { 
+        name: "Net Sales", 
+        current: comparisonData.currentPeriod.data.netSales, 
+        previous: comparisonData.previousPeriod.data.netSales 
+      },
+      { 
+        name: "Avg Check", 
+        current: comparisonData.currentPeriod.data.avgCheck, 
+        previous: comparisonData.previousPeriod.data.avgCheck 
+      },
+    ];
+  }, [comparisonData]);
 
   const avgItemPrice = menuItemData && menuItemData.totalQuantity > 0 
     ? menuItemData.totalSales / menuItemData.totalQuantity 
@@ -1312,7 +1389,12 @@ export default function ReportsPage() {
                 </TableHeader>
                 <TableBody>
                   {(openChecksData?.checks || []).map((check) => (
-                    <TableRow key={check.id} data-testid={`row-open-check-${check.id}`}>
+                    <TableRow 
+                      key={check.id} 
+                      data-testid={`row-open-check-${check.id}`}
+                      className="cursor-pointer hover-elevate"
+                      onClick={() => handleViewCheck(check.id)}
+                    >
                       <TableCell className="font-medium">{check.checkNumber}</TableCell>
                       <TableCell>{check.employeeName}</TableCell>
                       <TableCell>{check.rvcName}</TableCell>
@@ -1332,6 +1414,7 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              <p className="text-xs text-muted-foreground mt-2">Click on a check to view details</p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1404,7 +1487,12 @@ export default function ReportsPage() {
                 </TableHeader>
                 <TableBody>
                   {(closedChecksData?.checks || []).map((check) => (
-                    <TableRow key={check.id} data-testid={`row-closed-check-${check.id}`}>
+                    <TableRow 
+                      key={check.id} 
+                      data-testid={`row-closed-check-${check.id}`}
+                      className="cursor-pointer hover-elevate"
+                      onClick={() => handleViewCheck(check.id)}
+                    >
                       <TableCell className="font-medium">{check.checkNumber}</TableCell>
                       <TableCell>{check.employeeName}</TableCell>
                       <TableCell>{check.rvcName}</TableCell>
@@ -1424,6 +1512,7 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              <p className="text-xs text-muted-foreground mt-2">Click on a check to view details</p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1744,6 +1833,51 @@ export default function ReportsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Sales Comparison Chart</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={comparisonChartData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis type="number" tickFormatter={(value) => value >= 1000 ? `$${(value / 1000).toFixed(0)}k` : value.toString()} />
+                      <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-popover p-3 rounded border text-sm">
+                                <p className="font-medium mb-2">{label}</p>
+                                {payload.map((entry, index) => (
+                                  <p key={index} style={{ color: entry.color }}>
+                                    {entry.name}: {label === "Checks" ? entry.value : formatCurrency(entry.value as number)}
+                                  </p>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Legend />
+                      <Bar 
+                        dataKey="current" 
+                        name={comparisonData.currentPeriod.label} 
+                        fill="hsl(var(--primary))" 
+                        radius={[0, 4, 4, 0]} 
+                      />
+                      <Bar 
+                        dataKey="previous" 
+                        name={comparisonData.previousPeriod.label} 
+                        fill="hsl(var(--muted-foreground))" 
+                        radius={[0, 4, 4, 0]} 
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
             </>
           ) : (
             <Card>
@@ -1754,6 +1888,128 @@ export default function ReportsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={checkModalOpen} onOpenChange={setCheckModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5" />
+              Check #{checkDetailData?.check.checkNumber || "..."}
+              <Badge variant={checkDetailData?.check.status === "open" ? "default" : "secondary"}>
+                {checkDetailData?.check.status || "..."}
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {checkDetailLoading ? (
+            <div className="py-8 text-center text-muted-foreground">Loading check details...</div>
+          ) : checkDetailData ? (
+            <ScrollArea className="max-h-[60vh]">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Order Type</p>
+                    <p className="font-medium">{checkDetailData.check.orderType || "Dine In"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Table</p>
+                    <p className="font-medium">{checkDetailData.check.tableNumber || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Opened</p>
+                    <p className="font-medium">{formatDateTime(checkDetailData.check.openedAt || null)}</p>
+                  </div>
+                  {checkDetailData.check.closedAt && (
+                    <div>
+                      <p className="text-muted-foreground">Closed</p>
+                      <p className="font-medium">{formatDateTime(checkDetailData.check.closedAt)}</p>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h4 className="font-medium mb-2">Items ({checkDetailData.items.filter(i => !i.voided).length})</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Item</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {checkDetailData.items.filter(i => !i.voided).map((item) => {
+                        const unitPrice = parseFloat(item.unitPrice || "0");
+                        const qty = item.quantity || 1;
+                        const modifierTotal = item.modifiers?.reduce((sum, m) => sum + parseFloat(m.priceDelta || "0"), 0) || 0;
+                        const extendedPrice = (unitPrice + modifierTotal) * qty;
+                        return (
+                          <TableRow key={item.id} data-testid={`row-check-item-${item.id}`}>
+                            <TableCell>
+                              <div>
+                                <span className="font-medium">{item.menuItemName}</span>
+                                {item.modifiers && item.modifiers.length > 0 && (
+                                  <div className="text-xs text-muted-foreground mt-0.5">
+                                    {item.modifiers.map(m => m.name).join(", ")}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">{qty}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(unitPrice)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(extendedPrice)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {checkDetailData.items.filter(i => !i.voided).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-muted-foreground">No items</TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <Separator />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span>{formatCurrency(parseFloat(checkDetailData.check.subtotal || "0"))}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Discounts</span>
+                      <span className="text-destructive">-{formatCurrency(parseFloat(checkDetailData.check.discountTotal || "0"))}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tax</span>
+                      <span>{formatCurrency(parseFloat(checkDetailData.check.taxTotal || "0"))}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>Total</span>
+                      <span>{formatCurrency(parseFloat(checkDetailData.check.total || "0"))}</span>
+                    </div>
+                    {checkDetailData.check.paidAmount !== undefined && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Paid</span>
+                        <span className="text-green-600 dark:text-green-400">{formatCurrency(checkDetailData.check.paidAmount)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">Failed to load check details</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

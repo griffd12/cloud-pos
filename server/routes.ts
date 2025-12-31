@@ -3261,7 +3261,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         openChecks = openChecks.filter(c => c.rvcId === rvcId);
       }
       
-      const allCheckItems = await storage.getCheckItems();
+      const allCheckItems = await storage.getAllCheckItems();
       
       const checksWithDetails = openChecks.map(check => {
         const emp = employees.find(e => e.id === check.employeeId);

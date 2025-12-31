@@ -63,7 +63,7 @@ function AdminDashboard() {
     { title: "Revenue Centers", value: stats?.rvcs || 0, icon: LayoutGrid, href: "/admin/rvcs" },
     { title: "Employees", value: stats?.employees || 0, icon: Users, href: "/admin/employees" },
     { title: "Menu Items", value: stats?.menuItems || 0, icon: UtensilsCrossed, href: "/admin/menu-items" },
-    { title: "Active Checks", value: stats?.activeChecks || 0, icon: Receipt, href: "/admin" },
+    { title: "Active Checks", value: stats?.activeChecks || 0, icon: Receipt, href: "/admin/reports?tab=open-checks" },
   ];
 
   return (
