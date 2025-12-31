@@ -28,10 +28,31 @@ export default function PropertiesPage() {
     { value: "Pacific/Honolulu", label: "Hawaii" },
   ];
 
+  const rolloverTimeOptions = [
+    { value: "00:00", label: "12:00 AM (Midnight)" },
+    { value: "01:00", label: "1:00 AM" },
+    { value: "02:00", label: "2:00 AM" },
+    { value: "03:00", label: "3:00 AM" },
+    { value: "04:00", label: "4:00 AM" },
+    { value: "05:00", label: "5:00 AM" },
+    { value: "06:00", label: "6:00 AM" },
+  ];
+
+  const businessDateModeOptions = [
+    { value: "auto", label: "Auto (based on time)" },
+    { value: "manual", label: "Manual (set date)" },
+  ];
+
   const getTimezoneLabel = (tz: string | null | undefined) => {
     if (!tz) return "Not Set";
     const option = timezoneOptions.find(o => o.value === tz);
     return option?.label || tz;
+  };
+
+  const getRolloverLabel = (time: string | null | undefined) => {
+    if (!time) return "4:00 AM";
+    const option = rolloverTimeOptions.find(o => o.value === time);
+    return option?.label || time;
   };
 
   const columns: Column<Property>[] = [
@@ -47,7 +68,11 @@ export default function PropertiesPage() {
       header: "Timezone",
       render: (value) => getTimezoneLabel(value as string),
     },
-    { key: "address", header: "Address" },
+    { 
+      key: "businessDateRolloverTime", 
+      header: "Day Rollover",
+      render: (value) => getRolloverLabel(value as string),
+    },
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -68,6 +93,27 @@ export default function PropertiesPage() {
       required: true,
     },
     { name: "address", label: "Address", type: "textarea", placeholder: "Enter address" },
+    {
+      name: "businessDateRolloverTime",
+      label: "Business Day Rollover Time",
+      type: "select",
+      options: rolloverTimeOptions,
+      description: "When the business day ends (e.g., 4 AM means sales until 3:59 AM count as previous day)",
+    },
+    {
+      name: "businessDateMode",
+      label: "Business Date Mode",
+      type: "select",
+      options: businessDateModeOptions,
+      description: "Auto calculates based on time; Manual lets you set the date",
+    },
+    {
+      name: "currentBusinessDate",
+      label: "Current Business Date (Manual Mode)",
+      type: "text",
+      placeholder: "YYYY-MM-DD",
+      description: "Only used when mode is Manual",
+    },
   ];
 
   const createMutation = useMutation({
