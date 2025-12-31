@@ -2543,8 +2543,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       
       // Filter checks by date and property/rvc
+      // Use closedAt for closed checks (for accurate reporting by closure date)
+      // Fall back to openedAt for open checks
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt 
+          ? new Date(c.closedAt) 
+          : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         return true;
@@ -2637,7 +2641,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Filter checks
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2709,7 +2713,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2773,7 +2777,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2831,7 +2835,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const employees = await storage.getEmployees();
       
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         return true;
@@ -2886,7 +2890,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const employees = await storage.getEmployees();
       
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -2993,7 +2997,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const employees = await storage.getEmployees();
       
       let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -3054,7 +3058,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Filter checks by date range and location - use openedAt for date filter
       let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -3140,7 +3144,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Filter checks by date and location - use openedAt for date filter
       let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;
@@ -3259,7 +3263,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Filter checks by date and location - use openedAt for date filter
       let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.openedAt ? new Date(c.openedAt) : null;
+        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
         if (!checkDate) return false;
         if (checkDate < start || checkDate > end) return false;
         if (c.status !== "closed") return false;

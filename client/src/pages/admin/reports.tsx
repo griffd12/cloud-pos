@@ -259,6 +259,11 @@ export default function ReportsPage() {
         end.setHours(23, 59, 59, 999);
         return { startDate: start.toISOString(), endDate: end.toISOString() };
       }
+      case "this_month": {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
+      }
       case "custom": {
         if (customStartDate && customEndDate) {
           const start = new Date(customStartDate);
@@ -380,6 +385,7 @@ export default function ReportsPage() {
                   <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="week">Last 7 Days</SelectItem>
                   <SelectItem value="month">Last 30 Days</SelectItem>
+                  <SelectItem value="this_month">This Month</SelectItem>
                   <SelectItem value="ytd">Year to Date</SelectItem>
                   <SelectItem value="last_quarter">Last Quarter</SelectItem>
                   <SelectItem value="custom">Custom Range</SelectItem>
