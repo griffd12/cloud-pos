@@ -158,7 +158,7 @@ export function EntityForm<T extends z.ZodTypeAny>({
                               value={field.value ?? ""}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                field.onChange(val === "" ? null : val);
+                                field.onChange(val === "" ? null : parseFloat(val));
                               }}
                               data-testid={`input-${fieldConfig.name}`}
                             />
