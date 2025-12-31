@@ -3776,5 +3776,467 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Closed Checks Report
+  app.get("/api/reports/closed-checks", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const employees = await storage.getEmployees();
+      const allPayments = await storage.getAllPayments();
+      
+      let closedChecks = allChecks.filter(c => c.status === "closed");
+      
+      // Filter by property/RVC
+      if (propertyId && propertyId !== "all") {
+        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+        closedChecks = closedChecks.filter(c => propertyRvcs.includes(c.rvcId));
+      }
+      if (rvcId && rvcId !== "all") {
+        closedChecks = closedChecks.filter(c => c.rvcId === rvcId);
+      }
+      
+      // Filter by date (based on closedAt)
+      closedChecks = closedChecks.filter(check => {
+        if (useBusinessDate) {
+          return check.businessDate === businessDate;
+        }
+        if (!check.closedAt) return false;
+        const closedAt = new Date(check.closedAt);
+        return closedAt >= start && closedAt <= end;
+      });
+      
+      const result = closedChecks.map(check => {
+        const emp = employees.find(e => e.id === check.employeeId);
+        const rvc = allRvcs.find(r => r.id === check.rvcId);
+        const checkPayments = allPayments.filter(p => p.checkId === check.id);
+        const totalPaid = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        
+        const durationMinutes = check.openedAt && check.closedAt
+          ? Math.floor((new Date(check.closedAt).getTime() - new Date(check.openedAt).getTime()) / 60000)
+          : 0;
+        
+        return {
+          id: check.id,
+          checkNumber: check.checkNumber,
+          employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+          rvcName: rvc?.name || "Unknown",
+          tableNumber: check.tableNumber,
+          guestCount: check.guestCount,
+          subtotal: parseFloat(check.subtotal || "0"),
+          tax: parseFloat(check.taxTotal || "0"),
+          total: parseFloat(check.total || "0"),
+          totalPaid,
+          durationMinutes,
+          openedAt: check.openedAt,
+          closedAt: check.closedAt,
+          businessDate: check.businessDate,
+        };
+      }).sort((a, b) => new Date(b.closedAt || 0).getTime() - new Date(a.closedAt || 0).getTime());
+      
+      res.json({
+        checks: result,
+        summary: {
+          count: result.length,
+          totalSales: result.reduce((sum, c) => sum + c.total, 0),
+          avgCheck: result.length > 0 ? result.reduce((sum, c) => sum + c.total, 0) / result.length : 0,
+          avgDuration: result.length > 0 ? result.reduce((sum, c) => sum + c.durationMinutes, 0) / result.length : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Closed checks error:", error);
+      res.status(500).json({ message: "Failed to generate closed checks report" });
+    }
+  });
+
+  // Employee Balance Report - Shows employee sales transactions
+  app.get("/api/reports/employee-balance", async (req, res) => {
+    try {
+      const { propertyId, rvcId, employeeId, startDate, endDate, businessDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
+      
+      const employees = await storage.getEmployees();
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const allPayments = await storage.getAllPayments();
+      const allCheckItems = await storage.getAllCheckItems();
+      
+      // Get valid RVC IDs
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Filter checks by property/RVC and date
+      let filteredChecks = allChecks.filter(check => {
+        if (validRvcIds && !validRvcIds.includes(check.rvcId)) return false;
+        if (check.status !== "closed") return false;
+        
+        if (useBusinessDate) {
+          return check.businessDate === businessDate;
+        }
+        if (!check.closedAt) return false;
+        const closedAt = new Date(check.closedAt);
+        return closedAt >= start && closedAt <= end;
+      });
+      
+      // If specific employee, filter further
+      if (employeeId && employeeId !== "all") {
+        filteredChecks = filteredChecks.filter(c => c.employeeId === employeeId);
+      }
+      
+      // Build employee balance data
+      const employeeData: Record<string, {
+        id: string;
+        name: string;
+        checkCount: number;
+        itemCount: number;
+        grossSales: number;
+        discounts: number;
+        netSales: number;
+        tax: number;
+        total: number;
+        cashCollected: number;
+        creditCollected: number;
+        otherCollected: number;
+        totalCollected: number;
+        tips: number;
+      }> = {};
+      
+      for (const check of filteredChecks) {
+        const emp = employees.find(e => e.id === check.employeeId);
+        if (!emp) continue;
+        
+        const empId = emp.id;
+        if (!employeeData[empId]) {
+          employeeData[empId] = {
+            id: empId,
+            name: `${emp.firstName} ${emp.lastName}`,
+            checkCount: 0,
+            itemCount: 0,
+            grossSales: 0,
+            discounts: 0,
+            netSales: 0,
+            tax: 0,
+            total: 0,
+            cashCollected: 0,
+            creditCollected: 0,
+            otherCollected: 0,
+            totalCollected: 0,
+            tips: 0,
+          };
+        }
+        
+        employeeData[empId].checkCount++;
+        employeeData[empId].grossSales += parseFloat(check.subtotal || "0");
+        employeeData[empId].discounts += parseFloat(check.discountTotal || "0");
+        employeeData[empId].tax += parseFloat(check.taxTotal || "0");
+        employeeData[empId].total += parseFloat(check.total || "0");
+        
+        // Count items
+        const checkItems = allCheckItems.filter(ci => ci.checkId === check.id && !ci.voided);
+        employeeData[empId].itemCount += checkItems.reduce((sum, ci) => sum + (ci.quantity || 1), 0);
+        
+        // Get payments for this check
+        const checkPayments = allPayments.filter(p => p.checkId === check.id);
+        const tenders = await storage.getTenders();
+        for (const payment of checkPayments) {
+          const amount = parseFloat(payment.amount || "0");
+          employeeData[empId].totalCollected += amount;
+          
+          // Categorize by tender type (lookup tender)
+          const tender = tenders.find(t => t.id === payment.tenderId);
+          if (tender?.type === "cash") {
+            employeeData[empId].cashCollected += amount;
+          } else if (tender?.type === "credit") {
+            employeeData[empId].creditCollected += amount;
+          } else {
+            employeeData[empId].otherCollected += amount;
+          }
+        }
+        
+        employeeData[empId].netSales = employeeData[empId].grossSales - employeeData[empId].discounts;
+      }
+      
+      const result = Object.values(employeeData).sort((a, b) => b.total - a.total);
+      
+      res.json({
+        employees: result,
+        summary: {
+          employeeCount: result.length,
+          totalChecks: result.reduce((sum, e) => sum + e.checkCount, 0),
+          totalSales: result.reduce((sum, e) => sum + e.total, 0),
+          totalTips: result.reduce((sum, e) => sum + e.tips, 0),
+          totalCollected: result.reduce((sum, e) => sum + e.totalCollected, 0),
+        },
+      });
+    } catch (error) {
+      console.error("Employee balance error:", error);
+      res.status(500).json({ message: "Failed to generate employee balance report" });
+    }
+  });
+
+  // KDS KPI Dashboard
+  app.get("/api/reports/kds-kpi", async (req, res) => {
+    try {
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const end = endDate ? new Date(endDate as string) : new Date();
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
+      
+      const allRvcs = await storage.getRvcs();
+      
+      // Get KDS tickets with optional RVC filter
+      let allKdsTickets: any[];
+      if (rvcId && rvcId !== "all") {
+        allKdsTickets = await storage.getKdsTickets({ rvcId: rvcId as string });
+      } else {
+        allKdsTickets = await storage.getKdsTickets();
+      }
+      
+      // Get valid RVC IDs for property filtering
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      
+      // Filter tickets by RVC (property) and date
+      const filteredTickets = allKdsTickets.filter((ticket: any) => {
+        if (validRvcIds && !validRvcIds.includes(ticket.rvcId)) return false;
+        
+        if (useBusinessDate) {
+          const ticketDate = ticket.createdAt ? new Date(ticket.createdAt) : null;
+          if (!ticketDate) return false;
+          const ticketBd = ticketDate.toISOString().split('T')[0];
+          return ticketBd === businessDate;
+        }
+        
+        if (!ticket.createdAt) return false;
+        const createdAt = new Date(ticket.createdAt);
+        return createdAt >= start && createdAt <= end;
+      });
+      
+      // Calculate ticket times
+      const completedTickets = filteredTickets.filter((t: any) => t.status === "completed" && t.completedAt);
+      const ticketTimes = completedTickets.map((t: any) => {
+        const created = new Date(t.createdAt);
+        const completed = new Date(t.completedAt);
+        return (completed.getTime() - created.getTime()) / 1000;
+      });
+      
+      const avgTicketTime = ticketTimes.length > 0 
+        ? ticketTimes.reduce((a: number, b: number) => a + b, 0) / ticketTimes.length 
+        : 0;
+      const minTicketTime = ticketTimes.length > 0 ? Math.min(...ticketTimes) : 0;
+      const maxTicketTime = ticketTimes.length > 0 ? Math.max(...ticketTimes) : 0;
+      
+      // Count items from tickets (each ticket has items array)
+      let totalItems = 0;
+      let readyItems = 0;
+      for (const ticket of filteredTickets) {
+        if (ticket.items && Array.isArray(ticket.items)) {
+          totalItems += ticket.items.length;
+          readyItems += ticket.items.filter((i: any) => i.isReady).length;
+        }
+      }
+      
+      // Tickets by status
+      const statusCounts = {
+        pending: filteredTickets.filter((t: any) => t.status === "pending").length,
+        inProgress: filteredTickets.filter((t: any) => t.status === "in_progress").length,
+        completed: filteredTickets.filter((t: any) => t.status === "completed").length,
+        recalled: filteredTickets.filter((t: any) => t.status === "recalled").length,
+      };
+      
+      // Hourly throughput
+      const hourlyThroughput: { hour: number; tickets: number; avgTime: number }[] = [];
+      for (let h = 0; h < 24; h++) {
+        const hourTickets = completedTickets.filter((t: any) => {
+          const created = new Date(t.createdAt);
+          return created.getHours() === h;
+        });
+        const hourTimes = hourTickets.map((t: any) => {
+          const created = new Date(t.createdAt);
+          const completed = new Date(t.completedAt);
+          return (completed.getTime() - created.getTime()) / 1000;
+        });
+        hourlyThroughput.push({
+          hour: h,
+          tickets: hourTickets.length,
+          avgTime: hourTimes.length > 0 ? hourTimes.reduce((a: number, b: number) => a + b, 0) / hourTimes.length : 0,
+        });
+      }
+      
+      res.json({
+        summary: {
+          totalTickets: filteredTickets.length,
+          completedTickets: completedTickets.length,
+          totalItems,
+          readyItems,
+          avgTicketTimeSeconds: Math.round(avgTicketTime),
+          minTicketTimeSeconds: Math.round(minTicketTime),
+          maxTicketTimeSeconds: Math.round(maxTicketTime),
+        },
+        statusCounts,
+        hourlyThroughput,
+      });
+    } catch (error) {
+      console.error("KDS KPI error:", error);
+      res.status(500).json({ message: "Failed to generate KDS KPI report" });
+    }
+  });
+
+  // Sales Comparison Dashboard
+  app.get("/api/reports/sales-comparison", async (req, res) => {
+    try {
+      const { propertyId, rvcId, comparisonType } = req.query;
+      
+      const allChecks = await storage.getChecks();
+      const allRvcs = await storage.getRvcs();
+      const allPayments = await storage.getAllPayments();
+      
+      // Get valid RVC IDs
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Helper to calculate sales for a date range
+      const calculateSales = (startDate: Date, endDate: Date) => {
+        const checks = allChecks.filter(check => {
+          if (validRvcIds && !validRvcIds.includes(check.rvcId)) return false;
+          if (check.status !== "closed" || !check.closedAt) return false;
+          const closedAt = new Date(check.closedAt);
+          return closedAt >= startDate && closedAt <= endDate;
+        });
+        
+        const checkIds = new Set(checks.map(c => c.id));
+        const payments = allPayments.filter(p => checkIds.has(p.checkId));
+        
+        return {
+          checkCount: checks.length,
+          grossSales: checks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0"), 0),
+          discounts: checks.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0),
+          netSales: checks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0") - parseFloat(c.discountTotal || "0"), 0),
+          tax: checks.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0),
+          total: checks.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0),
+          avgCheck: checks.length > 0 ? checks.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0) / checks.length : 0,
+        };
+      };
+      
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      let currentPeriod: { start: Date; end: Date; label: string };
+      let previousPeriod: { start: Date; end: Date; label: string };
+      
+      switch (comparisonType) {
+        case "today_vs_last_week": {
+          const lastWeekSameDay = new Date(today);
+          lastWeekSameDay.setDate(lastWeekSameDay.getDate() - 7);
+          const lastWeekSameDayEnd = new Date(lastWeekSameDay);
+          lastWeekSameDayEnd.setHours(23, 59, 59, 999);
+          
+          currentPeriod = { start: today, end: todayEnd, label: "Today" };
+          previousPeriod = { start: lastWeekSameDay, end: lastWeekSameDayEnd, label: "Same Day Last Week" };
+          break;
+        }
+        case "this_week_vs_last_week": {
+          const dayOfWeek = now.getDay();
+          const weekStart = new Date(today);
+          weekStart.setDate(weekStart.getDate() - dayOfWeek);
+          
+          const lastWeekStart = new Date(weekStart);
+          lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+          const lastWeekEnd = new Date(lastWeekStart);
+          lastWeekEnd.setDate(lastWeekEnd.getDate() + 6);
+          lastWeekEnd.setHours(23, 59, 59, 999);
+          
+          currentPeriod = { start: weekStart, end: todayEnd, label: "This Week" };
+          previousPeriod = { start: lastWeekStart, end: lastWeekEnd, label: "Last Week" };
+          break;
+        }
+        case "this_month_vs_last_month": {
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+          lastMonthEnd.setHours(23, 59, 59, 999);
+          
+          currentPeriod = { start: monthStart, end: todayEnd, label: "This Month" };
+          previousPeriod = { start: lastMonthStart, end: lastMonthEnd, label: "Last Month" };
+          break;
+        }
+        case "this_year_vs_last_year": {
+          const yearStart = new Date(now.getFullYear(), 0, 1);
+          const lastYearStart = new Date(now.getFullYear() - 1, 0, 1);
+          const lastYearEnd = new Date(now.getFullYear() - 1, 11, 31);
+          lastYearEnd.setHours(23, 59, 59, 999);
+          
+          currentPeriod = { start: yearStart, end: todayEnd, label: "This Year" };
+          previousPeriod = { start: lastYearStart, end: lastYearEnd, label: "Last Year" };
+          break;
+        }
+        default: {
+          // Default to today vs yesterday
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayEnd = new Date(yesterday);
+          yesterdayEnd.setHours(23, 59, 59, 999);
+          
+          currentPeriod = { start: today, end: todayEnd, label: "Today" };
+          previousPeriod = { start: yesterday, end: yesterdayEnd, label: "Yesterday" };
+        }
+      }
+      
+      const currentSales = calculateSales(currentPeriod.start, currentPeriod.end);
+      const previousSales = calculateSales(previousPeriod.start, previousPeriod.end);
+      
+      // Calculate variances
+      const calculateVariance = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? 100 : 0;
+        return ((current - previous) / previous) * 100;
+      };
+      
+      res.json({
+        currentPeriod: {
+          label: currentPeriod.label,
+          startDate: currentPeriod.start.toISOString(),
+          endDate: currentPeriod.end.toISOString(),
+          ...currentSales,
+        },
+        previousPeriod: {
+          label: previousPeriod.label,
+          startDate: previousPeriod.start.toISOString(),
+          endDate: previousPeriod.end.toISOString(),
+          ...previousSales,
+        },
+        variance: {
+          checkCount: calculateVariance(currentSales.checkCount, previousSales.checkCount),
+          grossSales: calculateVariance(currentSales.grossSales, previousSales.grossSales),
+          netSales: calculateVariance(currentSales.netSales, previousSales.netSales),
+          total: calculateVariance(currentSales.total, previousSales.total),
+          avgCheck: calculateVariance(currentSales.avgCheck, previousSales.avgCheck),
+        },
+      });
+    } catch (error) {
+      console.error("Sales comparison error:", error);
+      res.status(500).json({ message: "Failed to generate sales comparison" });
+    }
+  });
+
   return httpServer;
 }
