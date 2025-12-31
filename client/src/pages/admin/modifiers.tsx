@@ -50,7 +50,7 @@ export default function ModifiersPage() {
 
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Modifier Name", type: "text", placeholder: "e.g., Extra Cheese", required: true },
-    { name: "priceDelta", label: "Price Delta", type: "number", placeholder: "0.00", defaultValue: "0" },
+    { name: "priceDelta", label: "Price Delta", type: "decimal", placeholder: "0.00", defaultValue: "0" },
     { name: "isActive", label: "Active", type: "switch", defaultValue: true },
   ];
 

@@ -33,7 +33,7 @@ import type { z } from "zod";
 export interface FormFieldConfig {
   name: string;
   label: string;
-  type: "text" | "number" | "textarea" | "switch" | "select" | "color" | "password";
+  type: "text" | "number" | "decimal" | "textarea" | "switch" | "select" | "color" | "password";
   placeholder?: string;
   description?: string;
   options?: { value: string; label: string }[];
@@ -159,6 +159,22 @@ export function EntityForm<T extends z.ZodTypeAny>({
                               onChange={(e) => {
                                 const val = e.target.value;
                                 field.onChange(val === "" ? null : parseFloat(val));
+                              }}
+                              data-testid={`input-${fieldConfig.name}`}
+                            />
+                          </FormControl>
+                        )}
+
+                        {fieldConfig.type === "decimal" && (
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder={fieldConfig.placeholder}
+                              {...field}
+                              value={field.value ?? ""}
+                              onChange={(e) => {
+                                field.onChange(e.target.value);
                               }}
                               data-testid={`input-${fieldConfig.name}`}
                             />

@@ -42,6 +42,7 @@ export default function MenuItemsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: menuItems = [], isLoading } = useQuery<MenuItem[]>({
@@ -75,6 +76,18 @@ export default function MenuItemsPage() {
   const { data: familyGroups = [] } = useQuery<FamilyGroup[]>({
     queryKey: ["/api/family-groups"],
   });
+
+  const filteredMenuItems = categoryFilter === "all"
+    ? menuItems
+    : categoryFilter === "unlinked"
+    ? menuItems.filter(item => {
+        const linkedSluIds = allMenuItemSlus.filter(l => l.menuItemId === item.id);
+        return linkedSluIds.length === 0;
+      })
+    : menuItems.filter(item => {
+        const linkedSluIds = allMenuItemSlus.filter(l => l.menuItemId === item.id).map(l => l.sluId);
+        return linkedSluIds.includes(categoryFilter);
+      });
 
   const columns: Column<MenuItem>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -306,8 +319,22 @@ export default function MenuItemsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-48" data-testid="select-category-filter">
+              <SelectValue placeholder="Filter by category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="unlinked">Unlinked Items</SelectItem>
+              {slus.map((slu) => (
+                <SelectItem key={slu.id} value={slu.id}>
+                  {slu.buttonLabel || slu.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-menu">
             <Download className="w-4 h-4 mr-2" />
             Export CSV
@@ -334,7 +361,7 @@ export default function MenuItemsPage() {
       </div>
       
       <DataTable
-        data={menuItems}
+        data={filteredMenuItems}
         columns={columns}
         title="Menu Items"
         onAdd={() => {
