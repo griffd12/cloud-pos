@@ -29,6 +29,16 @@ interface SalesSummary {
   avgCheck: number;
   avgPerGuest: number;
   openCheckCount: number;
+  // Detailed breakdowns
+  baseItemSales: number;
+  modifierTotal: number;
+  // New fields for proper accounting
+  totalPayments: number;
+  totalTips: number;
+  paymentCount: number;
+  checksStarted: number;
+  checksClosed: number;
+  checksCarriedOver: number;
 }
 
 interface CategorySale {
@@ -487,13 +497,16 @@ export default function ReportsPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Checks</CardTitle>
-                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Payments</CardTitle>
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold tabular-nums" data-testid="text-check-count">
-                  {summaryLoading ? "..." : salesSummary?.checkCount || 0}
+                <div className="text-2xl font-bold tabular-nums" data-testid="text-total-payments">
+                  {summaryLoading ? "..." : formatCurrency(salesSummary?.totalPayments || 0)}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  {summaryLoading ? "" : `${salesSummary?.paymentCount || 0} transactions`}
+                </p>
               </CardContent>
             </Card>
 
@@ -524,7 +537,41 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Sales Breakdown</CardTitle>
+              <CardTitle className="text-sm">Check Movement</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Checks Started</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-started">
+                    {salesSummary?.checksStarted || 0}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Checks Closed</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-closed">
+                    {salesSummary?.checksClosed || 0}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Carried Over</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-carried">
+                    {salesSummary?.checksCarriedOver || 0}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Currently Open</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-open">
+                    {salesSummary?.openCheckCount || 0}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">Sales Breakdown (by item ring-in date)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-7 gap-4 text-sm">

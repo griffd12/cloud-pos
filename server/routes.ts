@@ -2533,6 +2533,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   // Sales Dashboard Summary
+  // Sales post to date items are rung in (CheckItems.createdAt)
+  // Payments post to date payment is applied (CheckPayments.paidAt)
+  // Checks tracked as: started, closed, carried over
   app.get("/api/reports/sales-summary", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate } = req.query;
@@ -2541,47 +2544,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
+      const allCheckItems = await storage.getAllCheckItems();
+      const allPayments = await storage.getAllPayments();
       
-      // Filter checks by date and property/rvc
-      // Use closedAt for closed checks (for accurate reporting by closure date)
-      // Fall back to openedAt for open checks
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt 
-          ? new Date(c.closedAt) 
-          : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
+      // Get valid RVC IDs for property filter
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Filter checks by property/RVC for check counts
+      const checksInScope = validRvcIds 
+        ? allChecks.filter(c => validRvcIds!.includes(c.rvcId))
+        : allChecks;
+      
+      // CHECK MOVEMENT TRACKING
+      // Checks Started = opened within the date range
+      const checksStarted = checksInScope.filter(c => {
+        if (!c.openedAt) return false;
+        const openDate = new Date(c.openedAt);
+        return openDate >= start && openDate <= end;
+      });
+      
+      // Checks Closed = closed within the date range
+      const checksClosed = checksInScope.filter(c => {
+        if (!c.closedAt || c.status !== "closed") return false;
+        const closeDate = new Date(c.closedAt);
+        return closeDate >= start && closeDate <= end;
+      });
+      
+      // Checks Carried Over = opened before period end, still open OR closed after period end
+      const checksCarriedOver = checksInScope.filter(c => {
+        if (!c.openedAt) return false;
+        const openDate = new Date(c.openedAt);
+        // Opened before end of period
+        if (openDate > end) return false;
+        // Still open OR closed after the period
+        if (c.status === "open") return true;
+        if (c.closedAt) {
+          const closeDate = new Date(c.closedAt);
+          return closeDate > end;
+        }
+        return false;
+      });
+      
+      // Currently open checks (snapshot)
+      const currentlyOpen = checksInScope.filter(c => c.status === "open");
+      
+      // SALES - Based on item createdAt (when items were rung in)
+      // Filter items by createdAt within date range and by RVC scope
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      const itemsInPeriod = allCheckItems.filter(ci => {
+        if (ci.voided) return false;
+        if (!ci.createdAt) return false;
+        const itemDate = new Date(ci.createdAt);
+        if (itemDate < start || itemDate > end) return false;
+        // Apply RVC filter
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
         return true;
       });
       
-      // Apply property filter (skip if "all" or empty)
-      if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
-      }
-      
-      // Apply RVC filter (skip if "all" or empty)
-      if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
-      }
-      
-      const closedChecks = filteredChecks.filter(c => c.status === "closed");
-      const openChecks = filteredChecks.filter(c => c.status === "open");
-      const closedCheckIds = closedChecks.map(c => c.id);
-      
-      // Get all check items to calculate actual item sales
-      const allCheckItems = await storage.getAllCheckItems();
-      const menuItemsInChecks = allCheckItems.filter(ci => 
-        closedCheckIds.includes(ci.checkId) && !ci.voided
-      );
-      
-      // Calculate base item sales
-      const baseItemSales = menuItemsInChecks.reduce((sum, ci) => 
+      // Calculate item sales from items rung in during the period
+      const baseItemSales = itemsInPeriod.reduce((sum, ci) => 
         sum + parseFloat(ci.unitPrice || "0") * (ci.quantity || 1), 0
       );
       
-      // Calculate modifier upcharges from JSON modifiers field
-      const modifierTotal = menuItemsInChecks.reduce((sum, ci) => {
+      const modifierTotal = itemsInPeriod.reduce((sum, ci) => {
         if (!ci.modifiers || !Array.isArray(ci.modifiers)) return sum;
         const modSum = (ci.modifiers as any[]).reduce((mSum, mod) => {
           return mSum + parseFloat(mod.priceDelta || "0");
@@ -2591,34 +2625,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const itemSales = baseItemSales + modifierTotal;
       
-      const grossSales = closedChecks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0"), 0);
-      const serviceChargeTotal = closedChecks.reduce((sum, c) => sum + parseFloat(c.serviceChargeTotal || "0"), 0);
-      const otherCharges = grossSales - itemSales - serviceChargeTotal;
-      const totalDiscounts = closedChecks.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0);
-      const netSales = grossSales - totalDiscounts;
-      const totalTax = closedChecks.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0);
-      const totalWithTax = closedChecks.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
-      const checkCount = closedChecks.length;
-      const guestCount = closedChecks.reduce((sum, c) => sum + (c.guestCount || 1), 0);
-      const avgCheck = checkCount > 0 ? netSales / checkCount : 0;
-      const avgPerGuest = guestCount > 0 ? netSales / guestCount : 0;
+      // For tax calculation, we need to look at items' tax status
+      // Get tax groups for proper tax calculation
+      const menuItems = await storage.getMenuItems();
+      const taxGroups = await storage.getTaxGroups();
+      
+      let calculatedTax = 0;
+      for (const ci of itemsInPeriod) {
+        const menuItem = menuItems.find(m => m.id === ci.menuItemId);
+        if (menuItem?.taxGroupId) {
+          const taxGroup = taxGroups.find(t => t.id === menuItem.taxGroupId);
+          if (taxGroup && !taxGroup.inclusive) {
+            const itemTotal = (parseFloat(ci.unitPrice || "0") * (ci.quantity || 1));
+            // Add modifier prices
+            let modTotal = 0;
+            if (ci.modifiers && Array.isArray(ci.modifiers)) {
+              modTotal = (ci.modifiers as any[]).reduce((sum, mod) => 
+                sum + parseFloat(mod.priceDelta || "0"), 0
+              ) * (ci.quantity || 1);
+            }
+            calculatedTax += (itemTotal + modTotal) * parseFloat(taxGroup.rate || "0");
+          }
+        }
+      }
+      
+      const grossSales = itemSales;
+      const serviceChargeTotal = 0; // Service charges would need separate tracking
+      const taxTotal = Math.round(calculatedTax * 100) / 100;
+      const netSales = grossSales; // Discounts would need separate item-level tracking
+      const totalWithTax = grossSales + taxTotal;
+      
+      // PAYMENTS - Based on paidAt (when payment was applied)
+      const paymentsInPeriod = allPayments.filter(p => {
+        if (!p.paidAt) return false;
+        const payDate = new Date(p.paidAt);
+        if (payDate < start || payDate > end) return false;
+        // Apply RVC filter via check
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(p.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
+        return true;
+      });
+      
+      const totalPayments = paymentsInPeriod.reduce((sum, p) => 
+        sum + parseFloat(p.amount || "0"), 0
+      );
+      const totalTips = paymentsInPeriod.reduce((sum, p) => 
+        sum + parseFloat(p.tipAmount || "0"), 0
+      );
+      
+      // Guest count from checks closed in period
+      const guestCount = checksClosed.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      const avgCheck = checksClosed.length > 0 ? totalPayments / checksClosed.length : 0;
+      const avgPerGuest = guestCount > 0 ? totalPayments / guestCount : 0;
       
       res.json({
-        grossSales,
-        itemSales,
-        baseItemSales,
-        modifierTotal,
+        // Sales (based on item ring-in date)
+        grossSales: Math.round(grossSales * 100) / 100,
+        itemSales: Math.round(itemSales * 100) / 100,
+        baseItemSales: Math.round(baseItemSales * 100) / 100,
+        modifierTotal: Math.round(modifierTotal * 100) / 100,
         serviceChargeTotal,
-        otherCharges,
-        discountTotal: totalDiscounts,
-        netSales,
-        taxTotal: totalTax,
-        totalWithTax,
-        checkCount,
+        otherCharges: 0,
+        discountTotal: 0, // Would need item-level discount tracking
+        netSales: Math.round(netSales * 100) / 100,
+        taxTotal,
+        totalWithTax: Math.round(totalWithTax * 100) / 100,
+        
+        // Payments (based on payment date)
+        totalPayments: Math.round(totalPayments * 100) / 100,
+        totalTips: Math.round(totalTips * 100) / 100,
+        paymentCount: paymentsInPeriod.length,
+        
+        // Check Movement
+        checksStarted: checksStarted.length,
+        checksClosed: checksClosed.length,
+        checksCarriedOver: checksCarriedOver.length,
+        openCheckCount: currentlyOpen.length,
+        
+        // Averages
         guestCount,
-        avgCheck,
-        avgPerGuest,
-        openCheckCount: openChecks.length,
+        avgCheck: Math.round(avgCheck * 100) / 100,
+        avgPerGuest: Math.round(avgPerGuest * 100) / 100,
+        
+        // Legacy fields for backwards compatibility
+        checkCount: checksClosed.length,
       });
     } catch (error) {
       console.error("Sales summary error:", error);
