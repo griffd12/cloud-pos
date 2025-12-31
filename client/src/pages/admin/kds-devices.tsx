@@ -213,10 +213,19 @@ export default function KdsDevicesPage() {
   });
 
   const handleSubmit = (data: InsertKdsDevice) => {
+    // Convert string number fields to actual numbers
+    const processedData = {
+      ...data,
+      newOrderBlinkSeconds: data.newOrderBlinkSeconds != null ? Number(data.newOrderBlinkSeconds) : null,
+      colorAlert1Seconds: data.colorAlert1Seconds != null ? Number(data.colorAlert1Seconds) : null,
+      colorAlert2Seconds: data.colorAlert2Seconds != null ? Number(data.colorAlert2Seconds) : null,
+      colorAlert3Seconds: data.colorAlert3Seconds != null ? Number(data.colorAlert3Seconds) : null,
+    };
+    
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, ...processedData } as KdsDevice);
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(processedData);
     }
   };
 
