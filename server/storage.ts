@@ -265,6 +265,7 @@ export interface IStorage {
 
   // KDS Tickets
   getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]>;
+  getAllKdsTicketsForReporting(filters?: { rvcId?: string }): Promise<any[]>;
   getKdsTicket(id: string): Promise<KdsTicket | undefined>;
   createKdsTicket(data: InsertKdsTicket): Promise<KdsTicket>;
   updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined>;
@@ -1366,6 +1367,54 @@ export class DatabaseStorage implements IStorage {
         isRecalled: ticket.isRecalled || false,
         status: ticket.status,
         createdAt: ticket.createdAt,
+      });
+    }
+    return result;
+  }
+
+  async getAllKdsTicketsForReporting(filters?: { rvcId?: string }): Promise<any[]> {
+    // Get ALL tickets including bumped ones for reporting purposes
+    const conditions = [];
+    
+    if (filters?.rvcId) {
+      conditions.push(eq(kdsTickets.rvcId, filters.rvcId));
+    }
+
+    const tickets = conditions.length > 0 
+      ? await db.select().from(kdsTickets).where(and(...conditions)).orderBy(kdsTickets.createdAt)
+      : await db.select().from(kdsTickets).orderBy(kdsTickets.createdAt);
+
+    const result = [];
+    for (const ticket of tickets) {
+      const items = await db.select().from(kdsTicketItems).where(eq(kdsTicketItems.kdsTicketId, ticket.id));
+      const checkItemsList = [];
+      for (const item of items) {
+        const checkItem = await this.getCheckItem(item.checkItemId);
+        if (checkItem) {
+          checkItemsList.push({
+            id: item.id,
+            checkItemId: checkItem.id,
+            name: checkItem.menuItemName,
+            quantity: checkItem.quantity || 1,
+            modifiers: checkItem.modifiers,
+            status: item.status,
+            isReady: item.isReady || false,
+          });
+        }
+      }
+      result.push({
+        id: ticket.id,
+        rvcId: ticket.rvcId,
+        stationType: ticket.stationType,
+        kdsDeviceId: ticket.kdsDeviceId,
+        items: checkItemsList,
+        isPreview: ticket.isPreview || false,
+        isPaid: ticket.paid || false,
+        isRecalled: ticket.isRecalled || false,
+        status: ticket.status,
+        createdAt: ticket.createdAt,
+        bumpedAt: ticket.bumpedAt,
+        completedAt: ticket.bumpedAt, // bumpedAt is the completion time
       });
     }
     return result;

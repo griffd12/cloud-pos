@@ -4027,12 +4027,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const allRvcs = await storage.getRvcs();
       
-      // Get KDS tickets with optional RVC filter
+      // Get ALL KDS tickets including bumped ones for reporting
       let allKdsTickets: any[];
       if (rvcId && rvcId !== "all") {
-        allKdsTickets = await storage.getKdsTickets({ rvcId: rvcId as string });
+        allKdsTickets = await storage.getAllKdsTicketsForReporting({ rvcId: rvcId as string });
       } else {
-        allKdsTickets = await storage.getKdsTickets();
+        allKdsTickets = await storage.getAllKdsTicketsForReporting();
       }
       
       // Get valid RVC IDs for property filtering
@@ -4057,11 +4057,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return createdAt >= start && createdAt <= end;
       });
       
-      // Calculate ticket times
-      const completedTickets = filteredTickets.filter((t: any) => t.status === "completed" && t.completedAt);
+      // Calculate ticket times - "bumped" is the completed status for KDS tickets
+      const completedTickets = filteredTickets.filter((t: any) => 
+        (t.status === "completed" || t.status === "bumped") && (t.completedAt || t.bumpedAt)
+      );
       const ticketTimes = completedTickets.map((t: any) => {
         const created = new Date(t.createdAt);
-        const completed = new Date(t.completedAt);
+        const completed = new Date(t.completedAt || t.bumpedAt);
         return (completed.getTime() - created.getTime()) / 1000;
       });
       
@@ -4071,7 +4073,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const minTicketTime = ticketTimes.length > 0 ? Math.min(...ticketTimes) : 0;
       const maxTicketTime = ticketTimes.length > 0 ? Math.max(...ticketTimes) : 0;
       
-      // Count items from tickets (each ticket has items array)
+      // Count items from tickets - tickets from getKdsTickets already have items array
       let totalItems = 0;
       let readyItems = 0;
       for (const ticket of filteredTickets) {
@@ -4081,12 +4083,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       
-      // Tickets by status
+      // Tickets by status - include "active" as in-progress and "bumped" as completed
       const statusCounts = {
         pending: filteredTickets.filter((t: any) => t.status === "pending").length,
-        inProgress: filteredTickets.filter((t: any) => t.status === "in_progress").length,
-        completed: filteredTickets.filter((t: any) => t.status === "completed").length,
-        recalled: filteredTickets.filter((t: any) => t.status === "recalled").length,
+        inProgress: filteredTickets.filter((t: any) => t.status === "in_progress" || t.status === "active").length,
+        completed: filteredTickets.filter((t: any) => t.status === "completed" || t.status === "bumped").length,
+        recalled: filteredTickets.filter((t: any) => t.status === "recalled" || t.isRecalled).length,
       };
       
       // Hourly throughput
@@ -4094,11 +4096,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (let h = 0; h < 24; h++) {
         const hourTickets = completedTickets.filter((t: any) => {
           const created = new Date(t.createdAt);
-          return created.getHours() === h;
+          return created.getUTCHours() === h;
         });
         const hourTimes = hourTickets.map((t: any) => {
           const created = new Date(t.createdAt);
-          const completed = new Date(t.completedAt);
+          const completed = new Date(t.completedAt || t.bumpedAt);
           return (completed.getTime() - created.getTime()) / 1000;
         });
         hourlyThroughput.push({
