@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
+import { resolveBusinessDate } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
   insertEmployeeSchema, insertMajorGroupSchema, insertFamilyGroupSchema,
@@ -1571,12 +1572,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { rvcId, employeeId, orderType } = req.body;
       const checkNumber = await storage.getNextCheckNumber(rvcId);
+      
+      // Get property for business date calculation
+      const rvc = await storage.getRvc(rvcId);
+      let businessDate: string | undefined;
+      if (rvc) {
+        const property = await storage.getProperty(rvc.propertyId);
+        if (property) {
+          businessDate = resolveBusinessDate(new Date(), property);
+        }
+      }
+      
       const check = await storage.createCheck({
         checkNumber,
         rvcId,
         employeeId,
         orderType: orderType || "dine_in",
         status: "open",
+        businessDate,
       });
       res.status(201).json(check);
     } catch (error) {
@@ -1590,6 +1603,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkId = req.params.id;
       const { menuItemId, menuItemName, unitPrice, modifiers, quantity, itemStatus } = req.body;
 
+      // Get property for business date calculation
+      const check = await storage.getCheck(checkId);
+      let businessDate: string | undefined;
+      if (check) {
+        const rvc = await storage.getRvc(check.rvcId);
+        if (rvc) {
+          const property = await storage.getProperty(rvc.propertyId);
+          if (property) {
+            businessDate = resolveBusinessDate(new Date(), property);
+          }
+        }
+      }
+
       const item = await storage.createCheckItem({
         checkId,
         menuItemId,
@@ -1600,6 +1626,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         itemStatus: itemStatus || "active", // 'pending' for items awaiting modifiers
         sent: false,
         voided: false,
+        businessDate,
       });
 
       // Check for dynamic order mode - add to preview ticket if RVC has dynamicOrderMode enabled
@@ -1776,12 +1803,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
 
+      // Get property for business date calculation
+      const checkForBiz = await storage.getCheck(checkId);
+      let businessDate: string | undefined;
+      if (checkForBiz) {
+        const rvc = await storage.getRvc(checkForBiz.rvcId);
+        if (rvc) {
+          const property = await storage.getProperty(rvc.propertyId);
+          if (property) {
+            businessDate = resolveBusinessDate(new Date(), property);
+          }
+        }
+      }
+
       const payment = await storage.createPayment({
         checkId,
         tenderId,
         tenderName: tender.name,
         amount,
         employeeId,
+        businessDate,
       });
 
       const check = await storage.getCheck(checkId);
