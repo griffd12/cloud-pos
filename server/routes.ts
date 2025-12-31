@@ -1632,7 +1632,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check for dynamic order mode - add to preview ticket if RVC has dynamicOrderMode enabled
       // Items stay unsent until explicit Send action or payment
       let finalItem = item;
-      const check = await storage.getCheck(checkId);
       if (check && menuItemId) {
         const rvc = await storage.getRvc(check.rvcId);
         if (rvc && rvc.dynamicOrderMode) {
@@ -2574,12 +2573,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   // Sales Dashboard Summary
-  // Sales post to date items are rung in (CheckItems.createdAt)
-  // Payments post to date payment is applied (CheckPayments.paidAt)
+  // Sales post to business date when items are rung in (CheckItems.businessDate)
+  // Payments post to business date when payment is applied (CheckPayments.businessDate)
   // Checks tracked as: started, closed, carried over
+  // 
+  // Query params:
+  // - businessDate: YYYY-MM-DD (recommended) - filters by business date field
+  // - startDate/endDate: ISO timestamps (legacy) - filters by raw timestamps
   app.get("/api/reports/sales-summary", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string';
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -2603,52 +2607,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : allChecks;
       
       // CHECK MOVEMENT TRACKING
-      // Checks Started = opened within the date range
+      // When using businessDate, filter by check.businessDate field
+      // Checks Started = opened/started for the business date
       const checksStarted = checksInScope.filter(c => {
-        if (!c.openedAt) return false;
-        const openDate = new Date(c.openedAt);
-        return openDate >= start && openDate <= end;
-      });
-      
-      // Checks Closed = closed within the date range
-      const checksClosed = checksInScope.filter(c => {
-        if (!c.closedAt || c.status !== "closed") return false;
-        const closeDate = new Date(c.closedAt);
-        return closeDate >= start && closeDate <= end;
-      });
-      
-      // Checks Carried Over = opened before period end, still open OR closed after period end
-      const checksCarriedOver = checksInScope.filter(c => {
-        if (!c.openedAt) return false;
-        const openDate = new Date(c.openedAt);
-        // Opened before end of period
-        if (openDate > end) return false;
-        // Still open OR closed after the period
-        if (c.status === "open") return true;
-        if (c.closedAt) {
-          const closeDate = new Date(c.closedAt);
-          return closeDate > end;
+        if (useBusinessDate) {
+          return c.businessDate === businessDate;
+        } else {
+          if (!c.openedAt) return false;
+          const openDate = new Date(c.openedAt);
+          return openDate >= start && openDate <= end;
         }
-        return false;
+      });
+      
+      // Checks Closed = closed for the business date
+      const checksClosed = checksInScope.filter(c => {
+        if (c.status !== "closed") return false;
+        if (useBusinessDate) {
+          // For business date mode, check if the check's business date matches
+          return c.businessDate === businessDate;
+        } else {
+          if (!c.closedAt) return false;
+          const closeDate = new Date(c.closedAt);
+          return closeDate >= start && closeDate <= end;
+        }
+      });
+      
+      // Checks Carried Over = started for business date but not closed
+      const checksCarriedOver = checksInScope.filter(c => {
+        if (useBusinessDate) {
+          // Started on this business date but still open
+          return c.businessDate === businessDate && c.status === "open";
+        } else {
+          if (!c.openedAt) return false;
+          const openDate = new Date(c.openedAt);
+          // Opened before end of period
+          if (openDate > end) return false;
+          // Still open OR closed after the period
+          if (c.status === "open") return true;
+          if (c.closedAt) {
+            const closeDate = new Date(c.closedAt);
+            return closeDate > end;
+          }
+          return false;
+        }
       });
       
       // Currently open checks (snapshot)
       const currentlyOpen = checksInScope.filter(c => c.status === "open");
       
-      // SALES - Based on item createdAt (when items were rung in)
-      // Filter items by createdAt within date range and by RVC scope
+      // SALES - Based on item businessDate (operating day when items were rung in)
+      // If businessDate param provided, filter by businessDate field
+      // Otherwise fall back to timestamp filtering for legacy compatibility
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
-        if (!ci.addedAt) return false;
-        const itemDate = new Date(ci.addedAt);
-        if (itemDate < start || itemDate > end) return false;
-        // Apply RVC filter
+        // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        } else {
+          if (!ci.addedAt) return false;
+          const itemDate = new Date(ci.addedAt);
+          return itemDate >= start && itemDate <= end;
+        }
       });
       
       // Calculate item sales from items rung in during the period
@@ -2696,17 +2721,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const netSales = grossSales; // Discounts would need separate item-level tracking
       const totalWithTax = grossSales + taxTotal;
       
-      // PAYMENTS - Based on paidAt (when payment was applied)
+      // PAYMENTS - Based on businessDate (operating day when payment was applied)
       const paymentsInPeriod = allPayments.filter(p => {
-        if (!p.paidAt) return false;
-        const payDate = new Date(p.paidAt);
-        if (payDate < start || payDate > end) return false;
         // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return p.businessDate === businessDate;
+        } else {
+          if (!p.paidAt) return false;
+          const payDate = new Date(p.paidAt);
+          return payDate >= start && payDate <= end;
+        }
       });
       
       const totalPayments = paymentsInPeriod.reduce((sum, p) => 
@@ -2758,10 +2787,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Sales by Category (SLU) - Based on item addedAt (when items were rung in)
+  // Sales by Category (SLU) - Based on item businessDate (operating day when items were rung in)
   app.get("/api/reports/sales-by-category", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string';
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -2783,18 +2813,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
-      // Filter items by addedAt within date range
+      // Filter items by businessDate or addedAt timestamp
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
-        if (!ci.addedAt) return false;
-        const itemDate = new Date(ci.addedAt);
-        if (itemDate < start || itemDate > end) return false;
-        // Apply RVC filter
+        // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        } else {
+          if (!ci.addedAt) return false;
+          const itemDate = new Date(ci.addedAt);
+          return itemDate >= start && itemDate <= end;
+        }
       });
       
       // Aggregate by category
@@ -2837,10 +2871,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Top Selling Items - Based on item addedAt (when items were rung in)
+  // Top Selling Items - Based on item businessDate (operating day when items were rung in)
   app.get("/api/reports/top-items", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate, limit: limitParam } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate, limit: limitParam } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string';
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       const limit = parseInt(limitParam as string) || 10;
@@ -2861,18 +2896,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
-      // Filter items by addedAt within date range
+      // Filter items by businessDate or addedAt timestamp
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
-        if (!ci.addedAt) return false;
-        const itemDate = new Date(ci.addedAt);
-        if (itemDate < start || itemDate > end) return false;
-        // Apply RVC filter
+        // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        } else {
+          if (!ci.addedAt) return false;
+          const itemDate = new Date(ci.addedAt);
+          return itemDate >= start && itemDate <= end;
+        }
       });
       
       const itemTotals: Record<string, { name: string; quantity: number; sales: number }> = {};
@@ -2909,10 +2948,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Tender Mix Report - Based on paidAt (when payment was applied)
+  // Tender Mix Report - Based on payment businessDate (operating day when payment was applied)
   app.get("/api/reports/tender-mix", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string';
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -2932,17 +2972,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
-      // Filter payments by paidAt within date range
+      // Filter payments by businessDate or paidAt timestamp
       const paymentsInPeriod = allPayments.filter(p => {
-        if (!p.paidAt) return false;
-        const payDate = new Date(p.paidAt);
-        if (payDate < start || payDate > end) return false;
         // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return p.businessDate === businessDate;
+        } else {
+          if (!p.paidAt) return false;
+          const payDate = new Date(p.paidAt);
+          return payDate >= start && payDate <= end;
+        }
       });
       
       const tenderTotals: Record<string, { name: string; count: number; amount: number }> = {};
@@ -3196,7 +3240,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Tender Detail Report - Individual payment transactions - Based on paidAt
   app.get("/api/reports/tender-detail", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate, tenderId } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate, tenderId } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string';
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -3218,17 +3263,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
-      // Filter payments by paidAt within date range
+      // Filter payments by businessDate or paidAt timestamp
       let payments = allPayments.filter(p => {
-        if (!p.paidAt) return false;
-        const payDate = new Date(p.paidAt);
-        if (payDate < start || payDate > end) return false;
         // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return p.businessDate === businessDate;
+        } else {
+          if (!p.paidAt) return false;
+          const payDate = new Date(p.paidAt);
+          return payDate >= start && payDate <= end;
+        }
       });
       
       // Filter by specific tender if provided
@@ -3521,7 +3570,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Hourly Sales Report - Based on item addedAt (when items were rung in)
   app.get("/api/reports/hourly-sales", async (req, res) => {
     try {
-      const { propertyId, rvcId, date } = req.query;
+      const { propertyId, rvcId, date, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string';
       const targetDate = date ? new Date(date as string) : new Date();
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);
@@ -3554,18 +3604,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
-      // Filter items by addedAt within date range
+      // Filter items by businessDate or addedAt timestamp
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
-        if (!ci.addedAt) return false;
-        const itemDate = new Date(ci.addedAt);
-        if (itemDate < startOfDay || itemDate > endOfDay) return false;
-        // Apply RVC filter
+        // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        return true;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        }
+        if (!ci.addedAt) return false;
+        const itemDate = new Date(ci.addedAt);
+        return itemDate >= startOfDay && itemDate <= endOfDay;
       });
       
       // Initialize hourly buckets (0-23) with item count instead of check count
