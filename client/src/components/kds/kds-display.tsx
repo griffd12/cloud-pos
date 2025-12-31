@@ -43,6 +43,20 @@ interface BumpedTicket {
   items: { id: string; name: string; quantity: number; status: string }[];
 }
 
+interface KdsDeviceSettings {
+  newOrderSound?: boolean;
+  newOrderBlinkSeconds?: number;
+  colorAlert1Enabled?: boolean;
+  colorAlert1Seconds?: number;
+  colorAlert1Color?: string;
+  colorAlert2Enabled?: boolean;
+  colorAlert2Seconds?: number;
+  colorAlert2Color?: string;
+  colorAlert3Enabled?: boolean;
+  colorAlert3Seconds?: number;
+  colorAlert3Color?: string;
+}
+
 interface KdsDisplayProps {
   tickets: Ticket[];
   stationTypes: string[];
@@ -54,9 +68,7 @@ interface KdsDisplayProps {
   onBumpAll?: () => void;
   isLoading?: boolean;
   isBumpingAll?: boolean;
-  colorAlerts?: ColorAlertSettings;
-  newOrderSound?: boolean;
-  blinkDuration?: number;
+  deviceSettings?: KdsDeviceSettings;
   rvcId?: string;
 }
 
@@ -76,11 +88,8 @@ const STATION_LABELS: Record<string, string> = {
   bar: "Bar",
 };
 
-const DEFAULT_COLOR_ALERTS: ColorAlertSettings = {
-  yellowThreshold: 60,
-  orangeThreshold: 180,
-  redThreshold: 300,
-};
+const BEEP_SOUND = "data:audio/wav;base64,UklGRl9vT19teleXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU" +
+  "tvT19t" + "g".repeat(100) + "AAAA".repeat(500);
 
 export function KdsDisplay({
   tickets,
@@ -93,17 +102,29 @@ export function KdsDisplay({
   onBumpAll,
   isLoading = false,
   isBumpingAll = false,
-  colorAlerts = DEFAULT_COLOR_ALERTS,
-  newOrderSound = true,
-  blinkDuration = 5,
+  deviceSettings,
   rvcId,
 }: KdsDisplayProps) {
   const [showAllDay, setShowAllDay] = useState(false);
   const [showRecallModal, setShowRecallModal] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(newOrderSound);
+  const [soundEnabled, setSoundEnabled] = useState(deviceSettings?.newOrderSound ?? true);
   const [blinkingTickets, setBlinkingTickets] = useState<Set<string>>(new Set());
   const previousTicketIdsRef = useRef<Set<string>>(new Set());
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const blinkDuration = deviceSettings?.newOrderBlinkSeconds ?? 5;
+
+  const colorAlerts: ColorAlertSettings = {
+    alert1Enabled: deviceSettings?.colorAlert1Enabled ?? true,
+    alert1Seconds: deviceSettings?.colorAlert1Seconds ?? 60,
+    alert1Color: deviceSettings?.colorAlert1Color ?? "yellow",
+    alert2Enabled: deviceSettings?.colorAlert2Enabled ?? true,
+    alert2Seconds: deviceSettings?.colorAlert2Seconds ?? 180,
+    alert2Color: deviceSettings?.colorAlert2Color ?? "orange",
+    alert3Enabled: deviceSettings?.colorAlert3Enabled ?? true,
+    alert3Seconds: deviceSettings?.colorAlert3Seconds ?? 300,
+    alert3Color: deviceSettings?.colorAlert3Color ?? "red",
+  };
 
   const activeTickets = tickets.filter((t) => t.status === "active");
   const draftTickets = tickets.filter((t) => t.status === "draft");
@@ -134,6 +155,49 @@ export function KdsDisplay({
     },
   });
 
+  const playNotificationSound = useCallback(() => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      oscillator.frequency.value = 880;
+      oscillator.type = "sine";
+      
+      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.3);
+
+      setTimeout(() => {
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.frequency.value = 1100;
+        osc2.type = "sine";
+        gain2.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc2.start(ctx.currentTime);
+        osc2.stop(ctx.currentTime + 0.3);
+      }, 150);
+    } catch (e) {
+      console.log("Audio playback failed:", e);
+    }
+  }, []);
+
   useEffect(() => {
     const currentTicketIds = new Set(activeTickets.map((t) => t.id));
     const previousIds = previousTicketIdsRef.current;
@@ -150,32 +214,25 @@ export function KdsDisplay({
         playNotificationSound();
       }
 
-      setBlinkingTickets((prev) => {
-        const next = new Set(prev);
-        newTicketIds.forEach((id) => next.add(id));
-        return next;
-      });
-
-      setTimeout(() => {
+      if (blinkDuration > 0) {
         setBlinkingTickets((prev) => {
           const next = new Set(prev);
-          newTicketIds.forEach((id) => next.delete(id));
+          newTicketIds.forEach((id) => next.add(id));
           return next;
         });
-      }, blinkDuration * 1000);
+
+        setTimeout(() => {
+          setBlinkingTickets((prev) => {
+            const next = new Set(prev);
+            newTicketIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, blinkDuration * 1000);
+      }
     }
 
     previousTicketIdsRef.current = currentTicketIds;
-  }, [activeTickets, soundEnabled, blinkDuration]);
-
-  const playNotificationSound = useCallback(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp6clJWRkZaenZqSlox/f4WLi4N8d3h8gYODgYKDgYCAgICAgICAgICAgICAgICAgH5/gIGBf319fn+AgYKCgoODg4ODg4ODg4ODg4ODg4ODg4OCgoKCgoKCgoKCgoKCgoKCgn9/f39/f3+AgICAgICAgICAgICAgH9/f39/f39/f39/f3+AgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYF/f39/f39/f3+AgICAgICAgICAgICAgICAgICAgICAgICAgIB/f39/f39/f39/f39/f4CAgICAgICAgICAgICAf39/f39/gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIB/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/f39/");
-      audioRef.current.volume = 0.5;
-    }
-    audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(() => {});
-  }, []);
+  }, [activeTickets, soundEnabled, blinkDuration, playNotificationSound]);
 
   const getAllDaySummary = useCallback(() => {
     const summary: Record<string, { name: string; totalQty: number; readyQty: number }> = {};
@@ -219,9 +276,14 @@ export function KdsDisplay({
             <Button
               variant={soundEnabled ? "secondary" : "ghost"}
               size="icon"
-              onClick={() => setSoundEnabled(!soundEnabled)}
+              onClick={() => {
+                setSoundEnabled(!soundEnabled);
+                if (!soundEnabled) {
+                  playNotificationSound();
+                }
+              }}
               data-testid="button-kds-sound-toggle"
-              title={soundEnabled ? "Sound enabled" : "Sound muted"}
+              title={soundEnabled ? "Sound enabled (click to test)" : "Sound muted"}
             >
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </Button>
@@ -385,26 +447,23 @@ export function KdsDisplay({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {activeTickets.map((ticket) => (
-                <div
+                <KdsTicket
                   key={ticket.id}
-                  className={blinkingTickets.has(ticket.id) ? "animate-pulse" : ""}
-                >
-                  <KdsTicket
-                    ticketId={ticket.id}
-                    checkNumber={ticket.checkNumber}
-                    orderType={ticket.orderType}
-                    stationType={ticket.stationType}
-                    items={ticket.items}
-                    isDraft={false}
-                    isPreview={ticket.isPreview}
-                    isPaid={ticket.isPaid}
-                    isRecalled={ticket.isRecalled}
-                    createdAt={ticket.createdAt}
-                    colorAlerts={colorAlerts}
-                    onBump={onBump}
-                    onRecall={onRecall}
-                  />
-                </div>
+                  ticketId={ticket.id}
+                  checkNumber={ticket.checkNumber}
+                  orderType={ticket.orderType}
+                  stationType={ticket.stationType}
+                  items={ticket.items}
+                  isDraft={false}
+                  isPreview={ticket.isPreview}
+                  isPaid={ticket.isPaid}
+                  isRecalled={ticket.isRecalled}
+                  createdAt={ticket.createdAt}
+                  colorAlerts={colorAlerts}
+                  isBlinking={blinkingTickets.has(ticket.id)}
+                  onBump={onBump}
+                  onRecall={onRecall}
+                />
               ))}
               {draftTickets.map((ticket) => (
                 <KdsTicket

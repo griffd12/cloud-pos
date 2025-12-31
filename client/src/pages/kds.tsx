@@ -34,6 +34,17 @@ interface KdsDevice {
   name: string;
   stationType: string;
   propertyId: string;
+  newOrderSound?: boolean;
+  newOrderBlinkSeconds?: number;
+  colorAlert1Enabled?: boolean;
+  colorAlert1Seconds?: number;
+  colorAlert1Color?: string;
+  colorAlert2Enabled?: boolean;
+  colorAlert2Seconds?: number;
+  colorAlert2Color?: string;
+  colorAlert3Enabled?: boolean;
+  colorAlert3Seconds?: number;
+  colorAlert3Color?: string;
 }
 
 export default function KdsPage() {
@@ -55,6 +66,24 @@ export default function KdsPage() {
     }
     return acc;
   }, [] as string[]);
+
+  const selectedDevice = selectedStation !== "all" 
+    ? kdsDevices.find((d) => d.stationType === selectedStation)
+    : kdsDevices[0];
+
+  const deviceSettings = selectedDevice ? {
+    newOrderSound: selectedDevice.newOrderSound,
+    newOrderBlinkSeconds: selectedDevice.newOrderBlinkSeconds,
+    colorAlert1Enabled: selectedDevice.colorAlert1Enabled,
+    colorAlert1Seconds: selectedDevice.colorAlert1Seconds,
+    colorAlert1Color: selectedDevice.colorAlert1Color,
+    colorAlert2Enabled: selectedDevice.colorAlert2Enabled,
+    colorAlert2Seconds: selectedDevice.colorAlert2Seconds,
+    colorAlert2Color: selectedDevice.colorAlert2Color,
+    colorAlert3Enabled: selectedDevice.colorAlert3Enabled,
+    colorAlert3Seconds: selectedDevice.colorAlert3Seconds,
+    colorAlert3Color: selectedDevice.colorAlert3Color,
+  } : undefined;
 
   const queryParams = new URLSearchParams();
   if (currentRvc?.id) queryParams.set("rvcId", currentRvc.id);
@@ -211,6 +240,8 @@ export default function KdsPage() {
         onBumpAll={handleBumpAll}
         isLoading={isLoading}
         isBumpingAll={bumpAllMutation.isPending}
+        deviceSettings={deviceSettings}
+        rvcId={currentRvc?.id}
       />
     </div>
   );

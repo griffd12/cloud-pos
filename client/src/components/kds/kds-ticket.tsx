@@ -19,9 +19,15 @@ interface KdsItem {
 }
 
 export interface ColorAlertSettings {
-  yellowThreshold: number;
-  orangeThreshold: number;
-  redThreshold: number;
+  alert1Enabled: boolean;
+  alert1Seconds: number;
+  alert1Color: string;
+  alert2Enabled: boolean;
+  alert2Seconds: number;
+  alert2Color: string;
+  alert3Enabled: boolean;
+  alert3Seconds: number;
+  alert3Color: string;
 }
 
 interface KdsTicketProps {
@@ -37,6 +43,7 @@ interface KdsTicketProps {
   createdAt: Date;
   colorAlerts?: ColorAlertSettings;
   itemSelectEnabled?: boolean;
+  isBlinking?: boolean;
   onBump: (ticketId: string) => void;
   onRecall?: (ticketId: string) => void;
 }
@@ -72,9 +79,31 @@ const STATION_TYPE_LABELS: Record<string, string> = {
 };
 
 const DEFAULT_COLOR_ALERTS: ColorAlertSettings = {
-  yellowThreshold: 60,
-  orangeThreshold: 180,
-  redThreshold: 300,
+  alert1Enabled: true,
+  alert1Seconds: 60,
+  alert1Color: "yellow",
+  alert2Enabled: true,
+  alert2Seconds: 180,
+  alert2Color: "orange",
+  alert3Enabled: true,
+  alert3Seconds: 300,
+  alert3Color: "red",
+};
+
+const COLOR_BACKGROUND_CLASSES: Record<string, string> = {
+  yellow: "bg-yellow-400 dark:bg-yellow-500",
+  orange: "bg-orange-400 dark:bg-orange-500",
+  red: "bg-red-500 dark:bg-red-600",
+  blue: "bg-blue-400 dark:bg-blue-500",
+  purple: "bg-purple-400 dark:bg-purple-500",
+};
+
+const COLOR_TEXT_CLASSES: Record<string, string> = {
+  yellow: "text-yellow-900 dark:text-yellow-100",
+  orange: "text-orange-900 dark:text-orange-100",
+  red: "text-white",
+  blue: "text-blue-900 dark:text-blue-100",
+  purple: "text-purple-900 dark:text-purple-100",
 };
 
 export function KdsTicket({
@@ -90,6 +119,7 @@ export function KdsTicket({
   createdAt,
   colorAlerts = DEFAULT_COLOR_ALERTS,
   itemSelectEnabled = true,
+  isBlinking = false,
   onBump,
   onRecall,
 }: KdsTicketProps) {
@@ -118,19 +148,22 @@ export function KdsTicket({
   };
 
   const getTimerColorClass = useCallback(() => {
-    if (elapsedSeconds >= colorAlerts.redThreshold) return "text-red-500";
-    if (elapsedSeconds >= colorAlerts.orangeThreshold) return "text-orange-500";
-    if (elapsedSeconds >= colorAlerts.yellowThreshold) return "text-yellow-500";
+    if (colorAlerts.alert3Enabled && elapsedSeconds >= colorAlerts.alert3Seconds) return "text-red-500";
+    if (colorAlerts.alert2Enabled && elapsedSeconds >= colorAlerts.alert2Seconds) return "text-orange-500";
+    if (colorAlerts.alert1Enabled && elapsedSeconds >= colorAlerts.alert1Seconds) return "text-yellow-600 dark:text-yellow-400";
     return "text-green-500";
   }, [elapsedSeconds, colorAlerts]);
 
-  const getCardBorderClass = useCallback(() => {
-    if (isRecalled) return "border-2 border-purple-500 shadow-purple-500/20 shadow-lg";
-    if (elapsedSeconds >= colorAlerts.redThreshold) return "border-2 border-red-500";
-    if (elapsedSeconds >= colorAlerts.orangeThreshold) return "border-2 border-orange-500";
-    if (elapsedSeconds >= colorAlerts.yellowThreshold) return "border-2 border-yellow-500";
-    return "";
+  const getActiveAlertColor = useCallback((): string | null => {
+    if (isRecalled) return "purple";
+    if (colorAlerts.alert3Enabled && elapsedSeconds >= colorAlerts.alert3Seconds) return colorAlerts.alert3Color;
+    if (colorAlerts.alert2Enabled && elapsedSeconds >= colorAlerts.alert2Seconds) return colorAlerts.alert2Color;
+    if (colorAlerts.alert1Enabled && elapsedSeconds >= colorAlerts.alert1Seconds) return colorAlerts.alert1Color;
+    return null;
   }, [elapsedSeconds, colorAlerts, isRecalled]);
+
+  const activeAlertColor = getActiveAlertColor();
+  const hasAlert = activeAlertColor !== null;
 
   const markReadyMutation = useMutation({
     mutationFn: async (itemId: string) => {
@@ -163,9 +196,17 @@ export function KdsTicket({
   const activeItems = items.filter((item) => item.status !== "voided");
   const allItemsReady = activeItems.length > 0 && activeItems.every((item) => item.isReady);
 
+  const cardBgClass = hasAlert 
+    ? `${COLOR_BACKGROUND_CLASSES[activeAlertColor] || ""}`
+    : "";
+  
+  const cardTextClass = hasAlert
+    ? `${COLOR_TEXT_CLASSES[activeAlertColor] || ""}`
+    : "";
+
   return (
     <Card
-      className={`flex flex-col transition-all ${isDraft ? "opacity-60" : ""} ${getCardBorderClass()}`}
+      className={`flex flex-col transition-all ${isDraft ? "opacity-60" : ""} ${cardBgClass} ${cardTextClass} ${isBlinking ? "animate-pulse" : ""}`}
       data-testid={`kds-ticket-${ticketId}`}
     >
       <CardHeader className="flex-row items-center justify-between gap-2 pb-2 space-y-0">
@@ -174,7 +215,7 @@ export function KdsTicket({
             #{checkNumber}
           </span>
           {isRecalled && (
-            <Badge className="text-xs bg-purple-500 text-white animate-pulse">
+            <Badge className="text-xs bg-purple-600 text-white">
               <RotateCcw className="w-3 h-3 mr-1" />
               RECALL
             </Badge>
@@ -182,7 +223,7 @@ export function KdsTicket({
           {stationType && (
             <Badge
               variant="outline"
-              className={`text-xs font-bold ${STATION_TYPE_COLORS[stationType] || ""}`}
+              className={`text-xs font-bold ${!hasAlert ? STATION_TYPE_COLORS[stationType] || "" : "border-current"}`}
             >
               {STATION_TYPE_LABELS[stationType] || stationType.toUpperCase()}
             </Badge>
@@ -206,18 +247,18 @@ export function KdsTicket({
         <div className="flex items-center gap-2 flex-wrap">
           <Badge
             variant="outline"
-            className={ORDER_TYPE_COLORS[orderType] || ""}
+            className={!hasAlert ? ORDER_TYPE_COLORS[orderType] || "" : "border-current"}
           >
             {ORDER_TYPE_LABELS[orderType] || orderType}
           </Badge>
-          <div className={`flex items-center gap-1 text-sm font-medium tabular-nums ${getTimerColorClass()}`}>
+          <div className={`flex items-center gap-1 text-sm font-bold tabular-nums ${hasAlert ? "" : getTimerColorClass()}`}>
             <Clock className="w-3.5 h-3.5" />
             {formatTime(elapsedSeconds)}
           </div>
         </div>
       </CardHeader>
 
-      <Separator />
+      <Separator className={hasAlert ? "bg-current/20" : ""} />
 
       <CardContent className="flex-1 py-3 space-y-1">
         {activeItems.map((item) => (
@@ -225,21 +266,21 @@ export function KdsTicket({
             key={item.id}
             className={`flex items-start gap-2 p-1.5 rounded-md transition-colors ${
               itemSelectEnabled && item.itemStatus !== "pending" && item.status !== "voided"
-                ? "cursor-pointer hover-elevate"
+                ? "cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
                 : ""
-            } ${item.isReady ? "bg-green-500/10" : ""} ${item.itemStatus === "pending" ? "animate-pulse" : ""}`}
+            } ${item.isReady ? (hasAlert ? "bg-black/20" : "bg-green-500/10") : ""} ${item.itemStatus === "pending" ? "animate-pulse" : ""}`}
             onClick={() => handleItemClick(item)}
             data-testid={`kds-item-${item.id}`}
           >
             <div
               className={`w-7 h-7 flex-shrink-0 rounded-md flex items-center justify-center text-sm font-bold ${
                 item.isReady
-                  ? "bg-green-500/20 text-green-600"
+                  ? (hasAlert ? "bg-black/30 text-current" : "bg-green-500/20 text-green-600")
                   : item.status === "bumped"
                   ? "bg-green-500/20 text-green-600"
                   : item.itemStatus === "pending"
                   ? "bg-amber-500/20 text-amber-600"
-                  : "bg-muted text-muted-foreground"
+                  : (hasAlert ? "bg-black/10" : "bg-muted text-muted-foreground")
               }`}
             >
               {item.isReady ? <CircleCheck className="w-4 h-4" /> : item.quantity}
@@ -252,11 +293,11 @@ export function KdsTicket({
                 <span
                   className={`font-medium ${
                     item.isReady
-                      ? "text-green-600 dark:text-green-400"
+                      ? (hasAlert ? "font-bold" : "text-green-600 dark:text-green-400")
                       : item.status === "bumped"
-                      ? "line-through text-muted-foreground"
+                      ? "line-through opacity-60"
                       : item.itemStatus === "pending"
-                      ? "text-amber-600 dark:text-amber-400"
+                      ? (hasAlert ? "opacity-80" : "text-amber-600 dark:text-amber-400")
                       : ""
                   }`}
                 >
@@ -275,8 +316,8 @@ export function KdsTicket({
                       key={idx}
                       className={`block text-xs pl-1 ${
                         item.itemStatus === "pending" 
-                          ? "text-amber-600 dark:text-amber-400 font-medium" 
-                          : "text-muted-foreground"
+                          ? (hasAlert ? "opacity-80" : "text-amber-600 dark:text-amber-400 font-medium")
+                          : (hasAlert ? "opacity-80" : "text-muted-foreground")
                       }`}
                     >
                       - {mod.name}
@@ -290,13 +331,13 @@ export function KdsTicket({
 
         {items.filter((i) => i.status === "voided").length > 0 && (
           <div className="pt-2 space-y-1">
-            <Separator />
+            <Separator className={hasAlert ? "bg-current/20" : ""} />
             {items
               .filter((i) => i.status === "voided")
               .map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center gap-2 text-destructive/70"
+                  className="flex items-center gap-2 opacity-60"
                 >
                   <XCircle className="w-4 h-4" />
                   <span className="text-sm line-through">
@@ -314,7 +355,8 @@ export function KdsTicket({
       <CardFooter className="pt-2">
         {!isDraft && !isPreview && !activeItems.some((i) => i.itemStatus === "pending") && (
           <Button
-            className={`w-full h-12 text-base font-semibold ${allItemsReady ? "bg-green-600 hover:bg-green-700" : ""}`}
+            className={`w-full h-12 text-base font-semibold ${allItemsReady ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
+            variant={hasAlert ? "secondary" : "default"}
             onClick={() => onBump(ticketId)}
             disabled={activeItems.length > 0 && activeItems.every((i) => i.status === "bumped")}
             data-testid={`button-bump-${ticketId}`}
@@ -324,17 +366,17 @@ export function KdsTicket({
           </Button>
         )}
         {!isDraft && activeItems.some((i) => i.itemStatus === "pending") && (
-          <div className="w-full h-12 flex items-center justify-center text-amber-600 dark:text-amber-400 text-sm font-medium animate-pulse">
+          <div className={`w-full h-12 flex items-center justify-center text-sm font-medium animate-pulse ${hasAlert ? "" : "text-amber-600 dark:text-amber-400"}`}>
             Item being configured...
           </div>
         )}
         {isPreview && !activeItems.some((i) => i.itemStatus === "pending") && (
-          <div className="w-full h-12 flex items-center justify-center text-amber-600 dark:text-amber-400 text-sm font-medium">
+          <div className={`w-full h-12 flex items-center justify-center text-sm font-medium ${hasAlert ? "" : "text-amber-600 dark:text-amber-400"}`}>
             Preview - awaiting send/payment
           </div>
         )}
         {isDraft && (
-          <div className="w-full h-12 flex items-center justify-center text-muted-foreground text-sm">
+          <div className={`w-full h-12 flex items-center justify-center text-sm ${hasAlert ? "" : "text-muted-foreground"}`}>
             Waiting for send...
           </div>
         )}
