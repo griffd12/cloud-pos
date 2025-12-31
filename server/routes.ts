@@ -2005,15 +2005,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         businessDate,
       } = req.body;
 
-      // Validate employee has PROCESS_REFUNDS privilege
+      // Validate employee has refund privilege
       if (processedByEmployeeId) {
         const employee = await storage.getEmployee(processedByEmployeeId);
         if (!employee) {
           return res.status(400).json({ message: "Employee not found" });
         }
-        const role = await storage.getRole(employee.roleId);
-        const privileges = role?.privileges || [];
-        if (!privileges.includes("process_refunds") && !privileges.includes("admin_access")) {
+        if (!employee.roleId) {
+          return res.status(403).json({ message: "Employee has no assigned role" });
+        }
+        const privileges = await storage.getRolePrivileges(employee.roleId);
+        if (!privileges.includes("refund") && !privileges.includes("admin_access")) {
           return res.status(403).json({ message: "Employee does not have refund privileges" });
         }
       }
@@ -2024,9 +2026,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!manager) {
           return res.status(400).json({ message: "Manager not found" });
         }
-        const managerRole = await storage.getRole(manager.roleId);
-        const managerPrivileges = managerRole?.privileges || [];
-        if (!managerPrivileges.includes("approve_refunds") && !managerPrivileges.includes("admin_access")) {
+        if (!manager.roleId) {
+          return res.status(403).json({ message: "Manager has no assigned role" });
+        }
+        const managerPrivileges = await storage.getRolePrivileges(manager.roleId);
+        if (!managerPrivileges.includes("approve_refund") && !managerPrivileges.includes("admin_access")) {
           return res.status(403).json({ message: "Manager does not have refund approval privileges" });
         }
       }
