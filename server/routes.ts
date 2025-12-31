@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
-import { resolveBusinessDate } from "./businessDate";
+import { resolveBusinessDate, isValidBusinessDateFormat } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
   insertEmployeeSchema, insertMajorGroupSchema, insertFamilyGroupSchema,
@@ -411,6 +411,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.put("/api/properties/:id", async (req, res) => {
+    // Validate currentBusinessDate format if provided
+    if (req.body.currentBusinessDate && !/^\d{4}-\d{2}-\d{2}$/.test(req.body.currentBusinessDate)) {
+      return res.status(400).json({ message: "currentBusinessDate must be in YYYY-MM-DD format" });
+    }
+    // Require currentBusinessDate when manual mode is set
+    if (req.body.businessDateMode === 'manual' && !req.body.currentBusinessDate) {
+      // Check if existing property has a currentBusinessDate
+      const existing = await storage.getProperty(req.params.id);
+      if (!existing?.currentBusinessDate && !req.body.currentBusinessDate) {
+        return res.status(400).json({ message: "currentBusinessDate is required when businessDateMode is 'manual'" });
+      }
+    }
     const data = await storage.updateProperty(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
     res.json(data);
@@ -2583,7 +2595,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/reports/sales-summary", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
-      const useBusinessDate = businessDate && typeof businessDate === 'string';
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -2791,7 +2803,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/reports/sales-by-category", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
-      const useBusinessDate = businessDate && typeof businessDate === 'string';
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -2875,7 +2887,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/reports/top-items", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate, limit: limitParam } = req.query;
-      const useBusinessDate = businessDate && typeof businessDate === 'string';
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       const limit = parseInt(limitParam as string) || 10;
@@ -2952,7 +2964,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/reports/tender-mix", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
-      const useBusinessDate = businessDate && typeof businessDate === 'string';
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -3241,7 +3253,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/reports/tender-detail", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate, tenderId } = req.query;
-      const useBusinessDate = businessDate && typeof businessDate === 'string';
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -3571,7 +3583,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/reports/hourly-sales", async (req, res) => {
     try {
       const { propertyId, rvcId, date, businessDate } = req.query;
-      const useBusinessDate = businessDate && typeof businessDate === 'string';
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const targetDate = date ? new Date(date as string) : new Date();
       const startOfDay = new Date(targetDate);
       startOfDay.setHours(0, 0, 0, 0);

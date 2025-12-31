@@ -9,6 +9,28 @@
 import type { Property } from "@shared/schema";
 
 /**
+ * Validates a YYYY-MM-DD format string.
+ */
+export function isValidBusinessDateFormat(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false;
+  const pattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!pattern.test(dateStr)) return false;
+  const parsed = new Date(dateStr);
+  return !isNaN(parsed.getTime());
+}
+
+/**
+ * Default property settings for when property is not available.
+ * Uses conservative defaults that should work for most US-based operations.
+ */
+export const DEFAULT_BUSINESS_DATE_SETTINGS = {
+  businessDateRolloverTime: '04:00',
+  businessDateMode: 'auto' as const,
+  currentBusinessDate: null,
+  timezone: 'America/New_York',
+};
+
+/**
  * Resolves the business date for a given timestamp based on property settings.
  * 
  * @param timestamp - The actual timestamp of the transaction (UTC or with timezone)
@@ -27,21 +49,24 @@ import type { Property } from "@shared/schema";
  */
 export function resolveBusinessDate(
   timestamp: Date | string,
-  property: Pick<Property, 'businessDateRolloverTime' | 'businessDateMode' | 'currentBusinessDate' | 'timezone'>
+  property: Pick<Property, 'businessDateRolloverTime' | 'businessDateMode' | 'currentBusinessDate' | 'timezone'> | null | undefined
 ): string {
-  // For manual mode, return the current business date if set
-  if (property.businessDateMode === 'manual' && property.currentBusinessDate) {
-    return property.currentBusinessDate;
+  // Use default settings if property is not available
+  const settings = property ?? DEFAULT_BUSINESS_DATE_SETTINGS;
+  
+  // For manual mode, return the current business date if set and valid
+  if (settings.businessDateMode === 'manual' && isValidBusinessDateFormat(settings.currentBusinessDate)) {
+    return settings.currentBusinessDate!;
   }
 
   // Parse the timestamp
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
   
   // Get property timezone (default to America/New_York if not set)
-  const timezone = property.timezone || 'America/New_York';
+  const timezone = settings.timezone || 'America/New_York';
   
   // Parse rollover time (default to 4:00 AM)
-  const rolloverTime = property.businessDateRolloverTime || '04:00';
+  const rolloverTime = settings.businessDateRolloverTime || '04:00';
   const [rolloverHour, rolloverMinute] = rolloverTime.split(':').map(Number);
   
   // Convert timestamp to property's local time
