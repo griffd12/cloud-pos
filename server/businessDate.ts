@@ -167,3 +167,20 @@ export function formatBusinessDate(businessDate: string): string {
     day: 'numeric' 
   });
 }
+
+/**
+ * Increments a business date by one day.
+ * @param businessDate - YYYY-MM-DD formatted string
+ * @returns YYYY-MM-DD formatted string for the next day
+ */
+export function incrementDate(businessDate: string): string {
+  const [year, month, day] = businessDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + 1);
+  
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  
+  return `${yyyy}-${mm}-${dd}`;
+}

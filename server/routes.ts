@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
-import { resolveBusinessDate, isValidBusinessDateFormat } from "./businessDate";
+import { resolveBusinessDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
   insertEmployeeSchema, insertMajorGroupSchema, insertFamilyGroupSchema,
@@ -2142,6 +2142,102 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Sales reset error:", error);
       res.status(500).json({ message: error.message || "Failed to clear sales data" });
+    }
+  });
+
+  // Get current business date for a property
+  app.get("/api/properties/:id/business-date", async (req, res) => {
+    try {
+      const property = await storage.getProperty(req.params.id);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      const currentBusinessDate = resolveBusinessDate(new Date(), property);
+      const nextBusinessDate = incrementDate(currentBusinessDate);
+      
+      res.json({
+        currentBusinessDate,
+        nextBusinessDate,
+        rolloverTime: property.businessDateRolloverTime || "04:00",
+        timezone: property.timezone || "America/New_York",
+      });
+    } catch (error: any) {
+      console.error("Get business date error:", error);
+      res.status(500).json({ message: error.message || "Failed to get business date" });
+    }
+  });
+
+  // Increment business date by one day - requires Admin role + PIN
+  app.post("/api/properties/:id/business-date/increment", async (req, res) => {
+    try {
+      const { pin } = req.body;
+      const propertyId = req.params.id;
+      
+      // Require PIN for authentication
+      if (!pin) {
+        return res.status(400).json({ message: "Employee PIN is required" });
+      }
+      
+      // Authenticate employee by PIN
+      const employee = await storage.getEmployeeByPin(pin);
+      if (!employee) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+      
+      // Check if employee has admin_access privilege
+      if (!employee.roleId) {
+        return res.status(403).json({ message: "Employee has no assigned role" });
+      }
+      
+      const privileges = await storage.getRolePrivileges(employee.roleId);
+      if (!privileges.includes("admin_access")) {
+        return res.status(403).json({ message: "You do not have admin access privileges" });
+      }
+      
+      // Get property
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Calculate current and next business date
+      const currentBusinessDate = resolveBusinessDate(new Date(), property);
+      const nextBusinessDate = incrementDate(currentBusinessDate);
+      
+      // Update property with new business date and set to manual mode
+      await storage.updateProperty(propertyId, {
+        businessDateMode: "manual",
+        currentBusinessDate: nextBusinessDate,
+      });
+      
+      // Create audit log entry
+      await storage.createAuditLog({
+        rvcId: null,
+        employeeId: employee.id,
+        action: "business_date_increment",
+        targetType: "property",
+        targetId: propertyId,
+        details: {
+          propertyId,
+          propertyName: property.name,
+          previousBusinessDate: currentBusinessDate,
+          newBusinessDate: nextBusinessDate,
+          timestamp: new Date().toISOString(),
+        },
+        reasonCode: "admin_action",
+        managerApprovalId: null,
+      });
+      
+      res.json({
+        success: true,
+        previousBusinessDate: currentBusinessDate,
+        newBusinessDate: nextBusinessDate,
+        message: `Business date changed from ${currentBusinessDate} to ${nextBusinessDate}`,
+      });
+    } catch (error: any) {
+      console.error("Increment business date error:", error);
+      res.status(500).json({ message: error.message || "Failed to increment business date" });
     }
   });
 

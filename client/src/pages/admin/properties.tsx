@@ -38,11 +38,6 @@ export default function PropertiesPage() {
     { value: "06:00", label: "6:00 AM" },
   ];
 
-  const businessDateModeOptions = [
-    { value: "auto", label: "Auto (based on time)" },
-    { value: "manual", label: "Manual (set date)" },
-  ];
-
   const getTimezoneLabel = (tz: string | null | undefined) => {
     if (!tz) return "Not Set";
     const option = timezoneOptions.find(o => o.value === tz);
@@ -99,20 +94,6 @@ export default function PropertiesPage() {
       type: "select",
       options: rolloverTimeOptions,
       description: "When the business day ends (e.g., 4 AM means sales until 3:59 AM count as previous day)",
-    },
-    {
-      name: "businessDateMode",
-      label: "Business Date Mode",
-      type: "select",
-      options: businessDateModeOptions,
-      description: "Auto calculates based on time; Manual lets you set the date",
-    },
-    {
-      name: "currentBusinessDate",
-      label: "Current Business Date (Manual Mode)",
-      type: "text",
-      placeholder: "YYYY-MM-DD",
-      description: "Only used when mode is Manual",
     },
   ];
 
