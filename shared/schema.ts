@@ -25,6 +25,8 @@ export const properties = pgTable("properties", {
   businessDateRolloverTime: text("business_date_rollover_time").default("04:00"), // HH:MM format, e.g., "04:00" for 4 AM
   businessDateMode: text("business_date_mode").default("auto"), // 'auto' or 'manual'
   currentBusinessDate: text("current_business_date"), // YYYY-MM-DD format, used for manual mode
+  // Branding - custom sign-in logo for the property
+  signInLogoUrl: text("sign_in_logo_url"),
   active: boolean("active").default(true),
 });
 
