@@ -3967,7 +3967,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         employeeData[empId].netSales = employeeData[empId].grossSales - employeeData[empId].discounts;
       }
       
-      const result = Object.values(employeeData).sort((a, b) => b.total - a.total);
+      const result = Object.values(employeeData).map(emp => ({
+        employeeId: emp.id,
+        employeeName: emp.name,
+        checkCount: emp.checkCount,
+        itemCount: emp.itemCount,
+        grossSales: emp.grossSales,
+        discounts: emp.discounts,
+        netSales: emp.netSales,
+        tax: emp.tax,
+        total: emp.total,
+        cashCollected: emp.cashCollected,
+        creditCollected: emp.creditCollected,
+        otherCollected: emp.otherCollected,
+        totalCollected: emp.totalCollected,
+        tips: emp.tips,
+      })).sort((a, b) => b.total - a.total);
       
       res.json({
         employees: result,
