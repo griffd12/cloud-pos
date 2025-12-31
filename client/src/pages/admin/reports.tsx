@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -201,6 +202,8 @@ export default function ReportsPage() {
   const [selectedRvcId, setSelectedRvcId] = useState<string>("all");
   const [dateRange, setDateRange] = useState<string>("today");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -240,10 +243,36 @@ export default function ReportsPage() {
         start.setMonth(start.getMonth() - 1);
         return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
       }
+      case "ytd": {
+        const start = new Date(now.getFullYear(), 0, 1);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
+      }
+      case "last_quarter": {
+        const currentMonth = now.getMonth();
+        const currentQuarter = Math.floor(currentMonth / 3);
+        const lastQuarterStart = currentQuarter === 0 ? 9 : (currentQuarter - 1) * 3;
+        const lastQuarterYear = currentQuarter === 0 ? now.getFullYear() - 1 : now.getFullYear();
+        const start = new Date(lastQuarterYear, lastQuarterStart, 1);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(lastQuarterYear, lastQuarterStart + 3, 0);
+        end.setHours(23, 59, 59, 999);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      case "custom": {
+        if (customStartDate && customEndDate) {
+          const start = new Date(customStartDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(customEndDate);
+          end.setHours(23, 59, 59, 999);
+          return { startDate: start.toISOString(), endDate: end.toISOString() };
+        }
+        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString() };
+      }
       default:
         return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString() };
     }
-  }, [dateRange]);
+  }, [dateRange, customStartDate, customEndDate]);
   
   const buildUrl = (endpoint: string) => {
     const params = new URLSearchParams();
@@ -343,7 +372,7 @@ export default function ReportsPage() {
             <div className="space-y-1.5">
               <Label>Date Range</Label>
               <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger className="w-[140px]" data-testid="select-date-range">
+                <SelectTrigger className="w-[160px]" data-testid="select-date-range">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -351,9 +380,37 @@ export default function ReportsPage() {
                   <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="week">Last 7 Days</SelectItem>
                   <SelectItem value="month">Last 30 Days</SelectItem>
+                  <SelectItem value="ytd">Year to Date</SelectItem>
+                  <SelectItem value="last_quarter">Last Quarter</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {dateRange === "custom" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>From Date</Label>
+                  <Input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomStartDate(e.target.value)}
+                    className="w-[160px]"
+                    data-testid="input-custom-start-date"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>To Date</Label>
+                  <Input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomEndDate(e.target.value)}
+                    className="w-[160px]"
+                    data-testid="input-custom-end-date"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-1.5">
               <Label>Property</Label>
