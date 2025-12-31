@@ -449,6 +449,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
+  // Get property by RVC ID (for login page to fetch logo)
+  app.get("/api/rvcs/:id/property", async (req, res) => {
+    const rvc = await storage.getRvc(req.params.id);
+    if (!rvc) return res.status(404).json({ message: "RVC not found" });
+    const property = await storage.getProperty(rvc.propertyId);
+    if (!property) return res.status(404).json({ message: "Property not found" });
+    res.json(property);
+  });
+
   app.post("/api/rvcs", async (req, res) => {
     try {
       const validated = insertRvcSchema.parse(req.body);
