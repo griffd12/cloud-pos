@@ -2599,8 +2599,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
-        if (!ci.createdAt) return false;
-        const itemDate = new Date(ci.createdAt);
+        if (!ci.addedAt) return false;
+        const itemDate = new Date(ci.addedAt);
         if (itemDate < start || itemDate > end) return false;
         // Apply RVC filter
         if (validRvcIds) {
@@ -2635,7 +2635,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const menuItem = menuItems.find(m => m.id === ci.menuItemId);
         if (menuItem?.taxGroupId) {
           const taxGroup = taxGroups.find(t => t.id === menuItem.taxGroupId);
-          if (taxGroup && !taxGroup.inclusive) {
+          if (taxGroup && taxGroup.taxMode !== "inclusive") {
             const itemTotal = (parseFloat(ci.unitPrice || "0") * (ci.quantity || 1));
             // Add modifier prices
             let modTotal = 0;
@@ -2671,9 +2671,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const totalPayments = paymentsInPeriod.reduce((sum, p) => 
         sum + parseFloat(p.amount || "0"), 0
       );
-      const totalTips = paymentsInPeriod.reduce((sum, p) => 
-        sum + parseFloat(p.tipAmount || "0"), 0
-      );
+      // Tips would need to be tracked separately if the system supports them
+      const totalTips = 0;
       
       // Guest count from checks closed in period
       const guestCount = checksClosed.reduce((sum, c) => sum + (c.guestCount || 1), 0);
@@ -2718,7 +2717,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Sales by Category (SLU)
+  // Sales by Category (SLU) - Based on item addedAt (when items were rung in)
   app.get("/api/reports/sales-by-category", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate } = req.query;
@@ -2727,63 +2726,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
-      const allMenuItems = await storage.getMenuItems();
+      const allCheckItems = await storage.getAllCheckItems();
       const allSlus = await storage.getSlus();
       const menuItemSluLinks = await storage.getMenuItemSlus();
       
-      // Filter checks
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter items by addedAt within date range
+      const itemsInPeriod = allCheckItems.filter(ci => {
+        if (ci.voided) return false;
+        if (!ci.addedAt) return false;
+        const itemDate = new Date(ci.addedAt);
+        if (itemDate < start || itemDate > end) return false;
+        // Apply RVC filter
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
         return true;
       });
       
-      if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
-      }
-      if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
-      }
-      
-      // Get all check items for filtered checks
+      // Aggregate by category
       const categoryTotals: Record<string, { name: string; quantity: number; sales: number }> = {};
       
-      for (const check of filteredChecks) {
-        const items = await storage.getCheckItems(check.id);
-        for (const item of items) {
-          if (item.voided) continue;
-          
-          // Find SLU for this menu item
-          const sluLink = menuItemSluLinks.find((l: any) => l.menuItemId === item.menuItemId);
-          const slu = sluLink ? allSlus.find(s => s.id === sluLink.sluId) : null;
-          const categoryName = slu?.name || "Uncategorized";
-          const categoryId = slu?.id || "uncategorized";
-          
-          if (!categoryTotals[categoryId]) {
-            categoryTotals[categoryId] = { name: categoryName, quantity: 0, sales: 0 };
-          }
-          
-          const qty = item.quantity || 1;
-          const basePrice = parseFloat(item.unitPrice);
-          
-          // Calculate modifier upcharges
-          let modifierUpcharge = 0;
-          if (item.modifiers && Array.isArray(item.modifiers)) {
-            modifierUpcharge = (item.modifiers as any[]).reduce((mSum, mod) => {
-              return mSum + parseFloat(mod.priceDelta || "0");
-            }, 0);
-          }
-          
-          categoryTotals[categoryId].quantity += qty;
-          categoryTotals[categoryId].sales += (basePrice + modifierUpcharge) * qty;
+      for (const item of itemsInPeriod) {
+        // Find SLU for this menu item
+        const sluLink = menuItemSluLinks.find((l: any) => l.menuItemId === item.menuItemId);
+        const slu = sluLink ? allSlus.find(s => s.id === sluLink.sluId) : null;
+        const categoryName = slu?.name || "Uncategorized";
+        const categoryId = slu?.id || "uncategorized";
+        
+        if (!categoryTotals[categoryId]) {
+          categoryTotals[categoryId] = { name: categoryName, quantity: 0, sales: 0 };
         }
+        
+        const qty = item.quantity || 1;
+        const basePrice = parseFloat(item.unitPrice);
+        
+        // Calculate modifier upcharges
+        let modifierUpcharge = 0;
+        if (item.modifiers && Array.isArray(item.modifiers)) {
+          modifierUpcharge = (item.modifiers as any[]).reduce((mSum, mod) => {
+            return mSum + parseFloat(mod.priceDelta || "0");
+          }, 0);
+        }
+        
+        categoryTotals[categoryId].quantity += qty;
+        categoryTotals[categoryId].sales += (basePrice + modifierUpcharge) * qty;
       }
       
       const result = Object.entries(categoryTotals)
-        .map(([id, data]) => ({ id, ...data }))
+        .map(([id, data]) => ({ id, ...data, sales: Math.round(data.sales * 100) / 100 }))
         .sort((a, b) => b.sales - a.sales);
       
       res.json(result);
@@ -2793,7 +2796,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Top Selling Items
+  // Top Selling Items - Based on item addedAt (when items were rung in)
   app.get("/api/reports/top-items", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, limit: limitParam } = req.query;
@@ -2803,51 +2806,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
+      const allCheckItems = await storage.getAllCheckItems();
       
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter items by addedAt within date range
+      const itemsInPeriod = allCheckItems.filter(ci => {
+        if (ci.voided) return false;
+        if (!ci.addedAt) return false;
+        const itemDate = new Date(ci.addedAt);
+        if (itemDate < start || itemDate > end) return false;
+        // Apply RVC filter
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
         return true;
       });
       
-      if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
-      }
-      if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
-      }
-      
       const itemTotals: Record<string, { name: string; quantity: number; sales: number }> = {};
       
-      for (const check of filteredChecks) {
-        const items = await storage.getCheckItems(check.id);
-        for (const item of items) {
-          if (item.voided) continue;
-          const id = item.menuItemId;
-          if (!itemTotals[id]) {
-            itemTotals[id] = { name: item.menuItemName, quantity: 0, sales: 0 };
-          }
-          const qty = item.quantity || 1;
-          const basePrice = parseFloat(item.unitPrice);
-          
-          // Calculate modifier upcharges
-          let modifierUpcharge = 0;
-          if (item.modifiers && Array.isArray(item.modifiers)) {
-            modifierUpcharge = (item.modifiers as any[]).reduce((mSum, mod) => {
-              return mSum + parseFloat(mod.priceDelta || "0");
-            }, 0);
-          }
-          
-          itemTotals[id].quantity += qty;
-          itemTotals[id].sales += (basePrice + modifierUpcharge) * qty;
+      for (const item of itemsInPeriod) {
+        const id = item.menuItemId;
+        if (!itemTotals[id]) {
+          itemTotals[id] = { name: item.menuItemName, quantity: 0, sales: 0 };
         }
+        const qty = item.quantity || 1;
+        const basePrice = parseFloat(item.unitPrice);
+        
+        // Calculate modifier upcharges
+        let modifierUpcharge = 0;
+        if (item.modifiers && Array.isArray(item.modifiers)) {
+          modifierUpcharge = (item.modifiers as any[]).reduce((mSum, mod) => {
+            return mSum + parseFloat(mod.priceDelta || "0");
+          }, 0);
+        }
+        
+        itemTotals[id].quantity += qty;
+        itemTotals[id].sales += (basePrice + modifierUpcharge) * qty;
       }
       
       const result = Object.entries(itemTotals)
-        .map(([id, data]) => ({ id, ...data }))
+        .map(([id, data]) => ({ id, ...data, sales: Math.round(data.sales * 100) / 100 }))
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, limit);
       
@@ -2858,7 +2868,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Tender Mix Report
+  // Tender Mix Report - Based on paidAt (when payment was applied)
   app.get("/api/reports/tender-mix", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate } = req.query;
@@ -2867,35 +2877,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
+      const allPayments = await storage.getAllPayments();
       
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter payments by paidAt within date range
+      const paymentsInPeriod = allPayments.filter(p => {
+        if (!p.paidAt) return false;
+        const payDate = new Date(p.paidAt);
+        if (payDate < start || payDate > end) return false;
+        // Apply RVC filter via check
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(p.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
         return true;
       });
       
-      if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
-      }
-      if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
-      }
-      
       const tenderTotals: Record<string, { name: string; count: number; amount: number }> = {};
       
-      for (const check of filteredChecks) {
-        const payments = await storage.getPayments(check.id);
-        for (const payment of payments) {
-          const id = payment.tenderId;
-          if (!tenderTotals[id]) {
-            tenderTotals[id] = { name: payment.tenderName, count: 0, amount: 0 };
-          }
-          tenderTotals[id].count += 1;
-          tenderTotals[id].amount += parseFloat(payment.amount);
+      for (const payment of paymentsInPeriod) {
+        const id = payment.tenderId;
+        if (!tenderTotals[id]) {
+          tenderTotals[id] = { name: payment.tenderName, count: 0, amount: 0 };
         }
+        tenderTotals[id].count += 1;
+        tenderTotals[id].amount += parseFloat(payment.amount);
       }
       
       const totalAmount = Object.values(tenderTotals).reduce((sum, t) => sum + t.amount, 0);
@@ -3135,7 +3152,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Tender Detail Report - Individual payment transactions
+  // Tender Detail Report - Individual payment transactions - Based on paidAt
   app.get("/api/reports/tender-detail", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, tenderId } = req.query;
@@ -3148,27 +3165,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allTenders = await storage.getTenders();
       const employees = await storage.getEmployees();
       
-      // Filter checks by date range and location - use openedAt for date filter
-      let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
-        return true;
-      }).map(c => c.id);
-      
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
       if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        const propertyChecks = allChecks.filter(c => propertyRvcs.includes(c.rvcId)).map(c => c.id);
-        filteredCheckIds = filteredCheckIds.filter(id => propertyChecks.includes(id));
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
       }
       if (rvcId && rvcId !== "all") {
-        const rvcChecks = allChecks.filter(c => c.rvcId === rvcId).map(c => c.id);
-        filteredCheckIds = filteredCheckIds.filter(id => rvcChecks.includes(id));
+        validRvcIds = [rvcId as string];
       }
       
-      // Get payments for those checks
-      let payments = allPayments.filter(p => filteredCheckIds.includes(p.checkId));
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter payments by paidAt within date range
+      let payments = allPayments.filter(p => {
+        if (!p.paidAt) return false;
+        const payDate = new Date(p.paidAt);
+        if (payDate < start || payDate > end) return false;
+        // Apply RVC filter via check
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(p.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
+        return true;
+      });
       
       // Filter by specific tender if provided
       if (tenderId) {
@@ -3187,7 +3207,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           tenderName: tender?.name || "Unknown",
           tenderType: tender?.type || "unknown",
           amount: parseFloat(p.amount || "0"),
-          tipAmount: parseFloat(p.tipAmount || "0"),
+          tipAmount: 0, // Tips would need separate tracking
           employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
           rvcName: rvc?.name || "Unknown",
           paidAt: p.paidAt,
@@ -3204,7 +3224,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         summary[name].count += 1;
         summary[name].amount += parseFloat(p.amount || "0");
-        summary[name].tips += parseFloat(p.tipAmount || "0");
+        // Tips would need separate tracking
       }
       
       res.json({
@@ -3457,6 +3477,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Hourly Sales
+  // Hourly Sales Report - Based on item addedAt (when items were rung in)
   app.get("/api/reports/hourly-sales", async (req, res) => {
     try {
       const { propertyId, rvcId, date } = req.query;
@@ -3469,6 +3490,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
       const allProperties = await storage.getProperties();
+      const allCheckItems = await storage.getAllCheckItems();
       
       // Determine the timezone to use for hour conversion
       let timezone = "America/Los_Angeles"; // Default to PST
@@ -3479,36 +3501,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.closedAt ? new Date(c.closedAt) : null;
-        if (!checkDate) return false;
-        if (checkDate < startOfDay || checkDate > endOfDay) return false;
-        if (c.status !== "closed") return false;
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
+      if (propertyId && propertyId !== "all") {
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      }
+      if (rvcId && rvcId !== "all") {
+        validRvcIds = [rvcId as string];
+      }
+      
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter items by addedAt within date range
+      const itemsInPeriod = allCheckItems.filter(ci => {
+        if (ci.voided) return false;
+        if (!ci.addedAt) return false;
+        const itemDate = new Date(ci.addedAt);
+        if (itemDate < startOfDay || itemDate > endOfDay) return false;
+        // Apply RVC filter
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
         return true;
       });
       
-      if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
-      }
-      if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
-      }
-      
-      // Initialize hourly buckets (0-23)
+      // Initialize hourly buckets (0-23) with item count instead of check count
       const hourlyData: { hour: number; sales: number; checkCount: number }[] = [];
       for (let h = 0; h < 24; h++) {
         hourlyData.push({ hour: h, sales: 0, checkCount: 0 });
       }
       
-      for (const check of filteredChecks) {
-        // Convert UTC time to local timezone to get correct hour
-        const closedDate = new Date(check.closedAt!);
-        const localTimeStr = closedDate.toLocaleString("en-US", { timeZone: timezone, hour: "numeric", hour12: false });
+      // Track unique checks per hour for checkCount
+      const checksPerHour: Set<string>[] = Array.from({ length: 24 }, () => new Set());
+      
+      for (const item of itemsInPeriod) {
+        const itemDate = new Date(item.addedAt!);
+        const localTimeStr = itemDate.toLocaleString("en-US", { timeZone: timezone, hour: "numeric", hour12: false });
         const hour = parseInt(localTimeStr, 10);
-        const netSales = parseFloat(check.subtotal || "0") - parseFloat(check.discountTotal || "0");
-        hourlyData[hour].sales += netSales;
-        hourlyData[hour].checkCount += 1;
+        
+        const qty = item.quantity || 1;
+        const basePrice = parseFloat(item.unitPrice || "0");
+        let modifierUpcharge = 0;
+        if (item.modifiers && Array.isArray(item.modifiers)) {
+          modifierUpcharge = (item.modifiers as any[]).reduce((sum, mod) => 
+            sum + parseFloat(mod.priceDelta || "0"), 0
+          );
+        }
+        
+        hourlyData[hour].sales += (basePrice + modifierUpcharge) * qty;
+        checksPerHour[hour].add(item.checkId);
+      }
+      
+      // Set checkCount to unique checks with items in that hour
+      for (let h = 0; h < 24; h++) {
+        hourlyData[h].checkCount = checksPerHour[h].size;
+        hourlyData[h].sales = Math.round(hourlyData[h].sales * 100) / 100;
       }
       
       res.json(hourlyData);
