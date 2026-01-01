@@ -881,17 +881,11 @@ export default function ReportsPage() {
               <CardTitle className="text-sm">Sales Breakdown (by item ring-in date)</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-7 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Base Item Sales</p>
-                  <p className="font-medium text-lg" data-testid="text-base-item-sales">
-                    {formatCurrency(salesSummary?.baseItemSales || 0)}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Modifiers</p>
-                  <p className="font-medium text-lg" data-testid="text-modifier-sales">
-                    {formatCurrency(salesSummary?.modifierTotal || 0)}
+                  <p className="text-muted-foreground">Item Sales</p>
+                  <p className="font-medium text-lg" data-testid="text-item-sales">
+                    {formatCurrency(salesSummary?.itemSales || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
