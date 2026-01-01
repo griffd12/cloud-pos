@@ -4523,14 +4523,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Sales Comparison Dashboard
+  // Sales Comparison Dashboard - Uses businessDate-based item filtering to include all checks (open and closed)
   app.get("/api/reports/sales-comparison", async (req, res) => {
     try {
       const { propertyId, rvcId, comparisonType } = req.query;
       
       const allChecks = await storage.getChecks();
+      const allCheckItems = await storage.getAllCheckItems();
       const allRvcs = await storage.getRvcs();
-      const allPayments = await storage.getAllPayments();
       
       // Get valid RVC IDs
       let validRvcIds: string[] | null = null;
@@ -4541,26 +4541,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         validRvcIds = [rvcId as string];
       }
       
-      // Helper to calculate sales for a date range
+      // Filter checks by property/RVC
+      const checksInScope = allChecks.filter(c => {
+        if (validRvcIds && !validRvcIds.includes(c.rvcId)) return false;
+        return true;
+      });
+      const checkIdsInScope = new Set(checksInScope.map(c => c.id));
+      const checkMap = new Map(checksInScope.map(c => [c.id, c]));
+      
+      // Helper to calculate sales for a date range using businessDate on items
       const calculateSales = (startDate: Date, endDate: Date) => {
-        const checks = allChecks.filter(check => {
-          if (validRvcIds && !validRvcIds.includes(check.rvcId)) return false;
-          if (check.status !== "closed" || !check.closedAt) return false;
-          const closedAt = new Date(check.closedAt);
-          return closedAt >= startDate && closedAt <= endDate;
+        // Convert dates to YYYY-MM-DD strings for businessDate comparison
+        const startStr = startDate.toISOString().split('T')[0];
+        const endStr = endDate.toISOString().split('T')[0];
+        
+        // Filter items by businessDate range
+        const itemsInRange = allCheckItems.filter(item => {
+          if (!checkIdsInScope.has(item.checkId)) return false;
+          if (item.voided) return false;
+          if (!item.businessDate) return false;
+          return item.businessDate >= startStr && item.businessDate <= endStr;
         });
         
-        const checkIds = new Set(checks.map(c => c.id));
-        const payments = allPayments.filter(p => checkIds.has(p.checkId));
+        // Get unique checks that have items in this range
+        const checkIdsWithItems = new Set(itemsInRange.map(i => i.checkId));
+        const checksWithItems = [...checkIdsWithItems].map(id => checkMap.get(id)).filter(Boolean) as typeof checksInScope;
+        
+        // Calculate gross sales from items
+        const grossSales = itemsInRange.reduce((sum, item) => {
+          return sum + (parseFloat(item.unitPrice) * (item.quantity || 1));
+        }, 0);
+        
+        // Get discounts from checks that have items in range
+        const discounts = checksWithItems.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0);
+        
+        // Net sales = gross - discounts
+        const netSales = grossSales - discounts;
+        
+        // Tax from checks (proportional to items in range - simplified, use check tax)
+        const tax = checksWithItems.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0);
+        
+        // Total = net + tax
+        const total = netSales + tax;
         
         return {
-          checkCount: checks.length,
-          grossSales: checks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0"), 0),
-          discounts: checks.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0),
-          netSales: checks.reduce((sum, c) => sum + parseFloat(c.subtotal || "0") - parseFloat(c.discountTotal || "0"), 0),
-          tax: checks.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0),
-          total: checks.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0),
-          avgCheck: checks.length > 0 ? checks.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0) / checks.length : 0,
+          checkCount: checksWithItems.length,
+          grossSales,
+          discounts,
+          netSales,
+          tax,
+          total,
+          avgCheck: checksWithItems.length > 0 ? total / checksWithItems.length : 0,
         };
       };
       
