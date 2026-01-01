@@ -5301,7 +5301,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Get employee job codes
+  // Get employee job codes (basic)
   app.get("/api/employees/:employeeId/job-codes", async (req, res) => {
     try {
       const jobCodes = await storage.getEmployeeJobCodes(req.params.employeeId);
@@ -5312,15 +5312,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Set employee job codes
+  // Get employee job codes with job details (including role)
+  app.get("/api/employees/:employeeId/job-codes/details", async (req, res) => {
+    try {
+      const jobCodes = await storage.getEmployeeJobCodesWithDetails(req.params.employeeId);
+      res.json(jobCodes);
+    } catch (error) {
+      console.error("Get employee job codes with details error:", error);
+      res.status(500).json({ message: "Failed to get employee job codes" });
+    }
+  });
+
+  // Set employee job codes (with pay rates)
   app.put("/api/employees/:employeeId/job-codes", async (req, res) => {
     try {
-      const { jobCodeIds } = req.body;
-      if (!Array.isArray(jobCodeIds)) {
-        return res.status(400).json({ message: "jobCodeIds must be an array" });
+      const { assignments, jobCodeIds } = req.body;
+      // Support both old format (jobCodeIds array) and new format (assignments array with payRate)
+      let assignmentData: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[];
+      
+      if (assignments && Array.isArray(assignments)) {
+        assignmentData = assignments;
+      } else if (jobCodeIds && Array.isArray(jobCodeIds)) {
+        // Backward compatibility: convert simple array to assignment format
+        assignmentData = jobCodeIds.map((id: string, index: number) => ({
+          jobCodeId: id,
+          isPrimary: index === 0,
+        }));
+      } else {
+        return res.status(400).json({ message: "assignments or jobCodeIds must be an array" });
       }
-      const jobCodes = await storage.setEmployeeJobCodes(req.params.employeeId, jobCodeIds);
-      res.json(jobCodes);
+      
+      const result = await storage.setEmployeeJobCodes(req.params.employeeId, assignmentData);
+      res.json(result);
     } catch (error) {
       console.error("Set employee job codes error:", error);
       res.status(500).json({ message: "Failed to set employee job codes" });

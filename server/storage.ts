@@ -382,7 +382,8 @@ export interface IStorage {
 
   // Employee Job Codes
   getEmployeeJobCodes(employeeId: string): Promise<EmployeeJobCode[]>;
-  setEmployeeJobCodes(employeeId: string, jobCodeIds: string[]): Promise<EmployeeJobCode[]>;
+  getEmployeeJobCodesWithDetails(employeeId: string): Promise<(EmployeeJobCode & { jobCode: JobCode })[]>;
+  setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[]): Promise<EmployeeJobCode[]>;
 
   // Pay Periods
   getPayPeriods(propertyId: string): Promise<PayPeriod[]>;
@@ -2268,13 +2269,38 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(employeeJobCodes).where(eq(employeeJobCodes.employeeId, employeeId));
   }
 
-  async setEmployeeJobCodes(employeeId: string, jobCodeIds: string[]): Promise<EmployeeJobCode[]> {
+  async getEmployeeJobCodesWithDetails(employeeId: string): Promise<(EmployeeJobCode & { jobCode: JobCode })[]> {
+    const results = await db
+      .select({
+        id: employeeJobCodes.id,
+        employeeId: employeeJobCodes.employeeId,
+        jobCodeId: employeeJobCodes.jobCodeId,
+        payRate: employeeJobCodes.payRate,
+        isPrimary: employeeJobCodes.isPrimary,
+        jobCode: jobCodes,
+      })
+      .from(employeeJobCodes)
+      .innerJoin(jobCodes, eq(employeeJobCodes.jobCodeId, jobCodes.id))
+      .where(eq(employeeJobCodes.employeeId, employeeId));
+    
+    return results.map(r => ({
+      id: r.id,
+      employeeId: r.employeeId,
+      jobCodeId: r.jobCodeId,
+      payRate: r.payRate,
+      isPrimary: r.isPrimary,
+      jobCode: r.jobCode,
+    }));
+  }
+
+  async setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[]): Promise<EmployeeJobCode[]> {
     await db.delete(employeeJobCodes).where(eq(employeeJobCodes.employeeId, employeeId));
-    if (jobCodeIds.length === 0) return [];
-    const values = jobCodeIds.map((jobCodeId, index) => ({
+    if (assignments.length === 0) return [];
+    const values = assignments.map((assignment, index) => ({
       employeeId,
-      jobCodeId,
-      isPrimary: index === 0,
+      jobCodeId: assignment.jobCodeId,
+      payRate: assignment.payRate || null,
+      isPrimary: assignment.isPrimary ?? (index === 0),
     }));
     return db.insert(employeeJobCodes).values(values).returning();
   }
