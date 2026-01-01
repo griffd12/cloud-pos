@@ -1138,6 +1138,7 @@ export const timecards = pgTable("timecards", {
   payPeriodId: varchar("pay_period_id").references(() => payPeriods.id),
   businessDate: text("business_date").notNull(),
   jobCodeId: varchar("job_code_id").references(() => jobCodes.id),
+  payRate: decimal("pay_rate", { precision: 10, scale: 2 }),
   clockInTime: timestamp("clock_in_time"),
   clockOutTime: timestamp("clock_out_time"),
   regularHours: decimal("regular_hours", { precision: 6, scale: 2 }).default("0"),

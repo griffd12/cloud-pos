@@ -2535,6 +2535,7 @@ export class DatabaseStorage implements IStorage {
     let totalMinutes = 0;
     let clockInTime: Date | null = null;
     let clockOutTime: Date | null = null;
+    let jobCodeId: string | null = null;
 
     for (const clockIn of clockIns) {
       const matchingOut = clockOuts.find(o => new Date(o.actualTimestamp) > new Date(clockIn.actualTimestamp));
@@ -2543,6 +2544,7 @@ export class DatabaseStorage implements IStorage {
         totalMinutes += duration;
         if (!clockInTime || new Date(clockIn.actualTimestamp) < clockInTime) {
           clockInTime = new Date(clockIn.actualTimestamp);
+          jobCodeId = clockIn.jobCodeId || null;
         }
         if (!clockOutTime || new Date(matchingOut.actualTimestamp) > clockOutTime) {
           clockOutTime = new Date(matchingOut.actualTimestamp);
@@ -2568,12 +2570,29 @@ export class DatabaseStorage implements IStorage {
     const regularHours = Math.min(workedMinutes / 60, 8);
     const overtimeHours = Math.max(0, workedMinutes / 60 - 8);
 
+    // Look up employee's pay rate for this job
+    let payRate: string | null = null;
+    if (jobCodeId) {
+      const jobAssignment = await db.select().from(employeeJobCodes)
+        .where(and(eq(employeeJobCodes.employeeId, employeeId), eq(employeeJobCodes.jobCodeId, jobCodeId)))
+        .limit(1);
+      if (jobAssignment.length > 0 && jobAssignment[0].payRate) {
+        payRate = jobAssignment[0].payRate;
+      } else {
+        // Fall back to job's default hourly rate
+        const job = await db.select().from(jobCodes).where(eq(jobCodes.id, jobCodeId)).limit(1);
+        if (job.length > 0 && job[0].defaultHourlyRate) {
+          payRate = job[0].defaultHourlyRate;
+        }
+      }
+    }
+
     // Get or create timecard
     const existing = await db.select().from(timecards)
       .where(and(eq(timecards.employeeId, employeeId), eq(timecards.businessDate, businessDate)))
       .limit(1);
 
-    const timecardData = {
+    const timecardData: any = {
       regularHours: regularHours.toFixed(2),
       overtimeHours: overtimeHours.toFixed(2),
       totalHours: (workedMinutes / 60).toFixed(2),
@@ -2584,6 +2603,13 @@ export class DatabaseStorage implements IStorage {
       clockOutTime,
       updatedAt: new Date(),
     };
+    
+    if (jobCodeId) {
+      timecardData.jobCodeId = jobCodeId;
+    }
+    if (payRate) {
+      timecardData.payRate = payRate;
+    }
 
     if (existing.length > 0) {
       return this.updateTimecard(existing[0].id, timecardData);
