@@ -33,7 +33,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import type { Employee, Property, Timecard, TimecardException } from "@shared/schema";
+import type { Employee, Property, Timecard, TimecardException, JobCode } from "@shared/schema";
 
 export default function TimecardsPage() {
   const { toast } = useToast();
@@ -48,6 +48,10 @@ export default function TimecardsPage() {
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const { data: jobCodes = [] } = useQuery<JobCode[]>({
+    queryKey: ["/api/job-codes"],
   });
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
@@ -102,6 +106,17 @@ export default function TimecardsPage() {
   const getEmployeeName = (employeeId: string) => {
     const emp = employees.find((e) => e.id === employeeId);
     return emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+  };
+
+  const getJobName = (jobCodeId: string | null) => {
+    if (!jobCodeId) return "-";
+    const job = jobCodes.find((j) => j.id === jobCodeId);
+    return job ? job.name : "-";
+  };
+
+  const formatPay = (rate: string | null) => {
+    if (!rate) return "-";
+    return `$${parseFloat(rate).toFixed(2)}`;
   };
 
   const formatTime = (date: Date | string | null) => {
@@ -252,6 +267,8 @@ export default function TimecardsPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employee</TableHead>
+                        <TableHead>Job</TableHead>
+                        <TableHead>Rate</TableHead>
                         <TableHead>Clock In</TableHead>
                         <TableHead>Clock Out</TableHead>
                         <TableHead>Regular</TableHead>
@@ -268,6 +285,8 @@ export default function TimecardsPage() {
                           <TableCell className="font-medium">
                             {getEmployeeName(tc.employeeId)}
                           </TableCell>
+                          <TableCell>{getJobName(tc.jobCodeId)}</TableCell>
+                          <TableCell className="tabular-nums">{formatPay(tc.payRate)}</TableCell>
                           <TableCell>{formatTime(tc.clockInTime)}</TableCell>
                           <TableCell>{formatTime(tc.clockOutTime)}</TableCell>
                           <TableCell className="tabular-nums">{formatHours(tc.regularHours)}</TableCell>
