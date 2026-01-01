@@ -4171,6 +4171,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       const allPayments = await storage.getAllPayments();
       const allCheckItems = await storage.getAllCheckItems();
+      const tenders = await storage.getTenders();
+      const menuItems = await storage.getMenuItems();
       
       // Get valid RVC IDs
       let validRvcIds: string[] | null = null;
@@ -4181,17 +4183,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         validRvcIds = [rvcId as string];
       }
       
-      // Filter checks by property/RVC and date
+      // Filter checks by property/RVC - include ALL checks (open and closed) for business date
+      // Sales should be tracked when rung, not when paid
       let filteredChecks = allChecks.filter(check => {
         if (validRvcIds && !validRvcIds.includes(check.rvcId)) return false;
-        if (check.status !== "closed") return false;
         
         if (useBusinessDate) {
           return check.businessDate === businessDate;
         }
-        if (!check.closedAt) return false;
-        const closedAt = new Date(check.closedAt);
-        return closedAt >= start && closedAt <= end;
+        // For date range, use openedAt since items are rung when check is open
+        if (!check.openedAt) return false;
+        const openedAt = new Date(check.openedAt);
+        return openedAt >= start && openedAt <= end;
       });
       
       // If specific employee, filter further
@@ -4204,6 +4207,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         id: string;
         name: string;
         checkCount: number;
+        closedCheckCount: number;
+        openCheckCount: number;
         itemCount: number;
         grossSales: number;
         discounts: number;
@@ -4215,6 +4220,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         otherCollected: number;
         totalCollected: number;
         tips: number;
+        outstandingBalance: number;
       }> = {};
       
       for (const check of filteredChecks) {
@@ -4227,6 +4233,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             id: empId,
             name: `${emp.firstName} ${emp.lastName}`,
             checkCount: 0,
+            closedCheckCount: 0,
+            openCheckCount: 0,
             itemCount: 0,
             grossSales: 0,
             discounts: 0,
@@ -4238,35 +4246,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             otherCollected: 0,
             totalCollected: 0,
             tips: 0,
+            outstandingBalance: 0,
           };
         }
         
         employeeData[empId].checkCount++;
-        employeeData[empId].grossSales += parseFloat(check.subtotal || "0");
-        employeeData[empId].discounts += parseFloat(check.discountTotal || "0");
-        employeeData[empId].tax += parseFloat(check.taxTotal || "0");
-        employeeData[empId].total += parseFloat(check.total || "0");
+        if (check.status === "closed") {
+          employeeData[empId].closedCheckCount++;
+        } else {
+          employeeData[empId].openCheckCount++;
+        }
         
-        // Count items
-        const checkItems = allCheckItems.filter(ci => ci.checkId === check.id && !ci.voided);
-        employeeData[empId].itemCount += checkItems.reduce((sum, ci) => sum + (ci.quantity || 1), 0);
-        
-        // Get payments for this check
-        const checkPayments = allPayments.filter(p => p.checkId === check.id);
-        const tenders = await storage.getTenders();
-        for (const payment of checkPayments) {
-          const amount = parseFloat(payment.amount || "0");
-          employeeData[empId].totalCollected += amount;
-          
-          // Categorize by tender type (lookup tender)
-          const tender = tenders.find(t => t.id === payment.tenderId);
-          if (tender?.type === "cash") {
-            employeeData[empId].cashCollected += amount;
-          } else if (tender?.type === "credit") {
-            employeeData[empId].creditCollected += amount;
-          } else {
-            employeeData[empId].otherCollected += amount;
+        // Get items for this check that match the businessDate filter
+        // This ensures we count items by their actual business date
+        const checkItems = allCheckItems.filter(ci => {
+          if (ci.checkId !== check.id) return false;
+          if (ci.voided) return false;
+          if (useBusinessDate) {
+            return ci.businessDate === businessDate;
           }
+          return true;
+        });
+        
+        // Calculate sales from items directly (not from check.subtotal which may exclude open checks)
+        let itemGrossSales = 0;
+        let modifierTotal = 0;
+        for (const item of checkItems) {
+          const qty = item.quantity || 1;
+          const price = parseFloat(item.unitPrice || "0");
+          // Calculate modifier total from modifiers array
+          const modPrice = (item.modifiers || []).reduce((sum, mod) => 
+            sum + parseFloat(mod.priceDelta || "0"), 0);
+          itemGrossSales += price * qty;
+          modifierTotal += modPrice * qty;
+          employeeData[empId].itemCount += qty;
+        }
+        
+        const totalItemSales = itemGrossSales + modifierTotal;
+        employeeData[empId].grossSales += totalItemSales;
+        
+        // Discounts from check (if available)
+        const discountAmount = parseFloat(check.discountTotal || "0");
+        employeeData[empId].discounts += discountAmount;
+        
+        // Calculate tax proportionally if check is closed, otherwise estimate
+        if (check.status === "closed") {
+          employeeData[empId].tax += parseFloat(check.taxTotal || "0");
+          employeeData[empId].total += parseFloat(check.total || "0");
+          
+          // Get payments for closed checks
+          const checkPayments = allPayments.filter(p => p.checkId === check.id);
+          for (const payment of checkPayments) {
+            const amount = parseFloat(payment.amount || "0");
+            employeeData[empId].totalCollected += amount;
+            
+            const tender = tenders.find(t => t.id === payment.tenderId);
+            if (tender?.type === "cash") {
+              employeeData[empId].cashCollected += amount;
+            } else if (tender?.type === "credit") {
+              employeeData[empId].creditCollected += amount;
+            } else {
+              employeeData[empId].otherCollected += amount;
+            }
+          }
+        } else {
+          // For open checks, calculate estimated tax and total
+          // Use check's current values which are updated as items are added
+          const openTax = parseFloat(check.taxTotal || "0");
+          const openTotal = parseFloat(check.total || "0");
+          employeeData[empId].tax += openTax;
+          employeeData[empId].total += openTotal;
+          employeeData[empId].outstandingBalance += openTotal;
         }
         
         employeeData[empId].netSales = employeeData[empId].grossSales - employeeData[empId].discounts;
@@ -4276,6 +4326,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         employeeId: emp.id,
         employeeName: emp.name,
         checkCount: emp.checkCount,
+        closedCheckCount: emp.closedCheckCount,
+        openCheckCount: emp.openCheckCount,
         itemCount: emp.itemCount,
         grossSales: emp.grossSales,
         discounts: emp.discounts,
@@ -4287,16 +4339,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         otherCollected: emp.otherCollected,
         totalCollected: emp.totalCollected,
         tips: emp.tips,
-      })).sort((a, b) => b.total - a.total);
+        outstandingBalance: emp.outstandingBalance,
+      })).sort((a, b) => b.grossSales - a.grossSales);
       
       res.json({
         employees: result,
         summary: {
           employeeCount: result.length,
           totalChecks: result.reduce((sum, e) => sum + e.checkCount, 0),
-          totalSales: result.reduce((sum, e) => sum + e.total, 0),
+          closedChecks: result.reduce((sum, e) => sum + e.closedCheckCount, 0),
+          openChecks: result.reduce((sum, e) => sum + e.openCheckCount, 0),
+          totalSales: result.reduce((sum, e) => sum + e.grossSales, 0),
           totalTips: result.reduce((sum, e) => sum + e.tips, 0),
           totalCollected: result.reduce((sum, e) => sum + e.totalCollected, 0),
+          outstandingBalance: result.reduce((sum, e) => sum + e.outstandingBalance, 0),
         },
       });
     } catch (error) {
@@ -5129,7 +5185,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       // Get all employees for enrichment
-      const employees = await storage.getEmployees(period.propertyId);
+      const employees = await storage.getEmployees();
       const employeeMap = new Map(employees.map(e => [e.id, e]));
 
       // Get all job codes for enrichment
