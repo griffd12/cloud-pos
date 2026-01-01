@@ -19,7 +19,7 @@ export default function JobsPage() {
   
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [roleId, setRoleId] = useState<string>("");
+  const [roleId, setRoleId] = useState<string>("none");
   const [hourlyRate, setHourlyRate] = useState("");
   const [tipMode, setTipMode] = useState("not_eligible");
   const [active, setActive] = useState(true);
@@ -35,7 +35,7 @@ export default function JobsPage() {
   const resetForm = () => {
     setName("");
     setCode("");
-    setRoleId("");
+    setRoleId("none");
     setHourlyRate("");
     setTipMode("not_eligible");
     setActive(true);
@@ -45,7 +45,7 @@ export default function JobsPage() {
     if (editingItem) {
       setName(editingItem.name);
       setCode(editingItem.code);
-      setRoleId(editingItem.roleId || "");
+      setRoleId(editingItem.roleId || "none");
       setHourlyRate(editingItem.hourlyRate || "");
       setTipMode(editingItem.tipMode || "not_eligible");
       setActive(editingItem.active ?? true);
@@ -153,7 +153,7 @@ export default function JobsPage() {
     const jobData: Partial<JobCode> = {
       name,
       code,
-      roleId: roleId || null,
+      roleId: roleId === "none" ? null : roleId || null,
       hourlyRate: hourlyRate || null,
       tipMode,
       active,
@@ -223,7 +223,7 @@ export default function JobsPage() {
                     <SelectValue placeholder="Select a role..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No Role</SelectItem>
+                    <SelectItem value="none">No Role</SelectItem>
                     {roles.filter(r => r.active).map((role) => (
                       <SelectItem key={role.id} value={role.id}>
                         {role.name}
