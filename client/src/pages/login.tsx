@@ -122,11 +122,12 @@ export default function LoginPage() {
       const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include" });
       let statusData: ClockStatusResponse | null = null;
       if (statusRes.ok) {
-        statusData = await statusRes.json();
-        setClockStatus({
-          ...statusData,
-          isClockedIn: statusData.status === "clocked_in" || statusData.status === "on_break",
-        });
+        const rawStatus = await statusRes.json();
+        statusData = {
+          ...rawStatus,
+          isClockedIn: rawStatus.status === "clocked_in" || rawStatus.status === "on_break",
+        };
+        setClockStatus(statusData);
       }
       
       const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes`, { credentials: "include" });
@@ -143,7 +144,11 @@ export default function LoginPage() {
       } else if (jobs.length > 1) {
         setClockStep("job_select");
       } else {
-        clockInMutation.mutate(jobs.length === 1 ? jobs[0].id : undefined);
+        clockInMutation.mutate({
+          employeeId: data.employee.id,
+          jobCodeId: jobs.length === 1 ? jobs[0].id : undefined,
+          employeeName: data.employee.firstName,
+        });
       }
     },
     onError: () => {
@@ -164,19 +169,19 @@ export default function LoginPage() {
   };
 
   const clockInMutation = useMutation({
-    mutationFn: async (jobCodeId?: string) => {
+    mutationFn: async (params: { employeeId: string; jobCodeId?: string; employeeName: string }) => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
       const response = await apiRequest("POST", "/api/time-punches/clock-in", {
-        employeeId: clockEmployee?.id,
+        employeeId: params.employeeId,
         propertyId: selectedRvc?.propertyId,
-        jobCodeId,
+        jobCodeId: params.jobCodeId,
       });
-      return response.json();
+      return { result: await response.json(), employeeName: params.employeeName };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
         title: "Clocked In",
-        description: `${clockEmployee?.firstName} is now clocked in.`,
+        description: `${data.employeeName} is now clocked in.`,
       });
       handleCloseClockModal();
     },
@@ -585,7 +590,11 @@ export default function LoginPage() {
                     key={job.id}
                     variant="outline"
                     className="w-full h-12 justify-start"
-                    onClick={() => clockInMutation.mutate(job.id)}
+                    onClick={() => clockInMutation.mutate({
+                      employeeId: clockEmployee!.id,
+                      jobCodeId: job.id,
+                      employeeName: clockEmployee!.firstName,
+                    })}
                     disabled={clockInMutation.isPending}
                     data-testid={`button-job-${job.id}`}
                   >
