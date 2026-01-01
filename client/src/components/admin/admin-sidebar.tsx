@@ -36,6 +36,7 @@ import {
   Timer,
   BarChart3,
   Coins,
+  Briefcase,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -86,6 +87,7 @@ const menuGroups = [
     label: "Staff",
     items: [
       { title: "Employees", url: "/admin/employees", icon: Users },
+      { title: "Jobs", url: "/admin/jobs", icon: Briefcase },
       { title: "Roles & Privileges", url: "/admin/roles", icon: Shield },
     ],
   },
