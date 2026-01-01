@@ -5125,6 +5125,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Update timecard (manual edit)
+  app.patch("/api/timecards/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { regularHours, overtimeHours, doubleTimeHours, tips, editReason, editedById } = req.body;
+      
+      // Get existing timecard to get propertyId and businessDate for snapshot refresh
+      const existing = await storage.getTimecard(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Timecard not found" });
+      }
+      
+      // Calculate total hours and pay
+      const regHrs = parseFloat(regularHours || existing.regularHours || "0");
+      const otHrs = parseFloat(overtimeHours || existing.overtimeHours || "0");
+      const dtHrs = parseFloat(doubleTimeHours || existing.doubleTimeHours || "0");
+      const totalHours = regHrs + otHrs + dtHrs;
+      
+      // Get pay rate from timecard or employee job code
+      const payRate = parseFloat(existing.payRate || "0");
+      const regularPay = regHrs * payRate;
+      const overtimePay = otHrs * payRate * 1.5;
+      const doublePay = dtHrs * payRate * 2;
+      const totalPay = regularPay + overtimePay + doublePay;
+      
+      const updateData: any = {
+        regularHours: regHrs.toFixed(2),
+        overtimeHours: otHrs.toFixed(2),
+        doubleTimeHours: dtHrs.toFixed(2),
+        totalHours: totalHours.toFixed(2),
+        regularPay: regularPay.toFixed(2),
+        overtimePay: overtimePay.toFixed(2),
+        totalPay: totalPay.toFixed(2),
+      };
+      
+      if (tips !== undefined) {
+        updateData.tips = parseFloat(tips || "0").toFixed(2);
+      }
+      
+      const timecard = await storage.updateTimecard(id, updateData);
+      
+      // Log the edit for audit trail
+      if (editedById && editReason) {
+        await storage.createTimecardEdit({
+          propertyId: existing.propertyId,
+          targetType: "timecard",
+          targetId: id,
+          editedById: editedById,
+          editType: "hours_adjustment",
+          beforeValue: { totalHours: existing.totalHours || "0" },
+          afterValue: { totalHours: totalHours.toFixed(2) },
+          notes: editReason,
+        });
+      }
+      
+      // Recalculate labor snapshot for this business date
+      if (existing.propertyId && existing.businessDate) {
+        await storage.calculateLaborSnapshot(existing.propertyId, existing.businessDate);
+      }
+      
+      res.json(timecard);
+    } catch (error) {
+      console.error("Update timecard error:", error);
+      res.status(500).json({ message: "Failed to update timecard" });
+    }
+  });
+
   // Recalculate timecard
   app.post("/api/timecards/recalculate", async (req, res) => {
     try {
