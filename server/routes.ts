@@ -3114,10 +3114,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Tips would need to be tracked separately if the system supports them
       const totalTips = 0;
       
-      // Guest count from checks closed in period
-      const guestCount = checksClosed.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      // Guest counts - separate for closed (for accurate averages) and all checks
+      const guestCountClosed = checksClosed.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      const guestCountStarted = checksStarted.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      const guestCountOutstanding = checksOutstanding.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      
+      // Use closed guest count for averages (only paid checks)
       const avgCheck = checksClosed.length > 0 ? totalPayments / checksClosed.length : 0;
-      const avgPerGuest = guestCount > 0 ? totalPayments / guestCount : 0;
+      const avgPerGuest = guestCountClosed > 0 ? totalPayments / guestCountClosed : 0;
       
       res.json({
         // Sales (based on item ring-in date)
@@ -3144,8 +3148,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checksOutstanding: checksOutstanding.length,
         openCheckCount: checksOutstanding.length, // backwards compatibility
         
-        // Averages
-        guestCount,
+        // Averages and Guest Counts
+        guestCount: guestCountClosed, // backwards compatibility - guests from closed checks
+        guestCountStarted,
+        guestCountClosed,
+        guestCountOutstanding,
         avgCheck: Math.round(avgCheck * 100) / 100,
         avgPerGuest: Math.round(avgPerGuest * 100) / 100,
         

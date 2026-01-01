@@ -31,6 +31,9 @@ interface SalesSummary {
   totalWithTax: number;
   checkCount: number;
   guestCount: number;
+  guestCountStarted: number;
+  guestCountClosed: number;
+  guestCountOutstanding: number;
   avgCheck: number;
   avgPerGuest: number;
   checksOutstanding: number;
@@ -817,7 +820,7 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Check Movement</CardTitle>
+              <CardTitle className="text-sm">Check & Guest Movement</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -831,18 +834,27 @@ export default function ReportsPage() {
                   <p className="text-muted-foreground">Started</p>
                   <p className="font-medium text-lg" data-testid="text-checks-started">
                     {salesSummary?.checksStarted || 0}
+                    <span className="text-sm text-muted-foreground ml-1" data-testid="text-guests-started">
+                      ({salesSummary?.guestCountStarted || 0} guests)
+                    </span>
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Closed</p>
                   <p className="font-medium text-lg" data-testid="text-checks-closed">
                     {salesSummary?.checksClosed || 0}
+                    <span className="text-sm text-muted-foreground ml-1" data-testid="text-guests-closed">
+                      ({salesSummary?.guestCountClosed || 0} guests)
+                    </span>
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Outstanding</p>
                   <p className="font-medium text-lg" data-testid="text-checks-outstanding">
                     {salesSummary?.checksOutstanding || 0}
+                    <span className="text-sm text-muted-foreground ml-1" data-testid="text-guests-outstanding">
+                      ({salesSummary?.guestCountOutstanding || 0} guests)
+                    </span>
                   </p>
                 </div>
               </div>
