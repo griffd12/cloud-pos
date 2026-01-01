@@ -15,6 +15,13 @@ import {
   insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
   insertPosLayoutSchema, insertPosLayoutCellSchema,
+  // T&A schemas
+  insertJobCodeSchema, insertPayPeriodSchema, insertTimePunchSchema,
+  insertBreakSessionSchema, insertTimecardSchema, insertTimecardExceptionSchema,
+  insertEmployeeAvailabilitySchema, insertAvailabilityExceptionSchema,
+  insertTimeOffRequestSchema, insertShiftTemplateSchema, insertShiftSchema,
+  insertShiftCoverRequestSchema, insertShiftCoverOfferSchema,
+  insertTipPoolPolicySchema, insertTipPoolRunSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -4532,6 +4539,669 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Sales comparison error:", error);
       res.status(500).json({ message: "Failed to generate sales comparison" });
+    }
+  });
+
+  // ============================================================================
+  // TIME & ATTENDANCE API ROUTES
+  // ============================================================================
+
+  // === TIME PUNCHES ===
+
+  // Get time punches with filters
+  app.get("/api/time-punches", async (req, res) => {
+    try {
+      const { propertyId, employeeId, businessDate, startDate, endDate } = req.query;
+      const punches = await storage.getTimePunches({
+        propertyId: propertyId as string,
+        employeeId: employeeId as string,
+        businessDate: businessDate as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
+      });
+      res.json(punches);
+    } catch (error) {
+      console.error("Get time punches error:", error);
+      res.status(500).json({ message: "Failed to get time punches" });
+    }
+  });
+
+  // Get single time punch
+  app.get("/api/time-punches/:id", async (req, res) => {
+    try {
+      const punch = await storage.getTimePunch(req.params.id);
+      if (!punch) {
+        return res.status(404).json({ message: "Time punch not found" });
+      }
+      res.json(punch);
+    } catch (error) {
+      console.error("Get time punch error:", error);
+      res.status(500).json({ message: "Failed to get time punch" });
+    }
+  });
+
+  // Clock In
+  app.post("/api/time-punches/clock-in", async (req, res) => {
+    try {
+      const { employeeId, propertyId, workstationId, jobCodeId, notes } = req.body;
+      
+      if (!employeeId || !propertyId) {
+        return res.status(400).json({ message: "Employee ID and Property ID are required" });
+      }
+
+      // Check if employee is already clocked in
+      const lastPunch = await storage.getLastPunch(employeeId);
+      if (lastPunch && lastPunch.punchType === "clock_in") {
+        return res.status(400).json({ message: "Employee is already clocked in" });
+      }
+
+      // Check for active break
+      const activeBreak = await storage.getActiveBreak(employeeId);
+      if (activeBreak) {
+        return res.status(400).json({ message: "Employee has an active break. End break first." });
+      }
+
+      const now = new Date();
+      const businessDate = resolveBusinessDate(now, propertyId);
+
+      const punch = await storage.createTimePunch({
+        propertyId,
+        employeeId,
+        punchType: "clock_in",
+        actualTimestamp: now,
+        businessDate,
+        jobCodeId,
+        notes,
+        source: "pos",
+      });
+
+      // Recalculate timecard
+      await storage.recalculateTimecard(employeeId, businessDate);
+
+      res.status(201).json(punch);
+    } catch (error) {
+      console.error("Clock in error:", error);
+      res.status(500).json({ message: "Failed to clock in" });
+    }
+  });
+
+  // Clock Out
+  app.post("/api/time-punches/clock-out", async (req, res) => {
+    try {
+      const { employeeId, propertyId, workstationId, notes } = req.body;
+      
+      if (!employeeId || !propertyId) {
+        return res.status(400).json({ message: "Employee ID and Property ID are required" });
+      }
+
+      // Check if employee is clocked in
+      const lastPunch = await storage.getLastPunch(employeeId);
+      if (!lastPunch || lastPunch.punchType !== "clock_in") {
+        return res.status(400).json({ message: "Employee is not clocked in" });
+      }
+
+      const now = new Date();
+      const businessDate = resolveBusinessDate(now, propertyId);
+
+      // Check for active break - end it automatically before clock out
+      const activeBreak = await storage.getActiveBreak(employeeId);
+      if (activeBreak) {
+        const breakMinutes = Math.round((now.getTime() - new Date(activeBreak.startTime).getTime()) / 60000);
+        await storage.updateBreakSession(activeBreak.id, {
+          endTime: now,
+          actualMinutes: breakMinutes,
+        });
+        // Recalculate timecard after ending break
+        await storage.recalculateTimecard(employeeId, activeBreak.businessDate);
+      }
+
+      const punch = await storage.createTimePunch({
+        propertyId,
+        employeeId,
+        punchType: "clock_out",
+        actualTimestamp: now,
+        businessDate,
+        notes,
+        source: "pos",
+      });
+
+      // Recalculate timecard after clock out punch
+      await storage.recalculateTimecard(employeeId, businessDate);
+
+      res.status(201).json(punch);
+    } catch (error) {
+      console.error("Clock out error:", error);
+      res.status(500).json({ message: "Failed to clock out" });
+    }
+  });
+
+  // Get employee clock status
+  app.get("/api/time-punches/status/:employeeId", async (req, res) => {
+    try {
+      const { employeeId } = req.params;
+      const lastPunch = await storage.getLastPunch(employeeId);
+      const activeBreak = await storage.getActiveBreak(employeeId);
+
+      let status: "clocked_out" | "clocked_in" | "on_break" = "clocked_out";
+      if (activeBreak) {
+        status = "on_break";
+      } else if (lastPunch && lastPunch.punchType === "clock_in") {
+        status = "clocked_in";
+      }
+
+      res.json({
+        status,
+        lastPunch,
+        activeBreak,
+        clockedInAt: lastPunch?.punchType === "clock_in" ? lastPunch.actualTimestamp : null,
+      });
+    } catch (error) {
+      console.error("Get clock status error:", error);
+      res.status(500).json({ message: "Failed to get clock status" });
+    }
+  });
+
+  // Edit time punch (manager only)
+  app.patch("/api/time-punches/:id", async (req, res) => {
+    try {
+      const { actualTimestamp, editedById, editReason } = req.body;
+      
+      if (!editedById || !editReason) {
+        return res.status(400).json({ message: "Editor ID and reason are required" });
+      }
+
+      const punch = await storage.updateTimePunch(
+        req.params.id,
+        { actualTimestamp: actualTimestamp ? new Date(actualTimestamp) : undefined },
+        editedById,
+        editReason
+      );
+
+      if (!punch) {
+        return res.status(404).json({ message: "Time punch not found" });
+      }
+
+      // Recalculate timecard
+      await storage.recalculateTimecard(punch.employeeId, punch.businessDate);
+
+      res.json(punch);
+    } catch (error) {
+      console.error("Edit time punch error:", error);
+      res.status(500).json({ message: "Failed to edit time punch" });
+    }
+  });
+
+  // Void time punch (manager only)
+  app.post("/api/time-punches/:id/void", async (req, res) => {
+    try {
+      const { voidedById, voidReason } = req.body;
+      
+      if (!voidedById || !voidReason) {
+        return res.status(400).json({ message: "Voider ID and reason are required" });
+      }
+
+      const punch = await storage.voidTimePunch(req.params.id, voidedById, voidReason);
+      if (!punch) {
+        return res.status(404).json({ message: "Time punch not found" });
+      }
+
+      // Recalculate timecard
+      await storage.recalculateTimecard(punch.employeeId, punch.businessDate);
+
+      res.json(punch);
+    } catch (error) {
+      console.error("Void time punch error:", error);
+      res.status(500).json({ message: "Failed to void time punch" });
+    }
+  });
+
+  // === BREAKS ===
+
+  // Get break sessions
+  app.get("/api/breaks", async (req, res) => {
+    try {
+      const { propertyId, employeeId, businessDate } = req.query;
+      const breaks = await storage.getBreakSessions({
+        propertyId: propertyId as string,
+        employeeId: employeeId as string,
+        businessDate: businessDate as string,
+      });
+      res.json(breaks);
+    } catch (error) {
+      console.error("Get breaks error:", error);
+      res.status(500).json({ message: "Failed to get breaks" });
+    }
+  });
+
+  // Start break
+  app.post("/api/breaks/start", async (req, res) => {
+    try {
+      const { employeeId, propertyId, breakType, scheduledMinutes, isPaid } = req.body;
+      
+      if (!employeeId || !propertyId) {
+        return res.status(400).json({ message: "Employee ID and Property ID are required" });
+      }
+
+      // Check if employee is clocked in
+      const lastPunch = await storage.getLastPunch(employeeId);
+      if (!lastPunch || lastPunch.punchType !== "clock_in") {
+        return res.status(400).json({ message: "Employee must be clocked in to start a break" });
+      }
+
+      // Check for existing active break
+      const activeBreak = await storage.getActiveBreak(employeeId);
+      if (activeBreak) {
+        return res.status(400).json({ message: "Employee already has an active break" });
+      }
+
+      const now = new Date();
+      const businessDate = resolveBusinessDate(now, propertyId);
+
+      const breakSession = await storage.createBreakSession({
+        propertyId,
+        employeeId,
+        businessDate,
+        breakType: breakType || "meal",
+        startTime: now,
+        scheduledMinutes: scheduledMinutes || 30,
+        isPaid: isPaid ?? false,
+      });
+
+      res.status(201).json(breakSession);
+    } catch (error) {
+      console.error("Start break error:", error);
+      res.status(500).json({ message: "Failed to start break" });
+    }
+  });
+
+  // End break
+  app.post("/api/breaks/end", async (req, res) => {
+    try {
+      const { employeeId, propertyId } = req.body;
+      
+      if (!employeeId) {
+        return res.status(400).json({ message: "Employee ID is required" });
+      }
+
+      const activeBreak = await storage.getActiveBreak(employeeId);
+      if (!activeBreak) {
+        return res.status(400).json({ message: "No active break found" });
+      }
+
+      const now = new Date();
+      const actualMinutes = Math.round((now.getTime() - new Date(activeBreak.startTime).getTime()) / 60000);
+
+      const breakSession = await storage.updateBreakSession(activeBreak.id, {
+        endTime: now,
+        actualMinutes,
+      });
+
+      // Recalculate timecard and return updated data
+      const timecard = await storage.recalculateTimecard(employeeId, activeBreak.businessDate);
+
+      res.json({ breakSession, timecard });
+    } catch (error) {
+      console.error("End break error:", error);
+      res.status(500).json({ message: "Failed to end break" });
+    }
+  });
+
+  // === TIMECARDS ===
+
+  // Get timecards
+  app.get("/api/timecards", async (req, res) => {
+    try {
+      const { propertyId, employeeId, payPeriodId, businessDate } = req.query;
+      const timecards = await storage.getTimecards({
+        propertyId: propertyId as string,
+        employeeId: employeeId as string,
+        payPeriodId: payPeriodId as string,
+        businessDate: businessDate as string,
+      });
+      res.json(timecards);
+    } catch (error) {
+      console.error("Get timecards error:", error);
+      res.status(500).json({ message: "Failed to get timecards" });
+    }
+  });
+
+  // Get single timecard
+  app.get("/api/timecards/:id", async (req, res) => {
+    try {
+      const timecard = await storage.getTimecard(req.params.id);
+      if (!timecard) {
+        return res.status(404).json({ message: "Timecard not found" });
+      }
+      res.json(timecard);
+    } catch (error) {
+      console.error("Get timecard error:", error);
+      res.status(500).json({ message: "Failed to get timecard" });
+    }
+  });
+
+  // Get employee timecard with punches for a date
+  app.get("/api/timecards/employee/:employeeId/date/:businessDate", async (req, res) => {
+    try {
+      const { employeeId, businessDate } = req.params;
+      
+      const timecards = await storage.getTimecards({ employeeId, businessDate });
+      const timecard = timecards[0];
+      
+      const punches = await storage.getTimePunches({ employeeId, businessDate });
+      const breaks = await storage.getBreakSessions({ employeeId, businessDate });
+
+      res.json({
+        timecard,
+        punches,
+        breaks,
+      });
+    } catch (error) {
+      console.error("Get employee timecard error:", error);
+      res.status(500).json({ message: "Failed to get employee timecard" });
+    }
+  });
+
+  // Recalculate timecard
+  app.post("/api/timecards/recalculate", async (req, res) => {
+    try {
+      const { employeeId, businessDate } = req.body;
+      
+      if (!employeeId || !businessDate) {
+        return res.status(400).json({ message: "Employee ID and business date are required" });
+      }
+
+      const timecard = await storage.recalculateTimecard(employeeId, businessDate);
+      res.json(timecard);
+    } catch (error) {
+      console.error("Recalculate timecard error:", error);
+      res.status(500).json({ message: "Failed to recalculate timecard" });
+    }
+  });
+
+  // === TIMECARD EXCEPTIONS ===
+
+  // Get exceptions
+  app.get("/api/timecard-exceptions", async (req, res) => {
+    try {
+      const { propertyId, employeeId, status } = req.query;
+      const exceptions = await storage.getTimecardExceptions({
+        propertyId: propertyId as string,
+        employeeId: employeeId as string,
+        status: status as string,
+      });
+      res.json(exceptions);
+    } catch (error) {
+      console.error("Get timecard exceptions error:", error);
+      res.status(500).json({ message: "Failed to get timecard exceptions" });
+    }
+  });
+
+  // Create exception
+  app.post("/api/timecard-exceptions", async (req, res) => {
+    try {
+      const parsed = insertTimecardExceptionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid exception data", errors: parsed.error.issues });
+      }
+      const exception = await storage.createTimecardException(parsed.data);
+      res.status(201).json(exception);
+    } catch (error) {
+      console.error("Create exception error:", error);
+      res.status(500).json({ message: "Failed to create exception" });
+    }
+  });
+
+  // Resolve exception
+  app.post("/api/timecard-exceptions/:id/resolve", async (req, res) => {
+    try {
+      const { resolvedById, resolutionNotes } = req.body;
+      
+      if (!resolvedById) {
+        return res.status(400).json({ message: "Resolver ID is required" });
+      }
+
+      const exception = await storage.resolveTimecardException(
+        req.params.id,
+        resolvedById,
+        resolutionNotes || ""
+      );
+
+      if (!exception) {
+        return res.status(404).json({ message: "Exception not found" });
+      }
+
+      res.json(exception);
+    } catch (error) {
+      console.error("Resolve exception error:", error);
+      res.status(500).json({ message: "Failed to resolve exception" });
+    }
+  });
+
+  // === PAY PERIODS ===
+
+  // Get pay periods
+  app.get("/api/pay-periods", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const periods = await storage.getPayPeriods(propertyId as string);
+      res.json(periods);
+    } catch (error) {
+      console.error("Get pay periods error:", error);
+      res.status(500).json({ message: "Failed to get pay periods" });
+    }
+  });
+
+  // Get single pay period
+  app.get("/api/pay-periods/:id", async (req, res) => {
+    try {
+      const period = await storage.getPayPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Get pay period error:", error);
+      res.status(500).json({ message: "Failed to get pay period" });
+    }
+  });
+
+  // Get pay period for date
+  app.get("/api/pay-periods/for-date", async (req, res) => {
+    try {
+      const { propertyId, date } = req.query;
+      if (!propertyId || !date) {
+        return res.status(400).json({ message: "Property ID and date are required" });
+      }
+      const period = await storage.getPayPeriodForDate(propertyId as string, date as string);
+      res.json(period || null);
+    } catch (error) {
+      console.error("Get pay period for date error:", error);
+      res.status(500).json({ message: "Failed to get pay period" });
+    }
+  });
+
+  // Create pay period
+  app.post("/api/pay-periods", async (req, res) => {
+    try {
+      const parsed = insertPayPeriodSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid pay period data", errors: parsed.error.issues });
+      }
+      const period = await storage.createPayPeriod(parsed.data);
+      res.status(201).json(period);
+    } catch (error) {
+      console.error("Create pay period error:", error);
+      res.status(500).json({ message: "Failed to create pay period" });
+    }
+  });
+
+  // Update pay period
+  app.patch("/api/pay-periods/:id", async (req, res) => {
+    try {
+      const period = await storage.updatePayPeriod(req.params.id, req.body);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Update pay period error:", error);
+      res.status(500).json({ message: "Failed to update pay period" });
+    }
+  });
+
+  // Lock pay period
+  app.post("/api/pay-periods/:id/lock", async (req, res) => {
+    try {
+      const { lockedById } = req.body;
+      if (!lockedById) {
+        return res.status(400).json({ message: "Locker ID is required" });
+      }
+      
+      const period = await storage.lockPayPeriod(req.params.id, lockedById);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Lock pay period error:", error);
+      res.status(500).json({ message: "Failed to lock pay period" });
+    }
+  });
+
+  // Unlock pay period
+  app.post("/api/pay-periods/:id/unlock", async (req, res) => {
+    try {
+      const { unlockedById, reason } = req.body;
+      if (!unlockedById || !reason) {
+        return res.status(400).json({ message: "Unlocker ID and reason are required" });
+      }
+      
+      const period = await storage.unlockPayPeriod(req.params.id, reason, unlockedById);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Unlock pay period error:", error);
+      res.status(500).json({ message: "Failed to unlock pay period" });
+    }
+  });
+
+  // === JOB CODES ===
+
+  // Get job codes
+  app.get("/api/job-codes", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const jobCodes = await storage.getJobCodes(propertyId as string);
+      res.json(jobCodes);
+    } catch (error) {
+      console.error("Get job codes error:", error);
+      res.status(500).json({ message: "Failed to get job codes" });
+    }
+  });
+
+  // Get single job code
+  app.get("/api/job-codes/:id", async (req, res) => {
+    try {
+      const jobCode = await storage.getJobCode(req.params.id);
+      if (!jobCode) {
+        return res.status(404).json({ message: "Job code not found" });
+      }
+      res.json(jobCode);
+    } catch (error) {
+      console.error("Get job code error:", error);
+      res.status(500).json({ message: "Failed to get job code" });
+    }
+  });
+
+  // Create job code
+  app.post("/api/job-codes", async (req, res) => {
+    try {
+      const parsed = insertJobCodeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid job code data", errors: parsed.error.issues });
+      }
+      const jobCode = await storage.createJobCode(parsed.data);
+      res.status(201).json(jobCode);
+    } catch (error) {
+      console.error("Create job code error:", error);
+      res.status(500).json({ message: "Failed to create job code" });
+    }
+  });
+
+  // Update job code
+  app.patch("/api/job-codes/:id", async (req, res) => {
+    try {
+      const jobCode = await storage.updateJobCode(req.params.id, req.body);
+      if (!jobCode) {
+        return res.status(404).json({ message: "Job code not found" });
+      }
+      res.json(jobCode);
+    } catch (error) {
+      console.error("Update job code error:", error);
+      res.status(500).json({ message: "Failed to update job code" });
+    }
+  });
+
+  // Delete job code
+  app.delete("/api/job-codes/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteJobCode(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Job code not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete job code error:", error);
+      res.status(500).json({ message: "Failed to delete job code" });
+    }
+  });
+
+  // Get employee job codes
+  app.get("/api/employees/:employeeId/job-codes", async (req, res) => {
+    try {
+      const jobCodes = await storage.getEmployeeJobCodes(req.params.employeeId);
+      res.json(jobCodes);
+    } catch (error) {
+      console.error("Get employee job codes error:", error);
+      res.status(500).json({ message: "Failed to get employee job codes" });
+    }
+  });
+
+  // Set employee job codes
+  app.put("/api/employees/:employeeId/job-codes", async (req, res) => {
+    try {
+      const { jobCodeIds } = req.body;
+      if (!Array.isArray(jobCodeIds)) {
+        return res.status(400).json({ message: "jobCodeIds must be an array" });
+      }
+      const jobCodes = await storage.setEmployeeJobCodes(req.params.employeeId, jobCodeIds);
+      res.json(jobCodes);
+    } catch (error) {
+      console.error("Set employee job codes error:", error);
+      res.status(500).json({ message: "Failed to set employee job codes" });
+    }
+  });
+
+  // === TIMECARD EDITS (AUDIT) ===
+
+  // Get timecard edits
+  app.get("/api/timecard-edits", async (req, res) => {
+    try {
+      const { propertyId, targetType, targetId } = req.query;
+      const edits = await storage.getTimecardEdits({
+        propertyId: propertyId as string,
+        targetType: targetType as string,
+        targetId: targetId as string,
+      });
+      res.json(edits);
+    } catch (error) {
+      console.error("Get timecard edits error:", error);
+      res.status(500).json({ message: "Failed to get timecard edits" });
     }
   });
 
