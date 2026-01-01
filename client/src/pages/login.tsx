@@ -131,6 +131,17 @@ export default function LoginPage() {
     },
   });
 
+  const refreshClockStatus = async (employeeId: string) => {
+    const statusRes = await fetch(`/api/time-punches/status/${employeeId}`, { credentials: "include" });
+    if (statusRes.ok) {
+      const statusData = await statusRes.json();
+      setClockStatus({
+        ...statusData,
+        isClockedIn: statusData.status === "clocked_in" || statusData.status === "on_break",
+      });
+    }
+  };
+
   const clockInMutation = useMutation({
     mutationFn: async () => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
@@ -140,12 +151,14 @@ export default function LoginPage() {
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Clocked In",
         description: `${clockEmployee?.firstName} is now clocked in.`,
       });
-      handleCloseClockModal();
+      if (clockEmployee?.id) {
+        await refreshClockStatus(clockEmployee.id);
+      }
     },
     onError: () => {
       setClockError("Failed to clock in. Please try again.");
@@ -161,12 +174,14 @@ export default function LoginPage() {
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Clocked Out",
         description: `${clockEmployee?.firstName} is now clocked out.`,
       });
-      handleCloseClockModal();
+      if (clockEmployee?.id) {
+        await refreshClockStatus(clockEmployee.id);
+      }
     },
     onError: () => {
       setClockError("Failed to clock out. Please try again.");
