@@ -398,13 +398,16 @@ export default function ReportsPage() {
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
     
+    // Helper to format date as YYYY-MM-DD for businessDate
+    const formatBusinessDate = (d: Date) => d.toISOString().split('T')[0];
+    
     switch (dateRange) {
       case "yesterday": {
         const start = new Date(todayStart);
         start.setDate(start.getDate() - 1);
         const end = new Date(start);
         end.setHours(23, 59, 59, 999);
-        return { startDate: start.toISOString(), endDate: end.toISOString() };
+        return { startDate: start.toISOString(), endDate: end.toISOString(), businessDate: formatBusinessDate(start) };
       }
       case "week": {
         const start = new Date(todayStart);
@@ -443,12 +446,17 @@ export default function ReportsPage() {
           start.setHours(0, 0, 0, 0);
           const end = new Date(customEndDate);
           end.setHours(23, 59, 59, 999);
+          // If same day, include businessDate
+          if (customStartDate === customEndDate) {
+            return { startDate: start.toISOString(), endDate: end.toISOString(), businessDate: formatBusinessDate(start) };
+          }
           return { startDate: start.toISOString(), endDate: end.toISOString() };
         }
-        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString() };
+        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString(), businessDate: formatBusinessDate(todayStart) };
       }
       default:
-        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString() };
+        // Today - include businessDate for precise filtering
+        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString(), businessDate: formatBusinessDate(todayStart) };
     }
   }, [dateRange, customStartDate, customEndDate]);
   
@@ -456,6 +464,10 @@ export default function ReportsPage() {
     const params = new URLSearchParams();
     params.set("startDate", dateParams.startDate);
     params.set("endDate", dateParams.endDate);
+    // Include businessDate for precise single-day filtering when available
+    if ('businessDate' in dateParams && dateParams.businessDate) {
+      params.set("businessDate", dateParams.businessDate);
+    }
     if (selectedPropertyId !== "all") params.set("propertyId", selectedPropertyId);
     if (selectedRvcId !== "all") params.set("rvcId", selectedRvcId);
     return `${endpoint}?${params.toString()}`;

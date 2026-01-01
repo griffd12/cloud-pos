@@ -3725,10 +3725,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Menu Item Sales Report - Detailed item-level sales
+  // Menu Item Sales Report - Detailed item-level sales (uses businessDate for consistency)
   app.get("/api/reports/menu-item-sales", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate, itemId } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate, itemId } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -3739,27 +3740,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const slus = await storage.getSlus();
       const menuItemSlus = await storage.getMenuItemSlus();
       
-      // Filter checks by date and location - use openedAt for date filter
-      let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
-        return true;
-      }).map(c => c.id);
-      
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
       if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        const propertyChecks = allChecks.filter(c => propertyRvcs.includes(c.rvcId)).map(c => c.id);
-        filteredCheckIds = filteredCheckIds.filter(id => propertyChecks.includes(id));
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
       }
       if (rvcId && rvcId !== "all") {
-        const rvcChecks = allChecks.filter(c => c.rvcId === rvcId).map(c => c.id);
-        filteredCheckIds = filteredCheckIds.filter(id => rvcChecks.includes(id));
+        validRvcIds = [rvcId as string];
       }
       
-      // Get check items
-      let checkItems = allCheckItems.filter(ci => filteredCheckIds.includes(ci.checkId) && !ci.voided);
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter items by businessDate (consistent with sales-summary and top-items)
+      let checkItems = allCheckItems.filter(ci => {
+        if (ci.voided) return false;
+        // Apply RVC filter
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        } else {
+          if (!ci.addedAt) return false;
+          const itemDate = new Date(ci.addedAt);
+          return itemDate >= start && itemDate <= end;
+        }
+      });
       
       // Aggregate by menu item
       const itemSales: Record<string, { 
@@ -3844,10 +3853,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Category Sales Report - Detailed sales by SLU/category
+  // Category Sales Report - Detailed sales by SLU/category (uses businessDate for consistency)
   app.get("/api/reports/category-sales", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate, categoryId } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate, categoryId } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -3858,27 +3868,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const slus = await storage.getSlus();
       const menuItemSlus = await storage.getMenuItemSlus();
       
-      // Filter checks by date and location - use openedAt for date filter
-      let filteredCheckIds = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
-        return true;
-      }).map(c => c.id);
-      
+      // Get valid RVC IDs for filtering
+      let validRvcIds: string[] | null = null;
       if (propertyId && propertyId !== "all") {
-        const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        const propertyChecks = allChecks.filter(c => propertyRvcs.includes(c.rvcId)).map(c => c.id);
-        filteredCheckIds = filteredCheckIds.filter(id => propertyChecks.includes(id));
+        validRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
       }
       if (rvcId && rvcId !== "all") {
-        const rvcChecks = allChecks.filter(c => c.rvcId === rvcId).map(c => c.id);
-        filteredCheckIds = filteredCheckIds.filter(id => rvcChecks.includes(id));
+        validRvcIds = [rvcId as string];
       }
       
-      // Get check items
-      const checkItems = allCheckItems.filter(ci => filteredCheckIds.includes(ci.checkId) && !ci.voided);
+      // Build check to RVC mapping
+      const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      
+      // Filter items by businessDate (consistent with sales-summary and top-items)
+      const checkItems = allCheckItems.filter(ci => {
+        if (ci.voided) return false;
+        // Apply RVC filter
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        } else {
+          if (!ci.addedAt) return false;
+          const itemDate = new Date(ci.addedAt);
+          return itemDate >= start && itemDate <= end;
+        }
+      });
       
       // Build category -> items mapping
       const categoryData: Record<string, { 
