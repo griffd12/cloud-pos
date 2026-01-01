@@ -24,6 +24,10 @@ interface LoginResponse {
 }
 
 interface ClockStatusResponse {
+  status: "clocked_out" | "clocked_in" | "on_break";
+  lastPunch?: { punchType: string; actualTimestamp: string } | null;
+  activeBreak?: object | null;
+  clockedInAt?: string | null;
   isClockedIn: boolean;
   todayTimecard?: Timecard;
 }
@@ -71,7 +75,16 @@ export default function LoginPage() {
   });
 
   const { data: clockStatus, refetch: refetchClockStatus } = useQuery<ClockStatusResponse>({
-    queryKey: ["/api/time-clock/status", authenticatedEmployee?.id],
+    queryKey: ["/api/time-punches/status", authenticatedEmployee?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/time-punches/status/${authenticatedEmployee?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch clock status");
+      const data = await res.json();
+      return {
+        ...data,
+        isClockedIn: data.status === "clocked_in" || data.status === "on_break",
+      };
+    },
     enabled: !!authenticatedEmployee,
   });
 
@@ -97,7 +110,7 @@ export default function LoginPage() {
   const clockInMutation = useMutation({
     mutationFn: async () => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
-      const response = await apiRequest("POST", "/api/time-clock/clock-in", {
+      const response = await apiRequest("POST", "/api/time-punches/clock-in", {
         employeeId: authenticatedEmployee?.id,
         propertyId: selectedRvc?.propertyId,
       });
@@ -388,9 +401,9 @@ export default function LoginPage() {
                           Already Clocked In
                         </Badge>
                       </div>
-                      {clockStatus.todayTimecard?.clockInTime && (
+                      {clockStatus.clockedInAt && (
                         <p className="text-center text-sm text-muted-foreground" data-testid="text-clock-in-time">
-                          Clocked in at {format(new Date(clockStatus.todayTimecard.clockInTime), "h:mm a")}
+                          Clocked in at {format(new Date(clockStatus.clockedInAt), "h:mm a")}
                         </p>
                       )}
                       <Button

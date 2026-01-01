@@ -591,7 +591,7 @@ export default function PosPage() {
 
   const clockOutMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/time-clock/clock-out", {
+      const response = await apiRequest("POST", "/api/time-punches/clock-out", {
         employeeId: currentEmployee?.id,
         propertyId: currentRvc?.propertyId,
       });
