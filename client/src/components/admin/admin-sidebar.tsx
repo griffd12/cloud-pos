@@ -31,6 +31,11 @@ import {
   MonitorSmartphone,
   Tv2,
   Wrench,
+  Clock,
+  CalendarDays,
+  Timer,
+  BarChart3,
+  Coins,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -82,6 +87,21 @@ const menuGroups = [
     items: [
       { title: "Employees", url: "/admin/employees", icon: Users },
       { title: "Roles & Privileges", url: "/admin/roles", icon: Shield },
+    ],
+  },
+  {
+    label: "Time & Attendance",
+    items: [
+      { title: "Time Clock", url: "/admin/time-clock", icon: Clock },
+      { title: "Timecards", url: "/admin/timecards", icon: Timer },
+      { title: "Scheduling", url: "/admin/scheduling", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Tips & Labor",
+    items: [
+      { title: "Tip Pooling", url: "/admin/tip-pooling", icon: Coins },
+      { title: "Labor Analytics", url: "/admin/labor-analytics", icon: BarChart3 },
     ],
   },
   {

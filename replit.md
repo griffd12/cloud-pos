@@ -94,6 +94,43 @@ Payment auto-send: When a check is paid, any unsent items are automatically rout
 - Transactional: uses database transaction for atomic all-or-nothing deletion
 - Mandatory audit logging with employee ID for accountability
 
+### Time & Attendance System
+The system includes a comprehensive Time & Attendance module with frontend admin pages:
+
+**Time Clock** (`/admin/time-clock`):
+- Employee self-service clock in/out
+- Paid and meal break management
+- Real-time status display showing clocked-in state and active breaks
+- Today's summary with regular hours, overtime, and break totals
+
+**Timecards** (`/admin/timecards`):
+- Weekly timecard review and editing for managers
+- Exception management with pending exception alerts
+- Timecard edit dialog with mandatory reason field for audit trail
+- Week navigation with property filtering
+
+**Scheduling** (`/admin/scheduling`):
+- Weekly schedule builder with 7-day calendar view
+- Shift creation by employee and revenue center
+- Shift publishing workflow (draft → published)
+- Copy previous week functionality
+
+**Tip Pooling** (`/admin/tip-pooling`):
+- Tip pool policy management (hours-based, points-based, equal split)
+- Settlement run execution with date and policy selection
+- Allocation breakdown showing direct tips, pool share, and totals by employee
+
+**Labor Analytics** (`/admin/labor-analytics`):
+- Labor vs Sales reporting with daily breakdown and target comparison
+- Overtime tracking with employee-level detail (regular, OT, double-time)
+- Tips analysis with distribution by employee
+
+**Schema Fields Reference**:
+- TipPoolPolicy uses: `active` (not isActive), `calculationMethod` (not calcMethod)
+- TipAllocation uses: `allocatedAmount` (not poolShare)
+- Shift uses: `shiftDate`, `startTime`, `endTime` as strings
+- Timecard uses: `clockInTime`, `clockOutTime` as timestamps, `totalHours` as decimal string
+
 ## External Dependencies
 
 ### Database

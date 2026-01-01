@@ -44,6 +44,11 @@ import FamilyGroupsPage from "./family-groups";
 import UtilitiesPage from "./utilities";
 import ReportsPage from "./reports";
 import DevicesPage from "./devices";
+import TimeClockPage from "./time-clock";
+import TimecardsPage from "./timecards";
+import SchedulingPage from "./scheduling";
+import TipPoolingPage from "./tip-pooling";
+import LaborAnalyticsPage from "./labor-analytics";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -265,6 +270,11 @@ export default function AdminLayout() {
               <Route path="/admin/utilities" component={UtilitiesPage} />
               <Route path="/admin/reports" component={ReportsPage} />
               <Route path="/admin/devices" component={DevicesPage} />
+              <Route path="/admin/time-clock" component={TimeClockPage} />
+              <Route path="/admin/timecards" component={TimecardsPage} />
+              <Route path="/admin/scheduling" component={SchedulingPage} />
+              <Route path="/admin/tip-pooling" component={TipPoolingPage} />
+              <Route path="/admin/labor-analytics" component={LaborAnalyticsPage} />
             </Switch>
           </main>
         </div>
