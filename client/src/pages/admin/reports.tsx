@@ -883,27 +883,27 @@ export default function ReportsPage() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Item Sales</p>
-                  <p className="font-medium text-lg" data-testid="text-item-sales">
-                    {formatCurrency(salesSummary?.itemSales || 0)}
+                  <p className="text-muted-foreground">Gross Sales</p>
+                  <p className="font-medium text-lg" data-testid="text-gross-sales">
+                    {formatCurrency(salesSummary?.grossSales || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Service Charges</p>
-                  <p className="font-medium text-lg" data-testid="text-service-charges">
-                    {formatCurrency(salesSummary?.serviceChargeTotal || 0)}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Other</p>
-                  <p className="font-medium text-lg" data-testid="text-other-charges">
-                    {formatCurrency(salesSummary?.otherCharges || 0)}
+                  <p className="text-muted-foreground">Discounts</p>
+                  <p className="font-medium text-lg text-destructive" data-testid="text-discounts">
+                    -{formatCurrency(salesSummary?.discountTotal || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Net Sales</p>
                   <p className="font-medium text-lg" data-testid="text-breakdown-net-sales">
                     {formatCurrency(salesSummary?.netSales || 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Service Charges</p>
+                  <p className="font-medium text-lg" data-testid="text-service-charges">
+                    {formatCurrency(salesSummary?.serviceChargeTotal || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
