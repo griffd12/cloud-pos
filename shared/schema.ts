@@ -996,6 +996,7 @@ export const jobCodes = pgTable("job_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
   propertyId: varchar("property_id").references(() => properties.id),
+  roleId: varchar("role_id").references(() => roles.id),
   name: text("name").notNull(),
   code: text("code").notNull(),
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
@@ -1010,12 +1011,14 @@ export const employeeJobCodes = pgTable("employee_job_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull().references(() => employees.id),
   jobCodeId: varchar("job_code_id").notNull().references(() => jobCodes.id),
+  payRate: decimal("pay_rate", { precision: 10, scale: 2 }),
   isPrimary: boolean("is_primary").default(false),
 });
 
 export const jobCodesRelations = relations(jobCodes, ({ one, many }) => ({
   enterprise: one(enterprises, { fields: [jobCodes.enterpriseId], references: [enterprises.id] }),
   property: one(properties, { fields: [jobCodes.propertyId], references: [properties.id] }),
+  role: one(roles, { fields: [jobCodes.roleId], references: [roles.id] }),
   employeeJobCodes: many(employeeJobCodes),
 }));
 
