@@ -3450,10 +3450,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Discounts Report
+  // Discounts Report - Uses businessDate filtering to include discounts from all checks (open and closed)
   app.get("/api/reports/discounts", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
@@ -3461,21 +3462,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       const employees = await storage.getEmployees();
       
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
-        return true;
-      });
-      
+      // Filter checks by property/RVC first
+      let checksInScope = [...allChecks];
       if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+        checksInScope = checksInScope.filter(c => propertyRvcs.includes(c.rvcId));
       }
       if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+        checksInScope = checksInScope.filter(c => c.rvcId === rvcId);
       }
+      
+      // Filter by businessDate or date range - include ALL checks (open and closed)
+      const filteredChecks = checksInScope.filter(c => {
+        if (useBusinessDate) {
+          return c.businessDate === businessDate;
+        }
+        // For date range, use businessDate if available, otherwise fall back to openedAt
+        const checkDate = c.businessDate ? new Date(c.businessDate + "T12:00:00") : (c.openedAt ? new Date(c.openedAt) : null);
+        if (!checkDate) return false;
+        return checkDate >= start && checkDate <= end;
+      });
       
       const discountsByEmployee: Record<string, { name: string; count: number; amount: number }> = {};
       let totalDiscountAmount = 0;
@@ -3574,52 +3580,96 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Sales by Employee
+  // Sales by Employee - Uses businessDate filtering to include sales from all checks (open and closed)
   app.get("/api/reports/sales-by-employee", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
       const allChecks = await storage.getChecks();
+      const allCheckItems = await storage.getAllCheckItems();
       const allRvcs = await storage.getRvcs();
       const employees = await storage.getEmployees();
       
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        if (c.status !== "closed") return false;
-        return true;
-      });
-      
+      // Filter checks by property/RVC first
+      let checksInScope = [...allChecks];
       if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+        checksInScope = checksInScope.filter(c => propertyRvcs.includes(c.rvcId));
       }
       if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+        checksInScope = checksInScope.filter(c => c.rvcId === rvcId);
       }
       
-      const salesByEmployee: Record<string, { name: string; checkCount: number; netSales: number; avgCheck: number }> = {};
+      const checkIdsInScope = new Set(checksInScope.map(c => c.id));
+      const checkMap = new Map(checksInScope.map(c => [c.id, c]));
       
-      for (const check of filteredChecks) {
+      // Filter items by businessDate - this captures sales from ALL checks (open and closed)
+      const itemsInScope = allCheckItems.filter(item => {
+        if (!checkIdsInScope.has(item.checkId)) return false;
+        if (item.voided) return false;
+        if (useBusinessDate) {
+          return item.businessDate === businessDate;
+        }
+        // For date range, use item's businessDate if available
+        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.sentAt ? new Date(item.sentAt) : null);
+        if (!itemDate) return false;
+        return itemDate >= start && itemDate <= end;
+      });
+      
+      // Group by employee and calculate sales
+      const salesByEmployee: Record<string, { name: string; checkCount: number; closedCheckCount: number; openCheckCount: number; itemCount: number; grossSales: number; netSales: number; avgCheck: number }> = {};
+      const employeeChecks: Record<string, Set<string>> = {};
+      
+      for (const item of itemsInScope) {
+        const check = checkMap.get(item.checkId);
+        if (!check) continue;
+        
         const empId = check.employeeId;
         const emp = employees.find(e => e.id === empId);
         const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
-        const netSales = parseFloat(check.subtotal || "0") - parseFloat(check.discountTotal || "0");
+        const itemTotal = parseFloat(item.unitPrice) * (item.quantity || 1);
         
         if (!salesByEmployee[empId]) {
-          salesByEmployee[empId] = { name: empName, checkCount: 0, netSales: 0, avgCheck: 0 };
+          salesByEmployee[empId] = { name: empName, checkCount: 0, closedCheckCount: 0, openCheckCount: 0, itemCount: 0, grossSales: 0, netSales: 0, avgCheck: 0 };
+          employeeChecks[empId] = new Set();
         }
-        salesByEmployee[empId].checkCount += 1;
-        salesByEmployee[empId].netSales += netSales;
+        
+        employeeChecks[empId].add(item.checkId);
+        salesByEmployee[empId].itemCount += item.quantity || 1;
+        salesByEmployee[empId].grossSales += itemTotal;
       }
       
-      // Calculate averages
-      Object.values(salesByEmployee).forEach(emp => {
-        emp.avgCheck = emp.checkCount > 0 ? emp.netSales / emp.checkCount : 0;
-      });
+      // Count checks per employee and calculate net sales
+      for (const empId of Object.keys(salesByEmployee)) {
+        const checkIds = employeeChecks[empId];
+        salesByEmployee[empId].checkCount = checkIds.size;
+        
+        let totalDiscount = 0;
+        let closedCount = 0;
+        let openCount = 0;
+        
+        for (const checkId of checkIds) {
+          const check = checkMap.get(checkId);
+          if (check) {
+            totalDiscount += parseFloat(check.discountTotal || "0");
+            if (check.status === "closed") {
+              closedCount++;
+            } else {
+              openCount++;
+            }
+          }
+        }
+        
+        salesByEmployee[empId].closedCheckCount = closedCount;
+        salesByEmployee[empId].openCheckCount = openCount;
+        salesByEmployee[empId].netSales = salesByEmployee[empId].grossSales - totalDiscount;
+        salesByEmployee[empId].avgCheck = salesByEmployee[empId].checkCount > 0 
+          ? salesByEmployee[empId].netSales / salesByEmployee[empId].checkCount 
+          : 0;
+      }
       
       const result = Object.entries(salesByEmployee)
         .map(([id, data]) => ({ employeeId: id, ...data }))
