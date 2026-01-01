@@ -11,6 +11,12 @@ import {
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
   devices, deviceEnrollmentTokens, deviceHeartbeats,
   refunds, refundItems, refundPayments,
+  // T&A tables
+  jobCodes, employeeJobCodes, payPeriods, timePunches, breakSessions,
+  timecards, timecardExceptions, timecardEdits,
+  employeeAvailability, availabilityExceptions, timeOffRequests,
+  shiftTemplates, shifts, shiftCoverRequests, shiftCoverOffers, shiftCoverApprovals,
+  tipPoolPolicies, tipPoolRuns, tipAllocations, laborSnapshots,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -53,6 +59,27 @@ import {
   type Refund, type InsertRefund,
   type RefundItem, type InsertRefundItem,
   type RefundPayment, type InsertRefundPayment,
+  // T&A imports
+  type JobCode, type InsertJobCode,
+  type EmployeeJobCode, type InsertEmployeeJobCode,
+  type PayPeriod, type InsertPayPeriod,
+  type TimePunch, type InsertTimePunch,
+  type BreakSession, type InsertBreakSession,
+  type Timecard, type InsertTimecard,
+  type TimecardException, type InsertTimecardException,
+  type TimecardEdit, type InsertTimecardEdit,
+  type EmployeeAvailability, type InsertEmployeeAvailability,
+  type AvailabilityException, type InsertAvailabilityException,
+  type TimeOffRequest, type InsertTimeOffRequest,
+  type ShiftTemplate, type InsertShiftTemplate,
+  type Shift, type InsertShift,
+  type ShiftCoverRequest, type InsertShiftCoverRequest,
+  type ShiftCoverOffer, type InsertShiftCoverOffer,
+  type ShiftCoverApproval, type InsertShiftCoverApproval,
+  type TipPoolPolicy, type InsertTipPoolPolicy,
+  type TipPoolRun, type InsertTipPoolRun,
+  type TipAllocation, type InsertTipAllocation,
+  type LaborSnapshot, type InsertLaborSnapshot,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -341,6 +368,145 @@ export interface IStorage {
   getNextRefundNumber(rvcId: string): Promise<number>;
   getClosedChecks(rvcId: string, options?: { businessDate?: string; checkNumber?: number; limit?: number }): Promise<Check[]>;
   getCheckWithPaymentsAndItems(checkId: string): Promise<{ check: Check; items: CheckItem[]; payments: CheckPayment[] } | undefined>;
+
+  // ============================================================================
+  // TIME & ATTENDANCE
+  // ============================================================================
+
+  // Job Codes
+  getJobCodes(propertyId?: string): Promise<JobCode[]>;
+  getJobCode(id: string): Promise<JobCode | undefined>;
+  createJobCode(data: InsertJobCode): Promise<JobCode>;
+  updateJobCode(id: string, data: Partial<InsertJobCode>): Promise<JobCode | undefined>;
+  deleteJobCode(id: string): Promise<boolean>;
+
+  // Employee Job Codes
+  getEmployeeJobCodes(employeeId: string): Promise<EmployeeJobCode[]>;
+  setEmployeeJobCodes(employeeId: string, jobCodeIds: string[]): Promise<EmployeeJobCode[]>;
+
+  // Pay Periods
+  getPayPeriods(propertyId: string): Promise<PayPeriod[]>;
+  getPayPeriod(id: string): Promise<PayPeriod | undefined>;
+  getPayPeriodForDate(propertyId: string, date: string): Promise<PayPeriod | undefined>;
+  createPayPeriod(data: InsertPayPeriod): Promise<PayPeriod>;
+  updatePayPeriod(id: string, data: Partial<InsertPayPeriod>): Promise<PayPeriod | undefined>;
+  lockPayPeriod(id: string, lockedById: string): Promise<PayPeriod | undefined>;
+  unlockPayPeriod(id: string, reason: string, unlockedById: string): Promise<PayPeriod | undefined>;
+
+  // Time Punches
+  getTimePunches(filters: { propertyId?: string; employeeId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<TimePunch[]>;
+  getTimePunch(id: string): Promise<TimePunch | undefined>;
+  getLastPunch(employeeId: string): Promise<TimePunch | undefined>;
+  createTimePunch(data: InsertTimePunch): Promise<TimePunch>;
+  updateTimePunch(id: string, data: Partial<InsertTimePunch>, editedById?: string, editReason?: string): Promise<TimePunch | undefined>;
+  voidTimePunch(id: string, voidedById: string, voidReason: string): Promise<TimePunch | undefined>;
+
+  // Break Sessions
+  getBreakSessions(filters: { propertyId?: string; employeeId?: string; businessDate?: string }): Promise<BreakSession[]>;
+  getBreakSession(id: string): Promise<BreakSession | undefined>;
+  getActiveBreak(employeeId: string): Promise<BreakSession | undefined>;
+  createBreakSession(data: InsertBreakSession): Promise<BreakSession>;
+  updateBreakSession(id: string, data: Partial<InsertBreakSession>): Promise<BreakSession | undefined>;
+
+  // Timecards
+  getTimecards(filters: { propertyId?: string; employeeId?: string; payPeriodId?: string; businessDate?: string }): Promise<Timecard[]>;
+  getTimecard(id: string): Promise<Timecard | undefined>;
+  createTimecard(data: InsertTimecard): Promise<Timecard>;
+  updateTimecard(id: string, data: Partial<InsertTimecard>): Promise<Timecard | undefined>;
+  recalculateTimecard(employeeId: string, businessDate: string): Promise<Timecard | undefined>;
+
+  // Timecard Exceptions
+  getTimecardExceptions(filters: { propertyId?: string; employeeId?: string; status?: string }): Promise<TimecardException[]>;
+  getTimecardException(id: string): Promise<TimecardException | undefined>;
+  createTimecardException(data: InsertTimecardException): Promise<TimecardException>;
+  resolveTimecardException(id: string, resolvedById: string, resolutionNotes: string): Promise<TimecardException | undefined>;
+
+  // Timecard Edits (Audit Log)
+  getTimecardEdits(filters: { propertyId?: string; targetType?: string; targetId?: string }): Promise<TimecardEdit[]>;
+  createTimecardEdit(data: InsertTimecardEdit): Promise<TimecardEdit>;
+
+  // ============================================================================
+  // SCHEDULING
+  // ============================================================================
+
+  // Employee Availability
+  getEmployeeAvailability(employeeId: string): Promise<EmployeeAvailability[]>;
+  setEmployeeAvailability(employeeId: string, availability: InsertEmployeeAvailability[]): Promise<EmployeeAvailability[]>;
+
+  // Availability Exceptions
+  getAvailabilityExceptions(employeeId: string, startDate?: string, endDate?: string): Promise<AvailabilityException[]>;
+  createAvailabilityException(data: InsertAvailabilityException): Promise<AvailabilityException>;
+  deleteAvailabilityException(id: string): Promise<boolean>;
+
+  // Time Off Requests
+  getTimeOffRequests(filters: { employeeId?: string; propertyId?: string; status?: string }): Promise<TimeOffRequest[]>;
+  getTimeOffRequest(id: string): Promise<TimeOffRequest | undefined>;
+  createTimeOffRequest(data: InsertTimeOffRequest): Promise<TimeOffRequest>;
+  updateTimeOffRequest(id: string, data: Partial<InsertTimeOffRequest>): Promise<TimeOffRequest | undefined>;
+  reviewTimeOffRequest(id: string, reviewedById: string, approved: boolean, notes?: string): Promise<TimeOffRequest | undefined>;
+
+  // Shift Templates
+  getShiftTemplates(propertyId: string): Promise<ShiftTemplate[]>;
+  getShiftTemplate(id: string): Promise<ShiftTemplate | undefined>;
+  createShiftTemplate(data: InsertShiftTemplate): Promise<ShiftTemplate>;
+  updateShiftTemplate(id: string, data: Partial<InsertShiftTemplate>): Promise<ShiftTemplate | undefined>;
+  deleteShiftTemplate(id: string): Promise<boolean>;
+
+  // Shifts
+  getShifts(filters: { propertyId?: string; rvcId?: string; employeeId?: string; startDate?: string; endDate?: string; status?: string }): Promise<Shift[]>;
+  getShift(id: string): Promise<Shift | undefined>;
+  createShift(data: InsertShift): Promise<Shift>;
+  updateShift(id: string, data: Partial<InsertShift>): Promise<Shift | undefined>;
+  deleteShift(id: string): Promise<boolean>;
+  publishShifts(shiftIds: string[], publishedById: string): Promise<Shift[]>;
+  copyWeekSchedule(propertyId: string, sourceWeekStart: string, targetWeekStart: string): Promise<Shift[]>;
+
+  // Shift Cover Requests
+  getShiftCoverRequests(filters: { shiftId?: string; requesterId?: string; status?: string }): Promise<ShiftCoverRequest[]>;
+  getShiftCoverRequest(id: string): Promise<ShiftCoverRequest | undefined>;
+  createShiftCoverRequest(data: InsertShiftCoverRequest): Promise<ShiftCoverRequest>;
+  updateShiftCoverRequest(id: string, data: Partial<InsertShiftCoverRequest>): Promise<ShiftCoverRequest | undefined>;
+
+  // Shift Cover Offers
+  getShiftCoverOffers(coverRequestId: string): Promise<ShiftCoverOffer[]>;
+  createShiftCoverOffer(data: InsertShiftCoverOffer): Promise<ShiftCoverOffer>;
+  updateShiftCoverOffer(id: string, data: Partial<InsertShiftCoverOffer>): Promise<ShiftCoverOffer | undefined>;
+
+  // Shift Cover Approvals
+  approveShiftCover(coverRequestId: string, offerId: string, approvedById: string, notes?: string): Promise<ShiftCoverApproval>;
+  denyShiftCover(coverRequestId: string, approvedById: string, notes?: string): Promise<ShiftCoverApproval>;
+
+  // ============================================================================
+  // TIP POOLING
+  // ============================================================================
+
+  // Tip Pool Policies
+  getTipPoolPolicies(propertyId: string): Promise<TipPoolPolicy[]>;
+  getTipPoolPolicy(id: string): Promise<TipPoolPolicy | undefined>;
+  createTipPoolPolicy(data: InsertTipPoolPolicy): Promise<TipPoolPolicy>;
+  updateTipPoolPolicy(id: string, data: Partial<InsertTipPoolPolicy>): Promise<TipPoolPolicy | undefined>;
+  deleteTipPoolPolicy(id: string): Promise<boolean>;
+
+  // Tip Pool Runs
+  getTipPoolRuns(filters: { propertyId?: string; businessDate?: string }): Promise<TipPoolRun[]>;
+  getTipPoolRun(id: string): Promise<TipPoolRun | undefined>;
+  createTipPoolRun(data: InsertTipPoolRun): Promise<TipPoolRun>;
+  updateTipPoolRun(id: string, data: Partial<InsertTipPoolRun>): Promise<TipPoolRun | undefined>;
+
+  // Tip Allocations
+  getTipAllocations(tipPoolRunId: string): Promise<TipAllocation[]>;
+  createTipAllocation(data: InsertTipAllocation): Promise<TipAllocation>;
+  runTipPoolSettlement(propertyId: string, businessDate: string, policyId: string, runById: string): Promise<{ run: TipPoolRun; allocations: TipAllocation[] }>;
+
+  // ============================================================================
+  // LABOR VS SALES
+  // ============================================================================
+
+  // Labor Snapshots
+  getLaborSnapshots(filters: { propertyId?: string; rvcId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<LaborSnapshot[]>;
+  createLaborSnapshot(data: InsertLaborSnapshot): Promise<LaborSnapshot>;
+  updateLaborSnapshot(id: string, data: Partial<InsertLaborSnapshot>): Promise<LaborSnapshot | undefined>;
+  calculateLaborSnapshot(propertyId: string, businessDate: string): Promise<LaborSnapshot>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2063,6 +2229,898 @@ export class DatabaseStorage implements IStorage {
     const payments = await db.select().from(checkPayments).where(eq(checkPayments.checkId, checkId));
 
     return { check, items, payments };
+  }
+
+  // ============================================================================
+  // TIME & ATTENDANCE IMPLEMENTATIONS
+  // ============================================================================
+
+  // Job Codes
+  async getJobCodes(propertyId?: string): Promise<JobCode[]> {
+    if (propertyId) {
+      return db.select().from(jobCodes).where(eq(jobCodes.propertyId, propertyId)).orderBy(jobCodes.displayOrder);
+    }
+    return db.select().from(jobCodes).orderBy(jobCodes.displayOrder);
+  }
+
+  async getJobCode(id: string): Promise<JobCode | undefined> {
+    const [result] = await db.select().from(jobCodes).where(eq(jobCodes.id, id));
+    return result;
+  }
+
+  async createJobCode(data: InsertJobCode): Promise<JobCode> {
+    const [result] = await db.insert(jobCodes).values(data).returning();
+    return result;
+  }
+
+  async updateJobCode(id: string, data: Partial<InsertJobCode>): Promise<JobCode | undefined> {
+    const [result] = await db.update(jobCodes).set(data).where(eq(jobCodes.id, id)).returning();
+    return result;
+  }
+
+  async deleteJobCode(id: string): Promise<boolean> {
+    const result = await db.delete(jobCodes).where(eq(jobCodes.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Employee Job Codes
+  async getEmployeeJobCodes(employeeId: string): Promise<EmployeeJobCode[]> {
+    return db.select().from(employeeJobCodes).where(eq(employeeJobCodes.employeeId, employeeId));
+  }
+
+  async setEmployeeJobCodes(employeeId: string, jobCodeIds: string[]): Promise<EmployeeJobCode[]> {
+    await db.delete(employeeJobCodes).where(eq(employeeJobCodes.employeeId, employeeId));
+    if (jobCodeIds.length === 0) return [];
+    const values = jobCodeIds.map((jobCodeId, index) => ({
+      employeeId,
+      jobCodeId,
+      isPrimary: index === 0,
+    }));
+    return db.insert(employeeJobCodes).values(values).returning();
+  }
+
+  // Pay Periods
+  async getPayPeriods(propertyId: string): Promise<PayPeriod[]> {
+    return db.select().from(payPeriods).where(eq(payPeriods.propertyId, propertyId)).orderBy(desc(payPeriods.startDate));
+  }
+
+  async getPayPeriod(id: string): Promise<PayPeriod | undefined> {
+    const [result] = await db.select().from(payPeriods).where(eq(payPeriods.id, id));
+    return result;
+  }
+
+  async getPayPeriodForDate(propertyId: string, date: string): Promise<PayPeriod | undefined> {
+    const [result] = await db.select().from(payPeriods)
+      .where(and(
+        eq(payPeriods.propertyId, propertyId),
+        lte(payPeriods.startDate, date),
+        gte(payPeriods.endDate, date)
+      ));
+    return result;
+  }
+
+  async createPayPeriod(data: InsertPayPeriod): Promise<PayPeriod> {
+    const [result] = await db.insert(payPeriods).values(data).returning();
+    return result;
+  }
+
+  async updatePayPeriod(id: string, data: Partial<InsertPayPeriod>): Promise<PayPeriod | undefined> {
+    const [result] = await db.update(payPeriods).set(data).where(eq(payPeriods.id, id)).returning();
+    return result;
+  }
+
+  async lockPayPeriod(id: string, lockedById: string): Promise<PayPeriod | undefined> {
+    const [result] = await db.update(payPeriods)
+      .set({ status: "locked", lockedAt: new Date(), lockedById })
+      .where(eq(payPeriods.id, id))
+      .returning();
+    return result;
+  }
+
+  async unlockPayPeriod(id: string, reason: string, unlockedById: string): Promise<PayPeriod | undefined> {
+    const payPeriod = await this.getPayPeriod(id);
+    if (!payPeriod) return undefined;
+    
+    // Create audit record for unlock
+    await this.createTimecardEdit({
+      propertyId: payPeriod.propertyId,
+      targetType: "pay_period",
+      targetId: id,
+      editType: "unlock",
+      beforeValue: { status: payPeriod.status },
+      afterValue: { status: "open" },
+      reasonCode: "manual_unlock",
+      notes: reason,
+      editedById: unlockedById,
+    });
+
+    const [result] = await db.update(payPeriods)
+      .set({ status: "open", lockedAt: null, lockedById: null })
+      .where(eq(payPeriods.id, id))
+      .returning();
+    return result;
+  }
+
+  // Time Punches
+  async getTimePunches(filters: { propertyId?: string; employeeId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<TimePunch[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(timePunches.propertyId, filters.propertyId));
+    if (filters.employeeId) conditions.push(eq(timePunches.employeeId, filters.employeeId));
+    if (filters.businessDate) conditions.push(eq(timePunches.businessDate, filters.businessDate));
+    if (filters.startDate) conditions.push(gte(timePunches.businessDate, filters.startDate));
+    if (filters.endDate) conditions.push(lte(timePunches.businessDate, filters.endDate));
+    conditions.push(eq(timePunches.voided, false));
+    
+    if (conditions.length === 0) {
+      return db.select().from(timePunches).orderBy(desc(timePunches.actualTimestamp));
+    }
+    return db.select().from(timePunches).where(and(...conditions)).orderBy(desc(timePunches.actualTimestamp));
+  }
+
+  async getTimePunch(id: string): Promise<TimePunch | undefined> {
+    const [result] = await db.select().from(timePunches).where(eq(timePunches.id, id));
+    return result;
+  }
+
+  async getLastPunch(employeeId: string): Promise<TimePunch | undefined> {
+    const [result] = await db.select().from(timePunches)
+      .where(and(eq(timePunches.employeeId, employeeId), eq(timePunches.voided, false)))
+      .orderBy(desc(timePunches.actualTimestamp))
+      .limit(1);
+    return result;
+  }
+
+  async createTimePunch(data: InsertTimePunch): Promise<TimePunch> {
+    const [result] = await db.insert(timePunches).values(data).returning();
+    return result;
+  }
+
+  async updateTimePunch(id: string, data: Partial<InsertTimePunch>, editedById?: string, editReason?: string): Promise<TimePunch | undefined> {
+    const existing = await this.getTimePunch(id);
+    if (!existing) return undefined;
+
+    const updateData: any = { ...data };
+    if (editedById) {
+      updateData.isEdited = true;
+      updateData.editedById = editedById;
+      updateData.editedAt = new Date();
+      updateData.editReason = editReason;
+      if (!existing.originalTimestamp) {
+        updateData.originalTimestamp = existing.actualTimestamp;
+      }
+      
+      // Create audit record
+      await this.createTimecardEdit({
+        propertyId: existing.propertyId,
+        targetType: "time_punch",
+        targetId: id,
+        editType: "update",
+        beforeValue: existing,
+        afterValue: { ...existing, ...updateData },
+        reasonCode: editReason || "manual_edit",
+        notes: editReason,
+        editedById,
+      });
+    }
+
+    const [result] = await db.update(timePunches).set(updateData).where(eq(timePunches.id, id)).returning();
+    return result;
+  }
+
+  async voidTimePunch(id: string, voidedById: string, voidReason: string): Promise<TimePunch | undefined> {
+    const existing = await this.getTimePunch(id);
+    if (!existing) return undefined;
+
+    await this.createTimecardEdit({
+      propertyId: existing.propertyId,
+      targetType: "time_punch",
+      targetId: id,
+      editType: "void",
+      beforeValue: existing,
+      afterValue: { ...existing, voided: true },
+      reasonCode: "void",
+      notes: voidReason,
+      editedById: voidedById,
+    });
+
+    const [result] = await db.update(timePunches)
+      .set({ voided: true, voidedById, voidedAt: new Date(), voidReason })
+      .where(eq(timePunches.id, id))
+      .returning();
+    return result;
+  }
+
+  // Break Sessions
+  async getBreakSessions(filters: { propertyId?: string; employeeId?: string; businessDate?: string }): Promise<BreakSession[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(breakSessions.propertyId, filters.propertyId));
+    if (filters.employeeId) conditions.push(eq(breakSessions.employeeId, filters.employeeId));
+    if (filters.businessDate) conditions.push(eq(breakSessions.businessDate, filters.businessDate));
+    
+    if (conditions.length === 0) {
+      return db.select().from(breakSessions).orderBy(desc(breakSessions.startTime));
+    }
+    return db.select().from(breakSessions).where(and(...conditions)).orderBy(desc(breakSessions.startTime));
+  }
+
+  async getBreakSession(id: string): Promise<BreakSession | undefined> {
+    const [result] = await db.select().from(breakSessions).where(eq(breakSessions.id, id));
+    return result;
+  }
+
+  async getActiveBreak(employeeId: string): Promise<BreakSession | undefined> {
+    const [result] = await db.select().from(breakSessions)
+      .where(and(eq(breakSessions.employeeId, employeeId), sql`${breakSessions.endTime} IS NULL`))
+      .orderBy(desc(breakSessions.startTime))
+      .limit(1);
+    return result;
+  }
+
+  async createBreakSession(data: InsertBreakSession): Promise<BreakSession> {
+    const [result] = await db.insert(breakSessions).values(data).returning();
+    return result;
+  }
+
+  async updateBreakSession(id: string, data: Partial<InsertBreakSession>): Promise<BreakSession | undefined> {
+    const [result] = await db.update(breakSessions).set(data).where(eq(breakSessions.id, id)).returning();
+    return result;
+  }
+
+  // Timecards
+  async getTimecards(filters: { propertyId?: string; employeeId?: string; payPeriodId?: string; businessDate?: string }): Promise<Timecard[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(timecards.propertyId, filters.propertyId));
+    if (filters.employeeId) conditions.push(eq(timecards.employeeId, filters.employeeId));
+    if (filters.payPeriodId) conditions.push(eq(timecards.payPeriodId, filters.payPeriodId));
+    if (filters.businessDate) conditions.push(eq(timecards.businessDate, filters.businessDate));
+    
+    if (conditions.length === 0) {
+      return db.select().from(timecards).orderBy(desc(timecards.businessDate));
+    }
+    return db.select().from(timecards).where(and(...conditions)).orderBy(desc(timecards.businessDate));
+  }
+
+  async getTimecard(id: string): Promise<Timecard | undefined> {
+    const [result] = await db.select().from(timecards).where(eq(timecards.id, id));
+    return result;
+  }
+
+  async createTimecard(data: InsertTimecard): Promise<Timecard> {
+    const [result] = await db.insert(timecards).values(data).returning();
+    return result;
+  }
+
+  async updateTimecard(id: string, data: Partial<InsertTimecard>): Promise<Timecard | undefined> {
+    const [result] = await db.update(timecards).set({ ...data, updatedAt: new Date() }).where(eq(timecards.id, id)).returning();
+    return result;
+  }
+
+  async recalculateTimecard(employeeId: string, businessDate: string): Promise<Timecard | undefined> {
+    // Get all punches for this employee on this date
+    const punches = await this.getTimePunches({ employeeId, businessDate });
+    const breaks = await this.getBreakSessions({ employeeId, businessDate });
+
+    // Calculate hours from clock in/out pairs
+    const clockIns = punches.filter(p => p.punchType === "clock_in");
+    const clockOuts = punches.filter(p => p.punchType === "clock_out");
+    
+    let totalMinutes = 0;
+    let clockInTime: Date | null = null;
+    let clockOutTime: Date | null = null;
+
+    for (const clockIn of clockIns) {
+      const matchingOut = clockOuts.find(o => new Date(o.actualTimestamp) > new Date(clockIn.actualTimestamp));
+      if (matchingOut) {
+        const duration = (new Date(matchingOut.actualTimestamp).getTime() - new Date(clockIn.actualTimestamp).getTime()) / 60000;
+        totalMinutes += duration;
+        if (!clockInTime || new Date(clockIn.actualTimestamp) < clockInTime) {
+          clockInTime = new Date(clockIn.actualTimestamp);
+        }
+        if (!clockOutTime || new Date(matchingOut.actualTimestamp) > clockOutTime) {
+          clockOutTime = new Date(matchingOut.actualTimestamp);
+        }
+      }
+    }
+
+    // Calculate break minutes
+    let paidBreakMinutes = 0;
+    let unpaidBreakMinutes = 0;
+    for (const brk of breaks) {
+      if (brk.actualMinutes) {
+        if (brk.isPaid) {
+          paidBreakMinutes += brk.actualMinutes;
+        } else {
+          unpaidBreakMinutes += brk.actualMinutes;
+        }
+      }
+    }
+
+    // Subtract unpaid breaks from total
+    const workedMinutes = totalMinutes - unpaidBreakMinutes;
+    const regularHours = Math.min(workedMinutes / 60, 8);
+    const overtimeHours = Math.max(0, workedMinutes / 60 - 8);
+
+    // Get or create timecard
+    const existing = await db.select().from(timecards)
+      .where(and(eq(timecards.employeeId, employeeId), eq(timecards.businessDate, businessDate)))
+      .limit(1);
+
+    const timecardData = {
+      regularHours: regularHours.toFixed(2),
+      overtimeHours: overtimeHours.toFixed(2),
+      totalHours: (workedMinutes / 60).toFixed(2),
+      breakMinutes: paidBreakMinutes + unpaidBreakMinutes,
+      paidBreakMinutes,
+      unpaidBreakMinutes,
+      clockInTime,
+      clockOutTime,
+      updatedAt: new Date(),
+    };
+
+    if (existing.length > 0) {
+      return this.updateTimecard(existing[0].id, timecardData);
+    } else {
+      const employee = await this.getEmployee(employeeId);
+      if (!employee?.propertyId) return undefined;
+      
+      return this.createTimecard({
+        propertyId: employee.propertyId,
+        employeeId,
+        businessDate,
+        ...timecardData,
+      });
+    }
+  }
+
+  // Timecard Exceptions
+  async getTimecardExceptions(filters: { propertyId?: string; employeeId?: string; status?: string }): Promise<TimecardException[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(timecardExceptions.propertyId, filters.propertyId));
+    if (filters.employeeId) conditions.push(eq(timecardExceptions.employeeId, filters.employeeId));
+    if (filters.status) conditions.push(eq(timecardExceptions.status, filters.status));
+    
+    if (conditions.length === 0) {
+      return db.select().from(timecardExceptions).orderBy(desc(timecardExceptions.createdAt));
+    }
+    return db.select().from(timecardExceptions).where(and(...conditions)).orderBy(desc(timecardExceptions.createdAt));
+  }
+
+  async getTimecardException(id: string): Promise<TimecardException | undefined> {
+    const [result] = await db.select().from(timecardExceptions).where(eq(timecardExceptions.id, id));
+    return result;
+  }
+
+  async createTimecardException(data: InsertTimecardException): Promise<TimecardException> {
+    const [result] = await db.insert(timecardExceptions).values(data).returning();
+    return result;
+  }
+
+  async resolveTimecardException(id: string, resolvedById: string, resolutionNotes: string): Promise<TimecardException | undefined> {
+    const [result] = await db.update(timecardExceptions)
+      .set({ status: "resolved", resolvedById, resolvedAt: new Date(), resolutionNotes })
+      .where(eq(timecardExceptions.id, id))
+      .returning();
+    return result;
+  }
+
+  // Timecard Edits (Audit Log)
+  async getTimecardEdits(filters: { propertyId?: string; targetType?: string; targetId?: string }): Promise<TimecardEdit[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(timecardEdits.propertyId, filters.propertyId));
+    if (filters.targetType) conditions.push(eq(timecardEdits.targetType, filters.targetType));
+    if (filters.targetId) conditions.push(eq(timecardEdits.targetId, filters.targetId));
+    
+    if (conditions.length === 0) {
+      return db.select().from(timecardEdits).orderBy(desc(timecardEdits.createdAt));
+    }
+    return db.select().from(timecardEdits).where(and(...conditions)).orderBy(desc(timecardEdits.createdAt));
+  }
+
+  async createTimecardEdit(data: InsertTimecardEdit): Promise<TimecardEdit> {
+    const [result] = await db.insert(timecardEdits).values(data).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // SCHEDULING IMPLEMENTATIONS
+  // ============================================================================
+
+  // Employee Availability
+  async getEmployeeAvailability(employeeId: string): Promise<EmployeeAvailability[]> {
+    return db.select().from(employeeAvailability).where(eq(employeeAvailability.employeeId, employeeId));
+  }
+
+  async setEmployeeAvailability(employeeId: string, availability: InsertEmployeeAvailability[]): Promise<EmployeeAvailability[]> {
+    await db.delete(employeeAvailability).where(eq(employeeAvailability.employeeId, employeeId));
+    if (availability.length === 0) return [];
+    return db.insert(employeeAvailability).values(availability).returning();
+  }
+
+  // Availability Exceptions
+  async getAvailabilityExceptions(employeeId: string, startDate?: string, endDate?: string): Promise<AvailabilityException[]> {
+    const conditions = [eq(availabilityExceptions.employeeId, employeeId)];
+    if (startDate) conditions.push(gte(availabilityExceptions.exceptionDate, startDate));
+    if (endDate) conditions.push(lte(availabilityExceptions.exceptionDate, endDate));
+    return db.select().from(availabilityExceptions).where(and(...conditions));
+  }
+
+  async createAvailabilityException(data: InsertAvailabilityException): Promise<AvailabilityException> {
+    const [result] = await db.insert(availabilityExceptions).values(data).returning();
+    return result;
+  }
+
+  async deleteAvailabilityException(id: string): Promise<boolean> {
+    const result = await db.delete(availabilityExceptions).where(eq(availabilityExceptions.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Time Off Requests
+  async getTimeOffRequests(filters: { employeeId?: string; propertyId?: string; status?: string }): Promise<TimeOffRequest[]> {
+    const conditions: any[] = [];
+    if (filters.employeeId) conditions.push(eq(timeOffRequests.employeeId, filters.employeeId));
+    if (filters.propertyId) conditions.push(eq(timeOffRequests.propertyId, filters.propertyId));
+    if (filters.status) conditions.push(eq(timeOffRequests.status, filters.status));
+    
+    if (conditions.length === 0) {
+      return db.select().from(timeOffRequests).orderBy(desc(timeOffRequests.createdAt));
+    }
+    return db.select().from(timeOffRequests).where(and(...conditions)).orderBy(desc(timeOffRequests.createdAt));
+  }
+
+  async getTimeOffRequest(id: string): Promise<TimeOffRequest | undefined> {
+    const [result] = await db.select().from(timeOffRequests).where(eq(timeOffRequests.id, id));
+    return result;
+  }
+
+  async createTimeOffRequest(data: InsertTimeOffRequest): Promise<TimeOffRequest> {
+    const [result] = await db.insert(timeOffRequests).values(data).returning();
+    return result;
+  }
+
+  async updateTimeOffRequest(id: string, data: Partial<InsertTimeOffRequest>): Promise<TimeOffRequest | undefined> {
+    const [result] = await db.update(timeOffRequests).set({ ...data, updatedAt: new Date() }).where(eq(timeOffRequests.id, id)).returning();
+    return result;
+  }
+
+  async reviewTimeOffRequest(id: string, reviewedById: string, approved: boolean, notes?: string): Promise<TimeOffRequest | undefined> {
+    const [result] = await db.update(timeOffRequests)
+      .set({ 
+        status: approved ? "approved" : "denied", 
+        reviewedById, 
+        reviewedAt: new Date(), 
+        reviewNotes: notes,
+        updatedAt: new Date()
+      })
+      .where(eq(timeOffRequests.id, id))
+      .returning();
+    return result;
+  }
+
+  // Shift Templates
+  async getShiftTemplates(propertyId: string): Promise<ShiftTemplate[]> {
+    return db.select().from(shiftTemplates).where(eq(shiftTemplates.propertyId, propertyId));
+  }
+
+  async getShiftTemplate(id: string): Promise<ShiftTemplate | undefined> {
+    const [result] = await db.select().from(shiftTemplates).where(eq(shiftTemplates.id, id));
+    return result;
+  }
+
+  async createShiftTemplate(data: InsertShiftTemplate): Promise<ShiftTemplate> {
+    const [result] = await db.insert(shiftTemplates).values(data).returning();
+    return result;
+  }
+
+  async updateShiftTemplate(id: string, data: Partial<InsertShiftTemplate>): Promise<ShiftTemplate | undefined> {
+    const [result] = await db.update(shiftTemplates).set(data).where(eq(shiftTemplates.id, id)).returning();
+    return result;
+  }
+
+  async deleteShiftTemplate(id: string): Promise<boolean> {
+    const result = await db.delete(shiftTemplates).where(eq(shiftTemplates.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Shifts
+  async getShifts(filters: { propertyId?: string; rvcId?: string; employeeId?: string; startDate?: string; endDate?: string; status?: string }): Promise<Shift[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(shifts.propertyId, filters.propertyId));
+    if (filters.rvcId) conditions.push(eq(shifts.rvcId, filters.rvcId));
+    if (filters.employeeId) conditions.push(eq(shifts.employeeId, filters.employeeId));
+    if (filters.startDate) conditions.push(gte(shifts.shiftDate, filters.startDate));
+    if (filters.endDate) conditions.push(lte(shifts.shiftDate, filters.endDate));
+    if (filters.status) conditions.push(eq(shifts.status, filters.status));
+    
+    if (conditions.length === 0) {
+      return db.select().from(shifts).orderBy(shifts.shiftDate, shifts.startTime);
+    }
+    return db.select().from(shifts).where(and(...conditions)).orderBy(shifts.shiftDate, shifts.startTime);
+  }
+
+  async getShift(id: string): Promise<Shift | undefined> {
+    const [result] = await db.select().from(shifts).where(eq(shifts.id, id));
+    return result;
+  }
+
+  async createShift(data: InsertShift): Promise<Shift> {
+    const [result] = await db.insert(shifts).values(data).returning();
+    return result;
+  }
+
+  async updateShift(id: string, data: Partial<InsertShift>): Promise<Shift | undefined> {
+    const [result] = await db.update(shifts).set({ ...data, updatedAt: new Date() }).where(eq(shifts.id, id)).returning();
+    return result;
+  }
+
+  async deleteShift(id: string): Promise<boolean> {
+    const result = await db.delete(shifts).where(eq(shifts.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async publishShifts(shiftIds: string[], publishedById: string): Promise<Shift[]> {
+    const now = new Date();
+    return db.update(shifts)
+      .set({ status: "published", publishedAt: now, publishedById, updatedAt: now })
+      .where(inArray(shifts.id, shiftIds))
+      .returning();
+  }
+
+  async copyWeekSchedule(propertyId: string, sourceWeekStart: string, targetWeekStart: string): Promise<Shift[]> {
+    // Get all shifts from source week
+    const sourceEnd = new Date(sourceWeekStart);
+    sourceEnd.setDate(sourceEnd.getDate() + 6);
+    
+    const sourceShifts = await this.getShifts({ 
+      propertyId, 
+      startDate: sourceWeekStart, 
+      endDate: sourceEnd.toISOString().split('T')[0] 
+    });
+
+    const dayDiff = Math.round((new Date(targetWeekStart).getTime() - new Date(sourceWeekStart).getTime()) / (1000 * 60 * 60 * 24));
+    
+    const newShifts: Shift[] = [];
+    for (const shift of sourceShifts) {
+      const newDate = new Date(shift.shiftDate);
+      newDate.setDate(newDate.getDate() + dayDiff);
+      
+      const newShift = await this.createShift({
+        propertyId: shift.propertyId,
+        rvcId: shift.rvcId,
+        employeeId: shift.employeeId,
+        jobCodeId: shift.jobCodeId,
+        templateId: shift.templateId,
+        shiftDate: newDate.toISOString().split('T')[0],
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        scheduledBreakMinutes: shift.scheduledBreakMinutes,
+        status: "draft",
+        notes: shift.notes,
+      });
+      newShifts.push(newShift);
+    }
+
+    return newShifts;
+  }
+
+  // Shift Cover Requests
+  async getShiftCoverRequests(filters: { shiftId?: string; requesterId?: string; status?: string }): Promise<ShiftCoverRequest[]> {
+    const conditions: any[] = [];
+    if (filters.shiftId) conditions.push(eq(shiftCoverRequests.shiftId, filters.shiftId));
+    if (filters.requesterId) conditions.push(eq(shiftCoverRequests.requesterId, filters.requesterId));
+    if (filters.status) conditions.push(eq(shiftCoverRequests.status, filters.status));
+    
+    if (conditions.length === 0) {
+      return db.select().from(shiftCoverRequests).orderBy(desc(shiftCoverRequests.createdAt));
+    }
+    return db.select().from(shiftCoverRequests).where(and(...conditions)).orderBy(desc(shiftCoverRequests.createdAt));
+  }
+
+  async getShiftCoverRequest(id: string): Promise<ShiftCoverRequest | undefined> {
+    const [result] = await db.select().from(shiftCoverRequests).where(eq(shiftCoverRequests.id, id));
+    return result;
+  }
+
+  async createShiftCoverRequest(data: InsertShiftCoverRequest): Promise<ShiftCoverRequest> {
+    const [result] = await db.insert(shiftCoverRequests).values(data).returning();
+    return result;
+  }
+
+  async updateShiftCoverRequest(id: string, data: Partial<InsertShiftCoverRequest>): Promise<ShiftCoverRequest | undefined> {
+    const [result] = await db.update(shiftCoverRequests).set({ ...data, updatedAt: new Date() }).where(eq(shiftCoverRequests.id, id)).returning();
+    return result;
+  }
+
+  // Shift Cover Offers
+  async getShiftCoverOffers(coverRequestId: string): Promise<ShiftCoverOffer[]> {
+    return db.select().from(shiftCoverOffers).where(eq(shiftCoverOffers.coverRequestId, coverRequestId));
+  }
+
+  async createShiftCoverOffer(data: InsertShiftCoverOffer): Promise<ShiftCoverOffer> {
+    const [result] = await db.insert(shiftCoverOffers).values(data).returning();
+    return result;
+  }
+
+  async updateShiftCoverOffer(id: string, data: Partial<InsertShiftCoverOffer>): Promise<ShiftCoverOffer | undefined> {
+    const [result] = await db.update(shiftCoverOffers).set(data).where(eq(shiftCoverOffers.id, id)).returning();
+    return result;
+  }
+
+  // Shift Cover Approvals
+  async approveShiftCover(coverRequestId: string, offerId: string, approvedById: string, notes?: string): Promise<ShiftCoverApproval> {
+    // Update the offer status
+    await this.updateShiftCoverOffer(offerId, { status: "approved" });
+    
+    // Update the cover request status
+    await this.updateShiftCoverRequest(coverRequestId, { status: "approved" });
+    
+    // Get offer details and update the shift assignment
+    const [offer] = await db.select().from(shiftCoverOffers).where(eq(shiftCoverOffers.id, offerId));
+    const [request] = await db.select().from(shiftCoverRequests).where(eq(shiftCoverRequests.id, coverRequestId));
+    
+    if (offer && request) {
+      await this.updateShift(request.shiftId, { employeeId: offer.offererId });
+    }
+    
+    const [result] = await db.insert(shiftCoverApprovals).values({
+      coverRequestId,
+      offerId,
+      approvedById,
+      approved: true,
+      notes,
+    }).returning();
+    
+    return result;
+  }
+
+  async denyShiftCover(coverRequestId: string, approvedById: string, notes?: string): Promise<ShiftCoverApproval> {
+    await this.updateShiftCoverRequest(coverRequestId, { status: "denied" });
+    
+    const [result] = await db.insert(shiftCoverApprovals).values({
+      coverRequestId,
+      approvedById,
+      approved: false,
+      notes,
+    }).returning();
+    
+    return result;
+  }
+
+  // ============================================================================
+  // TIP POOLING IMPLEMENTATIONS
+  // ============================================================================
+
+  // Tip Pool Policies
+  async getTipPoolPolicies(propertyId: string): Promise<TipPoolPolicy[]> {
+    return db.select().from(tipPoolPolicies).where(eq(tipPoolPolicies.propertyId, propertyId));
+  }
+
+  async getTipPoolPolicy(id: string): Promise<TipPoolPolicy | undefined> {
+    const [result] = await db.select().from(tipPoolPolicies).where(eq(tipPoolPolicies.id, id));
+    return result;
+  }
+
+  async createTipPoolPolicy(data: InsertTipPoolPolicy): Promise<TipPoolPolicy> {
+    const [result] = await db.insert(tipPoolPolicies).values(data).returning();
+    return result;
+  }
+
+  async updateTipPoolPolicy(id: string, data: Partial<InsertTipPoolPolicy>): Promise<TipPoolPolicy | undefined> {
+    const [result] = await db.update(tipPoolPolicies).set(data).where(eq(tipPoolPolicies.id, id)).returning();
+    return result;
+  }
+
+  async deleteTipPoolPolicy(id: string): Promise<boolean> {
+    const result = await db.delete(tipPoolPolicies).where(eq(tipPoolPolicies.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Tip Pool Runs
+  async getTipPoolRuns(filters: { propertyId?: string; businessDate?: string }): Promise<TipPoolRun[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(tipPoolRuns.propertyId, filters.propertyId));
+    if (filters.businessDate) conditions.push(eq(tipPoolRuns.businessDate, filters.businessDate));
+    
+    if (conditions.length === 0) {
+      return db.select().from(tipPoolRuns).orderBy(desc(tipPoolRuns.businessDate));
+    }
+    return db.select().from(tipPoolRuns).where(and(...conditions)).orderBy(desc(tipPoolRuns.businessDate));
+  }
+
+  async getTipPoolRun(id: string): Promise<TipPoolRun | undefined> {
+    const [result] = await db.select().from(tipPoolRuns).where(eq(tipPoolRuns.id, id));
+    return result;
+  }
+
+  async createTipPoolRun(data: InsertTipPoolRun): Promise<TipPoolRun> {
+    const [result] = await db.insert(tipPoolRuns).values(data).returning();
+    return result;
+  }
+
+  async updateTipPoolRun(id: string, data: Partial<InsertTipPoolRun>): Promise<TipPoolRun | undefined> {
+    const [result] = await db.update(tipPoolRuns).set(data).where(eq(tipPoolRuns.id, id)).returning();
+    return result;
+  }
+
+  // Tip Allocations
+  async getTipAllocations(tipPoolRunId: string): Promise<TipAllocation[]> {
+    return db.select().from(tipAllocations).where(eq(tipAllocations.tipPoolRunId, tipPoolRunId));
+  }
+
+  async createTipAllocation(data: InsertTipAllocation): Promise<TipAllocation> {
+    const [result] = await db.insert(tipAllocations).values(data).returning();
+    return result;
+  }
+
+  async runTipPoolSettlement(propertyId: string, businessDate: string, policyId: string, runById: string): Promise<{ run: TipPoolRun; allocations: TipAllocation[] }> {
+    // Get policy
+    const policy = await this.getTipPoolPolicy(policyId);
+    if (!policy) throw new Error("Tip pool policy not found");
+
+    // Get all tips for the day from closed checks
+    const closedChecks = await db.select().from(checks)
+      .where(and(
+        eq(checks.businessDate, businessDate),
+        eq(checks.status, "closed")
+      ));
+    
+    let totalTips = 0;
+    for (const check of closedChecks) {
+      const payments = await this.getPayments(check.id);
+      for (const payment of payments) {
+        totalTips += parseFloat(payment.tipAmount || "0");
+      }
+    }
+
+    // Get timecards for eligible employees
+    const dayTimecards = await this.getTimecards({ propertyId, businessDate });
+    
+    // Filter by excluded job codes and calculate hours
+    const excludedJobCodes = policy.excludedJobCodeIds || [];
+    const eligibleTimecards = dayTimecards.filter(tc => 
+      !tc.jobCodeId || !excludedJobCodes.includes(tc.jobCodeId)
+    );
+
+    let totalHours = 0;
+    for (const tc of eligibleTimecards) {
+      totalHours += parseFloat(tc.totalHours || "0");
+    }
+
+    // Create the run
+    const run = await this.createTipPoolRun({
+      propertyId,
+      policyId,
+      businessDate,
+      totalTips: totalTips.toFixed(2),
+      totalHours: totalHours.toFixed(2),
+      participantCount: eligibleTimecards.length,
+      status: "completed",
+      runById,
+      runAt: new Date(),
+    });
+
+    // Calculate allocations based on calculation method
+    const allocations: TipAllocation[] = [];
+    
+    if (policy.calculationMethod === "hours_worked" && totalHours > 0) {
+      for (const tc of eligibleTimecards) {
+        const hours = parseFloat(tc.totalHours || "0");
+        const sharePercentage = (hours / totalHours) * 100;
+        const allocatedAmount = (hours / totalHours) * totalTips;
+
+        const allocation = await this.createTipAllocation({
+          tipPoolRunId: run.id,
+          employeeId: tc.employeeId,
+          hoursWorked: hours.toFixed(2),
+          sharePercentage: sharePercentage.toFixed(2),
+          allocatedAmount: allocatedAmount.toFixed(2),
+          totalTips: allocatedAmount.toFixed(2),
+        });
+        allocations.push(allocation);
+      }
+    } else if (policy.calculationMethod === "equal" && eligibleTimecards.length > 0) {
+      const equalShare = totalTips / eligibleTimecards.length;
+      const sharePercentage = 100 / eligibleTimecards.length;
+
+      for (const tc of eligibleTimecards) {
+        const allocation = await this.createTipAllocation({
+          tipPoolRunId: run.id,
+          employeeId: tc.employeeId,
+          hoursWorked: tc.totalHours || "0",
+          sharePercentage: sharePercentage.toFixed(2),
+          allocatedAmount: equalShare.toFixed(2),
+          totalTips: equalShare.toFixed(2),
+        });
+        allocations.push(allocation);
+      }
+    }
+
+    return { run, allocations };
+  }
+
+  // ============================================================================
+  // LABOR VS SALES IMPLEMENTATIONS
+  // ============================================================================
+
+  // Labor Snapshots
+  async getLaborSnapshots(filters: { propertyId?: string; rvcId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<LaborSnapshot[]> {
+    const conditions: any[] = [];
+    if (filters.propertyId) conditions.push(eq(laborSnapshots.propertyId, filters.propertyId));
+    if (filters.rvcId) conditions.push(eq(laborSnapshots.rvcId, filters.rvcId));
+    if (filters.businessDate) conditions.push(eq(laborSnapshots.businessDate, filters.businessDate));
+    if (filters.startDate) conditions.push(gte(laborSnapshots.businessDate, filters.startDate));
+    if (filters.endDate) conditions.push(lte(laborSnapshots.businessDate, filters.endDate));
+    
+    if (conditions.length === 0) {
+      return db.select().from(laborSnapshots).orderBy(desc(laborSnapshots.businessDate));
+    }
+    return db.select().from(laborSnapshots).where(and(...conditions)).orderBy(desc(laborSnapshots.businessDate));
+  }
+
+  async createLaborSnapshot(data: InsertLaborSnapshot): Promise<LaborSnapshot> {
+    const [result] = await db.insert(laborSnapshots).values(data).returning();
+    return result;
+  }
+
+  async updateLaborSnapshot(id: string, data: Partial<InsertLaborSnapshot>): Promise<LaborSnapshot | undefined> {
+    const [result] = await db.update(laborSnapshots).set({ ...data, updatedAt: new Date() }).where(eq(laborSnapshots.id, id)).returning();
+    return result;
+  }
+
+  async calculateLaborSnapshot(propertyId: string, businessDate: string): Promise<LaborSnapshot> {
+    // Get total sales for the day
+    const dayChecks = await db.select().from(checks)
+      .where(and(
+        eq(checks.businessDate, businessDate),
+        eq(checks.status, "closed")
+      ));
+    
+    let totalSales = 0;
+    for (const check of dayChecks) {
+      totalSales += parseFloat(check.total || "0");
+    }
+
+    // Get labor hours and cost
+    const dayTimecards = await this.getTimecards({ propertyId, businessDate });
+    
+    let laborHours = 0;
+    let laborCost = 0;
+    let headcount = dayTimecards.length;
+
+    for (const tc of dayTimecards) {
+      laborHours += parseFloat(tc.totalHours || "0");
+      laborCost += parseFloat(tc.totalPay || "0");
+    }
+
+    const laborPercentage = totalSales > 0 ? (laborCost / totalSales) * 100 : 0;
+    const salesPerLaborHour = laborHours > 0 ? totalSales / laborHours : 0;
+
+    // Check for existing snapshot
+    const existing = await db.select().from(laborSnapshots)
+      .where(and(eq(laborSnapshots.propertyId, propertyId), eq(laborSnapshots.businessDate, businessDate)))
+      .limit(1);
+
+    const snapshotData = {
+      totalSales: totalSales.toFixed(2),
+      laborHours: laborHours.toFixed(2),
+      laborCost: laborCost.toFixed(2),
+      laborPercentage: laborPercentage.toFixed(2),
+      salesPerLaborHour: salesPerLaborHour.toFixed(2),
+      headcount,
+    };
+
+    if (existing.length > 0) {
+      const [result] = await db.update(laborSnapshots)
+        .set({ ...snapshotData, updatedAt: new Date() })
+        .where(eq(laborSnapshots.id, existing[0].id))
+        .returning();
+      return result;
+    }
+
+    return this.createLaborSnapshot({
+      propertyId,
+      businessDate,
+      ...snapshotData,
+    });
   }
 }
 

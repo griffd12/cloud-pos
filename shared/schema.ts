@@ -984,3 +984,589 @@ export type DeviceEnrollmentToken = typeof deviceEnrollmentTokens.$inferSelect;
 export type InsertDeviceEnrollmentToken = z.infer<typeof insertDeviceEnrollmentTokenSchema>;
 export type DeviceHeartbeat = typeof deviceHeartbeats.$inferSelect;
 export type InsertDeviceHeartbeat = z.infer<typeof insertDeviceHeartbeatSchema>;
+
+// ============================================================================
+// TIME & ATTENDANCE - JOB CODES
+// ============================================================================
+
+export const JOB_CODE_TIP_MODES = ["not_eligible", "pooled", "direct", "both"] as const;
+export type JobCodeTipMode = typeof JOB_CODE_TIP_MODES[number];
+
+export const jobCodes = pgTable("job_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
+  tipMode: text("tip_mode").default("not_eligible"),
+  tipPoolWeight: decimal("tip_pool_weight", { precision: 5, scale: 2 }).default("1.00"),
+  color: text("color").default("#3B82F6"),
+  displayOrder: integer("display_order").default(0),
+  active: boolean("active").default(true),
+});
+
+export const employeeJobCodes = pgTable("employee_job_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  jobCodeId: varchar("job_code_id").notNull().references(() => jobCodes.id),
+  isPrimary: boolean("is_primary").default(false),
+});
+
+export const jobCodesRelations = relations(jobCodes, ({ one, many }) => ({
+  enterprise: one(enterprises, { fields: [jobCodes.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [jobCodes.propertyId], references: [properties.id] }),
+  employeeJobCodes: many(employeeJobCodes),
+}));
+
+export const employeeJobCodesRelations = relations(employeeJobCodes, ({ one }) => ({
+  employee: one(employees, { fields: [employeeJobCodes.employeeId], references: [employees.id] }),
+  jobCode: one(jobCodes, { fields: [employeeJobCodes.jobCodeId], references: [jobCodes.id] }),
+}));
+
+// ============================================================================
+// TIME & ATTENDANCE - PAY PERIODS
+// ============================================================================
+
+export const PAY_PERIOD_STATUSES = ["open", "pending_review", "locked", "exported"] as const;
+export type PayPeriodStatus = typeof PAY_PERIOD_STATUSES[number];
+
+export const payPeriods = pgTable("pay_periods", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name"),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  status: text("status").default("open"),
+  lockedAt: timestamp("locked_at"),
+  lockedById: varchar("locked_by_id").references(() => employees.id),
+  exportedAt: timestamp("exported_at"),
+  exportedById: varchar("exported_by_id").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const payPeriodsRelations = relations(payPeriods, ({ one }) => ({
+  property: one(properties, { fields: [payPeriods.propertyId], references: [properties.id] }),
+  lockedBy: one(employees, { fields: [payPeriods.lockedById], references: [employees.id] }),
+  exportedBy: one(employees, { fields: [payPeriods.exportedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// TIME & ATTENDANCE - TIME PUNCHES
+// ============================================================================
+
+export const PUNCH_TYPES = ["clock_in", "clock_out", "break_start", "break_end"] as const;
+export type PunchType = typeof PUNCH_TYPES[number];
+
+export const PUNCH_SOURCES = ["pos", "web", "mobile", "manager_edit", "system"] as const;
+export type PunchSource = typeof PUNCH_SOURCES[number];
+
+export const timePunches = pgTable("time_punches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  jobCodeId: varchar("job_code_id").references(() => jobCodes.id),
+  punchType: text("punch_type").notNull(),
+  actualTimestamp: timestamp("actual_timestamp").notNull(),
+  roundedTimestamp: timestamp("rounded_timestamp"),
+  businessDate: text("business_date").notNull(),
+  source: text("source").default("pos"),
+  notes: text("notes"),
+  isEdited: boolean("is_edited").default(false),
+  originalTimestamp: timestamp("original_timestamp"),
+  editedById: varchar("edited_by_id").references(() => employees.id),
+  editedAt: timestamp("edited_at"),
+  editReason: text("edit_reason"),
+  voided: boolean("voided").default(false),
+  voidedById: varchar("voided_by_id").references(() => employees.id),
+  voidedAt: timestamp("voided_at"),
+  voidReason: text("void_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const timePunchesRelations = relations(timePunches, ({ one }) => ({
+  property: one(properties, { fields: [timePunches.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [timePunches.employeeId], references: [employees.id] }),
+  jobCode: one(jobCodes, { fields: [timePunches.jobCodeId], references: [jobCodes.id] }),
+  editedBy: one(employees, { fields: [timePunches.editedById], references: [employees.id] }),
+  voidedBy: one(employees, { fields: [timePunches.voidedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// TIME & ATTENDANCE - BREAK SESSIONS
+// ============================================================================
+
+export const BREAK_TYPES = ["paid", "unpaid", "meal", "rest"] as const;
+export type BreakType = typeof BREAK_TYPES[number];
+
+export const breakSessions = pgTable("break_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  businessDate: text("business_date").notNull(),
+  breakType: text("break_type").default("unpaid"),
+  startPunchId: varchar("start_punch_id").references(() => timePunches.id),
+  endPunchId: varchar("end_punch_id").references(() => timePunches.id),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  scheduledMinutes: integer("scheduled_minutes"),
+  actualMinutes: integer("actual_minutes"),
+  isPaid: boolean("is_paid").default(false),
+  isViolation: boolean("is_violation").default(false),
+  violationNotes: text("violation_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const breakSessionsRelations = relations(breakSessions, ({ one }) => ({
+  property: one(properties, { fields: [breakSessions.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [breakSessions.employeeId], references: [employees.id] }),
+  startPunch: one(timePunches, { fields: [breakSessions.startPunchId], references: [timePunches.id] }),
+  endPunch: one(timePunches, { fields: [breakSessions.endPunchId], references: [timePunches.id] }),
+}));
+
+// ============================================================================
+// TIME & ATTENDANCE - TIMECARDS
+// ============================================================================
+
+export const timecards = pgTable("timecards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  payPeriodId: varchar("pay_period_id").references(() => payPeriods.id),
+  businessDate: text("business_date").notNull(),
+  jobCodeId: varchar("job_code_id").references(() => jobCodes.id),
+  clockInTime: timestamp("clock_in_time"),
+  clockOutTime: timestamp("clock_out_time"),
+  regularHours: decimal("regular_hours", { precision: 6, scale: 2 }).default("0"),
+  overtimeHours: decimal("overtime_hours", { precision: 6, scale: 2 }).default("0"),
+  doubleTimeHours: decimal("double_time_hours", { precision: 6, scale: 2 }).default("0"),
+  breakMinutes: integer("break_minutes").default(0),
+  paidBreakMinutes: integer("paid_break_minutes").default(0),
+  unpaidBreakMinutes: integer("unpaid_break_minutes").default(0),
+  totalHours: decimal("total_hours", { precision: 6, scale: 2 }).default("0"),
+  regularPay: decimal("regular_pay", { precision: 10, scale: 2 }).default("0"),
+  overtimePay: decimal("overtime_pay", { precision: 10, scale: 2 }).default("0"),
+  totalPay: decimal("total_pay", { precision: 10, scale: 2 }).default("0"),
+  tips: decimal("tips", { precision: 10, scale: 2 }).default("0"),
+  status: text("status").default("open"),
+  approvedById: varchar("approved_by_id").references(() => employees.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const timecardsRelations = relations(timecards, ({ one }) => ({
+  property: one(properties, { fields: [timecards.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [timecards.employeeId], references: [employees.id] }),
+  payPeriod: one(payPeriods, { fields: [timecards.payPeriodId], references: [payPeriods.id] }),
+  jobCode: one(jobCodes, { fields: [timecards.jobCodeId], references: [jobCodes.id] }),
+  approvedBy: one(employees, { fields: [timecards.approvedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// TIME & ATTENDANCE - EXCEPTIONS
+// ============================================================================
+
+export const EXCEPTION_TYPES = [
+  "missed_punch", "late_clock_in", "early_clock_out", "no_show",
+  "break_violation", "overtime_risk", "overtime_exceeded", "schedule_deviation"
+] as const;
+export type ExceptionType = typeof EXCEPTION_TYPES[number];
+
+export const EXCEPTION_STATUSES = ["pending", "acknowledged", "resolved", "dismissed"] as const;
+export type ExceptionStatus = typeof EXCEPTION_STATUSES[number];
+
+export const timecardExceptions = pgTable("timecard_exceptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  timecardId: varchar("timecard_id").references(() => timecards.id),
+  timePunchId: varchar("time_punch_id").references(() => timePunches.id),
+  exceptionType: text("exception_type").notNull(),
+  businessDate: text("business_date").notNull(),
+  description: text("description"),
+  severity: text("severity").default("warning"),
+  status: text("status").default("pending"),
+  resolvedById: varchar("resolved_by_id").references(() => employees.id),
+  resolvedAt: timestamp("resolved_at"),
+  resolutionNotes: text("resolution_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const timecardExceptionsRelations = relations(timecardExceptions, ({ one }) => ({
+  property: one(properties, { fields: [timecardExceptions.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [timecardExceptions.employeeId], references: [employees.id] }),
+  timecard: one(timecards, { fields: [timecardExceptions.timecardId], references: [timecards.id] }),
+  timePunch: one(timePunches, { fields: [timecardExceptions.timePunchId], references: [timePunches.id] }),
+  resolvedBy: one(employees, { fields: [timecardExceptions.resolvedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// TIME & ATTENDANCE - AUDIT LOG FOR EDITS
+// ============================================================================
+
+export const timecardEdits = pgTable("timecard_edits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  targetType: text("target_type").notNull(),
+  targetId: varchar("target_id").notNull(),
+  editType: text("edit_type").notNull(),
+  beforeValue: jsonb("before_value"),
+  afterValue: jsonb("after_value"),
+  reasonCode: text("reason_code"),
+  notes: text("notes"),
+  editedById: varchar("edited_by_id").notNull().references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const timecardEditsRelations = relations(timecardEdits, ({ one }) => ({
+  property: one(properties, { fields: [timecardEdits.propertyId], references: [properties.id] }),
+  editedBy: one(employees, { fields: [timecardEdits.editedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// SCHEDULING - AVAILABILITY
+// ============================================================================
+
+export const AVAILABILITY_TYPES = ["available", "preferred", "unavailable"] as const;
+export type AvailabilityType = typeof AVAILABILITY_TYPES[number];
+
+export const employeeAvailability = pgTable("employee_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  dayOfWeek: integer("day_of_week"),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  availabilityType: text("availability_type").default("available"),
+  effectiveFrom: text("effective_from"),
+  effectiveTo: text("effective_to"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const availabilityExceptions = pgTable("availability_exceptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  exceptionDate: text("exception_date").notNull(),
+  isAvailable: boolean("is_available").default(false),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const employeeAvailabilityRelations = relations(employeeAvailability, ({ one }) => ({
+  employee: one(employees, { fields: [employeeAvailability.employeeId], references: [employees.id] }),
+  property: one(properties, { fields: [employeeAvailability.propertyId], references: [properties.id] }),
+}));
+
+export const availabilityExceptionsRelations = relations(availabilityExceptions, ({ one }) => ({
+  employee: one(employees, { fields: [availabilityExceptions.employeeId], references: [employees.id] }),
+  property: one(properties, { fields: [availabilityExceptions.propertyId], references: [properties.id] }),
+}));
+
+// ============================================================================
+// SCHEDULING - TIME OFF REQUESTS
+// ============================================================================
+
+export const TIME_OFF_STATUSES = ["submitted", "approved", "denied", "cancelled"] as const;
+export type TimeOffStatus = typeof TIME_OFF_STATUSES[number];
+
+export const timeOffRequests = pgTable("time_off_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  requestType: text("request_type").default("pto"),
+  reasonCode: text("reason_code"),
+  notes: text("notes"),
+  status: text("status").default("submitted"),
+  reviewedById: varchar("reviewed_by_id").references(() => employees.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const timeOffRequestsRelations = relations(timeOffRequests, ({ one }) => ({
+  employee: one(employees, { fields: [timeOffRequests.employeeId], references: [employees.id] }),
+  property: one(properties, { fields: [timeOffRequests.propertyId], references: [properties.id] }),
+  reviewedBy: one(employees, { fields: [timeOffRequests.reviewedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// SCHEDULING - SHIFTS
+// ============================================================================
+
+export const SHIFT_STATUSES = ["draft", "published", "acknowledged", "completed", "cancelled"] as const;
+export type ShiftStatus = typeof SHIFT_STATUSES[number];
+
+export const shiftTemplates = pgTable("shift_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull(),
+  jobCodeId: varchar("job_code_id").references(() => jobCodes.id),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  breakMinutes: integer("break_minutes").default(0),
+  color: text("color"),
+  notes: text("notes"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const shifts = pgTable("shifts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  jobCodeId: varchar("job_code_id").references(() => jobCodes.id),
+  templateId: varchar("template_id").references(() => shiftTemplates.id),
+  shiftDate: text("shift_date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  scheduledBreakMinutes: integer("scheduled_break_minutes").default(0),
+  status: text("status").default("draft"),
+  notes: text("notes"),
+  publishedAt: timestamp("published_at"),
+  publishedById: varchar("published_by_id").references(() => employees.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const shiftsRelations = relations(shifts, ({ one }) => ({
+  property: one(properties, { fields: [shifts.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [shifts.rvcId], references: [rvcs.id] }),
+  employee: one(employees, { fields: [shifts.employeeId], references: [employees.id] }),
+  jobCode: one(jobCodes, { fields: [shifts.jobCodeId], references: [jobCodes.id] }),
+  template: one(shiftTemplates, { fields: [shifts.templateId], references: [shiftTemplates.id] }),
+  publishedBy: one(employees, { fields: [shifts.publishedById], references: [employees.id] }),
+}));
+
+export const shiftTemplatesRelations = relations(shiftTemplates, ({ one, many }) => ({
+  property: one(properties, { fields: [shiftTemplates.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [shiftTemplates.rvcId], references: [rvcs.id] }),
+  jobCode: one(jobCodes, { fields: [shiftTemplates.jobCodeId], references: [jobCodes.id] }),
+  shifts: many(shifts),
+}));
+
+// ============================================================================
+// SCHEDULING - SHIFT COVER/SWAP REQUESTS
+// ============================================================================
+
+export const COVER_REQUEST_STATUSES = ["open", "offered", "pending_approval", "approved", "denied", "cancelled", "expired"] as const;
+export type CoverRequestStatus = typeof COVER_REQUEST_STATUSES[number];
+
+export const shiftCoverRequests = pgTable("shift_cover_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shiftId: varchar("shift_id").notNull().references(() => shifts.id),
+  requesterId: varchar("requester_id").notNull().references(() => employees.id),
+  reason: text("reason"),
+  status: text("status").default("open"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const shiftCoverOffers = pgTable("shift_cover_offers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coverRequestId: varchar("cover_request_id").notNull().references(() => shiftCoverRequests.id),
+  offererId: varchar("offerer_id").notNull().references(() => employees.id),
+  notes: text("notes"),
+  status: text("status").default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const shiftCoverApprovals = pgTable("shift_cover_approvals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coverRequestId: varchar("cover_request_id").notNull().references(() => shiftCoverRequests.id),
+  offerId: varchar("offer_id").references(() => shiftCoverOffers.id),
+  approvedById: varchar("approved_by_id").notNull().references(() => employees.id),
+  approved: boolean("approved").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const shiftCoverRequestsRelations = relations(shiftCoverRequests, ({ one, many }) => ({
+  shift: one(shifts, { fields: [shiftCoverRequests.shiftId], references: [shifts.id] }),
+  requester: one(employees, { fields: [shiftCoverRequests.requesterId], references: [employees.id] }),
+  offers: many(shiftCoverOffers),
+  approvals: many(shiftCoverApprovals),
+}));
+
+export const shiftCoverOffersRelations = relations(shiftCoverOffers, ({ one }) => ({
+  coverRequest: one(shiftCoverRequests, { fields: [shiftCoverOffers.coverRequestId], references: [shiftCoverRequests.id] }),
+  offerer: one(employees, { fields: [shiftCoverOffers.offererId], references: [employees.id] }),
+}));
+
+export const shiftCoverApprovalsRelations = relations(shiftCoverApprovals, ({ one }) => ({
+  coverRequest: one(shiftCoverRequests, { fields: [shiftCoverApprovals.coverRequestId], references: [shiftCoverRequests.id] }),
+  offer: one(shiftCoverOffers, { fields: [shiftCoverApprovals.offerId], references: [shiftCoverOffers.id] }),
+  approvedBy: one(employees, { fields: [shiftCoverApprovals.approvedById], references: [employees.id] }),
+}));
+
+// ============================================================================
+// TIP POOLING
+// ============================================================================
+
+export const TIP_POOL_CALC_METHODS = ["hours_worked", "points", "equal", "custom"] as const;
+export type TipPoolCalcMethod = typeof TIP_POOL_CALC_METHODS[number];
+
+export const tipPoolPolicies = pgTable("tip_pool_policies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull(),
+  calculationMethod: text("calculation_method").default("hours_worked"),
+  roleWeights: jsonb("role_weights"),
+  excludedJobCodeIds: text("excluded_job_code_ids").array(),
+  excludeManagers: boolean("exclude_managers").default(true),
+  excludeTraining: boolean("exclude_training").default(true),
+  minimumHoursRequired: decimal("minimum_hours_required", { precision: 4, scale: 2 }).default("0"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tipPoolRuns = pgTable("tip_pool_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  policyId: varchar("policy_id").references(() => tipPoolPolicies.id),
+  businessDate: text("business_date").notNull(),
+  totalTips: decimal("total_tips", { precision: 10, scale: 2 }).default("0"),
+  totalHours: decimal("total_hours", { precision: 10, scale: 2 }).default("0"),
+  participantCount: integer("participant_count").default(0),
+  status: text("status").default("pending"),
+  runById: varchar("run_by_id").references(() => employees.id),
+  runAt: timestamp("run_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tipAllocations = pgTable("tip_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tipPoolRunId: varchar("tip_pool_run_id").notNull().references(() => tipPoolRuns.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  hoursWorked: decimal("hours_worked", { precision: 6, scale: 2 }).default("0"),
+  pointsEarned: decimal("points_earned", { precision: 6, scale: 2 }).default("0"),
+  sharePercentage: decimal("share_percentage", { precision: 5, scale: 2 }).default("0"),
+  allocatedAmount: decimal("allocated_amount", { precision: 10, scale: 2 }).default("0"),
+  directTips: decimal("direct_tips", { precision: 10, scale: 2 }).default("0"),
+  totalTips: decimal("total_tips", { precision: 10, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tipPoolPoliciesRelations = relations(tipPoolPolicies, ({ one, many }) => ({
+  property: one(properties, { fields: [tipPoolPolicies.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [tipPoolPolicies.rvcId], references: [rvcs.id] }),
+  runs: many(tipPoolRuns),
+}));
+
+export const tipPoolRunsRelations = relations(tipPoolRuns, ({ one, many }) => ({
+  property: one(properties, { fields: [tipPoolRuns.propertyId], references: [properties.id] }),
+  policy: one(tipPoolPolicies, { fields: [tipPoolRuns.policyId], references: [tipPoolPolicies.id] }),
+  runBy: one(employees, { fields: [tipPoolRuns.runById], references: [employees.id] }),
+  allocations: many(tipAllocations),
+}));
+
+export const tipAllocationsRelations = relations(tipAllocations, ({ one }) => ({
+  tipPoolRun: one(tipPoolRuns, { fields: [tipAllocations.tipPoolRunId], references: [tipPoolRuns.id] }),
+  employee: one(employees, { fields: [tipAllocations.employeeId], references: [employees.id] }),
+}));
+
+// ============================================================================
+// LABOR VS SALES ANALYTICS
+// ============================================================================
+
+export const laborSnapshots = pgTable("labor_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  businessDate: text("business_date").notNull(),
+  hour: integer("hour"),
+  daypart: text("daypart"),
+  totalSales: decimal("total_sales", { precision: 12, scale: 2 }).default("0"),
+  laborHours: decimal("labor_hours", { precision: 8, scale: 2 }).default("0"),
+  laborCost: decimal("labor_cost", { precision: 10, scale: 2 }).default("0"),
+  laborPercentage: decimal("labor_percentage", { precision: 5, scale: 2 }).default("0"),
+  salesPerLaborHour: decimal("sales_per_labor_hour", { precision: 10, scale: 2 }).default("0"),
+  headcount: integer("headcount").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const laborSnapshotsRelations = relations(laborSnapshots, ({ one }) => ({
+  property: one(properties, { fields: [laborSnapshots.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [laborSnapshots.rvcId], references: [rvcs.id] }),
+}));
+
+// ============================================================================
+// T&A INSERT SCHEMAS AND TYPES
+// ============================================================================
+
+export const insertJobCodeSchema = createInsertSchema(jobCodes).omit({ id: true });
+export const insertEmployeeJobCodeSchema = createInsertSchema(employeeJobCodes).omit({ id: true });
+export const insertPayPeriodSchema = createInsertSchema(payPeriods).omit({ id: true, createdAt: true });
+export const insertTimePunchSchema = createInsertSchema(timePunches).omit({ id: true, createdAt: true });
+export const insertBreakSessionSchema = createInsertSchema(breakSessions).omit({ id: true, createdAt: true });
+export const insertTimecardSchema = createInsertSchema(timecards).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTimecardExceptionSchema = createInsertSchema(timecardExceptions).omit({ id: true, createdAt: true });
+export const insertTimecardEditSchema = createInsertSchema(timecardEdits).omit({ id: true, createdAt: true });
+export const insertEmployeeAvailabilitySchema = createInsertSchema(employeeAvailability).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAvailabilityExceptionSchema = createInsertSchema(availabilityExceptions).omit({ id: true, createdAt: true });
+export const insertTimeOffRequestSchema = createInsertSchema(timeOffRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertShiftTemplateSchema = createInsertSchema(shiftTemplates).omit({ id: true, createdAt: true });
+export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertShiftCoverRequestSchema = createInsertSchema(shiftCoverRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertShiftCoverOfferSchema = createInsertSchema(shiftCoverOffers).omit({ id: true, createdAt: true });
+export const insertShiftCoverApprovalSchema = createInsertSchema(shiftCoverApprovals).omit({ id: true, createdAt: true });
+export const insertTipPoolPolicySchema = createInsertSchema(tipPoolPolicies).omit({ id: true, createdAt: true });
+export const insertTipPoolRunSchema = createInsertSchema(tipPoolRuns).omit({ id: true, createdAt: true });
+export const insertTipAllocationSchema = createInsertSchema(tipAllocations).omit({ id: true, createdAt: true });
+export const insertLaborSnapshotSchema = createInsertSchema(laborSnapshots).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type JobCode = typeof jobCodes.$inferSelect;
+export type InsertJobCode = z.infer<typeof insertJobCodeSchema>;
+export type EmployeeJobCode = typeof employeeJobCodes.$inferSelect;
+export type InsertEmployeeJobCode = z.infer<typeof insertEmployeeJobCodeSchema>;
+export type PayPeriod = typeof payPeriods.$inferSelect;
+export type InsertPayPeriod = z.infer<typeof insertPayPeriodSchema>;
+export type TimePunch = typeof timePunches.$inferSelect;
+export type InsertTimePunch = z.infer<typeof insertTimePunchSchema>;
+export type BreakSession = typeof breakSessions.$inferSelect;
+export type InsertBreakSession = z.infer<typeof insertBreakSessionSchema>;
+export type Timecard = typeof timecards.$inferSelect;
+export type InsertTimecard = z.infer<typeof insertTimecardSchema>;
+export type TimecardException = typeof timecardExceptions.$inferSelect;
+export type InsertTimecardException = z.infer<typeof insertTimecardExceptionSchema>;
+export type TimecardEdit = typeof timecardEdits.$inferSelect;
+export type InsertTimecardEdit = z.infer<typeof insertTimecardEditSchema>;
+export type EmployeeAvailability = typeof employeeAvailability.$inferSelect;
+export type InsertEmployeeAvailability = z.infer<typeof insertEmployeeAvailabilitySchema>;
+export type AvailabilityException = typeof availabilityExceptions.$inferSelect;
+export type InsertAvailabilityException = z.infer<typeof insertAvailabilityExceptionSchema>;
+export type TimeOffRequest = typeof timeOffRequests.$inferSelect;
+export type InsertTimeOffRequest = z.infer<typeof insertTimeOffRequestSchema>;
+export type ShiftTemplate = typeof shiftTemplates.$inferSelect;
+export type InsertShiftTemplate = z.infer<typeof insertShiftTemplateSchema>;
+export type Shift = typeof shifts.$inferSelect;
+export type InsertShift = z.infer<typeof insertShiftSchema>;
+export type ShiftCoverRequest = typeof shiftCoverRequests.$inferSelect;
+export type InsertShiftCoverRequest = z.infer<typeof insertShiftCoverRequestSchema>;
+export type ShiftCoverOffer = typeof shiftCoverOffers.$inferSelect;
+export type InsertShiftCoverOffer = z.infer<typeof insertShiftCoverOfferSchema>;
+export type ShiftCoverApproval = typeof shiftCoverApprovals.$inferSelect;
+export type InsertShiftCoverApproval = z.infer<typeof insertShiftCoverApprovalSchema>;
+export type TipPoolPolicy = typeof tipPoolPolicies.$inferSelect;
+export type InsertTipPoolPolicy = z.infer<typeof insertTipPoolPolicySchema>;
+export type TipPoolRun = typeof tipPoolRuns.$inferSelect;
+export type InsertTipPoolRun = z.infer<typeof insertTipPoolRunSchema>;
+export type TipAllocation = typeof tipAllocations.$inferSelect;
+export type InsertTipAllocation = z.infer<typeof insertTipAllocationSchema>;
+export type LaborSnapshot = typeof laborSnapshots.$inferSelect;
+export type InsertLaborSnapshot = z.infer<typeof insertLaborSnapshotSchema>;

@@ -1,0 +1,331 @@
+You are a senior full-stack engineer building the Scheduling + Time & Attendance (T&A) + Tip Pooling + Labor vs Sales analytics module inside a cloud POS (multi-tenant). Build this as a production-grade feature set with database schema, API endpoints, permissions, UI screens, and workflows.
+
+1) Core Requirements
+A. Employee Self-Service (POS FOH + optional web/mobile)
+
+Clock In / Clock Out
+
+Employees clock in/out from the POS (FOH).
+
+Support PIN-based authentication and role selection (if employee can work multiple roles).
+
+Break Tracking
+
+Start break / end break.
+
+Break types: paid vs unpaid.
+
+Allow break rules to be configured by location/jurisdiction (minimum break length, meal breaks, rest breaks).
+
+Availability
+
+Employees can enter availability:
+
+recurring weekly availability (day-of-week windows)
+
+exceptions (date ranges or single dates)
+
+Time Off Requests
+
+Employees submit time off requests (PTO or unpaid), with reason codes and notes.
+
+Manager approval workflow with status: submitted → approved/denied → scheduled adjustments.
+
+Shift Cover / Swap
+
+Employee can request coverage for an assigned shift.
+
+Other employees can offer to take the shift.
+
+Manager approval rules must be configurable (auto-approve allowed or always manager approve).
+
+Employee Timecard Printing
+
+Employees can view and print their timecard detail report from POS FOH.
+
+Timecard report includes punch history, breaks, edits, totals by day, totals by pay period.
+
+B. Time & Attendance (Manager + Payroll Admin)
+
+Time Punch Storage
+
+Store punches and break punches.
+
+Must support: missed punches, duplicate prevention, and cross-midnight shifts.
+
+Do NOT track workstation/device the employee was at.
+
+Timecard Editing
+
+Managers can create/edit/delete punches and break records.
+
+Edits require reason codes and notes.
+
+Full immutable audit log of all edits (before/after values, who edited, when, why).
+
+Pay Period Locking
+
+Support pay periods per location.
+
+Managers can lock timecards for a pay period after review.
+
+Locked periods prevent further edits unless user has unlock permission.
+
+Unlock requires reason + audit record.
+
+Exception Management
+
+Exception queue for managers: missed punch, late/early, break violation, overtime risk.
+
+Manager review workflow to resolve exceptions.
+
+Payroll Export
+
+Export finalized timecards to CSV (and/or API-based export framework).
+
+Must support mapping fields for payroll providers (generic mapping system).
+
+C. Scheduling (Back Office Web App + Employee View)
+
+Drag-and-Drop Schedule Builder
+
+Week view and day view.
+
+Drag/drop shifts and adjust start/end times.
+
+Copy & Paste Scheduling
+
+Copy a day to another day.
+
+Copy an entire week to another week (next week).
+
+Support schedule templates (save/load).
+
+Lineup Chart
+
+Daily “lineup” visualization showing employees as time bars (start → end).
+
+Filter by role/job code.
+
+Publishing Workflow
+
+Draft schedule → publish.
+
+Employees can view published schedule.
+
+Track schedule change history and notify employees when changed.
+
+D. Labor vs Sales + Tips
+
+Labor vs Sales Reporting
+
+Track labor hours and labor cost (hourly rates optional now, but schema must support it).
+
+Track sales attributed to employees (define attribution model: cashier/owner/closer—make configurable).
+
+Provide reports: sales per labor hour, labor %, labor hours by role and daypart.
+
+Credit Card Tips Capture
+
+POS must store CC tips per check and attribute them to employees (based on who closed the check or another configurable rule).
+
+Tip Pooling / Tip Sharing
+
+Must allow tip pooling allocation by hours worked for a business date.
+
+Allow optional role weights/points (not required for MVP but design must support).
+
+Exclusions: managers, training shifts, non-tip roles (configurable).
+
+Output:
+
+daily tip pool summary
+
+per-employee tip allocation statement
+
+payroll export fields for tips
+
+2) Required Deliverables From You (the AI builder)
+
+Provide all of the following:
+
+A. Database Schema (PostgreSQL)
+
+Include tables (or equivalent) for:
+
+tenants, locations
+
+employees
+
+roles/job_codes (tip eligible, optional weight)
+
+availability + availability_exceptions
+
+shifts (scheduled shifts)
+
+time_punches (clock in/out + break start/end)
+
+timecards or computed time summaries (by pay period)
+
+pay_periods (lock status)
+
+time_off_requests
+
+shift_cover_requests + offers + approvals
+
+sales attribution (check linkage)
+
+tip_records (cc tips, declared tips optional)
+
+tip_pool_runs + tip_allocations
+
+audit_log (immutable)
+
+Notes:
+
+Must support multi-role employees and split shifts.
+
+Must support shifts crossing midnight.
+
+Must support edits with full audit trail.
+
+Must support pay period locking at location level.
+
+B. API Spec (REST, OpenAPI-ready)
+
+Define endpoints and request/response examples for:
+
+auth (assume existing POS auth, just integrate)
+
+clock in/out
+
+break start/end
+
+fetch my schedule
+
+submit availability
+
+submit time off request
+
+approve/deny time off request
+
+schedule CRUD (manager)
+
+publish schedule
+
+request shift cover / accept cover / approve cover
+
+timecard fetch (employee + manager)
+
+timecard edit (manager)
+
+lock/unlock pay period
+
+exception queue list/resolve
+
+tip pool run + tip allocations
+
+labor vs sales reporting endpoints
+
+payroll export endpoint(s)
+
+C. Permissions Matrix (RBAC)
+
+Define roles and permissions clearly:
+
+employee
+
+shift lead (optional)
+
+manager
+
+payroll admin
+
+owner/admin
+Include permissions for edits, approvals, locking/unlocking, exports, and configuration.
+
+D. UI Screen Inventory + UX Behavior
+
+List all screens for:
+
+POS FOH:
+
+clock screen
+
+break screen
+
+my schedule
+
+my timecard + print
+
+(optional) time off request
+
+Back Office:
+
+schedule builder + lineup chart
+
+availability/time off admin
+
+timecard editor + exception queue
+
+pay period lock/export
+
+tips + tip pool configuration and daily run
+
+labor vs sales dashboards
+
+Include UI behaviors:
+
+drag/drop schedule
+
+conflict warnings (availability conflict, OT risk, break violation risk)
+
+publish confirmation
+
+audit log view for edits
+
+E. Edge Case Handling
+
+Explicitly define handling for:
+
+missed punches (employee request vs manager fix)
+
+early/late clock-in policy
+
+rounding rules (configurable)
+
+overtime rules framework (configurable by jurisdiction)
+
+breaks missed/short
+
+shift swap conflicts with existing scheduled shifts
+
+pay period lock integrity (no edits after lock unless unlocked)
+
+cross-midnight shifts and business date cutoffs (configurable)
+
+3) MVP Boundaries (What to Build First)
+
+Build in this order:
+
+Time clock + breaks + timecard view/print + manager edits + audit log + pay period lock
+
+Scheduling drag/drop + copy week + publish + employee schedule view
+
+Availability + time off requests + approvals
+
+Shift cover workflow
+
+Labor vs sales analytics + CC tip capture + tip pooling + payroll export mapping
+
+4) Non-Functional Requirements
+
+Must be multi-tenant and location-aware.
+
+Must be secure (PIN auth, permissions, audit logs).
+
+Must be fast and reliable; no data loss on refresh.
+
+Must support offline-tolerant POS behavior if the core POS is offline-first (queue punches and sync safely).
+
+All edits and approvals must be auditable.

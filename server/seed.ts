@@ -43,16 +43,50 @@ async function seed() {
 
   // Create privileges
   const privilegeData = [
-    { code: "fast_transaction", name: "Fast Transaction Mode" },
-    { code: "send_to_kitchen", name: "Send Orders to Kitchen" },
-    { code: "void_unsent", name: "Void Unsent Items" },
-    { code: "void_sent", name: "Void Sent Items" },
-    { code: "apply_discount", name: "Apply Discounts" },
-    { code: "admin_access", name: "Admin Access" },
-    { code: "kds_access", name: "KDS Access" },
-    { code: "manager_approval", name: "Manager Approval" },
-    { code: "close_check", name: "Close Check" },
-    { code: "reopen_check", name: "Reopen Closed Check" },
+    // POS privileges
+    { code: "fast_transaction", name: "Fast Transaction Mode", domain: "pos" },
+    { code: "send_to_kitchen", name: "Send Orders to Kitchen", domain: "pos" },
+    { code: "void_unsent", name: "Void Unsent Items", domain: "pos" },
+    { code: "void_sent", name: "Void Sent Items", domain: "pos" },
+    { code: "apply_discount", name: "Apply Discounts", domain: "pos" },
+    { code: "admin_access", name: "Admin Access", domain: "admin" },
+    { code: "kds_access", name: "KDS Access", domain: "pos" },
+    { code: "manager_approval", name: "Manager Approval", domain: "manager" },
+    { code: "close_check", name: "Close Check", domain: "pos" },
+    { code: "reopen_check", name: "Reopen Closed Check", domain: "pos" },
+    // Refund privileges
+    { code: "refund", name: "Process Refunds", domain: "pos" },
+    { code: "approve_refund", name: "Approve Refunds", domain: "manager" },
+    // Time & Attendance privileges
+    { code: "clock_in_out", name: "Clock In/Out", domain: "time_attendance" },
+    { code: "view_my_timecard", name: "View My Timecard", domain: "time_attendance" },
+    { code: "view_my_schedule", name: "View My Schedule", domain: "time_attendance" },
+    { code: "request_time_off", name: "Request Time Off", domain: "time_attendance" },
+    { code: "request_shift_cover", name: "Request Shift Cover", domain: "time_attendance" },
+    { code: "offer_shift_cover", name: "Offer to Cover Shift", domain: "time_attendance" },
+    { code: "manage_availability", name: "Manage Availability", domain: "time_attendance" },
+    { code: "timecard_view_all", name: "View All Timecards", domain: "time_attendance" },
+    { code: "timecard_edit", name: "Edit Timecards", domain: "time_attendance" },
+    { code: "timecard_approve", name: "Approve Timecards", domain: "time_attendance" },
+    { code: "pay_period_lock", name: "Lock Pay Periods", domain: "payroll" },
+    { code: "pay_period_unlock", name: "Unlock Pay Periods", domain: "payroll" },
+    { code: "payroll_export", name: "Export Payroll", domain: "payroll" },
+    { code: "exception_manage", name: "Manage Timecard Exceptions", domain: "time_attendance" },
+    // Scheduling privileges
+    { code: "schedule_view", name: "View Schedule", domain: "scheduling" },
+    { code: "schedule_build", name: "Build Schedule", domain: "scheduling" },
+    { code: "schedule_publish", name: "Publish Schedule", domain: "scheduling" },
+    { code: "schedule_copy", name: "Copy Schedule", domain: "scheduling" },
+    { code: "shift_cover_approve", name: "Approve Shift Cover Requests", domain: "scheduling" },
+    { code: "time_off_approve", name: "Approve Time Off Requests", domain: "scheduling" },
+    { code: "availability_manage", name: "Manage Employee Availability", domain: "scheduling" },
+    // Tip pooling privileges
+    { code: "tip_pool_view", name: "View Tip Pool", domain: "tips" },
+    { code: "tip_pool_manage", name: "Manage Tip Pool Policies", domain: "tips" },
+    { code: "tip_pool_settle", name: "Run Tip Pool Settlement", domain: "tips" },
+    // Labor reporting privileges
+    { code: "labor_report_view", name: "View Labor Reports", domain: "reporting" },
+    { code: "labor_vs_sales", name: "View Labor vs Sales", domain: "reporting" },
   ];
   for (const p of privilegeData) {
     await db.insert(privileges).values({ id: randomUUID(), ...p }).onConflictDoNothing();
