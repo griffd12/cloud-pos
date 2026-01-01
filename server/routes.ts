@@ -3004,28 +3004,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Checks Carried Over = started for business date but not closed
+      // Checks Carried Over = checks from PREVIOUS business dates that are still open
+      // These are checks that weren't closed before business date reset
       const checksCarriedOver = checksInScope.filter(c => {
+        if (c.status !== "open") return false; // Only open checks can be carried over
         if (useBusinessDate) {
-          // Started on this business date but still open
-          return c.businessDate === businessDate && c.status === "open";
+          // Open checks from a business date BEFORE the selected date
+          // Guard: both must be valid YYYY-MM-DD strings for comparison
+          if (!c.businessDate || !businessDate) return false;
+          return c.businessDate < (businessDate as string);
         } else {
           if (!c.openedAt) return false;
           const openDate = new Date(c.openedAt);
-          // Opened before end of period
-          if (openDate > end) return false;
-          // Still open OR closed after the period
-          if (c.status === "open") return true;
-          if (c.closedAt) {
-            const closeDate = new Date(c.closedAt);
-            return closeDate > end;
-          }
-          return false;
+          // Opened before the start of the period and still open
+          return openDate < start;
         }
       });
       
-      // Currently open checks (snapshot)
-      const currentlyOpen = checksInScope.filter(c => c.status === "open");
+      // Outstanding checks = all currently open checks in scope
+      // This includes both today's open checks AND any carried over from previous days
+      const checksOutstanding = checksInScope.filter(c => c.status === "open");
       
       // SALES - Based on item businessDate (operating day when items were rung in)
       // If businessDate param provided, filter by businessDate field
@@ -3143,7 +3141,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checksStarted: checksStarted.length,
         checksClosed: checksClosed.length,
         checksCarriedOver: checksCarriedOver.length,
-        openCheckCount: currentlyOpen.length,
+        checksOutstanding: checksOutstanding.length,
+        openCheckCount: checksOutstanding.length, // backwards compatibility
         
         // Averages
         guestCount,

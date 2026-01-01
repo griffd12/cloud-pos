@@ -33,7 +33,7 @@ interface SalesSummary {
   guestCount: number;
   avgCheck: number;
   avgPerGuest: number;
-  openCheckCount: number;
+  checksOutstanding: number;
   // Detailed breakdowns
   baseItemSales: number;
   modifierTotal: number;
@@ -822,27 +822,27 @@ export default function ReportsPage() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Checks Started</p>
-                  <p className="font-medium text-lg" data-testid="text-checks-started">
-                    {salesSummary?.checksStarted || 0}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Checks Closed</p>
-                  <p className="font-medium text-lg" data-testid="text-checks-closed">
-                    {salesSummary?.checksClosed || 0}
-                  </p>
-                </div>
-                <div className="space-y-1">
                   <p className="text-muted-foreground">Carried Over</p>
                   <p className="font-medium text-lg" data-testid="text-checks-carried">
                     {salesSummary?.checksCarriedOver || 0}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Currently Open</p>
-                  <p className="font-medium text-lg" data-testid="text-checks-open">
-                    {salesSummary?.openCheckCount || 0}
+                  <p className="text-muted-foreground">Started</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-started">
+                    {salesSummary?.checksStarted || 0}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Closed</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-closed">
+                    {salesSummary?.checksClosed || 0}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Outstanding</p>
+                  <p className="font-medium text-lg" data-testid="text-checks-outstanding">
+                    {salesSummary?.checksOutstanding || 0}
                   </p>
                 </div>
               </div>
