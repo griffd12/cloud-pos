@@ -5090,6 +5090,146 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Payroll export - generates CSV data for a pay period
+  app.get("/api/pay-periods/:id/export", async (req, res) => {
+    try {
+      const period = await storage.getPayPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Pay period not found" });
+      }
+
+      // Get all timecards for this pay period
+      const timecards = await storage.getTimecards({
+        propertyId: period.propertyId,
+        payPeriodId: period.id,
+      });
+
+      // Get all employees for enrichment
+      const employees = await storage.getEmployees(period.propertyId);
+      const employeeMap = new Map(employees.map(e => [e.id, e]));
+
+      // Get all job codes for enrichment
+      const jobCodes = await storage.getJobCodes(period.propertyId);
+      const jobCodeMap = new Map(jobCodes.map(j => [j.id, j]));
+
+      // Aggregate data per employee
+      const employeeSummaries: Record<string, {
+        employeeId: string;
+        employeeNumber: string;
+        firstName: string;
+        lastName: string;
+        regularHours: number;
+        overtimeHours: number;
+        doubleTimeHours: number;
+        totalHours: number;
+        regularPay: number;
+        overtimePay: number;
+        totalPay: number;
+        breakMinutes: number;
+        daysWorked: number;
+      }> = {};
+
+      for (const tc of timecards) {
+        const emp = employeeMap.get(tc.employeeId);
+        if (!emp) continue;
+
+        if (!employeeSummaries[tc.employeeId]) {
+          employeeSummaries[tc.employeeId] = {
+            employeeId: tc.employeeId,
+            employeeNumber: emp.employeeNumber,
+            firstName: emp.firstName,
+            lastName: emp.lastName,
+            regularHours: 0,
+            overtimeHours: 0,
+            doubleTimeHours: 0,
+            totalHours: 0,
+            regularPay: 0,
+            overtimePay: 0,
+            totalPay: 0,
+            breakMinutes: 0,
+            daysWorked: 0,
+          };
+        }
+
+        const summary = employeeSummaries[tc.employeeId];
+        summary.regularHours += parseFloat(tc.regularHours || "0");
+        summary.overtimeHours += parseFloat(tc.overtimeHours || "0");
+        summary.doubleTimeHours += parseFloat(tc.doubleTimeHours || "0");
+        summary.totalHours += parseFloat(tc.totalHours || "0");
+        summary.regularPay += parseFloat(tc.regularPay || "0");
+        summary.overtimePay += parseFloat(tc.overtimePay || "0");
+        summary.totalPay += parseFloat(tc.totalPay || "0");
+        summary.breakMinutes += tc.breakMinutes || 0;
+        summary.daysWorked += 1;
+      }
+
+      const format = req.query.format || "json";
+      
+      if (format === "csv") {
+        // Generate CSV
+        const headers = [
+          "Employee Number",
+          "First Name",
+          "Last Name",
+          "Regular Hours",
+          "Overtime Hours",
+          "Double Time Hours",
+          "Total Hours",
+          "Regular Pay",
+          "Overtime Pay",
+          "Total Pay",
+          "Break Minutes",
+          "Days Worked"
+        ].join(",");
+
+        const rows = Object.values(employeeSummaries).map(s => [
+          s.employeeNumber,
+          s.firstName,
+          s.lastName,
+          s.regularHours.toFixed(2),
+          s.overtimeHours.toFixed(2),
+          s.doubleTimeHours.toFixed(2),
+          s.totalHours.toFixed(2),
+          s.regularPay.toFixed(2),
+          s.overtimePay.toFixed(2),
+          s.totalPay.toFixed(2),
+          s.breakMinutes,
+          s.daysWorked
+        ].join(","));
+
+        const csv = [headers, ...rows].join("\n");
+        
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="payroll_${period.startDate}_${period.endDate}.csv"`);
+        res.send(csv);
+      } else {
+        // Return JSON
+        res.json({
+          payPeriod: {
+            id: period.id,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            status: period.status,
+          },
+          employees: Object.values(employeeSummaries),
+          totals: {
+            regularHours: Object.values(employeeSummaries).reduce((sum, s) => sum + s.regularHours, 0),
+            overtimeHours: Object.values(employeeSummaries).reduce((sum, s) => sum + s.overtimeHours, 0),
+            doubleTimeHours: Object.values(employeeSummaries).reduce((sum, s) => sum + s.doubleTimeHours, 0),
+            totalHours: Object.values(employeeSummaries).reduce((sum, s) => sum + s.totalHours, 0),
+            regularPay: Object.values(employeeSummaries).reduce((sum, s) => sum + s.regularPay, 0),
+            overtimePay: Object.values(employeeSummaries).reduce((sum, s) => sum + s.overtimePay, 0),
+            totalPay: Object.values(employeeSummaries).reduce((sum, s) => sum + s.totalPay, 0),
+          },
+          exportedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error("Payroll export error:", error);
+      res.status(500).json({ message: "Failed to export payroll" });
+    }
+  });
+
   // === JOB CODES ===
 
   // Get job codes
