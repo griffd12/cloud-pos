@@ -3450,7 +3450,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Discounts Report - Uses businessDate filtering to include discounts from all checks (open and closed)
+  // Discounts Report - Uses item.businessDate filtering to include discounts from all checks with items in scope
   app.get("/api/reports/discounts", async (req, res) => {
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
@@ -3459,6 +3459,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const end = endDate ? new Date(endDate as string) : new Date();
       
       const allChecks = await storage.getChecks();
+      const allCheckItems = await storage.getAllCheckItems();
       const allRvcs = await storage.getRvcs();
       const employees = await storage.getEmployees();
       
@@ -3472,25 +3473,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checksInScope = checksInScope.filter(c => c.rvcId === rvcId);
       }
       
-      // Filter by businessDate or date range - include ALL checks (open and closed)
-      const filteredChecks = checksInScope.filter(c => {
+      const checkIdsInScope = new Set(checksInScope.map(c => c.id));
+      const checkMap = new Map(checksInScope.map(c => [c.id, c]));
+      
+      // Filter items by businessDate - this determines which checks have in-scope sales
+      const itemsInScope = allCheckItems.filter(item => {
+        if (!checkIdsInScope.has(item.checkId)) return false;
+        if (item.voided) return false;
         if (useBusinessDate) {
-          return c.businessDate === businessDate;
+          return item.businessDate === businessDate;
         }
-        // For date range, use businessDate if available, otherwise fall back to openedAt
-        const checkDate = c.businessDate ? new Date(c.businessDate + "T12:00:00") : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        return checkDate >= start && checkDate <= end;
+        // For date range, use item's businessDate if available
+        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.sentAt ? new Date(item.sentAt) : null);
+        if (!itemDate) return false;
+        return itemDate >= start && itemDate <= end;
       });
+      
+      // Get checks that have items in scope
+      const checkIdsWithItems = new Set(itemsInScope.map(i => i.checkId));
       
       const discountsByEmployee: Record<string, { name: string; count: number; amount: number }> = {};
       let totalDiscountAmount = 0;
       let totalDiscountCount = 0;
       
-      for (const check of filteredChecks) {
-        const discountAmount = parseFloat(check.discountTotal || "0");
-        if (discountAmount > 0) {
-          totalDiscountAmount += discountAmount;
+      // Attribute discounts proportionally based on items in scope
+      for (const checkId of checkIdsWithItems) {
+        const check = checkMap.get(checkId);
+        if (!check) continue;
+        
+        const checkDiscount = parseFloat(check.discountTotal || "0");
+        if (checkDiscount <= 0) continue;
+        
+        // Get all items for this check (for proportion calculation)
+        const allCheckItemsForCheck = allCheckItems.filter(i => i.checkId === checkId && !i.voided);
+        const checkTotalItemValue = allCheckItemsForCheck.reduce((sum, i) => sum + parseFloat(i.unitPrice) * (i.quantity || 1), 0);
+        
+        // Get in-scope items for this check
+        const inScopeItemsForCheck = itemsInScope.filter(i => i.checkId === checkId);
+        const inScopeValue = inScopeItemsForCheck.reduce((sum, i) => sum + parseFloat(i.unitPrice) * (i.quantity || 1), 0);
+        
+        // Calculate proportional discount
+        const proportion = checkTotalItemValue > 0 ? inScopeValue / checkTotalItemValue : 0;
+        const attributedDiscount = checkDiscount * proportion;
+        
+        if (attributedDiscount > 0) {
+          totalDiscountAmount += attributedDiscount;
           totalDiscountCount += 1;
           
           // By employee who rang the check
@@ -3501,7 +3528,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             discountsByEmployee[empId] = { name: empName, count: 0, amount: 0 };
           }
           discountsByEmployee[empId].count += 1;
-          discountsByEmployee[empId].amount += discountAmount;
+          discountsByEmployee[empId].amount += attributedDiscount;
         }
       }
       
@@ -3642,7 +3669,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         salesByEmployee[empId].grossSales += itemTotal;
       }
       
-      // Count checks per employee and calculate net sales
+      // Count checks per employee and calculate net sales with proportional discount attribution
       for (const empId of Object.keys(salesByEmployee)) {
         const checkIds = employeeChecks[empId];
         salesByEmployee[empId].checkCount = checkIds.size;
@@ -3653,14 +3680,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         for (const checkId of checkIds) {
           const check = checkMap.get(checkId);
-          if (check) {
-            totalDiscount += parseFloat(check.discountTotal || "0");
-            if (check.status === "closed") {
-              closedCount++;
-            } else {
-              openCount++;
-            }
+          if (!check) continue;
+          
+          if (check.status === "closed") {
+            closedCount++;
+          } else {
+            openCount++;
           }
+          
+          // Calculate proportional discount attribution
+          // Get all items for this check (for proportion calculation)
+          const allCheckItemsForCheck = allCheckItems.filter(i => i.checkId === checkId && !i.voided);
+          const checkTotalItemValue = allCheckItemsForCheck.reduce((sum, i) => sum + parseFloat(i.unitPrice) * (i.quantity || 1), 0);
+          
+          // Get in-scope items for this check
+          const inScopeItemsForCheck = itemsInScope.filter(i => i.checkId === checkId);
+          const inScopeValue = inScopeItemsForCheck.reduce((sum, i) => sum + parseFloat(i.unitPrice) * (i.quantity || 1), 0);
+          
+          // Attribute discount proportionally
+          const proportion = checkTotalItemValue > 0 ? inScopeValue / checkTotalItemValue : 0;
+          totalDiscount += parseFloat(check.discountTotal || "0") * proportion;
         }
         
         salesByEmployee[empId].closedCheckCount = closedCount;
@@ -4549,11 +4588,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdsInScope = new Set(checksInScope.map(c => c.id));
       const checkMap = new Map(checksInScope.map(c => [c.id, c]));
       
+      // Helper to format date as YYYY-MM-DD in local timezone (not UTC)
+      const formatBusinessDate = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
       // Helper to calculate sales for a date range using businessDate on items
       const calculateSales = (startDate: Date, endDate: Date) => {
-        // Convert dates to YYYY-MM-DD strings for businessDate comparison
-        const startStr = startDate.toISOString().split('T')[0];
-        const endStr = endDate.toISOString().split('T')[0];
+        // Convert dates to YYYY-MM-DD strings for businessDate comparison (local timezone)
+        const startStr = formatBusinessDate(startDate);
+        const endStr = formatBusinessDate(endDate);
         
         // Filter items by businessDate range
         const itemsInRange = allCheckItems.filter(item => {
@@ -4563,35 +4610,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return item.businessDate >= startStr && item.businessDate <= endStr;
         });
         
-        // Get unique checks that have items in this range
-        const checkIdsWithItems = new Set(itemsInRange.map(i => i.checkId));
-        const checksWithItems = [...checkIdsWithItems].map(id => checkMap.get(id)).filter(Boolean) as typeof checksInScope;
-        
         // Calculate gross sales from items
         const grossSales = itemsInRange.reduce((sum, item) => {
           return sum + (parseFloat(item.unitPrice) * (item.quantity || 1));
         }, 0);
         
-        // Get discounts from checks that have items in range
-        const discounts = checksWithItems.reduce((sum, c) => sum + parseFloat(c.discountTotal || "0"), 0);
+        // Get unique checks that have items in this range
+        const checkIdsWithItems = new Set(itemsInRange.map(i => i.checkId));
+        
+        // For each check with items in range, calculate proportional discount and tax
+        let totalDiscounts = 0;
+        let totalTax = 0;
+        
+        for (const checkId of checkIdsWithItems) {
+          const check = checkMap.get(checkId);
+          if (!check) continue;
+          
+          // Get all items for this check (for proportion calculation)
+          const allCheckItemsForCheck = allCheckItems.filter(i => i.checkId === checkId && !i.voided);
+          const checkTotalItemValue = allCheckItemsForCheck.reduce((sum, i) => sum + parseFloat(i.unitPrice) * (i.quantity || 1), 0);
+          
+          // Get items in range for this check
+          const inRangeItems = itemsInRange.filter(i => i.checkId === checkId);
+          const inRangeValue = inRangeItems.reduce((sum, i) => sum + parseFloat(i.unitPrice) * (i.quantity || 1), 0);
+          
+          // Calculate proportion of check's discount/tax to attribute to in-range items
+          const proportion = checkTotalItemValue > 0 ? inRangeValue / checkTotalItemValue : 0;
+          totalDiscounts += parseFloat(check.discountTotal || "0") * proportion;
+          totalTax += parseFloat(check.taxTotal || "0") * proportion;
+        }
         
         // Net sales = gross - discounts
-        const netSales = grossSales - discounts;
-        
-        // Tax from checks (proportional to items in range - simplified, use check tax)
-        const tax = checksWithItems.reduce((sum, c) => sum + parseFloat(c.taxTotal || "0"), 0);
+        const netSales = grossSales - totalDiscounts;
         
         // Total = net + tax
-        const total = netSales + tax;
+        const total = netSales + totalTax;
         
         return {
-          checkCount: checksWithItems.length,
+          checkCount: checkIdsWithItems.size,
           grossSales,
-          discounts,
+          discounts: totalDiscounts,
           netSales,
-          tax,
+          tax: totalTax,
           total,
-          avgCheck: checksWithItems.length > 0 ? total / checksWithItems.length : 0,
+          avgCheck: checkIdsWithItems.size > 0 ? total / checkIdsWithItems.size : 0,
         };
       };
       
