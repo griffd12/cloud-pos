@@ -2,9 +2,11 @@ import { db } from "./db";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges,
   employees, slus, menuItems, menuItemSlus, taxGroups, printClasses,
-  modifierGroups, modifiers, menuItemModifierGroups, tenders, discounts
+  modifierGroups, modifiers, menuItemModifierGroups, tenders, discounts,
+  jobCodes, employeeJobCodes, timecards, shifts, tipPoolPolicies, payPeriods
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { format, subDays, addDays } from "date-fns";
 
 async function seed() {
   console.log("Seeding database...");
@@ -345,13 +347,188 @@ async function seed() {
   }
   console.log("Created discounts");
 
+  // ============================================================================
+  // TIME & ATTENDANCE SAMPLE DATA
+  // ============================================================================
+
+  // Job Codes
+  const [serverJobCode] = await db.insert(jobCodes).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    name: "Server",
+    code: "SVR",
+    basePayRate: "15.00",
+    displayOrder: 1,
+  }).returning();
+
+  const [cookJobCode] = await db.insert(jobCodes).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    name: "Line Cook",
+    code: "COOK",
+    basePayRate: "18.00",
+    displayOrder: 2,
+  }).returning();
+
+  const [hostJobCode] = await db.insert(jobCodes).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    name: "Host",
+    code: "HOST",
+    basePayRate: "12.00",
+    displayOrder: 3,
+  }).returning();
+
+  const [mgrJobCode] = await db.insert(jobCodes).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    name: "Manager",
+    code: "MGR",
+    basePayRate: "25.00",
+    displayOrder: 0,
+  }).returning();
+  console.log("Created job codes: Server, Line Cook, Host, Manager");
+
+  // Assign job codes to employees
+  await db.insert(employeeJobCodes).values({
+    id: randomUUID(),
+    employeeId: manager.id,
+    jobCodeId: mgrJobCode.id,
+    isPrimary: true,
+  });
+  await db.insert(employeeJobCodes).values({
+    id: randomUUID(),
+    employeeId: server.id,
+    jobCodeId: serverJobCode.id,
+    isPrimary: true,
+  });
+  console.log("Assigned job codes to employees");
+
+  // Create a current pay period
+  const today = new Date();
+  const payPeriodStart = format(subDays(today, 7), "yyyy-MM-dd");
+  const payPeriodEnd = format(addDays(today, 6), "yyyy-MM-dd");
+  
+  const [currentPayPeriod] = await db.insert(payPeriods).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    startDate: payPeriodStart,
+    endDate: payPeriodEnd,
+    status: "open",
+  }).returning();
+  console.log(`Created pay period: ${payPeriodStart} to ${payPeriodEnd}`);
+
+  // Sample timecards for past 3 days
+  const sampleDates = [
+    format(subDays(today, 3), "yyyy-MM-dd"),
+    format(subDays(today, 2), "yyyy-MM-dd"),
+    format(subDays(today, 1), "yyyy-MM-dd"),
+  ];
+
+  for (const dateStr of sampleDates) {
+    // Manager timecard
+    await db.insert(timecards).values({
+      id: randomUUID(),
+      propertyId: property.id,
+      employeeId: manager.id,
+      businessDate: dateStr,
+      clockInTime: new Date(`${dateStr}T09:00:00`),
+      clockOutTime: new Date(`${dateStr}T17:30:00`),
+      regularHours: "8.00",
+      overtimeHours: "0.50",
+      totalHours: "8.50",
+      regularPay: "200.00",
+      overtimePay: "18.75",
+      totalPay: "218.75",
+      status: "approved",
+    });
+
+    // Server timecard
+    await db.insert(timecards).values({
+      id: randomUUID(),
+      propertyId: property.id,
+      employeeId: server.id,
+      businessDate: dateStr,
+      clockInTime: new Date(`${dateStr}T11:00:00`),
+      clockOutTime: new Date(`${dateStr}T19:00:00`),
+      regularHours: "7.50",
+      overtimeHours: "0.00",
+      totalHours: "7.50",
+      regularPay: "112.50",
+      overtimePay: "0.00",
+      totalPay: "112.50",
+      breakMinutes: 30,
+      status: "approved",
+    });
+  }
+  console.log("Created sample timecards for past 3 days");
+
+  // Sample shifts for next week
+  const shiftDates = [
+    format(addDays(today, 1), "yyyy-MM-dd"),
+    format(addDays(today, 2), "yyyy-MM-dd"),
+    format(addDays(today, 3), "yyyy-MM-dd"),
+  ];
+
+  for (const dateStr of shiftDates) {
+    await db.insert(shifts).values({
+      id: randomUUID(),
+      propertyId: property.id,
+      rvcId: rvc.id,
+      employeeId: manager.id,
+      shiftDate: dateStr,
+      startTime: "09:00",
+      endTime: "17:00",
+      jobCodeId: mgrJobCode.id,
+      status: "published",
+    });
+
+    await db.insert(shifts).values({
+      id: randomUUID(),
+      propertyId: property.id,
+      rvcId: rvc.id,
+      employeeId: server.id,
+      shiftDate: dateStr,
+      startTime: "11:00",
+      endTime: "19:00",
+      jobCodeId: serverJobCode.id,
+      status: "published",
+    });
+  }
+  console.log("Created sample shifts for next 3 days");
+
+  // Tip Pool Policy - eligibleJobCodes is a JSON object with primary/support arrays
+  await db.insert(tipPoolPolicies).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    name: "FOH Pool",
+    description: "Front of house tip pool based on hours worked",
+    calculationMethod: "hours_worked",
+    eligibleJobCodes: { primary: [serverJobCode.id], support: [hostJobCode.id] },
+    poolPercentage: "100.00",
+    active: true,
+  });
+
+  await db.insert(tipPoolPolicies).values({
+    id: randomUUID(),
+    propertyId: property.id,
+    name: "Equal Split",
+    description: "Equal split among all eligible employees",
+    calculationMethod: "equal_split",
+    eligibleJobCodes: { primary: [serverJobCode.id], support: [] },
+    poolPercentage: "100.00",
+    active: true,
+  });
+  console.log("Created tip pool policies: FOH Pool, Equal Split");
+
   console.log("\n=== Seed Complete ===");
   console.log("Login Credentials:");
   console.log("  Manager: PIN 1234");
   console.log("  Server:  PIN 5678");
   console.log("\nNavigate to /pos to start using the POS system");
   console.log("Navigate to /kds for the Kitchen Display System");
-  console.log("Navigate to /admin for administration\n");
+  console.log("Navigate to /admin for administration");
+  console.log("Navigate to /admin/time-clock for Time & Attendance\n");
 
   process.exit(0);
 }
