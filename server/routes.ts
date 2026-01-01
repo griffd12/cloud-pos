@@ -5699,5 +5699,367 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // TIP POOLING API ROUTES
+  // ============================================================================
+
+  // === TIP POOL POLICIES ===
+
+  // Get tip pool policies
+  app.get("/api/tip-pool-policies", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const policies = await storage.getTipPoolPolicies(propertyId as string);
+      res.json(policies);
+    } catch (error) {
+      console.error("Get tip pool policies error:", error);
+      res.status(500).json({ message: "Failed to get tip pool policies" });
+    }
+  });
+
+  // Get single tip pool policy
+  app.get("/api/tip-pool-policies/:id", async (req, res) => {
+    try {
+      const policy = await storage.getTipPoolPolicy(req.params.id);
+      if (!policy) {
+        return res.status(404).json({ message: "Tip pool policy not found" });
+      }
+      res.json(policy);
+    } catch (error) {
+      console.error("Get tip pool policy error:", error);
+      res.status(500).json({ message: "Failed to get tip pool policy" });
+    }
+  });
+
+  // Create tip pool policy
+  app.post("/api/tip-pool-policies", async (req, res) => {
+    try {
+      const parsed = insertTipPoolPolicySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid tip pool policy data", errors: parsed.error.issues });
+      }
+      const policy = await storage.createTipPoolPolicy(parsed.data);
+      res.status(201).json(policy);
+    } catch (error) {
+      console.error("Create tip pool policy error:", error);
+      res.status(500).json({ message: "Failed to create tip pool policy" });
+    }
+  });
+
+  // Update tip pool policy
+  app.patch("/api/tip-pool-policies/:id", async (req, res) => {
+    try {
+      const policy = await storage.updateTipPoolPolicy(req.params.id, req.body);
+      if (!policy) {
+        return res.status(404).json({ message: "Tip pool policy not found" });
+      }
+      res.json(policy);
+    } catch (error) {
+      console.error("Update tip pool policy error:", error);
+      res.status(500).json({ message: "Failed to update tip pool policy" });
+    }
+  });
+
+  // Delete tip pool policy
+  app.delete("/api/tip-pool-policies/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteTipPoolPolicy(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Tip pool policy not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete tip pool policy error:", error);
+      res.status(500).json({ message: "Failed to delete tip pool policy" });
+    }
+  });
+
+  // === TIP POOL RUNS ===
+
+  // Get tip pool runs
+  app.get("/api/tip-pool-runs", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      const runs = await storage.getTipPoolRuns({
+        propertyId: propertyId as string,
+        businessDate: businessDate as string,
+      });
+      res.json(runs);
+    } catch (error) {
+      console.error("Get tip pool runs error:", error);
+      res.status(500).json({ message: "Failed to get tip pool runs" });
+    }
+  });
+
+  // Get single tip pool run
+  app.get("/api/tip-pool-runs/:id", async (req, res) => {
+    try {
+      const run = await storage.getTipPoolRun(req.params.id);
+      if (!run) {
+        return res.status(404).json({ message: "Tip pool run not found" });
+      }
+      res.json(run);
+    } catch (error) {
+      console.error("Get tip pool run error:", error);
+      res.status(500).json({ message: "Failed to get tip pool run" });
+    }
+  });
+
+  // Create tip pool run (manual)
+  app.post("/api/tip-pool-runs", async (req, res) => {
+    try {
+      const parsed = insertTipPoolRunSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid tip pool run data", errors: parsed.error.issues });
+      }
+      const run = await storage.createTipPoolRun(parsed.data);
+      res.status(201).json(run);
+    } catch (error) {
+      console.error("Create tip pool run error:", error);
+      res.status(500).json({ message: "Failed to create tip pool run" });
+    }
+  });
+
+  // Execute tip pool settlement (calculate and distribute tips)
+  app.post("/api/tip-pool-settlement", async (req, res) => {
+    try {
+      const { propertyId, businessDate, policyId, runById } = req.body;
+      if (!propertyId || !businessDate || !policyId || !runById) {
+        return res.status(400).json({ 
+          message: "Property ID, business date, policy ID, and runner ID are required" 
+        });
+      }
+      
+      const result = await storage.runTipPoolSettlement(propertyId, businessDate, policyId, runById);
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Tip pool settlement error:", error);
+      res.status(500).json({ message: "Failed to run tip pool settlement" });
+    }
+  });
+
+  // === TIP ALLOCATIONS ===
+
+  // Get tip allocations for a run
+  app.get("/api/tip-pool-runs/:runId/allocations", async (req, res) => {
+    try {
+      const allocations = await storage.getTipAllocations(req.params.runId);
+      res.json(allocations);
+    } catch (error) {
+      console.error("Get tip allocations error:", error);
+      res.status(500).json({ message: "Failed to get tip allocations" });
+    }
+  });
+
+  // ============================================================================
+  // LABOR ANALYTICS API ROUTES
+  // ============================================================================
+
+  // === LABOR SNAPSHOTS ===
+
+  // Get labor snapshots
+  app.get("/api/labor-snapshots", async (req, res) => {
+    try {
+      const { propertyId, rvcId, businessDate, startDate, endDate } = req.query;
+      const snapshots = await storage.getLaborSnapshots({
+        propertyId: propertyId as string,
+        rvcId: rvcId as string,
+        businessDate: businessDate as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
+      });
+      res.json(snapshots);
+    } catch (error) {
+      console.error("Get labor snapshots error:", error);
+      res.status(500).json({ message: "Failed to get labor snapshots" });
+    }
+  });
+
+  // Calculate/refresh labor snapshot for a business date
+  app.post("/api/labor-snapshots/calculate", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.body;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+      const snapshot = await storage.calculateLaborSnapshot(propertyId, businessDate);
+      res.status(201).json(snapshot);
+    } catch (error) {
+      console.error("Calculate labor snapshot error:", error);
+      res.status(500).json({ message: "Failed to calculate labor snapshot" });
+    }
+  });
+
+  // === LABOR VS SALES REPORT ===
+
+  // Get labor vs sales summary for a date range
+  app.get("/api/reports/labor-vs-sales", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      if (!propertyId || !startDate || !endDate) {
+        return res.status(400).json({ message: "Property ID, start date, and end date are required" });
+      }
+      
+      const snapshots = await storage.getLaborSnapshots({
+        propertyId: propertyId as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
+      });
+      
+      // Aggregate the data
+      const summary = {
+        propertyId,
+        startDate,
+        endDate,
+        totalSales: 0,
+        totalLaborCost: 0,
+        totalLaborHours: 0,
+        laborCostPercentage: 0,
+        dailyBreakdown: [] as any[],
+      };
+      
+      for (const snap of snapshots) {
+        const sales = parseFloat(snap.totalSales || "0");
+        const laborCost = parseFloat(snap.laborCost || "0");
+        const laborHours = parseFloat(snap.laborHours || "0");
+        
+        summary.totalSales += sales;
+        summary.totalLaborCost += laborCost;
+        summary.totalLaborHours += laborHours;
+        
+        summary.dailyBreakdown.push({
+          businessDate: snap.businessDate,
+          sales,
+          laborCost,
+          laborHours,
+          laborPercentage: sales > 0 ? (laborCost / sales) * 100 : 0,
+        });
+      }
+      
+      summary.laborCostPercentage = summary.totalSales > 0 
+        ? (summary.totalLaborCost / summary.totalSales) * 100 
+        : 0;
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Labor vs sales report error:", error);
+      res.status(500).json({ message: "Failed to generate labor vs sales report" });
+    }
+  });
+
+  // === OVERTIME REPORT ===
+
+  // Get overtime hours for a date range
+  app.get("/api/reports/overtime", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      if (!propertyId || !startDate || !endDate) {
+        return res.status(400).json({ message: "Property ID, start date, and end date are required" });
+      }
+      
+      // Get all timecards for the property and filter by date range
+      const allTimecards = await storage.getTimecards({
+        propertyId: propertyId as string,
+      });
+      const timecards = allTimecards.filter(tc => 
+        tc.businessDate >= (startDate as string) && tc.businessDate <= (endDate as string)
+      );
+      
+      // Group by employee and calculate overtime
+      const employeeOvertime: Record<string, { 
+        employeeId: string; 
+        regularHours: number; 
+        overtimeHours: number;
+        doubleTimeHours: number;
+      }> = {};
+      
+      for (const tc of timecards) {
+        if (!employeeOvertime[tc.employeeId]) {
+          employeeOvertime[tc.employeeId] = {
+            employeeId: tc.employeeId,
+            regularHours: 0,
+            overtimeHours: 0,
+            doubleTimeHours: 0,
+          };
+        }
+        employeeOvertime[tc.employeeId].regularHours += parseFloat(tc.regularHours || "0");
+        employeeOvertime[tc.employeeId].overtimeHours += parseFloat(tc.overtimeHours || "0");
+        employeeOvertime[tc.employeeId].doubleTimeHours += parseFloat(tc.doubleTimeHours || "0");
+      }
+      
+      const employees = Object.values(employeeOvertime).filter(e => e.overtimeHours > 0 || e.doubleTimeHours > 0);
+      
+      res.json({
+        propertyId,
+        startDate,
+        endDate,
+        totalRegularHours: employees.reduce((sum, e) => sum + e.regularHours, 0),
+        totalOvertimeHours: employees.reduce((sum, e) => sum + e.overtimeHours, 0),
+        totalDoubleTimeHours: employees.reduce((sum, e) => sum + e.doubleTimeHours, 0),
+        employeesWithOvertime: employees,
+      });
+    } catch (error) {
+      console.error("Overtime report error:", error);
+      res.status(500).json({ message: "Failed to generate overtime report" });
+    }
+  });
+
+  // === TIPS REPORT ===
+
+  // Get tips summary for a date range
+  app.get("/api/reports/tips", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      if (!propertyId || !startDate || !endDate) {
+        return res.status(400).json({ message: "Property ID, start date, and end date are required" });
+      }
+      
+      // Get all tip pool runs in the date range
+      const runs = await storage.getTipPoolRuns({ propertyId: propertyId as string });
+      const filteredRuns = runs.filter(r => 
+        r.businessDate >= (startDate as string) && r.businessDate <= (endDate as string)
+      );
+      
+      // Aggregate tip data
+      const summary = {
+        propertyId,
+        startDate,
+        endDate,
+        totalTips: 0,
+        runCount: filteredRuns.length,
+        dailyBreakdown: [] as any[],
+        employeeTotals: {} as Record<string, number>,
+      };
+      
+      for (const run of filteredRuns) {
+        const totalTips = parseFloat(run.totalTips || "0");
+        summary.totalTips += totalTips;
+        
+        summary.dailyBreakdown.push({
+          businessDate: run.businessDate,
+          totalTips,
+          status: run.status,
+        });
+        
+        // Get allocations for this run
+        const allocations = await storage.getTipAllocations(run.id);
+        for (const alloc of allocations) {
+          if (!summary.employeeTotals[alloc.employeeId]) {
+            summary.employeeTotals[alloc.employeeId] = 0;
+          }
+          summary.employeeTotals[alloc.employeeId] += parseFloat(alloc.totalTips || "0");
+        }
+      }
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Tips report error:", error);
+      res.status(500).json({ message: "Failed to generate tips report" });
+    }
+  });
+
   return httpServer;
 }
