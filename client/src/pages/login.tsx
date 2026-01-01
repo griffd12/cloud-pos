@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
 import { apiRequest } from "@/lib/queryClient";
-import type { Employee, Rvc, Property, Timecard } from "@shared/schema";
+import type { Employee, Rvc, Property, Timecard, JobCode } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -62,6 +62,8 @@ export default function LoginPage() {
   const [clockEmployee, setClockEmployee] = useState<Employee | null>(null);
   const [clockStatus, setClockStatus] = useState<ClockStatusResponse | null>(null);
   const [clockError, setClockError] = useState<string | null>(null);
+  const [employeeJobs, setEmployeeJobs] = useState<JobCode[]>([]);
+  const [clockStep, setClockStep] = useState<"pin" | "job_select" | "status" | "clock_out_type">("pin");
 
   const { data: rvcs = [], isLoading: rvcsLoading } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
@@ -116,13 +118,32 @@ export default function LoginPage() {
     },
     onSuccess: async (data) => {
       setClockEmployee(data.employee);
+      
       const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include" });
+      let statusData: ClockStatusResponse | null = null;
       if (statusRes.ok) {
-        const statusData = await statusRes.json();
+        statusData = await statusRes.json();
         setClockStatus({
           ...statusData,
           isClockedIn: statusData.status === "clocked_in" || statusData.status === "on_break",
         });
+      }
+      
+      const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes`, { credentials: "include" });
+      let jobs: JobCode[] = [];
+      if (jobsRes.ok) {
+        jobs = await jobsRes.json();
+        setEmployeeJobs(jobs);
+      }
+      
+      const isClockedIn = statusData?.status === "clocked_in" || statusData?.status === "on_break";
+      
+      if (isClockedIn) {
+        setClockStep("status");
+      } else if (jobs.length > 1) {
+        setClockStep("job_select");
+      } else {
+        clockInMutation.mutate(jobs.length === 1 ? jobs[0].id : undefined);
       }
     },
     onError: () => {
@@ -143,22 +164,21 @@ export default function LoginPage() {
   };
 
   const clockInMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (jobCodeId?: string) => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
       const response = await apiRequest("POST", "/api/time-punches/clock-in", {
         employeeId: clockEmployee?.id,
         propertyId: selectedRvc?.propertyId,
+        jobCodeId,
       });
       return response.json();
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       toast({
         title: "Clocked In",
         description: `${clockEmployee?.firstName} is now clocked in.`,
       });
-      if (clockEmployee?.id) {
-        await refreshClockStatus(clockEmployee.id);
-      }
+      handleCloseClockModal();
     },
     onError: () => {
       setClockError("Failed to clock in. Please try again.");
@@ -166,22 +186,23 @@ export default function LoginPage() {
   });
 
   const clockOutMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (punchType: "break" | "end_shift") => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
       const response = await apiRequest("POST", "/api/time-punches/clock-out", {
         employeeId: clockEmployee?.id,
         propertyId: selectedRvc?.propertyId,
+        punchType,
       });
       return response.json();
     },
-    onSuccess: async () => {
+    onSuccess: (_data, punchType) => {
       toast({
-        title: "Clocked Out",
-        description: `${clockEmployee?.firstName} is now clocked out.`,
+        title: punchType === "break" ? "On Break" : "Clocked Out",
+        description: punchType === "break" 
+          ? `${clockEmployee?.firstName} is now on break.`
+          : `${clockEmployee?.firstName} has ended their shift.`,
       });
-      if (clockEmployee?.id) {
-        await refreshClockStatus(clockEmployee.id);
-      }
+      handleCloseClockModal();
     },
     onError: () => {
       setClockError("Failed to clock out. Please try again.");
@@ -238,6 +259,8 @@ export default function LoginPage() {
     setClockEmployee(null);
     setClockStatus(null);
     setClockError(null);
+    setEmployeeJobs([]);
+    setClockStep("pin");
   };
 
   const handleBackToClockPin = () => {
@@ -245,6 +268,8 @@ export default function LoginPage() {
     setClockStatus(null);
     setClockPin("");
     setClockError(null);
+    setEmployeeJobs([]);
+    setClockStep("pin");
   };
 
   useEffect(() => {
@@ -458,7 +483,7 @@ export default function LoginPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {!clockEmployee ? (
+          {clockStep === "pin" && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground text-center">
                 Enter your PIN to clock in or out
@@ -535,33 +560,17 @@ export default function LoginPage() {
                 {clockAuthMutation.isPending ? "Verifying..." : "Continue"}
               </Button>
             </div>
-          ) : (
+          )}
+
+          {clockStep === "job_select" && clockEmployee && (
             <div className="space-y-4">
               <div className="text-center">
                 <h3 className="text-lg font-semibold">
                   {clockEmployee.firstName} {clockEmployee.lastName}
                 </h3>
-                
-                {clockStatus?.isClockedIn ? (
-                  <div className="mt-3 space-y-2">
-                    <Badge variant="default" className="bg-green-500">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      Clocked In
-                    </Badge>
-                    {clockStatus.clockedInAt && (
-                      <p className="text-sm text-muted-foreground">
-                        Since {format(new Date(clockStatus.clockedInAt), "h:mm a")}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-3">
-                    <Badge variant="secondary">
-                      <XCircle className="w-3 h-3 mr-1" />
-                      Clocked Out
-                    </Badge>
-                  </div>
-                )}
+                <p className="text-sm text-muted-foreground mt-2">
+                  Select the job you are working today
+                </p>
               </div>
 
               {clockError && (
@@ -571,35 +580,125 @@ export default function LoginPage() {
               )}
 
               <div className="flex flex-col gap-2">
-                {clockStatus?.isClockedIn ? (
+                {employeeJobs.map((job) => (
                   <Button
-                    variant="destructive"
-                    className="w-full h-12"
-                    onClick={() => clockOutMutation.mutate()}
-                    disabled={clockOutMutation.isPending}
-                    data-testid="button-clock-out"
-                  >
-                    <LogOut className="w-5 h-5 mr-2" />
-                    {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
-                  </Button>
-                ) : (
-                  <Button
-                    className="w-full h-12"
-                    onClick={() => clockInMutation.mutate()}
+                    key={job.id}
+                    variant="outline"
+                    className="w-full h-12 justify-start"
+                    onClick={() => clockInMutation.mutate(job.id)}
                     disabled={clockInMutation.isPending}
-                    data-testid="button-clock-in"
+                    data-testid={`button-job-${job.id}`}
                   >
-                    <Clock className="w-5 h-5 mr-2" />
-                    {clockInMutation.isPending ? "Clocking In..." : "Clock In"}
+                    <Clock className="w-4 h-4 mr-2" />
+                    {job.name}
                   </Button>
-                )}
+                ))}
+              </div>
+
+              <Button
+                variant="ghost"
+                onClick={handleBackToClockPin}
+                className="w-full"
+                data-testid="button-clock-back"
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+
+          {clockStep === "status" && clockEmployee && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">
+                  {clockEmployee.firstName} {clockEmployee.lastName}
+                </h3>
+                
+                <div className="mt-3 space-y-2">
+                  <Badge variant="default" className="bg-green-500">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Clocked In
+                  </Badge>
+                  {clockStatus?.clockedInAt && (
+                    <p className="text-sm text-muted-foreground">
+                      Since {format(new Date(clockStatus.clockedInAt), "h:mm a")}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {clockError && (
+                <div className="text-center text-destructive text-sm font-medium">
+                  {clockError}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="secondary"
+                  className="w-full h-12"
+                  onClick={() => setClockStep("clock_out_type")}
+                  data-testid="button-clock-out"
+                >
+                  <LogOut className="w-5 h-5 mr-2" />
+                  Clock Out
+                </Button>
 
                 <Button
                   variant="ghost"
-                  onClick={handleBackToClockPin}
-                  data-testid="button-clock-back"
+                  onClick={handleCloseClockModal}
+                  data-testid="button-clock-cancel"
                 >
-                  Different Employee
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {clockStep === "clock_out_type" && clockEmployee && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">
+                  {clockEmployee.firstName} {clockEmployee.lastName}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Are you going on break or ending your shift?
+                </p>
+              </div>
+
+              {clockError && (
+                <div className="text-center text-destructive text-sm font-medium">
+                  {clockError}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="w-full h-12"
+                  onClick={() => clockOutMutation.mutate("break")}
+                  disabled={clockOutMutation.isPending}
+                  data-testid="button-clock-out-break"
+                >
+                  Going on Break
+                </Button>
+
+                <Button
+                  variant="destructive"
+                  className="w-full h-12"
+                  onClick={() => clockOutMutation.mutate("end_shift")}
+                  disabled={clockOutMutation.isPending}
+                  data-testid="button-clock-out-end-shift"
+                >
+                  <LogOut className="w-5 h-5 mr-2" />
+                  End Shift
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => setClockStep("status")}
+                  data-testid="button-clock-out-back"
+                >
+                  Back
                 </Button>
               </div>
             </div>
