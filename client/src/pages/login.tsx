@@ -101,23 +101,24 @@ export default function LoginPage() {
         employeeId: authenticatedEmployee?.id,
         propertyId: selectedRvc?.propertyId,
       });
-      return response.json();
+      return response.json() as Promise<{ timecard: Timecard }>;
     },
-    onSuccess: async () => {
-      await refetchClockStatus();
-      completeLogin();
+    onSuccess: async (data) => {
+      const refetchedStatus = await refetchClockStatus();
+      const freshTimecard = refetchedStatus.data?.todayTimecard || data.timecard;
+      completeLogin(true, freshTimecard);
     },
     onError: () => {
       setLoginError("Failed to clock in. Please try again.");
     },
   });
 
-  const completeLogin = () => {
+  const completeLogin = (clockedIn: boolean = false, timecard?: Timecard) => {
     if (authenticatedEmployee) {
       setCurrentEmployee(authenticatedEmployee);
-      setIsClockedIn(true);
-      if (clockStatus?.todayTimecard) {
-        setCurrentTimecard(clockStatus.todayTimecard);
+      setIsClockedIn(clockedIn);
+      if (timecard) {
+        setCurrentTimecard(timecard);
       }
       const rvc = rvcs.find((r) => r.id === selectedRvcId);
       if (rvc) {
@@ -129,11 +130,7 @@ export default function LoginPage() {
 
   const handleContinueAlreadyClockedIn = () => {
     if (clockStatus?.isClockedIn) {
-      setIsClockedIn(true);
-      if (clockStatus.todayTimecard) {
-        setCurrentTimecard(clockStatus.todayTimecard);
-      }
-      completeLogin();
+      completeLogin(true, clockStatus.todayTimecard);
     }
   };
 
