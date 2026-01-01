@@ -2539,13 +2539,16 @@ export class DatabaseStorage implements IStorage {
 
     for (const clockIn of clockIns) {
       const matchingOut = clockOuts.find(o => new Date(o.actualTimestamp) > new Date(clockIn.actualTimestamp));
+      
+      // Always capture the earliest clock in time and job code, regardless of whether clocked out
+      if (!clockInTime || new Date(clockIn.actualTimestamp) < clockInTime) {
+        clockInTime = new Date(clockIn.actualTimestamp);
+        jobCodeId = clockIn.jobCodeId || null;
+      }
+      
       if (matchingOut) {
         const duration = (new Date(matchingOut.actualTimestamp).getTime() - new Date(clockIn.actualTimestamp).getTime()) / 60000;
         totalMinutes += duration;
-        if (!clockInTime || new Date(clockIn.actualTimestamp) < clockInTime) {
-          clockInTime = new Date(clockIn.actualTimestamp);
-          jobCodeId = clockIn.jobCodeId || null;
-        }
         if (!clockOutTime || new Date(matchingOut.actualTimestamp) > clockOutTime) {
           clockOutTime = new Date(matchingOut.actualTimestamp);
         }
@@ -2581,8 +2584,8 @@ export class DatabaseStorage implements IStorage {
       } else {
         // Fall back to job's default hourly rate
         const job = await db.select().from(jobCodes).where(eq(jobCodes.id, jobCodeId)).limit(1);
-        if (job.length > 0 && job[0].defaultHourlyRate) {
-          payRate = job[0].defaultHourlyRate;
+        if (job.length > 0 && job[0].hourlyRate) {
+          payRate = job[0].hourlyRate;
         }
       }
     }
