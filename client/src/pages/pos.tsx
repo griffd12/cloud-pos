@@ -619,10 +619,6 @@ export default function PosPage() {
     return <Redirect to="/" />;
   }
 
-  if (!isClockedIn) {
-    return <Redirect to="/" />;
-  }
-
   return (
     <div className="h-screen flex flex-col bg-background">
       <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
@@ -637,10 +633,17 @@ export default function PosPage() {
               {currentEmployee.firstName} {currentEmployee.lastName}
             </span>
           </div>
-          <Badge variant="outline" className="border-green-500 text-green-600">
-            <Clock className="w-3 h-3 mr-1" />
-            Clocked In
-          </Badge>
+          {isClockedIn ? (
+            <Badge variant="outline" className="border-green-500 text-green-600">
+              <Clock className="w-3 h-3 mr-1" />
+              Clocked In
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-amber-500 text-amber-600">
+              <Clock className="w-3 h-3 mr-1" />
+              Not Clocked In
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -678,16 +681,28 @@ export default function PosPage() {
             </Link>
           )}
           <ThemeToggle />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClockOut}
-            disabled={clockOutMutation.isPending}
-            data-testid="button-clock-out"
-          >
-            <Square className="w-4 h-4 mr-2" />
-            {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
-          </Button>
+          {isClockedIn ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClockOut}
+              disabled={clockOutMutation.isPending}
+              data-testid="button-clock-out"
+            >
+              <Square className="w-4 h-4 mr-2" />
+              {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={logout}
+              data-testid="button-sign-out"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          )}
         </div>
       </header>
 
