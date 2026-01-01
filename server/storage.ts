@@ -409,7 +409,7 @@ export interface IStorage {
   updateBreakSession(id: string, data: Partial<InsertBreakSession>): Promise<BreakSession | undefined>;
 
   // Timecards
-  getTimecards(filters: { propertyId?: string; employeeId?: string; payPeriodId?: string; businessDate?: string }): Promise<Timecard[]>;
+  getTimecards(filters: { propertyId?: string; employeeId?: string; payPeriodId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<Timecard[]>;
   getTimecard(id: string): Promise<Timecard | undefined>;
   createTimecard(data: InsertTimecard): Promise<Timecard>;
   updateTimecard(id: string, data: Partial<InsertTimecard>): Promise<Timecard | undefined>;
@@ -2467,12 +2467,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Timecards
-  async getTimecards(filters: { propertyId?: string; employeeId?: string; payPeriodId?: string; businessDate?: string }): Promise<Timecard[]> {
+  async getTimecards(filters: { propertyId?: string; employeeId?: string; payPeriodId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<Timecard[]> {
     const conditions: any[] = [];
     if (filters.propertyId) conditions.push(eq(timecards.propertyId, filters.propertyId));
     if (filters.employeeId) conditions.push(eq(timecards.employeeId, filters.employeeId));
     if (filters.payPeriodId) conditions.push(eq(timecards.payPeriodId, filters.payPeriodId));
     if (filters.businessDate) conditions.push(eq(timecards.businessDate, filters.businessDate));
+    if (filters.startDate) conditions.push(gte(timecards.businessDate, filters.startDate));
+    if (filters.endDate) conditions.push(lte(timecards.businessDate, filters.endDate));
     
     if (conditions.length === 0) {
       return db.select().from(timecards).orderBy(desc(timecards.businessDate));

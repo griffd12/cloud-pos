@@ -5960,13 +5960,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Property ID, start date, and end date are required" });
       }
       
-      // Get all timecards for the property and filter by date range
-      const allTimecards = await storage.getTimecards({
+      // Get timecards for the property within the date range
+      const timecards = await storage.getTimecards({
         propertyId: propertyId as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
       });
-      const timecards = allTimecards.filter(tc => 
-        tc.businessDate >= (startDate as string) && tc.businessDate <= (endDate as string)
-      );
       
       // Group by employee and calculate overtime
       const employeeOvertime: Record<string, { 
