@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode, type Dispatch, type SetStateAction } from "react";
-import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType } from "@shared/schema";
+import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard } from "@shared/schema";
 
 interface SelectedModifier {
   id: string;
@@ -16,6 +16,8 @@ interface PosContextType {
   pendingItem: MenuItem | null;
   pendingModifiers: SelectedModifier[];
   privileges: string[];
+  isClockedIn: boolean;
+  currentTimecard: Timecard | null;
   
   setCurrentEmployee: (employee: Employee | null) => void;
   setCurrentRvc: (rvc: Rvc | null) => void;
@@ -25,6 +27,8 @@ interface PosContextType {
   setPendingItem: (item: MenuItem | null) => void;
   setPendingModifiers: (modifiers: SelectedModifier[]) => void;
   setPrivileges: (privileges: string[]) => void;
+  setIsClockedIn: (value: boolean) => void;
+  setCurrentTimecard: (timecard: Timecard | null) => void;
   
   hasPrivilege: (code: string) => boolean;
   logout: () => void;
@@ -41,6 +45,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
   const [pendingModifiers, setPendingModifiers] = useState<SelectedModifier[]>([]);
   const [privileges, setPrivileges] = useState<string[]>([]);
+  const [isClockedIn, setIsClockedIn] = useState<boolean>(false);
+  const [currentTimecard, setCurrentTimecard] = useState<Timecard | null>(null);
 
   const hasPrivilege = useCallback((code: string) => {
     return privileges.includes(code);
@@ -54,6 +60,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
     setPendingItem(null);
     setPendingModifiers([]);
     setPrivileges([]);
+    setIsClockedIn(false);
+    setCurrentTimecard(null);
   }, []);
 
   return (
@@ -67,6 +75,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
         pendingItem,
         pendingModifiers,
         privileges,
+        isClockedIn,
+        currentTimecard,
         setCurrentEmployee,
         setCurrentRvc,
         setCurrentCheck,
@@ -75,6 +85,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
         setPendingItem,
         setPendingModifiers,
         setPrivileges,
+        setIsClockedIn,
+        setCurrentTimecard,
         hasPrivilege,
         logout,
       }}

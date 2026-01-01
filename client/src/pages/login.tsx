@@ -3,9 +3,9 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
 import { apiRequest } from "@/lib/queryClient";
-import type { Employee, Rvc, Property } from "@shared/schema";
+import type { Employee, Rvc, Property, Shift, Timecard } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -13,12 +13,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Building2, Delete, LogIn } from "lucide-react";
+import { Building2, Delete, LogIn, Clock, Play, Calendar, CheckCircle2 } from "lucide-react";
+import { format } from "date-fns";
 
 interface LoginResponse {
   employee: Employee;
   privileges: string[];
+}
+
+interface ClockStatusResponse {
+  isClockedIn: boolean;
+  todayTimecard?: Timecard;
 }
 
 export default function LoginPage() {
@@ -27,22 +34,45 @@ export default function LoginPage() {
     setCurrentEmployee,
     setCurrentRvc,
     setPrivileges,
+    setIsClockedIn,
+    setCurrentTimecard,
     currentEmployee,
     currentRvc,
+    isClockedIn,
   } = usePosContext();
 
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
   const [pin, setPin] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [authenticatedEmployee, setAuthenticatedEmployee] = useState<Employee | null>(null);
+  const [showClockIn, setShowClockIn] = useState(false);
 
   const { data: rvcs = [], isLoading: rvcsLoading } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
   });
 
-  // Fetch property details for the selected RVC to get the logo
   const { data: selectedProperty } = useQuery<Property>({
     queryKey: ["/api/rvcs", selectedRvcId, "property"],
     enabled: !!selectedRvcId,
+  });
+
+  const today = format(new Date(), "yyyy-MM-dd");
+
+  const { data: todayShift } = useQuery<Shift | null>({
+    queryKey: ["/api/shifts/employee", authenticatedEmployee?.id, today],
+    queryFn: async () => {
+      if (!authenticatedEmployee?.id) return null;
+      const res = await fetch(`/api/shifts?employeeId=${authenticatedEmployee.id}&startDate=${today}&endDate=${today}`, { credentials: "include" });
+      if (!res.ok) return null;
+      const shifts = await res.json();
+      return shifts.length > 0 ? shifts[0] : null;
+    },
+    enabled: !!authenticatedEmployee,
+  });
+
+  const { data: clockStatus, refetch: refetchClockStatus } = useQuery<ClockStatusResponse>({
+    queryKey: ["/api/time-clock/status", authenticatedEmployee?.id],
+    enabled: !!authenticatedEmployee,
   });
 
   const loginMutation = useMutation({
@@ -54,19 +84,58 @@ export default function LoginPage() {
       return response.json() as Promise<LoginResponse>;
     },
     onSuccess: (data) => {
-      setCurrentEmployee(data.employee);
+      setAuthenticatedEmployee(data.employee);
       setPrivileges(data.privileges);
-      const rvc = rvcs.find((r) => r.id === selectedRvcId);
-      if (rvc) {
-        setCurrentRvc(rvc);
-      }
-      navigate("/pos");
+      setShowClockIn(true);
     },
     onError: () => {
       setLoginError("Invalid PIN or employee not found");
       setPin("");
     },
   });
+
+  const clockInMutation = useMutation({
+    mutationFn: async () => {
+      const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
+      const response = await apiRequest("POST", "/api/time-clock/clock-in", {
+        employeeId: authenticatedEmployee?.id,
+        propertyId: selectedRvc?.propertyId,
+      });
+      return response.json();
+    },
+    onSuccess: async () => {
+      await refetchClockStatus();
+      completeLogin();
+    },
+    onError: () => {
+      setLoginError("Failed to clock in. Please try again.");
+    },
+  });
+
+  const completeLogin = () => {
+    if (authenticatedEmployee) {
+      setCurrentEmployee(authenticatedEmployee);
+      setIsClockedIn(true);
+      if (clockStatus?.todayTimecard) {
+        setCurrentTimecard(clockStatus.todayTimecard);
+      }
+      const rvc = rvcs.find((r) => r.id === selectedRvcId);
+      if (rvc) {
+        setCurrentRvc(rvc);
+      }
+      navigate("/pos");
+    }
+  };
+
+  const handleContinueAlreadyClockedIn = () => {
+    if (clockStatus?.isClockedIn) {
+      setIsClockedIn(true);
+      if (clockStatus.todayTimecard) {
+        setCurrentTimecard(clockStatus.todayTimecard);
+      }
+      completeLogin();
+    }
+  };
 
   const handleDigit = (digit: string) => {
     if (pin.length < 6) {
@@ -90,6 +159,12 @@ export default function LoginPage() {
     }
   };
 
+  const handleBackToPin = () => {
+    setShowClockIn(false);
+    setAuthenticatedEmployee(null);
+    setPin("");
+  };
+
   useEffect(() => {
     if (rvcs.length > 0 && !selectedRvcId) {
       setSelectedRvcId(rvcs[0].id);
@@ -97,12 +172,12 @@ export default function LoginPage() {
   }, [rvcs, selectedRvcId]);
 
   useEffect(() => {
-    if (currentEmployee && currentRvc) {
+    if (currentEmployee && currentRvc && isClockedIn) {
       navigate("/pos");
     }
-  }, [currentEmployee, currentRvc, navigate]);
+  }, [currentEmployee, currentRvc, isClockedIn, navigate]);
 
-  if (currentEmployee && currentRvc) {
+  if (currentEmployee && currentRvc && isClockedIn) {
     return null;
   }
 
@@ -116,7 +191,6 @@ export default function LoginPage() {
       </div>
 
       <div className="flex min-h-screen">
-        {/* Left side - Logo area */}
         <div className="hidden md:flex flex-1 bg-muted/30 items-center justify-center p-8">
           <div className="max-w-md w-full text-center space-y-6">
             {selectedProperty?.signInLogoUrl ? (
@@ -144,10 +218,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right side - Login keypad */}
         <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 md:max-w-md lg:max-w-lg md:border-l">
           <div className="w-full max-w-sm space-y-6">
-            {/* Mobile logo - only shows on small screens */}
             <div className="md:hidden text-center mb-6">
               {selectedProperty?.signInLogoUrl ? (
                 <img
@@ -161,7 +233,6 @@ export default function LoginPage() {
               )}
             </div>
 
-            {/* Location selector */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-medium flex items-center gap-2">
@@ -173,7 +244,7 @@ export default function LoginPage() {
                 <Select
                   value={selectedRvcId}
                   onValueChange={setSelectedRvcId}
-                  disabled={rvcsLoading}
+                  disabled={rvcsLoading || showClockIn}
                 >
                   <SelectTrigger data-testid="select-rvc-login">
                     <SelectValue placeholder="Select Revenue Center..." />
@@ -189,8 +260,7 @@ export default function LoginPage() {
               </CardContent>
             </Card>
 
-            {/* PIN entry */}
-            {selectedRvcId && (
+            {selectedRvcId && !showClockIn && (
               <Card>
                 <CardHeader className="text-center space-y-2">
                   <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-2">
@@ -199,7 +269,7 @@ export default function LoginPage() {
                   <CardTitle className="text-xl font-semibold" data-testid="text-login-title">
                     Employee Sign In
                   </CardTitle>
-                  <p className="text-muted-foreground text-sm">Enter your PIN to clock in</p>
+                  <p className="text-muted-foreground text-sm">Enter your PIN to sign in</p>
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="flex justify-center gap-2">
@@ -274,6 +344,93 @@ export default function LoginPage() {
                     data-testid="button-login-submit"
                   >
                     {loginMutation.isPending ? "Signing in..." : "Sign In"}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {showClockIn && authenticatedEmployee && (
+              <Card>
+                <CardHeader className="text-center space-y-2">
+                  <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-2">
+                    <Clock className="w-6 h-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl font-semibold" data-testid="text-clock-in-title">
+                    Welcome, {authenticatedEmployee.firstName}
+                  </CardTitle>
+                  <CardDescription>
+                    {format(new Date(), "EEEE, MMMM d, yyyy")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {todayShift && (
+                    <div className="bg-muted/50 rounded-md p-4 space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Calendar className="w-4 h-4" />
+                        Scheduled Shift
+                      </div>
+                      <div className="text-lg font-semibold" data-testid="text-scheduled-shift">
+                        {todayShift.startTime} - {todayShift.endTime}
+                      </div>
+                    </div>
+                  )}
+
+                  {!todayShift && (
+                    <div className="bg-muted/50 rounded-md p-4 text-center">
+                      <p className="text-sm text-muted-foreground" data-testid="text-no-shift">
+                        No scheduled shift for today
+                      </p>
+                    </div>
+                  )}
+
+                  {clockStatus?.isClockedIn ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Badge variant="default" className="bg-green-500">
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Already Clocked In
+                        </Badge>
+                      </div>
+                      {clockStatus.todayTimecard?.clockInTime && (
+                        <p className="text-center text-sm text-muted-foreground" data-testid="text-clock-in-time">
+                          Clocked in at {format(new Date(clockStatus.todayTimecard.clockInTime), "h:mm a")}
+                        </p>
+                      )}
+                      <Button
+                        className="w-full h-12 text-base font-semibold"
+                        onClick={handleContinueAlreadyClockedIn}
+                        data-testid="button-continue-pos"
+                      >
+                        <Play className="w-5 h-5 mr-2" />
+                        Continue to POS
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {loginError && (
+                        <div className="text-center text-destructive text-sm font-medium">
+                          {loginError}
+                        </div>
+                      )}
+                      <Button
+                        className="w-full h-14 text-lg font-semibold"
+                        onClick={() => clockInMutation.mutate()}
+                        disabled={clockInMutation.isPending}
+                        data-testid="button-clock-in"
+                      >
+                        <Clock className="w-5 h-5 mr-2" />
+                        {clockInMutation.isPending ? "Clocking In..." : "Clock In & Start"}
+                      </Button>
+                    </div>
+                  )}
+
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={handleBackToPin}
+                    data-testid="button-back-to-pin"
+                  >
+                    Back to Sign In
                   </Button>
                 </CardContent>
               </Card>

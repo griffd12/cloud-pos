@@ -18,8 +18,20 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square } from "lucide-react";
 import { Link, Redirect } from "wouter";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface MenuItemWithModifiers extends MenuItem {
   hasRequiredModifiers?: boolean;
@@ -42,13 +54,17 @@ export default function PosPage() {
     selectedSlu,
     pendingItem,
     privileges,
+    isClockedIn,
     setCurrentCheck,
     setCheckItems,
     setSelectedSlu,
     setPendingItem,
+    setIsClockedIn,
     hasPrivilege,
     logout,
   } = usePosContext();
+
+  const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
 
   const [showModifierModal, setShowModifierModal] = useState(false);
   const [showManagerApproval, setShowManagerApproval] = useState(false);
@@ -573,7 +589,37 @@ export default function PosPage() {
 
   const { subtotal, tax, total } = calculateTotals();
 
+  const clockOutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/time-clock/clock-out", {
+        employeeId: currentEmployee?.id,
+        propertyId: currentRvc?.propertyId,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Clocked Out", description: "You have been clocked out successfully." });
+      setIsClockedIn(false);
+      logout();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to clock out. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const handleClockOut = () => {
+    if (currentCheck && checkItems.length > 0) {
+      setShowClockOutConfirm(true);
+    } else {
+      clockOutMutation.mutate();
+    }
+  };
+
   if (!currentEmployee || !currentRvc) {
+    return <Redirect to="/" />;
+  }
+
+  if (!isClockedIn) {
     return <Redirect to="/" />;
   }
 
@@ -591,8 +637,12 @@ export default function PosPage() {
               {currentEmployee.firstName} {currentEmployee.lastName}
             </span>
           </div>
+          <Badge variant="outline" className="border-green-500 text-green-600">
+            <Clock className="w-3 h-3 mr-1" />
+            Clocked In
+          </Badge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -628,11 +678,41 @@ export default function PosPage() {
             </Link>
           )}
           <ThemeToggle />
-          <Button variant="ghost" size="icon" onClick={logout} data-testid="button-logout">
-            <LogOut className="w-4 h-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClockOut}
+            disabled={clockOutMutation.isPending}
+            data-testid="button-clock-out"
+          >
+            <Square className="w-4 h-4 mr-2" />
+            {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
           </Button>
         </div>
       </header>
+
+      <AlertDialog open={showClockOutConfirm} onOpenChange={setShowClockOutConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clock Out with Open Check?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have an open check with items. Are you sure you want to clock out? The check will remain open for another employee to handle.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-clock-out">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowClockOutConfirm(false);
+                clockOutMutation.mutate();
+              }}
+              data-testid="button-confirm-clock-out"
+            >
+              Clock Out Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
