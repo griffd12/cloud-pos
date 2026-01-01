@@ -5205,5 +5205,499 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // SCHEDULING API ROUTES
+  // ============================================================================
+
+  // === SHIFTS ===
+
+  // Get shifts with filters
+  app.get("/api/shifts", async (req, res) => {
+    try {
+      const { propertyId, rvcId, employeeId, startDate, endDate, status } = req.query;
+      const shifts = await storage.getShifts({
+        propertyId: propertyId as string,
+        rvcId: rvcId as string,
+        employeeId: employeeId as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
+        status: status as string,
+      });
+      res.json(shifts);
+    } catch (error) {
+      console.error("Get shifts error:", error);
+      res.status(500).json({ message: "Failed to get shifts" });
+    }
+  });
+
+  // Get single shift
+  app.get("/api/shifts/:id", async (req, res) => {
+    try {
+      const shift = await storage.getShift(req.params.id);
+      if (!shift) {
+        return res.status(404).json({ message: "Shift not found" });
+      }
+      res.json(shift);
+    } catch (error) {
+      console.error("Get shift error:", error);
+      res.status(500).json({ message: "Failed to get shift" });
+    }
+  });
+
+  // Create shift
+  app.post("/api/shifts", async (req, res) => {
+    try {
+      const parsed = insertShiftSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid shift data", errors: parsed.error.issues });
+      }
+      const shift = await storage.createShift(parsed.data);
+      res.status(201).json(shift);
+    } catch (error) {
+      console.error("Create shift error:", error);
+      res.status(500).json({ message: "Failed to create shift" });
+    }
+  });
+
+  // Update shift
+  app.patch("/api/shifts/:id", async (req, res) => {
+    try {
+      const shift = await storage.updateShift(req.params.id, req.body);
+      if (!shift) {
+        return res.status(404).json({ message: "Shift not found" });
+      }
+      res.json(shift);
+    } catch (error) {
+      console.error("Update shift error:", error);
+      res.status(500).json({ message: "Failed to update shift" });
+    }
+  });
+
+  // Delete shift
+  app.delete("/api/shifts/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteShift(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Shift not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete shift error:", error);
+      res.status(500).json({ message: "Failed to delete shift" });
+    }
+  });
+
+  // Publish shifts
+  app.post("/api/shifts/publish", async (req, res) => {
+    try {
+      const { shiftIds, publishedById } = req.body;
+      if (!Array.isArray(shiftIds) || !publishedById) {
+        return res.status(400).json({ message: "Shift IDs array and publisher ID are required" });
+      }
+      const shifts = await storage.publishShifts(shiftIds, publishedById);
+      res.json(shifts);
+    } catch (error) {
+      console.error("Publish shifts error:", error);
+      res.status(500).json({ message: "Failed to publish shifts" });
+    }
+  });
+
+  // Copy week schedule
+  app.post("/api/shifts/copy-week", async (req, res) => {
+    try {
+      const { propertyId, sourceWeekStart, targetWeekStart } = req.body;
+      if (!propertyId || !sourceWeekStart || !targetWeekStart) {
+        return res.status(400).json({ message: "Property ID, source week start, and target week start are required" });
+      }
+      const shifts = await storage.copyWeekSchedule(propertyId, sourceWeekStart, targetWeekStart);
+      res.status(201).json(shifts);
+    } catch (error) {
+      console.error("Copy week schedule error:", error);
+      res.status(500).json({ message: "Failed to copy week schedule" });
+    }
+  });
+
+  // === SHIFT TEMPLATES ===
+
+  // Get shift templates
+  app.get("/api/shift-templates", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const templates = await storage.getShiftTemplates(propertyId as string);
+      res.json(templates);
+    } catch (error) {
+      console.error("Get shift templates error:", error);
+      res.status(500).json({ message: "Failed to get shift templates" });
+    }
+  });
+
+  // Get single shift template
+  app.get("/api/shift-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getShiftTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Shift template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Get shift template error:", error);
+      res.status(500).json({ message: "Failed to get shift template" });
+    }
+  });
+
+  // Create shift template
+  app.post("/api/shift-templates", async (req, res) => {
+    try {
+      const parsed = insertShiftTemplateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid shift template data", errors: parsed.error.issues });
+      }
+      const template = await storage.createShiftTemplate(parsed.data);
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Create shift template error:", error);
+      res.status(500).json({ message: "Failed to create shift template" });
+    }
+  });
+
+  // Update shift template
+  app.patch("/api/shift-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.updateShiftTemplate(req.params.id, req.body);
+      if (!template) {
+        return res.status(404).json({ message: "Shift template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Update shift template error:", error);
+      res.status(500).json({ message: "Failed to update shift template" });
+    }
+  });
+
+  // Delete shift template
+  app.delete("/api/shift-templates/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteShiftTemplate(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Shift template not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete shift template error:", error);
+      res.status(500).json({ message: "Failed to delete shift template" });
+    }
+  });
+
+  // === EMPLOYEE AVAILABILITY ===
+
+  // Get employee availability
+  app.get("/api/employees/:employeeId/availability", async (req, res) => {
+    try {
+      const availability = await storage.getEmployeeAvailability(req.params.employeeId);
+      res.json(availability);
+    } catch (error) {
+      console.error("Get employee availability error:", error);
+      res.status(500).json({ message: "Failed to get employee availability" });
+    }
+  });
+
+  // Set employee availability (replaces all)
+  app.put("/api/employees/:employeeId/availability", async (req, res) => {
+    try {
+      const { availability } = req.body;
+      if (!Array.isArray(availability)) {
+        return res.status(400).json({ message: "Availability must be an array" });
+      }
+      // Add employeeId to each availability entry and validate
+      const withEmployeeId = availability.map((a: any) => ({
+        ...a,
+        employeeId: req.params.employeeId,
+      }));
+      
+      // Validate each availability entry
+      const validatedEntries = [];
+      for (let i = 0; i < withEmployeeId.length; i++) {
+        const parsed = insertEmployeeAvailabilitySchema.safeParse(withEmployeeId[i]);
+        if (!parsed.success) {
+          return res.status(400).json({ 
+            message: `Invalid availability entry at index ${i}`, 
+            errors: parsed.error.issues 
+          });
+        }
+        validatedEntries.push(parsed.data);
+      }
+      
+      const result = await storage.setEmployeeAvailability(req.params.employeeId, validatedEntries);
+      res.json(result);
+    } catch (error) {
+      console.error("Set employee availability error:", error);
+      res.status(500).json({ message: "Failed to set employee availability" });
+    }
+  });
+
+  // === AVAILABILITY EXCEPTIONS ===
+
+  // Get availability exceptions
+  app.get("/api/employees/:employeeId/availability-exceptions", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const exceptions = await storage.getAvailabilityExceptions(
+        req.params.employeeId,
+        startDate as string,
+        endDate as string
+      );
+      res.json(exceptions);
+    } catch (error) {
+      console.error("Get availability exceptions error:", error);
+      res.status(500).json({ message: "Failed to get availability exceptions" });
+    }
+  });
+
+  // Create availability exception
+  app.post("/api/availability-exceptions", async (req, res) => {
+    try {
+      const parsed = insertAvailabilityExceptionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid availability exception data", errors: parsed.error.issues });
+      }
+      const exception = await storage.createAvailabilityException(parsed.data);
+      res.status(201).json(exception);
+    } catch (error) {
+      console.error("Create availability exception error:", error);
+      res.status(500).json({ message: "Failed to create availability exception" });
+    }
+  });
+
+  // Delete availability exception
+  app.delete("/api/availability-exceptions/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAvailabilityException(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Availability exception not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete availability exception error:", error);
+      res.status(500).json({ message: "Failed to delete availability exception" });
+    }
+  });
+
+  // === TIME OFF REQUESTS ===
+
+  // Get time off requests
+  app.get("/api/time-off-requests", async (req, res) => {
+    try {
+      const { employeeId, propertyId, status } = req.query;
+      const requests = await storage.getTimeOffRequests({
+        employeeId: employeeId as string,
+        propertyId: propertyId as string,
+        status: status as string,
+      });
+      res.json(requests);
+    } catch (error) {
+      console.error("Get time off requests error:", error);
+      res.status(500).json({ message: "Failed to get time off requests" });
+    }
+  });
+
+  // Get single time off request
+  app.get("/api/time-off-requests/:id", async (req, res) => {
+    try {
+      const request = await storage.getTimeOffRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ message: "Time off request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      console.error("Get time off request error:", error);
+      res.status(500).json({ message: "Failed to get time off request" });
+    }
+  });
+
+  // Create time off request
+  app.post("/api/time-off-requests", async (req, res) => {
+    try {
+      const parsed = insertTimeOffRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid time off request data", errors: parsed.error.issues });
+      }
+      const request = await storage.createTimeOffRequest(parsed.data);
+      res.status(201).json(request);
+    } catch (error) {
+      console.error("Create time off request error:", error);
+      res.status(500).json({ message: "Failed to create time off request" });
+    }
+  });
+
+  // Update time off request
+  app.patch("/api/time-off-requests/:id", async (req, res) => {
+    try {
+      const request = await storage.updateTimeOffRequest(req.params.id, req.body);
+      if (!request) {
+        return res.status(404).json({ message: "Time off request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      console.error("Update time off request error:", error);
+      res.status(500).json({ message: "Failed to update time off request" });
+    }
+  });
+
+  // Review time off request (approve/deny)
+  app.post("/api/time-off-requests/:id/review", async (req, res) => {
+    try {
+      const { reviewedById, approved, notes } = req.body;
+      if (!reviewedById || typeof approved !== "boolean") {
+        return res.status(400).json({ message: "Reviewer ID and approval status are required" });
+      }
+      const request = await storage.reviewTimeOffRequest(req.params.id, reviewedById, approved, notes);
+      if (!request) {
+        return res.status(404).json({ message: "Time off request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      console.error("Review time off request error:", error);
+      res.status(500).json({ message: "Failed to review time off request" });
+    }
+  });
+
+  // === SHIFT COVER REQUESTS ===
+
+  // Get shift cover requests
+  app.get("/api/shift-cover-requests", async (req, res) => {
+    try {
+      const { shiftId, requesterId, status } = req.query;
+      const requests = await storage.getShiftCoverRequests({
+        shiftId: shiftId as string,
+        requesterId: requesterId as string,
+        status: status as string,
+      });
+      res.json(requests);
+    } catch (error) {
+      console.error("Get shift cover requests error:", error);
+      res.status(500).json({ message: "Failed to get shift cover requests" });
+    }
+  });
+
+  // Get single shift cover request
+  app.get("/api/shift-cover-requests/:id", async (req, res) => {
+    try {
+      const request = await storage.getShiftCoverRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ message: "Shift cover request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      console.error("Get shift cover request error:", error);
+      res.status(500).json({ message: "Failed to get shift cover request" });
+    }
+  });
+
+  // Create shift cover request
+  app.post("/api/shift-cover-requests", async (req, res) => {
+    try {
+      const parsed = insertShiftCoverRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid shift cover request data", errors: parsed.error.issues });
+      }
+      const request = await storage.createShiftCoverRequest(parsed.data);
+      res.status(201).json(request);
+    } catch (error) {
+      console.error("Create shift cover request error:", error);
+      res.status(500).json({ message: "Failed to create shift cover request" });
+    }
+  });
+
+  // Update shift cover request
+  app.patch("/api/shift-cover-requests/:id", async (req, res) => {
+    try {
+      const request = await storage.updateShiftCoverRequest(req.params.id, req.body);
+      if (!request) {
+        return res.status(404).json({ message: "Shift cover request not found" });
+      }
+      res.json(request);
+    } catch (error) {
+      console.error("Update shift cover request error:", error);
+      res.status(500).json({ message: "Failed to update shift cover request" });
+    }
+  });
+
+  // === SHIFT COVER OFFERS ===
+
+  // Get shift cover offers for a request
+  app.get("/api/shift-cover-requests/:coverRequestId/offers", async (req, res) => {
+    try {
+      const offers = await storage.getShiftCoverOffers(req.params.coverRequestId);
+      res.json(offers);
+    } catch (error) {
+      console.error("Get shift cover offers error:", error);
+      res.status(500).json({ message: "Failed to get shift cover offers" });
+    }
+  });
+
+  // Create shift cover offer
+  app.post("/api/shift-cover-offers", async (req, res) => {
+    try {
+      const parsed = insertShiftCoverOfferSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid shift cover offer data", errors: parsed.error.issues });
+      }
+      const offer = await storage.createShiftCoverOffer(parsed.data);
+      res.status(201).json(offer);
+    } catch (error) {
+      console.error("Create shift cover offer error:", error);
+      res.status(500).json({ message: "Failed to create shift cover offer" });
+    }
+  });
+
+  // Update shift cover offer
+  app.patch("/api/shift-cover-offers/:id", async (req, res) => {
+    try {
+      const offer = await storage.updateShiftCoverOffer(req.params.id, req.body);
+      if (!offer) {
+        return res.status(404).json({ message: "Shift cover offer not found" });
+      }
+      res.json(offer);
+    } catch (error) {
+      console.error("Update shift cover offer error:", error);
+      res.status(500).json({ message: "Failed to update shift cover offer" });
+    }
+  });
+
+  // === SHIFT COVER APPROVALS ===
+
+  // Approve shift cover (accept an offer)
+  app.post("/api/shift-cover-requests/:coverRequestId/approve", async (req, res) => {
+    try {
+      const { offerId, approvedById, notes } = req.body;
+      if (!offerId || !approvedById) {
+        return res.status(400).json({ message: "Offer ID and approver ID are required" });
+      }
+      const approval = await storage.approveShiftCover(req.params.coverRequestId, offerId, approvedById, notes);
+      res.status(201).json(approval);
+    } catch (error) {
+      console.error("Approve shift cover error:", error);
+      res.status(500).json({ message: "Failed to approve shift cover" });
+    }
+  });
+
+  // Deny shift cover request
+  app.post("/api/shift-cover-requests/:coverRequestId/deny", async (req, res) => {
+    try {
+      const { approvedById, notes } = req.body;
+      if (!approvedById) {
+        return res.status(400).json({ message: "Approver ID is required" });
+      }
+      const approval = await storage.denyShiftCover(req.params.coverRequestId, approvedById, notes);
+      res.status(201).json(approval);
+    } catch (error) {
+      console.error("Deny shift cover error:", error);
+      res.status(500).json({ message: "Failed to deny shift cover" });
+    }
+  });
+
   return httpServer;
 }
