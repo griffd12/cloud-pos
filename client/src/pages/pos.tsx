@@ -54,17 +54,13 @@ export default function PosPage() {
     selectedSlu,
     pendingItem,
     privileges,
-    isClockedIn,
     setCurrentCheck,
     setCheckItems,
     setSelectedSlu,
     setPendingItem,
-    setIsClockedIn,
     hasPrivilege,
     logout,
   } = usePosContext();
-
-  const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
 
   const [showModifierModal, setShowModifierModal] = useState(false);
   const [showManagerApproval, setShowManagerApproval] = useState(false);
@@ -589,31 +585,6 @@ export default function PosPage() {
 
   const { subtotal, tax, total } = calculateTotals();
 
-  const clockOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/time-punches/clock-out", {
-        employeeId: currentEmployee?.id,
-        propertyId: currentRvc?.propertyId,
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Clocked Out", description: "You have been clocked out successfully." });
-      setIsClockedIn(false);
-      logout();
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to clock out. Please try again.", variant: "destructive" });
-    },
-  });
-
-  const handleClockOut = () => {
-    if (currentCheck && checkItems.length > 0) {
-      setShowClockOutConfirm(true);
-    } else {
-      clockOutMutation.mutate();
-    }
-  };
 
   if (!currentEmployee || !currentRvc) {
     return <Redirect to="/" />;
@@ -633,17 +604,6 @@ export default function PosPage() {
               {currentEmployee.firstName} {currentEmployee.lastName}
             </span>
           </div>
-          {isClockedIn ? (
-            <Badge variant="outline" className="border-green-500 text-green-600">
-              <Clock className="w-3 h-3 mr-1" />
-              Clocked In
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-amber-500 text-amber-600">
-              <Clock className="w-3 h-3 mr-1" />
-              Not Clocked In
-            </Badge>
-          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -681,53 +641,18 @@ export default function PosPage() {
             </Link>
           )}
           <ThemeToggle />
-          {isClockedIn ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClockOut}
-              disabled={clockOutMutation.isPending}
-              data-testid="button-clock-out"
-            >
-              <Square className="w-4 h-4 mr-2" />
-              {clockOutMutation.isPending ? "Clocking Out..." : "Clock Out"}
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              data-testid="button-sign-out"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={logout}
+            data-testid="button-sign-out"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
       </header>
 
-      <AlertDialog open={showClockOutConfirm} onOpenChange={setShowClockOutConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Clock Out with Open Check?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have an open check with items. Are you sure you want to clock out? The check will remain open for another employee to handle.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-clock-out">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setShowClockOutConfirm(false);
-                clockOutMutation.mutate();
-              }}
-              data-testid="button-confirm-clock-out"
-            >
-              Clock Out Anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
