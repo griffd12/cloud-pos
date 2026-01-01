@@ -258,6 +258,16 @@ export default function LoginPage() {
     }
   };
 
+  const handleOpenClockModal = () => {
+    setClockPin("");
+    setClockEmployee(null);
+    setClockStatus(null);
+    setClockError(null);
+    setEmployeeJobs([]);
+    setClockStep("pin");
+    setShowClockModal(true);
+  };
+
   const handleCloseClockModal = () => {
     setShowClockModal(false);
     setClockPin("");
@@ -464,7 +474,7 @@ export default function LoginPage() {
                 <Button
                   variant="outline"
                   className="w-full h-12"
-                  onClick={() => setShowClockModal(true)}
+                  onClick={handleOpenClockModal}
                   data-testid="button-open-clock"
                 >
                   <Clock className="w-5 h-5 mr-2" />
