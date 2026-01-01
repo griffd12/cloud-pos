@@ -52,8 +52,11 @@ export default function TimecardsPage() {
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
 
+  const startDateStr = format(weekStart, "yyyy-MM-dd");
+  const endDateStr = format(weekEnd, "yyyy-MM-dd");
+
   const { data: timecards = [], isLoading } = useQuery<Timecard[]>({
-    queryKey: ["/api/timecards", selectedProperty, format(weekStart, "yyyy-MM-dd")],
+    queryKey: [`/api/timecards?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`],
     enabled: !!selectedProperty,
   });
 

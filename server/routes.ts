@@ -5073,12 +5073,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get timecards
   app.get("/api/timecards", async (req, res) => {
     try {
-      const { propertyId, employeeId, payPeriodId, businessDate } = req.query;
+      const { propertyId, employeeId, payPeriodId, businessDate, startDate, endDate } = req.query;
       const timecards = await storage.getTimecards({
         propertyId: propertyId as string,
         employeeId: employeeId as string,
         payPeriodId: payPeriodId as string,
         businessDate: businessDate as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
       });
       res.json(timecards);
     } catch (error) {

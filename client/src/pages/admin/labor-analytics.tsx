@@ -87,17 +87,17 @@ export default function LaborAnalyticsPage() {
   });
 
   const { data: laborReport, isLoading: laborLoading } = useQuery<LaborVsSalesReport>({
-    queryKey: ["/api/reports/labor-vs-sales", selectedProperty, startDate, endDate],
+    queryKey: [`/api/reports/labor-vs-sales?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`],
     enabled: !!selectedProperty,
   });
 
   const { data: overtimeReport, isLoading: overtimeLoading } = useQuery<OvertimeReport>({
-    queryKey: ["/api/reports/overtime", selectedProperty, startDate, endDate],
+    queryKey: [`/api/reports/overtime?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`],
     enabled: !!selectedProperty,
   });
 
   const { data: tipsReport, isLoading: tipsLoading } = useQuery<TipsReport>({
-    queryKey: ["/api/reports/tips", selectedProperty, startDate, endDate],
+    queryKey: [`/api/reports/tips?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`],
     enabled: !!selectedProperty,
   });
 
