@@ -130,10 +130,12 @@ export default function LoginPage() {
         setClockStatus(statusData);
       }
       
-      const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes`, { credentials: "include" });
+      const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes/details`, { credentials: "include" });
       let jobs: JobCode[] = [];
       if (jobsRes.ok) {
-        jobs = await jobsRes.json();
+        const jobDetails = await jobsRes.json();
+        // Extract jobCode from each assignment to get full job details with name
+        jobs = jobDetails.map((detail: { jobCode: JobCode }) => detail.jobCode);
         setEmployeeJobs(jobs);
       }
       
