@@ -3114,14 +3114,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Tips would need to be tracked separately if the system supports them
       const totalTips = 0;
       
-      // Guest counts - separate for closed (for accurate averages) and all checks
-      const guestCountClosed = checksClosed.reduce((sum, c) => sum + (c.guestCount || 1), 0);
-      const guestCountStarted = checksStarted.reduce((sum, c) => sum + (c.guestCount || 1), 0);
-      const guestCountOutstanding = checksOutstanding.reduce((sum, c) => sum + (c.guestCount || 1), 0);
+      // Calculate totals for each check movement category
+      const carriedOverTotal = checksCarriedOver.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
+      const startedTotal = checksStarted.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
+      const closedTotal = checksClosed.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
+      const outstandingTotal = checksOutstanding.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
       
-      // Use closed guest count for averages (only paid checks)
+      // Use closed check count for averages (only paid checks)
       const avgCheck = checksClosed.length > 0 ? totalPayments / checksClosed.length : 0;
-      const avgPerGuest = guestCountClosed > 0 ? totalPayments / guestCountClosed : 0;
       
       res.json({
         // Sales (based on item ring-in date)
@@ -3141,20 +3141,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalTips: Math.round(totalTips * 100) / 100,
         paymentCount: paymentsInPeriod.length,
         
-        // Check Movement
+        // Check Movement (counts and totals)
         checksStarted: checksStarted.length,
         checksClosed: checksClosed.length,
         checksCarriedOver: checksCarriedOver.length,
         checksOutstanding: checksOutstanding.length,
         openCheckCount: checksOutstanding.length, // backwards compatibility
+        carriedOverTotal: Math.round(carriedOverTotal * 100) / 100,
+        startedTotal: Math.round(startedTotal * 100) / 100,
+        closedTotal: Math.round(closedTotal * 100) / 100,
+        outstandingTotal: Math.round(outstandingTotal * 100) / 100,
         
-        // Averages and Guest Counts
-        guestCount: guestCountClosed, // backwards compatibility - guests from closed checks
-        guestCountStarted,
-        guestCountClosed,
-        guestCountOutstanding,
+        // Averages
         avgCheck: Math.round(avgCheck * 100) / 100,
-        avgPerGuest: Math.round(avgPerGuest * 100) / 100,
         
         // Legacy fields for backwards compatibility
         checkCount: checksClosed.length,
@@ -3484,7 +3483,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return item.businessDate === businessDate;
         }
         // For date range, use item's businessDate if available
-        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.sentAt ? new Date(item.sentAt) : null);
+        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.addedAt ? new Date(item.addedAt) : null);
         if (!itemDate) return false;
         return itemDate >= start && itemDate <= end;
       });
@@ -3497,7 +3496,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let totalDiscountCount = 0;
       
       // Attribute discounts proportionally based on items in scope
-      for (const checkId of checkIdsWithItems) {
+      for (const checkId of Array.from(checkIdsWithItems)) {
         const check = checkMap.get(checkId);
         if (!check) continue;
         
@@ -3641,7 +3640,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return item.businessDate === businessDate;
         }
         // For date range, use item's businessDate if available
-        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.sentAt ? new Date(item.sentAt) : null);
+        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.addedAt ? new Date(item.addedAt) : null);
         if (!itemDate) return false;
         return itemDate >= start && itemDate <= end;
       });
@@ -3678,7 +3677,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let closedCount = 0;
         let openCount = 0;
         
-        for (const checkId of checkIds) {
+        for (const checkId of Array.from(checkIds)) {
           const check = checkMap.get(checkId);
           if (!check) continue;
           
@@ -4622,7 +4621,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let totalDiscounts = 0;
         let totalTax = 0;
         
-        for (const checkId of checkIdsWithItems) {
+        for (const checkId of Array.from(checkIdsWithItems)) {
           const check = checkMap.get(checkId);
           if (!check) continue;
           

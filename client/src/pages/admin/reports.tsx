@@ -30,12 +30,7 @@ interface SalesSummary {
   taxTotal: number;
   totalWithTax: number;
   checkCount: number;
-  guestCount: number;
-  guestCountStarted: number;
-  guestCountClosed: number;
-  guestCountOutstanding: number;
   avgCheck: number;
-  avgPerGuest: number;
   checksOutstanding: number;
   // Detailed breakdowns
   baseItemSales: number;
@@ -47,6 +42,11 @@ interface SalesSummary {
   checksStarted: number;
   checksClosed: number;
   checksCarriedOver: number;
+  // Check movement totals
+  carriedOverTotal: number;
+  startedTotal: number;
+  closedTotal: number;
+  outstandingTotal: number;
 }
 
 interface CategorySale {
@@ -819,12 +819,12 @@ export default function ReportsPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Guests</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Checks</CardTitle>
+                <Receipt className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold tabular-nums" data-testid="text-guest-count">
-                  {summaryLoading ? "..." : salesSummary?.guestCount || 0}
+                <div className="text-2xl font-bold tabular-nums" data-testid="text-check-count">
+                  {summaryLoading ? "..." : salesSummary?.checkCount || 0}
                 </div>
               </CardContent>
             </Card>
@@ -832,41 +832,44 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Check & Guest Movement</CardTitle>
+              <CardTitle className="text-sm">Check Movement</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Carried Over</p>
                   <p className="font-medium text-lg" data-testid="text-checks-carried">
-                    {salesSummary?.checksCarriedOver || 0}
+                    {salesSummary?.checksCarriedOver || 0} checks
+                  </p>
+                  <p className="text-sm text-muted-foreground" data-testid="text-carried-total">
+                    {formatCurrency(salesSummary?.carriedOverTotal || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Started</p>
                   <p className="font-medium text-lg" data-testid="text-checks-started">
-                    {salesSummary?.checksStarted || 0}
-                    <span className="text-sm text-muted-foreground ml-1" data-testid="text-guests-started">
-                      ({salesSummary?.guestCountStarted || 0} guests)
-                    </span>
+                    {salesSummary?.checksStarted || 0} checks
+                  </p>
+                  <p className="text-sm text-muted-foreground" data-testid="text-started-total">
+                    {formatCurrency(salesSummary?.startedTotal || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Closed</p>
                   <p className="font-medium text-lg" data-testid="text-checks-closed">
-                    {salesSummary?.checksClosed || 0}
-                    <span className="text-sm text-muted-foreground ml-1" data-testid="text-guests-closed">
-                      ({salesSummary?.guestCountClosed || 0} guests)
-                    </span>
+                    {salesSummary?.checksClosed || 0} checks
+                  </p>
+                  <p className="text-sm text-muted-foreground" data-testid="text-closed-total">
+                    {formatCurrency(salesSummary?.closedTotal || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Outstanding</p>
                   <p className="font-medium text-lg" data-testid="text-checks-outstanding">
-                    {salesSummary?.checksOutstanding || 0}
-                    <span className="text-sm text-muted-foreground ml-1" data-testid="text-guests-outstanding">
-                      ({salesSummary?.guestCountOutstanding || 0} guests)
-                    </span>
+                    {salesSummary?.checksOutstanding || 0} checks
+                  </p>
+                  <p className="text-sm text-muted-foreground" data-testid="text-outstanding-total">
+                    {formatCurrency(salesSummary?.outstandingTotal || 0)}
                   </p>
                 </div>
               </div>
