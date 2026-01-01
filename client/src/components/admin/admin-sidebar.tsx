@@ -92,7 +92,6 @@ const menuGroups = [
   {
     label: "Time & Attendance",
     items: [
-      { title: "Time Clock", url: "/admin/time-clock", icon: Clock },
       { title: "Timecards", url: "/admin/timecards", icon: Timer },
       { title: "Scheduling", url: "/admin/scheduling", icon: CalendarDays },
     ],
