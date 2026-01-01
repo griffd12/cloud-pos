@@ -11,7 +11,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { type Employee, type Role, type Property, type EmployeeAssignment } from "@shared/schema";
+import { type Employee, type Role, type Property, type EmployeeAssignment, type JobCode, type EmployeeJobCode } from "@shared/schema";
+import { Plus, Trash2 } from "lucide-react";
+
+interface JobAssignment {
+  jobCodeId: string;
+  payRate: string;
+  isPrimary: boolean;
+}
 
 export default function EmployeesPage() {
   const { toast } = useToast();
@@ -25,6 +32,7 @@ export default function EmployeesPage() {
   const [roleId, setRoleId] = useState("");
   const [active, setActive] = useState(true);
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
+  const [jobAssignments, setJobAssignments] = useState<JobAssignment[]>([]);
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -38,6 +46,10 @@ export default function EmployeesPage() {
     queryKey: ["/api/properties"],
   });
 
+  const { data: jobCodes = [] } = useQuery<JobCode[]>({
+    queryKey: ["/api/job-codes"],
+  });
+
   const resetForm = () => {
     setEmployeeNumber("");
     setFirstName("");
@@ -46,6 +58,7 @@ export default function EmployeesPage() {
     setRoleId("");
     setActive(true);
     setSelectedPropertyIds([]);
+    setJobAssignments([]);
   };
 
   useEffect(() => {
@@ -61,6 +74,16 @@ export default function EmployeesPage() {
         .then(res => res.json())
         .then((assignments: EmployeeAssignment[]) => {
           setSelectedPropertyIds(assignments.map(a => a.propertyId).filter(Boolean) as string[]);
+        });
+      
+      apiRequest("GET", `/api/employees/${editingItem.id}/job-codes`)
+        .then(res => res.json())
+        .then((assignments: EmployeeJobCode[]) => {
+          setJobAssignments(assignments.map(a => ({
+            jobCodeId: a.jobCodeId,
+            payRate: a.payRate || "",
+            isPrimary: a.isPrimary || false,
+          })));
         });
     } else {
       resetForm();
@@ -88,11 +111,20 @@ export default function EmployeesPage() {
   ];
 
   const createMutation = useMutation({
-    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[] }) => {
+    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[]; jobAssignments: JobAssignment[] }) => {
       const response = await apiRequest("POST", "/api/employees", data.employee);
       const created = await response.json();
       if (data.propertyIds.length > 0) {
         await apiRequest("PUT", `/api/employees/${created.id}/assignments`, { propertyIds: data.propertyIds });
+      }
+      if (data.jobAssignments.length > 0) {
+        await apiRequest("PUT", `/api/employees/${created.id}/job-codes`, { 
+          assignments: data.jobAssignments.map(a => ({
+            jobCodeId: a.jobCodeId,
+            payRate: a.payRate || null,
+            isPrimary: a.isPrimary,
+          }))
+        });
       }
       return created;
     },
@@ -109,9 +141,16 @@ export default function EmployeesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[] }) => {
+    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[]; jobAssignments: JobAssignment[] }) => {
       const response = await apiRequest("PUT", "/api/employees/" + data.employee.id, data.employee);
       await apiRequest("PUT", `/api/employees/${data.employee.id}/assignments`, { propertyIds: data.propertyIds });
+      await apiRequest("PUT", `/api/employees/${data.employee.id}/job-codes`, { 
+        assignments: data.jobAssignments.map(a => ({
+          jobCodeId: a.jobCodeId,
+          payRate: a.payRate || null,
+          isPrimary: a.isPrimary,
+        }))
+      });
       return response.json();
     },
     onSuccess: () => {
@@ -166,10 +205,37 @@ export default function EmployeesPage() {
 
     if (editingItem) {
       employeeData.id = editingItem.id;
-      updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds });
+      updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds, jobAssignments });
     } else {
-      createMutation.mutate({ employee: employeeData as Employee, propertyIds: selectedPropertyIds });
+      createMutation.mutate({ employee: employeeData as Employee, propertyIds: selectedPropertyIds, jobAssignments });
     }
+  };
+
+  const addJobAssignment = () => {
+    setJobAssignments(prev => [...prev, { jobCodeId: "", payRate: "", isPrimary: prev.length === 0 }]);
+  };
+
+  const removeJobAssignment = (index: number) => {
+    setJobAssignments(prev => {
+      const newAssignments = prev.filter((_, i) => i !== index);
+      if (newAssignments.length > 0 && !newAssignments.some(a => a.isPrimary)) {
+        newAssignments[0].isPrimary = true;
+      }
+      return newAssignments;
+    });
+  };
+
+  const updateJobAssignment = (index: number, field: keyof JobAssignment, value: string | boolean) => {
+    setJobAssignments(prev => {
+      const newAssignments = [...prev];
+      newAssignments[index] = { ...newAssignments[index], [field]: value };
+      if (field === "isPrimary" && value === true) {
+        newAssignments.forEach((a, i) => {
+          if (i !== index) a.isPrimary = false;
+        });
+      }
+      return newAssignments;
+    });
   };
 
   const toggleProperty = (propertyId: string) => {
@@ -260,7 +326,7 @@ export default function EmployeesPage() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="roleId">Role *</Label>
+              <Label htmlFor="roleId">Default Role *</Label>
               <Select value={roleId} onValueChange={setRoleId}>
                 <SelectTrigger data-testid="select-role">
                   <SelectValue placeholder="Select a role" />
@@ -273,6 +339,80 @@ export default function EmployeesPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Fallback role when not clocked in to a specific job
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Job Assignments</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addJobAssignment}
+                  data-testid="button-add-job"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Job
+                </Button>
+              </div>
+              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-3">
+                {jobAssignments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No jobs assigned</p>
+                ) : (
+                  jobAssignments.map((assignment, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Select
+                        value={assignment.jobCodeId}
+                        onValueChange={(v) => updateJobAssignment(index, "jobCodeId", v)}
+                      >
+                        <SelectTrigger className="flex-1" data-testid={`select-job-${index}`}>
+                          <SelectValue placeholder="Select job..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {jobCodes.filter(j => j.active).map((job) => (
+                            <SelectItem key={job.id} value={job.id}>
+                              {job.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Rate"
+                        className="w-24"
+                        value={assignment.payRate}
+                        onChange={(e) => updateJobAssignment(index, "payRate", e.target.value)}
+                        data-testid={`input-pay-rate-${index}`}
+                      />
+                      <div className="flex items-center gap-1">
+                        <Checkbox
+                          checked={assignment.isPrimary}
+                          onCheckedChange={(c) => updateJobAssignment(index, "isPrimary", !!c)}
+                          data-testid={`checkbox-primary-${index}`}
+                        />
+                        <span className="text-xs text-muted-foreground">Primary</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeJobAssignment(index)}
+                        data-testid={`button-remove-job-${index}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Assign jobs with employee-specific pay rates. Primary job is the default.
+              </p>
             </div>
 
             <div className="space-y-2">
