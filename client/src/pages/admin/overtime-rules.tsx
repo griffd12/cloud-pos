@@ -79,7 +79,7 @@ export default function OvertimeRulesPage() {
   });
 
   const { data: rules = [], isLoading } = useQuery<OvertimeRule[]>({
-    queryKey: ["/api/overtime-rules", selectedProperty],
+    queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty],
     enabled: !!selectedProperty,
   });
 
@@ -91,7 +91,7 @@ export default function OvertimeRulesPage() {
       toast({ title: "Success", description: "Overtime rule created." });
       setIsDialogOpen(false);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -107,7 +107,7 @@ export default function OvertimeRulesPage() {
       setIsDialogOpen(false);
       setEditingRule(null);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -120,7 +120,7 @@ export default function OvertimeRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Overtime rule deleted." });
-      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
