@@ -6364,6 +6364,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         endDate: endDate as string,
       });
       
+      // Get the active overtime rule for this property to get configured multipliers
+      const otRule = await storage.getActiveOvertimeRule(propertyId as string);
+      const otMultiplier = otRule?.overtimeMultiplier ? parseFloat(otRule.overtimeMultiplier) : 1.5;
+      const dtMultiplier = otRule?.doubleTimeMultiplier ? parseFloat(otRule.doubleTimeMultiplier) : 2.0;
+      
       // Aggregate by business date
       const dailyData: Record<string, { laborHours: number; laborCost: number }> = {};
       
@@ -6382,8 +6387,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const doubleTimeHours = parseFloat(tc.doubleTimeHours || "0");
         
         dailyData[bd].laborHours += hours;
-        // Calculate labor cost: regular*rate + OT*rate*1.5 + DT*rate*2
-        dailyData[bd].laborCost += (regularHours * payRate) + (overtimeHours * payRate * 1.5) + (doubleTimeHours * payRate * 2);
+        // Calculate labor cost using configured multipliers from overtime rule
+        dailyData[bd].laborCost += (regularHours * payRate) + (overtimeHours * payRate * otMultiplier) + (doubleTimeHours * payRate * dtMultiplier);
       }
       
       // Get sales data from checks (items rung on businessDate, not when check was closed)
