@@ -4,7 +4,9 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -26,8 +28,20 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
-import { format, startOfWeek, endOfWeek, addDays, differenceInMinutes, parseISO } from "date-fns";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { format, startOfWeek, endOfWeek, addDays, differenceInMinutes, parseISO, getDay } from "date-fns";
 import {
   Calendar,
   Plus,
@@ -40,8 +54,26 @@ import {
   Settings,
   Users,
   Clock,
+  GripVertical,
+  X,
 } from "lucide-react";
 import type { Employee, Property, Rvc, Shift, JobCode, EmployeeJobCode } from "@shared/schema";
+
+const SHIFT_COLORS = [
+  "#22C55E", "#16A34A", "#14B8A6", "#3B82F6", "#8B5CF6", 
+  "#A855F7", "#7C3AED", "#DC2626", "#EF4444", "#F97316", 
+  "#F59E0B", "#EAB308",
+];
+
+const WEEKDAYS = [
+  { key: 0, label: "Sun", short: "S" },
+  { key: 1, label: "Mon", short: "M" },
+  { key: 2, label: "Tue", short: "T" },
+  { key: 3, label: "Wed", short: "W" },
+  { key: 4, label: "Thu", short: "T" },
+  { key: 5, label: "Fri", short: "F" },
+  { key: 6, label: "Sat", short: "S" },
+];
 
 type EmployeeJobCodeWithDetails = EmployeeJobCode & { jobCode: JobCode };
 
@@ -60,7 +92,19 @@ export default function SchedulingPage() {
     jobCodeId: "",
     startTime: "09:00",
     endTime: "17:00",
+    notes: "",
+    color: "#22C55E",
+    repeatDays: [] as number[],
   });
+  const [activeShift, setActiveShift] = useState<Shift | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -185,8 +229,38 @@ export default function SchedulingPage() {
     setSelectedDay(null);
     setSelectedEmployee(null);
     setEditingShift(null);
-    setShiftForm({ employeeId: "", rvcId: "", jobCodeId: "", startTime: "09:00", endTime: "17:00" });
+    setShiftForm({ employeeId: "", rvcId: "", jobCodeId: "", startTime: "09:00", endTime: "17:00", notes: "", color: "#22C55E", repeatDays: [] });
   };
+
+  const reassignShiftMutation = useMutation({
+    mutationFn: async ({ shiftId, newEmployeeId }: { shiftId: string; newEmployeeId: string | null }) => {
+      return apiRequest("PATCH", `/api/shifts/${shiftId}`, { 
+        employeeId: newEmployeeId,
+        jobCodeId: null,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Shift reassigned successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkCreateShiftsMutation = useMutation({
+    mutationFn: async (shiftsData: any[]) => {
+      return apiRequest("POST", "/api/shifts/bulk-create", { shifts: shiftsData });
+    },
+    onSuccess: (_, variables) => {
+      toast({ title: "Success", description: `${variables.length} shift(s) created successfully.` });
+      closeDialog();
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
 
   const propertyRvcs = useMemo(() => rvcs.filter((r) => r.propertyId === selectedProperty), [rvcs, selectedProperty]);
   const propertyEmployees = useMemo(() => employees.filter((e) => e.propertyId === selectedProperty && e.active), [employees, selectedProperty]);
@@ -304,12 +378,16 @@ export default function SchedulingPage() {
   const openAddShiftDialog = (employeeId: string | null, day: Date) => {
     setSelectedEmployee(employeeId);
     setSelectedDay(day);
+    const dayOfWeek = getDay(day);
     setShiftForm({
       employeeId: employeeId || "",
       rvcId: propertyRvcs[0]?.id || "",
       jobCodeId: "",
       startTime: "09:00",
       endTime: "17:00",
+      notes: "",
+      color: "#22C55E",
+      repeatDays: [dayOfWeek],
     });
     setIsAddingShift(true);
   };
@@ -323,6 +401,9 @@ export default function SchedulingPage() {
       jobCodeId: shift.jobCodeId || "",
       startTime: shift.startTime || "09:00",
       endTime: shift.endTime || "17:00",
+      notes: shift.notes || "",
+      color: "#22C55E",
+      repeatDays: [],
     });
     setIsAddingShift(true);
   };
@@ -337,22 +418,99 @@ export default function SchedulingPage() {
       return;
     }
 
-    const shiftData = {
-      propertyId: selectedProperty,
-      rvcId: shiftForm.rvcId,
-      employeeId: shiftForm.employeeId || null,
-      jobCodeId: shiftForm.jobCodeId || null,
-      shiftDate: format(selectedDay!, "yyyy-MM-dd"),
-      startTime: shiftForm.startTime,
-      endTime: shiftForm.endTime,
-      status: "draft",
-    };
-
     if (editingShift) {
+      const shiftData = {
+        propertyId: selectedProperty,
+        rvcId: shiftForm.rvcId,
+        employeeId: shiftForm.employeeId || null,
+        jobCodeId: shiftForm.jobCodeId || null,
+        shiftDate: format(selectedDay!, "yyyy-MM-dd"),
+        startTime: shiftForm.startTime,
+        endTime: shiftForm.endTime,
+        notes: shiftForm.notes || null,
+        status: "draft",
+      };
       updateShiftMutation.mutate({ id: editingShift.id, data: shiftData });
     } else {
-      createShiftMutation.mutate(shiftData);
+      const shiftsToCreate: any[] = [];
+      const selectedDayOfWeek = getDay(selectedDay!);
+      
+      shiftForm.repeatDays.forEach((dayNum) => {
+        const dayOffset = dayNum - selectedDayOfWeek;
+        const shiftDate = addDays(selectedDay!, dayOffset);
+        
+        if (shiftDate >= weekStart && shiftDate <= weekEnd) {
+          shiftsToCreate.push({
+            propertyId: selectedProperty,
+            rvcId: shiftForm.rvcId,
+            employeeId: shiftForm.employeeId || null,
+            jobCodeId: shiftForm.jobCodeId || null,
+            shiftDate: format(shiftDate, "yyyy-MM-dd"),
+            startTime: shiftForm.startTime,
+            endTime: shiftForm.endTime,
+            notes: shiftForm.notes || null,
+            status: "draft",
+          });
+        }
+      });
+
+      if (shiftsToCreate.length === 0) {
+        const shiftData = {
+          propertyId: selectedProperty,
+          rvcId: shiftForm.rvcId,
+          employeeId: shiftForm.employeeId || null,
+          jobCodeId: shiftForm.jobCodeId || null,
+          shiftDate: format(selectedDay!, "yyyy-MM-dd"),
+          startTime: shiftForm.startTime,
+          endTime: shiftForm.endTime,
+          notes: shiftForm.notes || null,
+          status: "draft",
+        };
+        createShiftMutation.mutate(shiftData);
+      } else if (shiftsToCreate.length === 1) {
+        createShiftMutation.mutate(shiftsToCreate[0]);
+      } else {
+        bulkCreateShiftsMutation.mutate(shiftsToCreate);
+      }
     }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const shiftId = event.active.id as string;
+    const shift = shifts.find((s) => s.id === shiftId);
+    setActiveShift(shift || null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveShift(null);
+
+    if (!over) return;
+
+    const shiftId = active.id as string;
+    const dropTargetId = over.id as string;
+    
+    const [targetType, targetEmployeeId] = dropTargetId.split(":");
+    if (targetType !== "employee-row") return;
+
+    const shift = shifts.find((s) => s.id === shiftId);
+    if (!shift) return;
+
+    const currentEmployeeId = shift.employeeId || "open";
+    const newEmployeeId = targetEmployeeId === "open" ? null : targetEmployeeId;
+    
+    if (currentEmployeeId === (newEmployeeId || "open")) return;
+
+    reassignShiftMutation.mutate({ shiftId, newEmployeeId });
+  };
+
+  const toggleRepeatDay = (dayNum: number) => {
+    setShiftForm((prev) => {
+      const newDays = prev.repeatDays.includes(dayNum)
+        ? prev.repeatDays.filter((d) => d !== dayNum)
+        : [...prev.repeatDays, dayNum].sort((a, b) => a - b);
+      return { ...prev, repeatDays: newDays };
+    });
   };
 
   const selectedEmployeeJobCodes = useMemo(() => {
@@ -441,103 +599,104 @@ export default function SchedulingPage() {
       ) : isLoading ? (
         <Skeleton className="h-96 w-full" />
       ) : (
-        <div className="border rounded-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse min-w-[900px]">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="text-left p-3 border-b font-medium w-48 sticky left-0 bg-muted/50 z-10">
-                    Team member
-                  </th>
-                  {weekDays.map((day) => (
-                    <th key={day.toISOString()} className="text-left p-3 border-b border-l font-medium min-w-[120px]">
-                      <div className="text-sm">{format(day, "EEE M/d")}</div>
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="border rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-3 border-b font-medium w-48 sticky left-0 bg-muted/50 z-10">
+                      Team member
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b hover:bg-muted/20">
-                  <td className="p-3 sticky left-0 bg-background z-10 border-r">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-medium">Open shifts</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {formatHours(employeeShiftsMap["open"]?.weeklyHours || 0)}
-                    </div>
-                  </td>
-                  {weekDays.map((day) => {
-                    const dayShifts = getEmployeeShiftsForDay(null, day);
-                    return (
-                      <td key={day.toISOString()} className="p-2 border-l align-top min-h-[80px]">
-                        <div className="space-y-1">
-                          {dayShifts.map((shift) => (
-                            <ShiftBlock
-                              key={shift.id}
-                              shift={shift}
-                              jobName={getJobCodeName(shift.jobCodeId)}
-                              color={getJobCodeColor(shift.jobCodeId)}
-                              onEdit={() => openEditShiftDialog(shift)}
-                              onDelete={() => deleteShiftMutation.mutate(shift.id)}
-                            />
-                          ))}
-                          <button
-                            onClick={() => openAddShiftDialog(null, day)}
-                            className="w-full h-6 border border-dashed rounded text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center text-xs"
-                            data-testid={`button-add-open-shift-${format(day, "yyyy-MM-dd")}`}
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                {propertyEmployees.map((emp) => {
-                  const empData = employeeShiftsMap[emp.id] || { shifts: [], weeklyHours: 0, weeklyCost: 0 };
-                  return (
-                    <tr key={emp.id} className="border-b hover:bg-muted/20">
-                      <td className="p-3 sticky left-0 bg-background z-10 border-r">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="flex items-center gap-1 hover:text-primary transition-colors text-left">
-                              <span className="font-medium">{emp.firstName} {emp.lastName}</span>
-                              <ChevronDown className="w-3 h-3" />
+                    {weekDays.map((day) => (
+                      <th key={day.toISOString()} className="text-left p-3 border-b border-l font-medium min-w-[120px]">
+                        <div className="text-sm">{format(day, "EEE M/d")}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <DroppableRow employeeId="open">
+                    <td className="p-3 sticky left-0 bg-background z-10 border-r">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-medium">Open shifts</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatHours(employeeShiftsMap["open"]?.weeklyHours || 0)}
+                      </div>
+                    </td>
+                    {weekDays.map((day) => {
+                      const dayShifts = getEmployeeShiftsForDay(null, day);
+                      return (
+                        <td key={day.toISOString()} className="p-2 border-l align-top min-h-[80px]">
+                          <div className="space-y-1">
+                            {dayShifts.map((shift) => (
+                              <DraggableShift
+                                key={shift.id}
+                                shift={shift}
+                                jobName={getJobCodeName(shift.jobCodeId)}
+                                color={getJobCodeColor(shift.jobCodeId)}
+                                onEdit={() => openEditShiftDialog(shift)}
+                                onDelete={() => deleteShiftMutation.mutate(shift.id)}
+                              />
+                            ))}
+                            <button
+                              onClick={() => openAddShiftDialog(null, day)}
+                              className="w-full h-6 border border-dashed rounded text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center text-xs"
+                              data-testid={`button-add-open-shift-${format(day, "yyyy-MM-dd")}`}
+                            >
+                              <Plus className="w-3 h-3" />
                             </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            <DropdownMenuItem>View availability</DropdownMenuItem>
-                            <DropdownMenuItem>Time off requests</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {formatHours(empData.weeklyHours)} {formatCurrency(empData.weeklyCost)}
-                        </div>
-                      </td>
-                      {weekDays.map((day) => {
-                        const dayShifts = getEmployeeShiftsForDay(emp.id, day);
-                        return (
-                          <td key={day.toISOString()} className="p-2 border-l align-top min-h-[80px]">
-                            <div className="space-y-1">
-                              {dayShifts.length === 0 ? (
-                                <button
-                                  onClick={() => openAddShiftDialog(emp.id, day)}
-                                  className="w-full h-12 border border-dashed rounded text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center"
-                                  data-testid={`button-add-shift-${emp.id}-${format(day, "yyyy-MM-dd")}`}
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                              ) : dayShifts.length === 1 ? (
-                                <>
-                                  <ShiftBlock
-                                    shift={dayShifts[0]}
-                                    jobName={getJobCodeName(dayShifts[0].jobCodeId)}
-                                    color={getJobCodeColor(dayShifts[0].jobCodeId)}
-                                    onEdit={() => openEditShiftDialog(dayShifts[0])}
-                                    onDelete={() => deleteShiftMutation.mutate(dayShifts[0].id)}
-                                  />
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </DroppableRow>
+
+                  {propertyEmployees.map((emp) => {
+                    const empData = employeeShiftsMap[emp.id] || { shifts: [], weeklyHours: 0, weeklyCost: 0 };
+                    return (
+                      <DroppableRow key={emp.id} employeeId={emp.id}>
+                        <td className="p-3 sticky left-0 bg-background z-10 border-r">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className="flex items-center gap-1 hover:text-primary transition-colors text-left">
+                                <span className="font-medium">{emp.firstName} {emp.lastName}</span>
+                                <ChevronDown className="w-3 h-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem>View availability</DropdownMenuItem>
+                              <DropdownMenuItem>Time off requests</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {formatHours(empData.weeklyHours)} {formatCurrency(empData.weeklyCost)}
+                          </div>
+                        </td>
+                        {weekDays.map((day) => {
+                          const dayShifts = getEmployeeShiftsForDay(emp.id, day);
+                          return (
+                            <td key={day.toISOString()} className="p-2 border-l align-top min-h-[80px]">
+                              <div className="space-y-1">
+                                {dayShifts.length === 0 ? (
+                                  <button
+                                    onClick={() => openAddShiftDialog(emp.id, day)}
+                                    className="w-full h-12 border border-dashed rounded text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                                    data-testid={`button-add-shift-${emp.id}-${format(day, "yyyy-MM-dd")}`}
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                ) : dayShifts.length === 1 ? (
+                                  <>
+                                    <DraggableShift
+                                      shift={dayShifts[0]}
+                                      jobName={getJobCodeName(dayShifts[0].jobCodeId)}
+                                      color={getJobCodeColor(dayShifts[0].jobCodeId)}
+                                      onEdit={() => openEditShiftDialog(dayShifts[0])}
+                                      onDelete={() => deleteShiftMutation.mutate(dayShifts[0].id)}
+                                    />
                                   <button
                                     onClick={() => openAddShiftDialog(emp.id, day)}
                                     className="w-full h-5 border border-dashed rounded text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center text-xs opacity-0 hover:opacity-100"
@@ -583,11 +742,11 @@ export default function SchedulingPage() {
                             </div>
                           </td>
                         );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
+                        })}
+                      </DroppableRow>
+                    );
+                  })}
+                </tbody>
               <tfoot>
                 <tr className="bg-muted/30 font-medium">
                   <td className="p-3 sticky left-0 bg-muted/30 z-10 border-r border-t">
@@ -604,76 +763,85 @@ export default function SchedulingPage() {
               </tfoot>
             </table>
           </div>
+          <DragOverlay>
+            {activeShift && (
+              <div
+                className="p-2 rounded cursor-grabbing text-white shadow-lg opacity-80"
+                style={{ backgroundColor: getJobCodeColor(activeShift.jobCodeId) }}
+              >
+                <div className="text-xs font-medium">{getJobCodeName(activeShift.jobCodeId) || "Shift"}</div>
+                <div className="text-xs opacity-80">
+                  {formatShiftTime(activeShift.startTime)} - {formatShiftTime(activeShift.endTime)}
+                </div>
+              </div>
+            )}
+          </DragOverlay>
         </div>
+        </DndContext>
       )}
 
       <Dialog open={isAddingShift} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              {editingShift ? "Edit Shift" : "Add Shift"} - {selectedDay && format(selectedDay, "EEEE, MMM d")}
+        <DialogContent className="max-w-md">
+          <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
+            <DialogTitle className="text-lg font-semibold">
+              {editingShift ? "Edit shift" : "Add shift"}
             </DialogTitle>
-            <DialogDescription>
-              {selectedEmployee 
-                ? `Schedule for ${propertyEmployees.find(e => e.id === selectedEmployee)?.firstName || "employee"}`
-                : "Create an open shift for staff to claim"}
-            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {!selectedEmployee && (
-              <div>
-                <label className="text-sm font-medium">Employee (optional for open shift)</label>
-                <Select
-                  value={shiftForm.employeeId || "OPEN_SHIFT"}
-                  onValueChange={(v) => setShiftForm({ ...shiftForm, employeeId: v === "OPEN_SHIFT" ? "" : v, jobCodeId: "" })}
-                >
-                  <SelectTrigger data-testid="select-employee">
-                    <SelectValue placeholder="Leave empty for open shift..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="OPEN_SHIFT">Open Shift</SelectItem>
-                    {propertyEmployees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.firstName} {emp.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
-            {shiftForm.employeeId && (
-              <div>
-                <label className="text-sm font-medium">Job / Role</label>
-                <Select
-                  value={shiftForm.jobCodeId}
-                  onValueChange={(v) => setShiftForm({ ...shiftForm, jobCodeId: v })}
-                >
-                  <SelectTrigger data-testid="select-job">
-                    <SelectValue placeholder="Select job for this shift..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedEmployeeJobCodes.filter((ejc) => ejc.jobCodeId).map((ejc) => (
-                      <SelectItem key={ejc.jobCodeId} value={ejc.jobCodeId}>
-                        {ejc.jobCode?.name || "Job"} - {formatCurrency(parseFloat(ejc.payRate || "0"))}/hr
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div>
-              <label className="text-sm font-medium">Revenue Center</label>
+          <div className="space-y-0 divide-y">
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+              <span className="text-sm font-medium text-muted-foreground">Team member</span>
               <Select
-                value={shiftForm.rvcId}
-                onValueChange={(v) => setShiftForm({ ...shiftForm, rvcId: v })}
+                value={shiftForm.employeeId || "OPEN_SHIFT"}
+                onValueChange={(v) => setShiftForm({ ...shiftForm, employeeId: v === "OPEN_SHIFT" ? "" : v, jobCodeId: "" })}
               >
-                <SelectTrigger data-testid="select-rvc">
-                  <SelectValue placeholder="Select RVC..." />
+                <SelectTrigger data-testid="select-employee" className="border-0 p-0 h-auto shadow-none focus:ring-0">
+                  <SelectValue placeholder="Open Shift" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="OPEN_SHIFT">Open Shift</SelectItem>
+                  {propertyEmployees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {shiftForm.employeeId && (
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                <span className="text-sm font-medium text-muted-foreground">Job</span>
+                <Select
+                  value={shiftForm.jobCodeId || "NO_JOB"}
+                  onValueChange={(v) => setShiftForm({ ...shiftForm, jobCodeId: v === "NO_JOB" ? "" : v })}
+                >
+                  <SelectTrigger data-testid="select-job" className="border-0 p-0 h-auto shadow-none focus:ring-0">
+                    <SelectValue placeholder="Select job..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NO_JOB">Select job...</SelectItem>
+                    {selectedEmployeeJobCodes.filter((ejc) => ejc.jobCodeId).map((ejc) => (
+                      <SelectItem key={ejc.jobCodeId} value={ejc.jobCodeId}>
+                        {ejc.jobCode?.name || "Job"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+              <span className="text-sm font-medium text-muted-foreground">Location</span>
+              <Select
+                value={shiftForm.rvcId || "NO_RVC"}
+                onValueChange={(v) => setShiftForm({ ...shiftForm, rvcId: v === "NO_RVC" ? "" : v })}
+              >
+                <SelectTrigger data-testid="select-rvc" className="border-0 p-0 h-auto shadow-none focus:ring-0">
+                  <SelectValue placeholder="Select location..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NO_RVC">Select location...</SelectItem>
                   {propertyRvcs.map((rvc) => (
                     <SelectItem key={rvc.id} value={rvc.id}>
                       {rvc.name}
@@ -682,50 +850,125 @@ export default function SchedulingPage() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">Start Time</label>
-                <Input
-                  type="time"
-                  value={shiftForm.startTime}
-                  onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
-                  data-testid="input-start-time"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">End Time</label>
-                <Input
-                  type="time"
-                  value={shiftForm.endTime}
-                  onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
-                  data-testid="input-end-time"
-                />
+          <div className="space-y-0 divide-y border-t mt-4 pt-2">
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+              <span className="text-sm font-medium text-muted-foreground">Start Date</span>
+              <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
+            </div>
+
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+              <span className="text-sm font-medium text-muted-foreground">Start Time</span>
+              <Input
+                type="time"
+                value={shiftForm.startTime}
+                onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
+                className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
+                data-testid="input-start-time"
+              />
+            </div>
+
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+              <span className="text-sm font-medium text-muted-foreground">End Date</span>
+              <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
+            </div>
+
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+              <span className="text-sm font-medium text-muted-foreground">End Time</span>
+              <Input
+                type="time"
+                value={shiftForm.endTime}
+                onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
+                className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
+                data-testid="input-end-time"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-0 divide-y border-t mt-4 pt-2">
+            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-start">
+              <span className="text-sm font-medium text-muted-foreground">Notes</span>
+              <Textarea
+                value={shiftForm.notes}
+                onChange={(e) => setShiftForm({ ...shiftForm, notes: e.target.value })}
+                placeholder="Optional"
+                className="min-h-[60px] border-0 p-0 shadow-none focus-visible:ring-0 resize-none"
+                data-testid="input-notes"
+              />
+            </div>
+
+            <div className="py-3">
+              <span className="text-sm font-medium text-muted-foreground mb-2 block">Color</span>
+              <div className="flex flex-wrap gap-2">
+                {SHIFT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setShiftForm({ ...shiftForm, color: c })}
+                    className={`w-7 h-7 rounded-md flex items-center justify-center ${shiftForm.color === c ? "ring-2 ring-offset-2 ring-primary" : ""}`}
+                    style={{ backgroundColor: c }}
+                    data-testid={`color-${c}`}
+                  >
+                    {shiftForm.color === c && (
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {shiftForm.employeeId && shiftForm.jobCodeId && (
-              <div className="p-3 bg-muted rounded-md text-sm">
-                <div className="flex justify-between">
-                  <span>Shift Duration:</span>
-                  <span className="font-medium">{formatHours(calculateShiftHours(shiftForm.startTime, shiftForm.endTime))}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span>Estimated Cost:</span>
-                  <span className="font-medium">
-                    {formatCurrency(
-                      calculateShiftHours(shiftForm.startTime, shiftForm.endTime) * 
-                      getPayRateForShift(shiftForm.employeeId, shiftForm.jobCodeId)
-                    )}
-                  </span>
-                </div>
+            {!editingShift && (
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                <span className="text-sm font-medium text-muted-foreground">Repeat shift</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-auto p-0 justify-start font-normal">
+                      {shiftForm.repeatDays.length === 0 
+                        ? "Select days..."
+                        : shiftForm.repeatDays.map((d) => WEEKDAYS.find((w) => w.key === d)?.label).join(", ")}
+                      <ChevronDown className="w-4 h-4 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    {WEEKDAYS.map((wd) => (
+                      <DropdownMenuCheckboxItem
+                        key={wd.key}
+                        checked={shiftForm.repeatDays.includes(wd.key)}
+                        onCheckedChange={() => toggleRepeatDay(wd.key)}
+                        data-testid={`repeat-day-${wd.label}`}
+                      >
+                        {wd.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
+
+          {shiftForm.employeeId && shiftForm.jobCodeId && (
+            <div className="p-3 bg-muted rounded-md text-sm mt-4">
+              <div className="flex justify-between gap-4">
+                <span>Duration:</span>
+                <span className="font-medium">{formatHours(calculateShiftHours(shiftForm.startTime, shiftForm.endTime))}</span>
+              </div>
+              <div className="flex justify-between gap-4 mt-1">
+                <span>Est. Cost{shiftForm.repeatDays.length > 1 ? ` (${shiftForm.repeatDays.length} days)` : ""}:</span>
+                <span className="font-medium">
+                  {formatCurrency(
+                    calculateShiftHours(shiftForm.startTime, shiftForm.endTime) * 
+                    getPayRateForShift(shiftForm.employeeId, shiftForm.jobCodeId) *
+                    Math.max(1, shiftForm.repeatDays.length)
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-4 flex justify-between gap-2">
             {editingShift && (
               <Button
                 variant="destructive"
@@ -733,17 +976,24 @@ export default function SchedulingPage() {
                   deleteShiftMutation.mutate(editingShift.id);
                   closeDialog();
                 }}
+                className="mr-auto"
               >
+                <Trash2 className="w-4 h-4 mr-2" />
                 Delete
               </Button>
             )}
-            <Button
-              onClick={handleSaveShift}
-              disabled={createShiftMutation.isPending || updateShiftMutation.isPending}
-              data-testid="button-save-shift"
-            >
-              {editingShift ? "Update" : "Add"} Shift
-            </Button>
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" onClick={closeDialog}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveShift}
+                disabled={createShiftMutation.isPending || updateShiftMutation.isPending || bulkCreateShiftsMutation.isPending}
+                data-testid="button-save-shift"
+              >
+                {bulkCreateShiftsMutation.isPending || createShiftMutation.isPending || updateShiftMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -828,6 +1078,111 @@ function ShiftBlock({
       <div className="text-[10px] opacity-90">
         {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
       </div>
+      {onDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="absolute top-1 right-1 w-4 h-4 rounded bg-black/20 hover:bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+          data-testid={`button-delete-shift-${shift.id}`}
+        >
+          <Trash2 className="w-2.5 h-2.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DroppableRow({ employeeId, children }: { employeeId: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `employee-row:${employeeId}`,
+  });
+
+  return (
+    <tr
+      ref={setNodeRef}
+      className={`border-b transition-colors ${isOver ? "bg-primary/10" : "hover:bg-muted/20"}`}
+    >
+      {children}
+    </tr>
+  );
+}
+
+function DraggableShift({
+  shift,
+  jobName,
+  color,
+  onEdit,
+  onDelete,
+  showBadge,
+}: {
+  shift: Shift;
+  jobName: string;
+  color: string;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  showBadge?: number;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: shift.id,
+  });
+
+  const formatTime = (time: string | null) => {
+    if (!time) return "";
+    try {
+      return format(parseISO(`2000-01-01T${time}`), "h:mm a");
+    } catch {
+      return time;
+    }
+  };
+
+  const isPublished = shift.status === "published";
+  const bgOpacity = isPublished ? "bg-opacity-100" : "bg-opacity-60";
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        backgroundColor: isPublished ? color : `${color}99`,
+      }
+    : { backgroundColor: isPublished ? color : `${color}99` };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-2 rounded cursor-grab relative group text-white ${bgOpacity} ${isDragging ? "opacity-50 shadow-lg z-50" : ""}`}
+      data-testid={`shift-block-${shift.id}`}
+      {...listeners}
+      {...attributes}
+    >
+      {showBadge && showBadge > 1 && (
+        <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]">
+          {showBadge}
+        </Badge>
+      )}
+      <div className="text-xs font-medium truncate flex items-center gap-1">
+        <GripVertical className="w-3 h-3 opacity-60" />
+        {jobName || "Shift"}
+        {!isPublished && (
+          <span className="text-[10px] opacity-80">(draft)</span>
+        )}
+      </div>
+      <div className="text-[10px] opacity-90">
+        {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
+      </div>
+      {onEdit && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          className="absolute top-1 right-5 w-4 h-4 rounded bg-black/20 hover:bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+          data-testid={`button-edit-shift-${shift.id}`}
+        >
+          <Settings className="w-2.5 h-2.5" />
+        </button>
+      )}
       {onDelete && (
         <button
           onClick={(e) => {

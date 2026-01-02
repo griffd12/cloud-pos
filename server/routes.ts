@@ -5753,6 +5753,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Bulk create shifts (for repeating shifts across multiple days)
+  app.post("/api/shifts/bulk-create", async (req, res) => {
+    try {
+      const { shifts } = req.body;
+      if (!Array.isArray(shifts) || shifts.length === 0) {
+        return res.status(400).json({ message: "Shifts array is required" });
+      }
+      const createdShifts = [];
+      for (const shiftData of shifts) {
+        const parsed = insertShiftSchema.safeParse(shiftData);
+        if (!parsed.success) {
+          return res.status(400).json({ message: "Invalid shift data", errors: parsed.error.issues });
+        }
+        const shift = await storage.createShift(parsed.data);
+        createdShifts.push(shift);
+      }
+      res.status(201).json(createdShifts);
+    } catch (error) {
+      console.error("Bulk create shifts error:", error);
+      res.status(500).json({ message: "Failed to bulk create shifts" });
+    }
+  });
+
   // Update shift
   app.patch("/api/shifts/:id", async (req, res) => {
     try {
