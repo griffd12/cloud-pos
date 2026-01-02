@@ -462,7 +462,7 @@ export interface IStorage {
   createShift(data: InsertShift): Promise<Shift>;
   updateShift(id: string, data: Partial<InsertShift>): Promise<Shift | undefined>;
   deleteShift(id: string): Promise<boolean>;
-  publishShifts(shiftIds: string[], publishedById: string): Promise<Shift[]>;
+  publishShifts(shiftIds: string[], publishedById: string | null): Promise<Shift[]>;
   copyWeekSchedule(propertyId: string, sourceWeekStart: string, targetWeekStart: string): Promise<Shift[]>;
 
   // Shift Cover Requests
@@ -2961,10 +2961,18 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  async publishShifts(shiftIds: string[], publishedById: string): Promise<Shift[]> {
+  async publishShifts(shiftIds: string[], publishedById: string | null): Promise<Shift[]> {
     const now = new Date();
+    const updateData: Record<string, unknown> = { 
+      status: "published", 
+      publishedAt: now, 
+      updatedAt: now 
+    };
+    if (publishedById) {
+      updateData.publishedById = publishedById;
+    }
     return db.update(shifts)
-      .set({ status: "published", publishedAt: now, publishedById, updatedAt: now })
+      .set(updateData)
       .where(inArray(shifts.id, shiftIds))
       .returning();
   }

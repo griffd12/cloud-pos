@@ -5808,10 +5808,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/shifts/publish", async (req, res) => {
     try {
       const { shiftIds, publishedById } = req.body;
-      if (!Array.isArray(shiftIds) || !publishedById) {
-        return res.status(400).json({ message: "Shift IDs array and publisher ID are required" });
+      if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
+        return res.status(400).json({ message: "Shift IDs array is required" });
       }
-      const shifts = await storage.publishShifts(shiftIds, publishedById);
+      // publishedById is optional - pass null if not a valid UUID
+      const validPublisherId = publishedById && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publishedById) 
+        ? publishedById 
+        : null;
+      const shifts = await storage.publishShifts(shiftIds, validPublisherId);
       res.json(shifts);
     } catch (error) {
       console.error("Publish shifts error:", error);

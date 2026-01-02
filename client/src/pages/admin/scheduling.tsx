@@ -195,7 +195,6 @@ export default function SchedulingPage() {
     mutationFn: async (shiftIds: string[]) => {
       return apiRequest("POST", "/api/shifts/publish", {
         shiftIds,
-        publishedById: "current-manager",
       });
     },
     onSuccess: () => {
