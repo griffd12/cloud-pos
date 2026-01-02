@@ -269,6 +269,7 @@ export interface IStorage {
 
   // Checks
   getChecks(rvcId?: string, status?: string): Promise<Check[]>;
+  getChecksByPropertyAndDateRange(propertyId: string, startDate: string, endDate: string): Promise<Check[]>;
   getCheck(id: string): Promise<Check | undefined>;
   getOpenChecks(rvcId: string): Promise<Check[]>;
   createCheck(data: InsertCheck): Promise<Check>;
@@ -1411,6 +1412,23 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(checks).where(eq(checks.status, status));
     }
     return db.select().from(checks).orderBy(desc(checks.openedAt));
+  }
+
+  async getChecksByPropertyAndDateRange(propertyId: string, startDate: string, endDate: string): Promise<Check[]> {
+    // Get all RVCs for the property
+    const propertyRvcs = await this.getRvcs(propertyId);
+    const rvcIds = propertyRvcs.map(rvc => rvc.id);
+    
+    if (rvcIds.length === 0) return [];
+    
+    // Query checks for those RVCs within the date range
+    return db.select().from(checks)
+      .where(and(
+        inArray(checks.rvcId, rvcIds),
+        gte(checks.businessDate, startDate),
+        lte(checks.businessDate, endDate)
+      ))
+      .orderBy(checks.businessDate);
   }
 
   async getCheck(id: string): Promise<Check | undefined> {

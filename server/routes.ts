@@ -6369,6 +6369,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       for (const tc of timecardData) {
         const bd = tc.businessDate;
+        // Skip timecards without a businessDate
+        if (!bd) continue;
+        
         if (!dailyData[bd]) {
           dailyData[bd] = { laborHours: 0, laborCost: 0 };
         }
@@ -6384,23 +6387,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Get sales data from checks (items rung on businessDate, not when check was closed)
-      // First get RVCs for the property, then get checks for those RVCs
-      const propertyRvcs = await storage.getRvcs(propertyId as string);
-      const rvcIds = propertyRvcs.map(rvc => rvc.id);
+      // Use efficient single-query storage method
+      const checksData = await storage.getChecksByPropertyAndDateRange(
+        propertyId as string,
+        startDate as string,
+        endDate as string
+      );
       
       const salesByDate: Record<string, number> = {};
-      for (const rvcId of rvcIds) {
-        const rvcChecks = await storage.getChecks(rvcId);
-        for (const check of rvcChecks) {
-          const bd = check.businessDate;
-          // Filter by date range and skip if no businessDate
-          if (!bd || bd < (startDate as string) || bd > (endDate as string)) continue;
-          
-          if (!salesByDate[bd]) {
-            salesByDate[bd] = 0;
-          }
-          salesByDate[bd] += parseFloat(check.subtotal || "0");
+      for (const check of checksData) {
+        const bd = check.businessDate;
+        if (!bd) continue;
+        
+        if (!salesByDate[bd]) {
+          salesByDate[bd] = 0;
         }
+        salesByDate[bd] += parseFloat(check.subtotal || "0");
       }
       
       // Build summary
