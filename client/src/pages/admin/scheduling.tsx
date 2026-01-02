@@ -625,14 +625,14 @@ export default function SchedulingPage() {
               <div>
                 <label className="text-sm font-medium">Employee (optional for open shift)</label>
                 <Select
-                  value={shiftForm.employeeId}
-                  onValueChange={(v) => setShiftForm({ ...shiftForm, employeeId: v, jobCodeId: "" })}
+                  value={shiftForm.employeeId || "OPEN_SHIFT"}
+                  onValueChange={(v) => setShiftForm({ ...shiftForm, employeeId: v === "OPEN_SHIFT" ? "" : v, jobCodeId: "" })}
                 >
                   <SelectTrigger data-testid="select-employee">
                     <SelectValue placeholder="Leave empty for open shift..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Open Shift</SelectItem>
+                    <SelectItem value="OPEN_SHIFT">Open Shift</SelectItem>
                     {propertyEmployees.map((emp) => (
                       <SelectItem key={emp.id} value={emp.id}>
                         {emp.firstName} {emp.lastName}
@@ -654,7 +654,7 @@ export default function SchedulingPage() {
                     <SelectValue placeholder="Select job for this shift..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {selectedEmployeeJobCodes.map((ejc) => (
+                    {selectedEmployeeJobCodes.filter((ejc) => ejc.jobCodeId).map((ejc) => (
                       <SelectItem key={ejc.jobCodeId} value={ejc.jobCodeId}>
                         {ejc.jobCode?.name || "Job"} - {formatCurrency(parseFloat(ejc.payRate || "0"))}/hr
                       </SelectItem>
