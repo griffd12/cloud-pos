@@ -338,7 +338,7 @@ export interface IStorage {
 
   // Admin Sales Reset (property-specific)
   getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
-  clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }>;
+  clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number; timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; tipAllocations: number; tipPoolRuns: number } }>;
 
   // Device Registry (CAL)
   getDevices(filters?: { enterpriseId?: string; propertyId?: string; deviceType?: string; status?: string }): Promise<Device[]>;
@@ -1950,13 +1950,13 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number } }> {
+  async clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number; timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; tipAllocations: number; tipPoolRuns: number } }> {
     // Get all RVCs for this property
     const propertyRvcs = await db.select({ id: rvcs.id }).from(rvcs).where(eq(rvcs.propertyId, propertyId));
     const rvcIds = propertyRvcs.map(r => r.id);
 
     if (rvcIds.length === 0) {
-      return { deleted: { checks: 0, checkItems: 0, payments: 0, discounts: 0, rounds: 0, kdsTicketItems: 0, kdsTickets: 0, auditLogs: 0 } };
+      return { deleted: { checks: 0, checkItems: 0, payments: 0, discounts: 0, rounds: 0, kdsTicketItems: 0, kdsTickets: 0, auditLogs: 0, timePunches: 0, timecards: 0, breakSessions: 0, timecardExceptions: 0, shifts: 0, tipAllocations: 0, tipPoolRuns: 0 } };
     }
 
     // Use transaction to ensure atomicity - either all tables are cleared or none
@@ -2041,6 +2041,47 @@ export class DatabaseStorage implements IStorage {
       const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
       const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
 
+      // STEP 3: Delete labor/time & attendance data for this property
+      // Delete in FK-safe order
+
+      // 3a. Get tip pool run IDs for this property before deleting allocations
+      const propertyTipPoolRuns = await tx.select({ id: tipPoolRuns.id }).from(tipPoolRuns).where(eq(tipPoolRuns.propertyId, propertyId));
+      const tipPoolRunIds = propertyTipPoolRuns.map(r => r.id);
+
+      // 3b. Delete tip allocations (references tipPoolRuns)
+      let tipAllocationsResult = { rowCount: 0 };
+      if (tipPoolRunIds.length > 0) {
+        tipAllocationsResult = await tx.delete(tipAllocations).where(inArray(tipAllocations.tipPoolRunId, tipPoolRunIds));
+      }
+
+      // 3c. Delete tip pool runs
+      const tipPoolRunsResult = await tx.delete(tipPoolRuns).where(eq(tipPoolRuns.propertyId, propertyId));
+
+      // 3d. Get timecard IDs for this property
+      const propertyTimecards = await tx.select({ id: timecards.id }).from(timecards).where(eq(timecards.propertyId, propertyId));
+      const timecardIds = propertyTimecards.map(t => t.id);
+
+      // 3e. Delete timecard exceptions (references timecards)
+      let timecardExceptionsResult = { rowCount: 0 };
+      if (timecardIds.length > 0) {
+        timecardExceptionsResult = await tx.delete(timecardExceptions).where(inArray(timecardExceptions.timecardId, timecardIds));
+      }
+      // Also delete by propertyId to catch any orphaned exceptions
+      const additionalExceptions = await tx.delete(timecardExceptions).where(eq(timecardExceptions.propertyId, propertyId));
+      timecardExceptionsResult = { rowCount: (timecardExceptionsResult.rowCount || 0) + (additionalExceptions.rowCount || 0) };
+
+      // 3f. Delete break sessions (references timePunches via startPunchId/endPunchId)
+      const breakSessionsResult = await tx.delete(breakSessions).where(eq(breakSessions.propertyId, propertyId));
+
+      // 3g. Delete timecards
+      const timecardsResult = await tx.delete(timecards).where(eq(timecards.propertyId, propertyId));
+
+      // 3h. Delete time punches
+      const timePunchesResult = await tx.delete(timePunches).where(eq(timePunches.propertyId, propertyId));
+
+      // 3i. Delete shifts (schedules)
+      const shiftsResult = await tx.delete(shifts).where(eq(shifts.propertyId, propertyId));
+
       return {
         deleted: {
           checks: checksResult.rowCount || 0,
@@ -2051,6 +2092,13 @@ export class DatabaseStorage implements IStorage {
           kdsTicketItems: kdsItemsResult.rowCount || 0,
           kdsTickets: kdsResult.rowCount || 0,
           auditLogs: auditResult.rowCount || 0,
+          timePunches: timePunchesResult.rowCount || 0,
+          timecards: timecardsResult.rowCount || 0,
+          breakSessions: breakSessionsResult.rowCount || 0,
+          timecardExceptions: timecardExceptionsResult.rowCount || 0,
+          shifts: shiftsResult.rowCount || 0,
+          tipAllocations: tipAllocationsResult.rowCount || 0,
+          tipPoolRuns: tipPoolRunsResult.rowCount || 0,
         }
       };
     });

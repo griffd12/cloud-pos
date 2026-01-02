@@ -55,6 +55,13 @@ interface ClearResult {
     kdsTicketItems: number;
     kdsTickets: number;
     auditLogs: number;
+    timePunches: number;
+    timecards: number;
+    breakSessions: number;
+    timecardExceptions: number;
+    shifts: number;
+    tipAllocations: number;
+    tipPoolRuns: number;
   };
 }
 
@@ -343,6 +350,37 @@ export default function UtilitiesPage() {
                 <span className="text-muted-foreground">Audit Logs:</span>{" "}
                 <span className="font-medium">{lastResult.deleted.auditLogs}</span>
               </div>
+              <div className="col-span-2 pt-2 border-t mt-2">
+                <span className="font-semibold text-sm">Labor Data</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Time Punches:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.timePunches}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Timecards:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.timecards}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Break Sessions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.breakSessions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Timecard Exceptions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.timecardExceptions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Shifts (Schedules):</span>{" "}
+                <span className="font-medium">{lastResult.deleted.shifts}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Tip Allocations:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.tipAllocations}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Tip Pool Runs:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.tipPoolRuns}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -452,7 +490,8 @@ export default function UtilitiesPage() {
               Confirm Sales Data Reset
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete all sales transactions, payments, and KDS tickets 
+              This will permanently delete all sales transactions, payments, KDS tickets, 
+              time punches, timecards, schedules, and tip pool data 
               for <strong>{selectedProperty?.name}</strong>.
             </DialogDescription>
           </DialogHeader>
