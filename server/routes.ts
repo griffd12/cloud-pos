@@ -4823,8 +4823,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Employee has an active break. End break first." });
       }
 
+      // Get property for business date calculation using configured rollover time
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(400).json({ message: "Property not found" });
+      }
+
       const now = new Date();
-      const businessDate = resolveBusinessDate(now, propertyId);
+      const businessDate = resolveBusinessDate(now, property);
 
       const punch = await storage.createTimePunch({
         propertyId,
@@ -4862,8 +4868,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Employee is not clocked in" });
       }
 
+      // Get property for business date calculation using configured rollover time
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(400).json({ message: "Property not found" });
+      }
+
       const now = new Date();
-      const businessDate = resolveBusinessDate(now, propertyId);
+      const businessDate = resolveBusinessDate(now, property);
 
       // Check for active break - end it automatically before clock out
       const activeBreak = await storage.getActiveBreak(employeeId);
@@ -5016,8 +5028,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Employee already has an active break" });
       }
 
+      // Get property for business date calculation using configured rollover time
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(400).json({ message: "Property not found" });
+      }
+
       const now = new Date();
-      const businessDate = resolveBusinessDate(now, propertyId);
+      const businessDate = resolveBusinessDate(now, property);
 
       const breakSession = await storage.createBreakSession({
         propertyId,
