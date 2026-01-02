@@ -59,12 +59,6 @@ import {
 } from "lucide-react";
 import type { Employee, Property, Rvc, Shift, JobCode, EmployeeJobCode } from "@shared/schema";
 
-const SHIFT_COLORS = [
-  "#22C55E", "#16A34A", "#14B8A6", "#3B82F6", "#8B5CF6", 
-  "#A855F7", "#7C3AED", "#DC2626", "#EF4444", "#F97316", 
-  "#F59E0B", "#EAB308",
-];
-
 const WEEKDAYS = [
   { key: 0, label: "Sun", short: "S" },
   { key: 1, label: "Mon", short: "M" },
@@ -93,7 +87,6 @@ export default function SchedulingPage() {
     startTime: "09:00",
     endTime: "17:00",
     notes: "",
-    color: "#22C55E",
     repeatDays: [] as number[],
   });
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
@@ -228,7 +221,7 @@ export default function SchedulingPage() {
     setSelectedDay(null);
     setSelectedEmployee(null);
     setEditingShift(null);
-    setShiftForm({ employeeId: "", rvcId: "", jobCodeId: "", startTime: "09:00", endTime: "17:00", notes: "", color: "#22C55E", repeatDays: [] });
+    setShiftForm({ employeeId: "", rvcId: "", jobCodeId: "", startTime: "09:00", endTime: "17:00", notes: "", repeatDays: [] });
   };
 
   const reassignShiftMutation = useMutation({
@@ -385,7 +378,6 @@ export default function SchedulingPage() {
       startTime: "09:00",
       endTime: "17:00",
       notes: "",
-      color: "#22C55E",
       repeatDays: [dayOfWeek],
     });
     setIsAddingShift(true);
@@ -401,7 +393,6 @@ export default function SchedulingPage() {
       startTime: shift.startTime || "09:00",
       endTime: shift.endTime || "17:00",
       notes: shift.notes || "",
-      color: "#22C55E",
       repeatDays: [],
     });
     setIsAddingShift(true);
@@ -897,53 +888,31 @@ export default function SchedulingPage() {
               />
             </div>
 
-            <div className="py-3">
-              <span className="text-sm font-medium text-muted-foreground mb-2 block">Color</span>
-              <div className="flex flex-wrap gap-2">
-                {SHIFT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setShiftForm({ ...shiftForm, color: c })}
-                    className={`w-7 h-7 rounded-md flex items-center justify-center ${shiftForm.color === c ? "ring-2 ring-offset-2 ring-primary" : ""}`}
-                    style={{ backgroundColor: c }}
-                    data-testid={`color-${c}`}
-                  >
-                    {shiftForm.color === c && (
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {!editingShift && (
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-                <span className="text-sm font-medium text-muted-foreground">Repeat shift</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-auto p-0 justify-start font-normal">
-                      {shiftForm.repeatDays.length === 0 
-                        ? "Select days..."
-                        : shiftForm.repeatDays.map((d) => WEEKDAYS.find((w) => w.key === d)?.label).join(", ")}
-                      <ChevronDown className="w-4 h-4 ml-2" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-48">
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-start">
+                <span className="text-sm font-medium text-muted-foreground pt-1">Repeat shift</span>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-3">
                     {WEEKDAYS.map((wd) => (
-                      <DropdownMenuCheckboxItem
+                      <label
                         key={wd.key}
-                        checked={shiftForm.repeatDays.includes(wd.key)}
-                        onCheckedChange={() => toggleRepeatDay(wd.key)}
+                        className="flex items-center gap-2 cursor-pointer"
                         data-testid={`repeat-day-${wd.label}`}
                       >
-                        {wd.label}
-                      </DropdownMenuCheckboxItem>
+                        <Checkbox
+                          checked={shiftForm.repeatDays.includes(wd.key)}
+                          onCheckedChange={() => toggleRepeatDay(wd.key)}
+                        />
+                        <span className="text-sm">{wd.label}</span>
+                      </label>
                     ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  </div>
+                  {shiftForm.repeatDays.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Shift will be created for {shiftForm.repeatDays.length} day(s)
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
