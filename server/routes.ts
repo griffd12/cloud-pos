@@ -440,6 +440,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  app.get("/api/properties/:propertyId/employee-job-codes", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      const data = await storage.getAllEmployeeJobCodesForProperty(propertyId);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching employee job codes for property:", error);
+      res.status(500).json({ message: "Failed to fetch employee job codes" });
+    }
+  });
+
   // ============================================================================
   // RVC ROUTES
   // ============================================================================
@@ -5628,6 +5639,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(jobCodes);
     } catch (error) {
       console.error("Get employee job codes with details error:", error);
+      res.status(500).json({ message: "Failed to get employee job codes" });
+    }
+  });
+
+  // Get all employee job codes for a property (bulk)
+  app.get("/api/properties/:propertyId/employee-job-codes", async (req, res) => {
+    try {
+      const jobCodes = await storage.getAllEmployeeJobCodesForProperty(req.params.propertyId);
+      res.json(jobCodes);
+    } catch (error) {
+      console.error("Get all employee job codes for property error:", error);
       res.status(500).json({ message: "Failed to get employee job codes" });
     }
   });

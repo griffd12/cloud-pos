@@ -385,6 +385,7 @@ export interface IStorage {
   // Employee Job Codes
   getEmployeeJobCodes(employeeId: string): Promise<EmployeeJobCode[]>;
   getEmployeeJobCodesWithDetails(employeeId: string): Promise<(EmployeeJobCode & { jobCode: JobCode })[]>;
+  getAllEmployeeJobCodesForProperty(propertyId: string): Promise<Record<string, (EmployeeJobCode & { jobCode: JobCode })[]>>;
   setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[]): Promise<EmployeeJobCode[]>;
 
   // Pay Periods
@@ -2369,6 +2370,36 @@ export class DatabaseStorage implements IStorage {
       isPrimary: r.isPrimary,
       jobCode: r.jobCode,
     }));
+  }
+
+  async getAllEmployeeJobCodesForProperty(propertyId: string): Promise<Record<string, (EmployeeJobCode & { jobCode: JobCode })[]>> {
+    const results = await db
+      .select({
+        id: employeeJobCodes.id,
+        employeeId: employeeJobCodes.employeeId,
+        jobCodeId: employeeJobCodes.jobCodeId,
+        payRate: employeeJobCodes.payRate,
+        isPrimary: employeeJobCodes.isPrimary,
+        jobCode: jobCodes,
+      })
+      .from(employeeJobCodes)
+      .innerJoin(jobCodes, eq(employeeJobCodes.jobCodeId, jobCodes.id))
+      .innerJoin(employees, eq(employeeJobCodes.employeeId, employees.id))
+      .where(eq(employees.propertyId, propertyId));
+    
+    const grouped: Record<string, (EmployeeJobCode & { jobCode: JobCode })[]> = {};
+    results.forEach(r => {
+      if (!grouped[r.employeeId]) grouped[r.employeeId] = [];
+      grouped[r.employeeId].push({
+        id: r.id,
+        employeeId: r.employeeId,
+        jobCodeId: r.jobCodeId,
+        payRate: r.payRate,
+        isPrimary: r.isPrimary,
+        jobCode: r.jobCode,
+      });
+    });
+    return grouped;
   }
 
   async setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[]): Promise<EmployeeJobCode[]> {
