@@ -1510,6 +1510,37 @@ export const laborSnapshotsRelations = relations(laborSnapshots, ({ one }) => ({
 }));
 
 // ============================================================================
+// OVERTIME RULES - Property-specific labor law configuration
+// ============================================================================
+
+export const overtimeRules = pgTable("overtime_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  dailyRegularHours: decimal("daily_regular_hours", { precision: 4, scale: 2 }).default("8.00"),
+  dailyOvertimeThreshold: decimal("daily_overtime_threshold", { precision: 4, scale: 2 }).default("8.00"),
+  dailyDoubleTimeThreshold: decimal("daily_double_time_threshold", { precision: 4, scale: 2 }),
+  weeklyOvertimeThreshold: decimal("weekly_overtime_threshold", { precision: 4, scale: 2 }).default("40.00"),
+  weeklyDoubleTimeThreshold: decimal("weekly_double_time_threshold", { precision: 4, scale: 2 }),
+  overtimeMultiplier: decimal("overtime_multiplier", { precision: 3, scale: 2 }).default("1.50"),
+  doubleTimeMultiplier: decimal("double_time_multiplier", { precision: 3, scale: 2 }).default("2.00"),
+  enableDailyOvertime: boolean("enable_daily_overtime").default(true),
+  enableDailyDoubleTime: boolean("enable_daily_double_time").default(false),
+  enableWeeklyOvertime: boolean("enable_weekly_overtime").default(true),
+  enableWeeklyDoubleTime: boolean("enable_weekly_double_time").default(false),
+  weekStartDay: integer("week_start_day").default(0),
+  effectiveDate: text("effective_date"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const overtimeRulesRelations = relations(overtimeRules, ({ one }) => ({
+  property: one(properties, { fields: [overtimeRules.propertyId], references: [properties.id] }),
+}));
+
+// ============================================================================
 // T&A INSERT SCHEMAS AND TYPES
 // ============================================================================
 
@@ -1533,6 +1564,7 @@ export const insertTipPoolPolicySchema = createInsertSchema(tipPoolPolicies).omi
 export const insertTipPoolRunSchema = createInsertSchema(tipPoolRuns).omit({ id: true, createdAt: true });
 export const insertTipAllocationSchema = createInsertSchema(tipAllocations).omit({ id: true, createdAt: true });
 export const insertLaborSnapshotSchema = createInsertSchema(laborSnapshots).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertOvertimeRuleSchema = createInsertSchema(overtimeRules).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type JobCode = typeof jobCodes.$inferSelect;
 export type InsertJobCode = z.infer<typeof insertJobCodeSchema>;
@@ -1574,3 +1606,5 @@ export type TipAllocation = typeof tipAllocations.$inferSelect;
 export type InsertTipAllocation = z.infer<typeof insertTipAllocationSchema>;
 export type LaborSnapshot = typeof laborSnapshots.$inferSelect;
 export type InsertLaborSnapshot = z.infer<typeof insertLaborSnapshotSchema>;
+export type OvertimeRule = typeof overtimeRules.$inferSelect;
+export type InsertOvertimeRule = z.infer<typeof insertOvertimeRuleSchema>;

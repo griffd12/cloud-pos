@@ -16,7 +16,7 @@ import {
   timecards, timecardExceptions, timecardEdits,
   employeeAvailability, availabilityExceptions, timeOffRequests,
   shiftTemplates, shifts, shiftCoverRequests, shiftCoverOffers, shiftCoverApprovals,
-  tipPoolPolicies, tipPoolRuns, tipAllocations, laborSnapshots,
+  tipPoolPolicies, tipPoolRuns, tipAllocations, laborSnapshots, overtimeRules,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -80,6 +80,7 @@ import {
   type TipPoolRun, type InsertTipPoolRun,
   type TipAllocation, type InsertTipAllocation,
   type LaborSnapshot, type InsertLaborSnapshot,
+  type OvertimeRule, type InsertOvertimeRule,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -508,6 +509,17 @@ export interface IStorage {
   createLaborSnapshot(data: InsertLaborSnapshot): Promise<LaborSnapshot>;
   updateLaborSnapshot(id: string, data: Partial<InsertLaborSnapshot>): Promise<LaborSnapshot | undefined>;
   calculateLaborSnapshot(propertyId: string, businessDate: string): Promise<LaborSnapshot>;
+
+  // ============================================================================
+  // OVERTIME RULES
+  // ============================================================================
+  
+  getOvertimeRules(propertyId: string): Promise<OvertimeRule[]>;
+  getOvertimeRule(id: string): Promise<OvertimeRule | undefined>;
+  getActiveOvertimeRule(propertyId: string): Promise<OvertimeRule | undefined>;
+  createOvertimeRule(data: InsertOvertimeRule): Promise<OvertimeRule>;
+  updateOvertimeRule(id: string, data: Partial<InsertOvertimeRule>): Promise<OvertimeRule | undefined>;
+  deleteOvertimeRule(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2570,8 +2582,48 @@ export class DatabaseStorage implements IStorage {
 
     // Subtract unpaid breaks from total
     const workedMinutes = totalMinutes - unpaidBreakMinutes;
-    const regularHours = Math.min(workedMinutes / 60, 8);
-    const overtimeHours = Math.max(0, workedMinutes / 60 - 8);
+    const totalHoursWorked = workedMinutes / 60;
+
+    // Get property from employee for OT rule lookup
+    const employee = await this.getEmployee(employeeId);
+    if (!employee?.propertyId) return undefined;
+    
+    // Get active overtime rule for this property
+    const otRule = await this.getActiveOvertimeRule(employee.propertyId);
+    
+    // Apply OT rules - default to 8 hours regular if no rule configured
+    const dailyRegular = otRule?.dailyOvertimeThreshold ? parseFloat(otRule.dailyOvertimeThreshold) : 8;
+    const dailyDoubleThreshold = otRule?.dailyDoubleTimeThreshold ? parseFloat(otRule.dailyDoubleTimeThreshold) : null;
+    const enableDailyOT = otRule?.enableDailyOvertime !== false;
+    const enableDailyDT = otRule?.enableDailyDoubleTime === true && dailyDoubleThreshold !== null;
+    
+    let regularHours = totalHoursWorked;
+    let overtimeHours = 0;
+    let doubleTimeHours = 0;
+    
+    if (enableDailyOT) {
+      if (enableDailyDT && dailyDoubleThreshold !== null) {
+        // California-style: Regular up to 8, OT from 8-12, DT over 12
+        if (totalHoursWorked > dailyDoubleThreshold) {
+          regularHours = dailyRegular;
+          overtimeHours = dailyDoubleThreshold - dailyRegular;
+          doubleTimeHours = totalHoursWorked - dailyDoubleThreshold;
+        } else if (totalHoursWorked > dailyRegular) {
+          regularHours = dailyRegular;
+          overtimeHours = totalHoursWorked - dailyRegular;
+          doubleTimeHours = 0;
+        } else {
+          regularHours = totalHoursWorked;
+          overtimeHours = 0;
+          doubleTimeHours = 0;
+        }
+      } else {
+        // Standard: Regular up to threshold, OT after
+        regularHours = Math.min(totalHoursWorked, dailyRegular);
+        overtimeHours = Math.max(0, totalHoursWorked - dailyRegular);
+        doubleTimeHours = 0;
+      }
+    }
 
     // Look up employee's pay rate for this job
     let payRate: string | null = null;
@@ -2598,7 +2650,8 @@ export class DatabaseStorage implements IStorage {
     const timecardData: any = {
       regularHours: regularHours.toFixed(2),
       overtimeHours: overtimeHours.toFixed(2),
-      totalHours: (workedMinutes / 60).toFixed(2),
+      doubleTimeHours: doubleTimeHours.toFixed(2),
+      totalHours: totalHoursWorked.toFixed(2),
       breakMinutes: paidBreakMinutes + unpaidBreakMinutes,
       paidBreakMinutes,
       unpaidBreakMinutes,
@@ -2617,9 +2670,6 @@ export class DatabaseStorage implements IStorage {
     if (existing.length > 0) {
       return this.updateTimecard(existing[0].id, timecardData);
     } else {
-      const employee = await this.getEmployee(employeeId);
-      if (!employee?.propertyId) return undefined;
-      
       return this.createTimecard({
         propertyId: employee.propertyId,
         employeeId,
@@ -3178,6 +3228,45 @@ export class DatabaseStorage implements IStorage {
       businessDate,
       ...snapshotData,
     });
+  }
+
+  // ============================================================================
+  // OVERTIME RULES
+  // ============================================================================
+
+  async getOvertimeRules(propertyId: string): Promise<OvertimeRule[]> {
+    return db.select().from(overtimeRules).where(eq(overtimeRules.propertyId, propertyId));
+  }
+
+  async getOvertimeRule(id: string): Promise<OvertimeRule | undefined> {
+    const [result] = await db.select().from(overtimeRules).where(eq(overtimeRules.id, id));
+    return result;
+  }
+
+  async getActiveOvertimeRule(propertyId: string): Promise<OvertimeRule | undefined> {
+    const [result] = await db.select().from(overtimeRules)
+      .where(and(eq(overtimeRules.propertyId, propertyId), eq(overtimeRules.active, true)))
+      .orderBy(desc(overtimeRules.createdAt))
+      .limit(1);
+    return result;
+  }
+
+  async createOvertimeRule(data: InsertOvertimeRule): Promise<OvertimeRule> {
+    const [result] = await db.insert(overtimeRules).values(data).returning();
+    return result;
+  }
+
+  async updateOvertimeRule(id: string, data: Partial<InsertOvertimeRule>): Promise<OvertimeRule | undefined> {
+    const [result] = await db.update(overtimeRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(overtimeRules.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteOvertimeRule(id: string): Promise<boolean> {
+    const result = await db.delete(overtimeRules).where(eq(overtimeRules.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 }
 

@@ -37,6 +37,7 @@ import {
   BarChart3,
   Coins,
   Briefcase,
+  Scale,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -89,6 +90,7 @@ const menuGroups = [
       { title: "Employees", url: "/admin/employees", icon: Users },
       { title: "Jobs", url: "/admin/jobs", icon: Briefcase },
       { title: "Roles & Privileges", url: "/admin/roles", icon: Shield },
+      { title: "Overtime Rules", url: "/admin/overtime-rules", icon: Scale },
     ],
   },
   {

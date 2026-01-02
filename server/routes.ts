@@ -6514,5 +6514,82 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // OVERTIME RULES - Property-specific labor law configuration
+  // ============================================================================
+
+  app.get("/api/overtime-rules", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const rules = await storage.getOvertimeRules(propertyId as string);
+      res.json(rules);
+    } catch (error) {
+      console.error("Get overtime rules error:", error);
+      res.status(500).json({ message: "Failed to get overtime rules" });
+    }
+  });
+
+  app.get("/api/overtime-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.getOvertimeRule(req.params.id);
+      if (!rule) {
+        return res.status(404).json({ message: "Overtime rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Get overtime rule error:", error);
+      res.status(500).json({ message: "Failed to get overtime rule" });
+    }
+  });
+
+  app.get("/api/overtime-rules/active/:propertyId", async (req, res) => {
+    try {
+      const rule = await storage.getActiveOvertimeRule(req.params.propertyId);
+      res.json(rule || null);
+    } catch (error) {
+      console.error("Get active overtime rule error:", error);
+      res.status(500).json({ message: "Failed to get active overtime rule" });
+    }
+  });
+
+  app.post("/api/overtime-rules", async (req, res) => {
+    try {
+      const rule = await storage.createOvertimeRule(req.body);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Create overtime rule error:", error);
+      res.status(500).json({ message: "Failed to create overtime rule" });
+    }
+  });
+
+  app.patch("/api/overtime-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.updateOvertimeRule(req.params.id, req.body);
+      if (!rule) {
+        return res.status(404).json({ message: "Overtime rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Update overtime rule error:", error);
+      res.status(500).json({ message: "Failed to update overtime rule" });
+    }
+  });
+
+  app.delete("/api/overtime-rules/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteOvertimeRule(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Overtime rule not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete overtime rule error:", error);
+      res.status(500).json({ message: "Failed to delete overtime rule" });
+    }
+  });
+
   return httpServer;
 }

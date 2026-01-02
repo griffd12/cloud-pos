@@ -49,6 +49,7 @@ import SchedulingPage from "./scheduling";
 import TipPoolingPage from "./tip-pooling";
 import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
+import OvertimeRulesPage from "./overtime-rules";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -275,6 +276,7 @@ export default function AdminLayout() {
               <Route path="/admin/tip-pooling" component={TipPoolingPage} />
               <Route path="/admin/labor-analytics" component={LaborAnalyticsPage} />
               <Route path="/admin/jobs" component={JobsPage} />
+              <Route path="/admin/overtime-rules" component={OvertimeRulesPage} />
             </Switch>
           </main>
         </div>
