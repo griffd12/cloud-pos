@@ -98,6 +98,7 @@ const menuGroups = [
     items: [
       { title: "Timecards", url: "/admin/timecards", icon: Timer },
       { title: "Scheduling", url: "/admin/scheduling", icon: CalendarDays },
+      { title: "Line Up", url: "/admin/line-up", icon: Clock },
     ],
   },
   {

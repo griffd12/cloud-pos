@@ -5700,6 +5700,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // LINE UP API - Daily Schedule Timeline
+  // ============================================================================
+
+  // Get line-up data for a specific day (shifts, timecards, breaks)
+  app.get("/api/line-up", async (req, res) => {
+    try {
+      const { propertyId, date } = req.query;
+      
+      if (!propertyId || !date) {
+        return res.status(400).json({ message: "propertyId and date are required" });
+      }
+
+      // Get shifts for this date
+      const shifts = await storage.getShifts({
+        propertyId: propertyId as string,
+        startDate: date as string,
+        endDate: date as string,
+      });
+
+      // Get timecards for this business date
+      const timecards = await storage.getTimecards({
+        propertyId: propertyId as string,
+        businessDate: date as string,
+      });
+
+      // Get break sessions for this business date
+      const breakSessions = await storage.getBreakSessions({
+        propertyId: propertyId as string,
+        businessDate: date as string,
+      });
+
+      res.json({
+        shifts,
+        timecards,
+        breakSessions,
+      });
+    } catch (error) {
+      console.error("Get line-up data error:", error);
+      res.status(500).json({ message: "Failed to get line-up data" });
+    }
+  });
+
+  // ============================================================================
   // SCHEDULING API ROUTES
   // ============================================================================
 
