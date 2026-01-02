@@ -1119,10 +1119,9 @@ function DraggableShift({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-2 rounded cursor-grab relative group text-white ${bgOpacity} ${isDragging ? "opacity-50 shadow-lg z-50" : ""}`}
+      onClick={() => !isDragging && onEdit?.()}
+      className={`p-2 rounded cursor-pointer relative group text-white ${bgOpacity} ${isDragging ? "opacity-50 shadow-lg z-50" : ""}`}
       data-testid={`shift-block-${shift.id}`}
-      {...listeners}
-      {...attributes}
     >
       {showBadge && showBadge > 1 && (
         <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]">
@@ -1130,7 +1129,14 @@ function DraggableShift({
         </Badge>
       )}
       <div className="text-xs font-medium truncate flex items-center gap-1">
-        <GripVertical className="w-3 h-3 opacity-60" />
+        <span
+          className="cursor-grab touch-none"
+          {...listeners}
+          {...attributes}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="w-3 h-3 opacity-60" />
+        </span>
         {jobName || "Shift"}
         {!isPublished && (
           <span className="text-[10px] opacity-80">(draft)</span>
@@ -1139,18 +1145,6 @@ function DraggableShift({
       <div className="text-[10px] opacity-90">
         {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
       </div>
-      {onEdit && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="absolute top-1 right-5 w-4 h-4 rounded bg-black/20 hover:bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-          data-testid={`button-edit-shift-${shift.id}`}
-        >
-          <Settings className="w-2.5 h-2.5" />
-        </button>
-      )}
       {onDelete && (
         <button
           onClick={(e) => {
