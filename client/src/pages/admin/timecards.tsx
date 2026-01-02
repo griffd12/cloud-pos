@@ -273,6 +273,7 @@ export default function TimecardsPage() {
                         <TableHead>Clock Out</TableHead>
                         <TableHead>Regular</TableHead>
                         <TableHead>OT</TableHead>
+                        <TableHead>Dbl OT</TableHead>
                         <TableHead>Break</TableHead>
                         <TableHead>Total</TableHead>
                         <TableHead>Status</TableHead>
@@ -291,6 +292,7 @@ export default function TimecardsPage() {
                           <TableCell>{formatTime(tc.clockOutTime)}</TableCell>
                           <TableCell className="tabular-nums">{formatHours(tc.regularHours)}</TableCell>
                           <TableCell className="tabular-nums">{formatHours(tc.overtimeHours)}</TableCell>
+                          <TableCell className="tabular-nums">{formatHours(tc.doubleTimeHours)}</TableCell>
                           <TableCell className="tabular-nums">{tc.breakMinutes || 0}m</TableCell>
                           <TableCell className="tabular-nums font-semibold">{formatHours(tc.totalHours)}</TableCell>
                           <TableCell>

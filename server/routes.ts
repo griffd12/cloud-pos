@@ -6357,13 +6357,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Property ID, start date, and end date are required" });
       }
       
-      const snapshots = await storage.getLaborSnapshots({
+      // Get timecards directly instead of laborSnapshots (which aren't populated)
+      const timecardData = await storage.getTimecards({
         propertyId: propertyId as string,
         startDate: startDate as string,
         endDate: endDate as string,
       });
       
-      // Aggregate the data
+      // Aggregate by business date
+      const dailyData: Record<string, { laborHours: number; laborCost: number }> = {};
+      
+      for (const tc of timecardData) {
+        const bd = tc.businessDate;
+        if (!dailyData[bd]) {
+          dailyData[bd] = { laborHours: 0, laborCost: 0 };
+        }
+        const hours = parseFloat(tc.totalHours || "0");
+        const payRate = parseFloat(tc.payRate || "0");
+        const regularHours = parseFloat(tc.regularHours || "0");
+        const overtimeHours = parseFloat(tc.overtimeHours || "0");
+        const doubleTimeHours = parseFloat(tc.doubleTimeHours || "0");
+        
+        dailyData[bd].laborHours += hours;
+        // Calculate labor cost: regular*rate + OT*rate*1.5 + DT*rate*2
+        dailyData[bd].laborCost += (regularHours * payRate) + (overtimeHours * payRate * 1.5) + (doubleTimeHours * payRate * 2);
+      }
+      
+      // Get sales data from checks (items rung on businessDate, not when check was closed)
+      // First get RVCs for the property, then get checks for those RVCs
+      const propertyRvcs = await storage.getRvcs(propertyId as string);
+      const rvcIds = propertyRvcs.map(rvc => rvc.id);
+      
+      const salesByDate: Record<string, number> = {};
+      for (const rvcId of rvcIds) {
+        const rvcChecks = await storage.getChecks(rvcId);
+        for (const check of rvcChecks) {
+          const bd = check.businessDate;
+          // Filter by date range and skip if no businessDate
+          if (!bd || bd < (startDate as string) || bd > (endDate as string)) continue;
+          
+          if (!salesByDate[bd]) {
+            salesByDate[bd] = 0;
+          }
+          salesByDate[bd] += parseFloat(check.subtotal || "0");
+        }
+      }
+      
+      // Build summary
       const summary = {
         propertyId,
         startDate,
@@ -6375,17 +6415,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         dailyBreakdown: [] as any[],
       };
       
-      for (const snap of snapshots) {
-        const sales = parseFloat(snap.totalSales || "0");
-        const laborCost = parseFloat(snap.laborCost || "0");
-        const laborHours = parseFloat(snap.laborHours || "0");
+      // Get all dates in range
+      const allDates = new Set([...Object.keys(dailyData), ...Object.keys(salesByDate)]);
+      for (const bd of Array.from(allDates).sort()) {
+        const sales = salesByDate[bd] || 0;
+        const laborHours = dailyData[bd]?.laborHours || 0;
+        const laborCost = dailyData[bd]?.laborCost || 0;
         
         summary.totalSales += sales;
         summary.totalLaborCost += laborCost;
         summary.totalLaborHours += laborHours;
         
         summary.dailyBreakdown.push({
-          businessDate: snap.businessDate,
+          businessDate: bd,
           sales,
           laborCost,
           laborHours,
