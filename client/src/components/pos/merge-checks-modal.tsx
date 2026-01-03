@@ -30,8 +30,14 @@ export function MergeChecksModal({
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set());
 
   const { data: openChecks = [], isLoading } = useQuery<Check[]>({
-    queryKey: ["/api/checks", rvcId, "open"],
-    enabled: open,
+    queryKey: ["/api/checks/open", rvcId],
+    queryFn: async () => {
+      if (!rvcId) return [];
+      const res = await fetch(`/api/checks/open?rvcId=${rvcId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch open checks");
+      return res.json();
+    },
+    enabled: open && !!rvcId,
   });
 
   const otherChecks = openChecks.filter((check) => check.id !== currentCheckId);

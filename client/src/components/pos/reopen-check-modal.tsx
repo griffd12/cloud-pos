@@ -27,8 +27,14 @@ export function ReopenCheckModal({
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
 
   const { data: closedChecks = [], isLoading } = useQuery<Check[]>({
-    queryKey: ["/api/checks", rvcId, "closed"],
-    enabled: open,
+    queryKey: ["/api/rvcs", rvcId, "closed-checks"],
+    queryFn: async () => {
+      if (!rvcId) return [];
+      const res = await fetch(`/api/rvcs/${rvcId}/closed-checks?limit=50`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch closed checks");
+      return res.json();
+    },
+    enabled: open && !!rvcId,
   });
 
   const filteredChecks = closedChecks.filter((check) => {
