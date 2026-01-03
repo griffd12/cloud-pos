@@ -51,6 +51,7 @@ import TipPoolingPage from "./tip-pooling";
 import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
+import PaymentProcessorsPage from "./payment-processors";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -259,6 +260,7 @@ export default function AdminLayout() {
               <Route path="/admin/roles" component={RolesPage} />
               <Route path="/admin/tax-groups" component={TaxGroupsPage} />
               <Route path="/admin/tenders" component={TendersPage} />
+              <Route path="/admin/payment-processors" component={PaymentProcessorsPage} />
               <Route path="/admin/discounts" component={DiscountsPage} />
               <Route path="/admin/service-charges" component={ServiceChargesPage} />
               <Route path="/admin/print-classes" component={PrintClassesPage} />

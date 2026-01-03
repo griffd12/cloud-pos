@@ -38,6 +38,7 @@ import {
   Coins,
   Briefcase,
   Scale,
+  Wallet,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -79,6 +80,7 @@ const menuGroups = [
       { title: "Tax Groups", url: "/admin/tax-groups", icon: Receipt },
       { title: "Discounts", url: "/admin/discounts", icon: Percent },
       { title: "Tenders", url: "/admin/tenders", icon: CreditCard },
+      { title: "Payment Processors", url: "/admin/payment-processors", icon: Wallet },
       { title: "Service Charges", url: "/admin/service-charges", icon: DollarSign },
       { title: "Major Groups", url: "/admin/major-groups", icon: LayoutGrid },
       { title: "Family Groups", url: "/admin/family-groups", icon: LayoutGrid },

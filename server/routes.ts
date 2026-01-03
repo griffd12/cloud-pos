@@ -22,6 +22,8 @@ import {
   insertTimeOffRequestSchema, insertShiftTemplateSchema, insertShiftSchema,
   insertShiftCoverRequestSchema, insertShiftCoverOfferSchema,
   insertTipPoolPolicySchema, insertTipPoolRunSchema,
+  // Payment schemas
+  insertPaymentProcessorSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -7718,7 +7720,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/payment-processors", async (req, res) => {
     try {
-      const processor = await storage.createPaymentProcessor(req.body);
+      const parsed = insertPaymentProcessorSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid payment processor data", errors: parsed.error.flatten().fieldErrors });
+      }
+      const processor = await storage.createPaymentProcessor(parsed.data);
       res.status(201).json(processor);
     } catch (error) {
       console.error("Create payment processor error:", error);
@@ -7728,7 +7734,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/payment-processors/:id", async (req, res) => {
     try {
-      const processor = await storage.updatePaymentProcessor(req.params.id, req.body);
+      const parsed = insertPaymentProcessorSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid payment processor data", errors: parsed.error.flatten().fieldErrors });
+      }
+      const processor = await storage.updatePaymentProcessor(req.params.id, parsed.data);
       if (!processor) {
         return res.status(404).json({ message: "Payment processor not found" });
       }
