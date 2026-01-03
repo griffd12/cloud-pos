@@ -63,42 +63,72 @@ function SwipeableItem({
   formatPrice,
 }: SwipeableItemProps) {
   const [isRevealed, setIsRevealed] = useState(false);
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const isDragging = useRef(false);
 
+  // Touch handlers
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    isDragging.current = false;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
+    if (startX.current === null || startY.current === null) return;
     
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-    const deltaX = touchStartX.current - touchEndX;
-    const deltaY = Math.abs(touchStartY.current - touchEndY);
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const deltaX = startX.current - endX;
+    const deltaY = Math.abs(startY.current - endY);
     
-    // Only trigger swipe if horizontal movement is significant and greater than vertical
     if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > deltaY) {
-      if (deltaX > 0) {
-        // Swipe left - reveal actions
-        setIsRevealed(true);
-      } else {
-        // Swipe right - hide actions
-        setIsRevealed(false);
-      }
+      isDragging.current = true;
+      setIsRevealed(deltaX > 0);
     }
     
-    touchStartX.current = null;
-    touchStartY.current = null;
+    startX.current = null;
+    startY.current = null;
   };
 
-  const handleClick = () => {
+  // Mouse handlers for desktop
+  const handleMouseDown = (e: React.MouseEvent) => {
+    startX.current = e.clientX;
+    startY.current = e.clientY;
+    isDragging.current = false;
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (startX.current === null || startY.current === null) return;
+    
+    const deltaX = startX.current - e.clientX;
+    const deltaY = Math.abs(startY.current - e.clientY);
+    
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > deltaY) {
+      isDragging.current = true;
+      setIsRevealed(deltaX > 0);
+    }
+    
+    startX.current = null;
+    startY.current = null;
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    // If we just finished dragging, don't trigger click
+    if (isDragging.current) {
+      isDragging.current = false;
+      return;
+    }
+    
     if (isRevealed) {
       setIsRevealed(false);
     } else {
-      onSelect();
+      // For unsent items, clicking opens modifier modal if available
+      if (!item.sent && onEditModifiers) {
+        onEditModifiers();
+      } else {
+        onSelect();
+      }
     }
   };
 
@@ -122,6 +152,8 @@ function SwipeableItem({
           onClick={handleClick}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
           data-testid={`button-select-item-${item.id}`}
         >
           <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
