@@ -737,6 +737,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ message: "Roles seeded successfully", roles: createdRoles });
   });
 
+  // Get privileges for a specific role
+  app.get("/api/roles/:roleId/privileges", async (req, res) => {
+    try {
+      const privileges = await storage.getRolePrivileges(req.params.roleId);
+      res.json(privileges);
+    } catch (error) {
+      console.error("Error fetching role privileges:", error);
+      res.status(500).json({ message: "Failed to fetch role privileges" });
+    }
+  });
+
+  // Set privileges for a specific role
+  app.put("/api/roles/:roleId/privileges", async (req, res) => {
+    try {
+      const { privileges } = req.body;
+      if (!Array.isArray(privileges)) {
+        return res.status(400).json({ message: "privileges must be an array" });
+      }
+      await storage.setRolePrivileges(req.params.roleId, privileges);
+      res.json({ message: "Role privileges updated" });
+    } catch (error) {
+      console.error("Error updating role privileges:", error);
+      res.status(500).json({ message: "Failed to update role privileges" });
+    }
+  });
+
   // ============================================================================
   // MAJOR GROUP ROUTES (for reporting)
   // ============================================================================
