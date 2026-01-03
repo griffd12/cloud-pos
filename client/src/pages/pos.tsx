@@ -1133,6 +1133,16 @@ export default function PosPage() {
           setShowTransferModal(true);
         }}
         onSplitCheck={() => {
+          const hasUnsentItems = checkItems.some(item => !item.sent);
+          if (hasUnsentItems) {
+            toast({
+              title: "Cannot Split Check",
+              description: "All items must be sent to KDS before splitting. Please send the order first.",
+              variant: "destructive",
+            });
+            setShowFunctionsModal(false);
+            return;
+          }
           setShowFunctionsModal(false);
           setShowSplitModal(true);
         }}
