@@ -297,6 +297,28 @@ async function sendPendingFireOnNextItems(checkId: string): Promise<void> {
   }
 }
 
+// Helper for DOM: Re-display bumped orders when modified
+// When items are added/modified/voided on a check with a bumped ticket, 
+// automatically recall the ticket so kitchen sees the update
+async function recallBumpedTicketsOnModification(checkId: string): Promise<boolean> {
+  const tickets = await storage.getKdsTicketsByCheck(checkId);
+  let recalled = false;
+  
+  for (const ticket of tickets) {
+    if (ticket.status === "bumped") {
+      await storage.recallKdsTicket(ticket.id);
+      recalled = true;
+    }
+  }
+  
+  if (recalled) {
+    const check = await storage.getCheck(checkId);
+    broadcastKdsUpdate(check?.rvcId || undefined);
+  }
+  
+  return recalled;
+}
+
 // Helper to convert preview ticket to final when Send is pressed
 // This creates a proper round, marks items as sent, and removes preview flag
 // Also handles DOM send modes properly
@@ -1836,6 +1858,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             console.error("Dynamic order preview error:", e);
           }
         }
+        
+        // DOM: Re-display bumped orders when modified
+        // If any tickets for this check are bumped, recall them to show the new item
+        await recallBumpedTicketsOnModification(checkId);
       }
 
       // Recalculate and persist check totals
@@ -1930,6 +1956,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate and persist check totals (modifiers affect prices)
       await recalculateCheckTotals(item.checkId);
+      
+      // DOM: Re-display bumped orders when modified
+      await recallBumpedTicketsOnModification(item.checkId);
 
       res.json(updated);
     } catch (error) {
@@ -1979,6 +2008,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate and persist check totals (voiding affects total)
       await recalculateCheckTotals(item.checkId);
+
+      // DOM: Re-display bumped orders when modified (voiding is a modification)
+      await recallBumpedTicketsOnModification(item.checkId);
 
       broadcastKdsUpdate(check?.rvcId || undefined);
       res.json(updated);
