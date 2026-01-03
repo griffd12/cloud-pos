@@ -49,7 +49,7 @@ import {
   type CheckItem, type InsertCheckItem,
   type CheckPayment, type InsertCheckPayment,
   type AuditLog, type InsertAuditLog,
-  type KdsTicket, type InsertKdsTicket,
+  type KdsTicket, type InsertKdsTicket, type KdsTicketItem,
   type PosLayout, type InsertPosLayout,
   type PosLayoutCell, type InsertPosLayoutCell,
   type PosLayoutRvcAssignment, type InsertPosLayoutRvcAssignment,
@@ -304,6 +304,7 @@ export interface IStorage {
   createKdsTicket(data: InsertKdsTicket): Promise<KdsTicket>;
   updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined>;
   createKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
+  getKdsTicketItems(kdsTicketId: string): Promise<KdsTicketItem[]>;
   removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
   voidKdsTicketItem(checkItemId: string): Promise<void>;
   bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
@@ -1659,6 +1660,11 @@ export class DatabaseStorage implements IStorage {
     if (existing.length === 0) {
       await db.insert(kdsTicketItems).values({ kdsTicketId, checkItemId, status: "pending" });
     }
+  }
+
+  async getKdsTicketItems(kdsTicketId: string): Promise<KdsTicketItem[]> {
+    return db.select().from(kdsTicketItems)
+      .where(eq(kdsTicketItems.kdsTicketId, kdsTicketId));
   }
 
   async removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void> {

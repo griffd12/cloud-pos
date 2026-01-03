@@ -30,6 +30,10 @@ export const properties = pgTable("properties", {
   active: boolean("active").default(true),
 });
 
+// DOM Send Modes for KDS
+export const DOM_SEND_MODES = ["fire_on_fly", "fire_on_next", "fire_on_tender"] as const;
+export type DomSendMode = (typeof DOM_SEND_MODES)[number];
+
 export const rvcs = pgTable("rvcs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
@@ -39,6 +43,7 @@ export const rvcs = pgTable("rvcs", {
   defaultOrderType: text("default_order_type").default("dine_in"),
   orderTypeDefault: text("order_type_default").default("dine_in"),
   dynamicOrderMode: boolean("dynamic_order_mode").default(false),
+  domSendMode: text("dom_send_mode").default("fire_on_fly"), // 'fire_on_fly', 'fire_on_next', 'fire_on_tender'
   active: boolean("active").default(true),
 });
 
@@ -637,6 +642,7 @@ export const kdsTickets = pgTable("kds_tickets", {
   recalledAt: timestamp("recalled_at"),
   bumpedAt: timestamp("bumped_at"),
   bumpedByEmployeeId: varchar("bumped_by_employee_id").references(() => employees.id),
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }), // DOM: display subtotal on ticket
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -647,6 +653,9 @@ export const kdsTicketItems = pgTable("kds_ticket_items", {
   status: text("status").notNull().default("pending"), // 'pending', 'bumped', 'voided'
   isReady: boolean("is_ready").default(false), // True when item is marked as ready/made
   readyAt: timestamp("ready_at"),
+  isModified: boolean("is_modified").default(false), // DOM: item was modified after initial send
+  modifiedAt: timestamp("modified_at"), // DOM: when item was last modified
+  sortPriority: integer("sort_priority").default(0), // DOM: for priority sorting (modified items higher)
 });
 
 // ============================================================================
@@ -764,6 +773,7 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type KdsTicket = typeof kdsTickets.$inferSelect;
 export type InsertKdsTicket = z.infer<typeof insertKdsTicketSchema>;
+export type KdsTicketItem = typeof kdsTicketItems.$inferSelect;
 export type Refund = typeof refunds.$inferSelect;
 export type InsertRefund = z.infer<typeof insertRefundSchema>;
 export type RefundItem = typeof refundItems.$inferSelect;

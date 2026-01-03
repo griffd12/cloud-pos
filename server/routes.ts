@@ -201,13 +201,23 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
 // Helper for dynamic order mode - adds item to a preview ticket for real-time KDS display
 // Items remain unsent (sent=false) until explicit Send or Pay action
 // All items for a check are consolidated onto a single preview ticket
+// Respects DOM send modes: fire_on_fly (immediate), fire_on_next (next item triggers), fire_on_tender (payment triggers)
 async function addItemToPreviewTicket(
   checkId: string,
   item: any,
-  rvc: any
+  rvc: any,
+  options?: { triggerSendOfPrevious?: boolean }
 ): Promise<any> {
   const check = await storage.getCheck(checkId);
   if (!check) return item;
+
+  const sendMode = rvc?.domSendMode || "fire_on_fly";
+
+  // Fire on Tender mode - don't add to KDS preview, items only appear on payment
+  if (sendMode === "fire_on_tender") {
+    // Items stay in check only, will be sent when payment is made
+    return item;
+  }
 
   // Get or create preview ticket for this check
   let previewTicket = await storage.getPreviewTicket(checkId);
@@ -221,15 +231,75 @@ async function addItemToPreviewTicket(
     });
   }
 
-  // Add item to the preview ticket (createKdsTicketItem now handles duplicates)
-  await storage.createKdsTicketItem(previewTicket.id, item.id);
+  // Fire on Fly mode - add item immediately to KDS preview
+  if (sendMode === "fire_on_fly") {
+    await storage.createKdsTicketItem(previewTicket.id, item.id);
+    broadcastKdsUpdate(check.rvcId || undefined);
+    return item;
+  }
 
-  broadcastKdsUpdate(check.rvcId || undefined);
+  // Fire on Next mode - this item triggers sending the PREVIOUS item(s) that were queued
+  if (sendMode === "fire_on_next") {
+    // Get all check items that are NOT yet in KDS preview
+    const allItems = await storage.getCheckItems(checkId);
+    const ticketItems = await storage.getKdsTicketItems(previewTicket.id);
+    const ticketItemCheckIds = new Set(ticketItems.map(ti => ti.checkItemId));
+    
+    // Find items that are in check but not yet in KDS (excluding voided and the current new item)
+    const pendingItems = allItems.filter(ci => 
+      !ticketItemCheckIds.has(ci.id) && 
+      !ci.voided && 
+      ci.id !== item.id // Don't send the current item - it waits for the NEXT item
+    );
+    
+    // Add all pending items (previous items) to KDS preview
+    for (const pendingItem of pendingItems) {
+      await storage.createKdsTicketItem(previewTicket.id, pendingItem.id);
+    }
+    
+    // The current item is NOT added yet - it will be added when the NEXT item is rung
+    // We store it in check but don't add to KDS preview
+    
+    broadcastKdsUpdate(check.rvcId || undefined);
+    return item;
+  }
+
   return item;
+}
+
+// Helper to send any pending Fire on Next items when check is finalized
+async function sendPendingFireOnNextItems(checkId: string): Promise<void> {
+  const check = await storage.getCheck(checkId);
+  if (!check) return;
+
+  const rvc = await storage.getRvc(check.rvcId);
+  if (!rvc || rvc.domSendMode !== "fire_on_next") return;
+
+  const previewTicket = await storage.getPreviewTicket(checkId);
+  if (!previewTicket) return;
+
+  const allItems = await storage.getCheckItems(checkId);
+  const ticketItems = await storage.getKdsTicketItems(previewTicket.id);
+  const ticketItemCheckIds = new Set(ticketItems.map(ti => ti.checkItemId));
+
+  // Find items that haven't been added to KDS yet
+  const pendingItems = allItems.filter(ci => 
+    !ticketItemCheckIds.has(ci.id) && !ci.voided
+  );
+
+  // Add remaining items to KDS preview
+  for (const pendingItem of pendingItems) {
+    await storage.createKdsTicketItem(previewTicket.id, pendingItem.id);
+  }
+
+  if (pendingItems.length > 0) {
+    broadcastKdsUpdate(check.rvcId || undefined);
+  }
 }
 
 // Helper to convert preview ticket to final when Send is pressed
 // This creates a proper round, marks items as sent, and removes preview flag
+// Also handles DOM send modes properly
 async function finalizePreviewTicket(
   checkId: string,
   employeeId: string
@@ -237,11 +307,38 @@ async function finalizePreviewTicket(
   const check = await storage.getCheck(checkId);
   if (!check) return null;
 
-  const previewTicket = await storage.getPreviewTicket(checkId);
-  if (!previewTicket) return null;
-
   const rvc = await storage.getRvc(check.rvcId);
   if (!rvc) return null;
+
+  // For fire_on_next mode, send any pending items that haven't been added to KDS yet
+  if (rvc.dynamicOrderMode && rvc.domSendMode === "fire_on_next") {
+    await sendPendingFireOnNextItems(checkId);
+  }
+
+  // For fire_on_tender mode, all items need to be sent now
+  // Create preview ticket with all items if it doesn't exist
+  let previewTicket = await storage.getPreviewTicket(checkId);
+  
+  if (rvc.dynamicOrderMode && rvc.domSendMode === "fire_on_tender") {
+    // Create or update preview ticket with all unsent items
+    if (!previewTicket) {
+      previewTicket = await storage.createKdsTicket({
+        checkId,
+        rvcId: check.rvcId,
+        status: "active",
+        isPreview: true,
+        paid: false,
+      });
+    }
+    
+    const items = await storage.getCheckItems(checkId);
+    const unsentItems = items.filter(i => !i.sent && !i.voided);
+    for (const item of unsentItems) {
+      await storage.createKdsTicketItem(previewTicket.id, item.id);
+    }
+  }
+
+  if (!previewTicket) return null;
 
   // Get items linked to preview ticket
   const items = await storage.getCheckItems(checkId);

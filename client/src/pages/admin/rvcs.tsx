@@ -5,7 +5,7 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertRvcSchema, type Rvc, type InsertRvc, type Property, ORDER_TYPES } from "@shared/schema";
+import { insertRvcSchema, type Rvc, type InsertRvc, type Property, ORDER_TYPES, DOM_SEND_MODES } from "@shared/schema";
 
 export default function RvcsPage() {
   const { toast } = useToast();
@@ -37,6 +37,19 @@ export default function RvcsPage() {
       key: "dynamicOrderMode",
       header: "Dynamic Order",
       render: (value) => (value ? <Badge>Enabled</Badge> : <Badge variant="secondary">Disabled</Badge>),
+    },
+    {
+      key: "domSendMode",
+      header: "DOM Send Mode",
+      render: (value, row) => {
+        if (!row.dynamicOrderMode) return "-";
+        const labels: Record<string, string> = {
+          fire_on_fly: "Fire on Fly",
+          fire_on_next: "Fire on Next",
+          fire_on_tender: "Fire on Tender",
+        };
+        return <Badge variant="outline">{labels[value as string] || value}</Badge>;
+      },
     },
     { key: "defaultOrderType", header: "Default Order Type" },
   ];
@@ -71,6 +84,19 @@ export default function RvcsPage() {
       type: "switch",
       description: "Items appear on KDS immediately when added to check (no send required)",
       defaultValue: false,
+    },
+    {
+      name: "domSendMode",
+      label: "DOM Send Mode",
+      type: "select",
+      options: DOM_SEND_MODES.map((mode) => ({
+        value: mode,
+        label: mode === "fire_on_fly" ? "Fire on Fly (immediate)" :
+               mode === "fire_on_next" ? "Fire on Next (when next item rung)" :
+               "Fire on Tender (when payment made)",
+      })),
+      description: "When Dynamic Order Mode is enabled, controls when items are sent to KDS",
+      defaultValue: "fire_on_fly",
     },
   ];
 
