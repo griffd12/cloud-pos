@@ -39,6 +39,7 @@ import {
   Briefcase,
   Scale,
   Wallet,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -116,6 +117,7 @@ const menuGroups = [
     items: [
       { title: "Device Management", url: "/admin/devices", icon: Monitor },
       { title: "Utilities", url: "/admin/utilities", icon: Wrench },
+      { title: "Onboarding Checklist", url: "/admin/onboarding", icon: ClipboardCheck },
     ],
   },
 ];

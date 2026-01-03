@@ -52,6 +52,7 @@ import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
 import PaymentProcessorsPage from "./payment-processors";
+import OnboardingPage from "./onboarding";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -281,6 +282,7 @@ export default function AdminLayout() {
               <Route path="/admin/labor-analytics" component={LaborAnalyticsPage} />
               <Route path="/admin/jobs" component={JobsPage} />
               <Route path="/admin/overtime-rules" component={OvertimeRulesPage} />
+              <Route path="/admin/onboarding" component={OnboardingPage} />
             </Switch>
           </main>
         </div>
