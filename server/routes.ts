@@ -1780,7 +1780,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!check) return res.status(404).json({ message: "Check not found" });
     const items = await storage.getCheckItems(req.params.id);
     const payments = await storage.getPayments(req.params.id);
-    const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    const totalTendered = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    const checkTotal = parseFloat(check.total || "0");
+    // Cap paidAmount at check total - for cash over-tender, show what was applied to the check
+    const paidAmount = Math.min(totalTendered, checkTotal);
     res.json({ check: { ...check, paidAmount }, items });
   });
 
