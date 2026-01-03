@@ -1064,7 +1064,7 @@ export default function PosPage() {
           canSplit: hasPrivilege("split_check"),
           canMerge: hasPrivilege("merge_checks"),
           canReopen: hasPrivilege("reopen_check"),
-          canPriceOverride: hasPrivilege("price_override"),
+          canPriceOverride: hasPrivilege("modify_price"),
         }}
       />
 

@@ -345,32 +345,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Check if employee has a salaried job with bypassClockIn enabled
       const jobAssignments = await storage.getEmployeeJobCodesWithDetails(employee.id);
-      console.log(`[LOGIN DEBUG] Employee ${employee.id} has ${jobAssignments.length} job assignments`);
       const bypassJob = jobAssignments.find(j => j.bypassClockIn && j.jobCode?.compensationType === "salaried");
       
       if (bypassJob && bypassJob.jobCode?.roleId) {
         // Salaried employee with bypass - load privileges from job's role
         privileges = await storage.getRolePrivileges(bypassJob.jobCode.roleId);
-        console.log(`[LOGIN DEBUG] Using bypass job role ${bypassJob.jobCode.roleId}, got ${privileges.length} privileges`);
         salariedBypass = true;
         bypassJobCode = bypassJob.jobCode;
       } else if (employee.roleId) {
         // Fall back to employee's default role (for admin access)
-        console.log(`[LOGIN DEBUG] Falling back to employee default role ${employee.roleId}`);
         privileges = await storage.getRolePrivileges(employee.roleId);
-        console.log(`[LOGIN DEBUG] Got ${privileges.length} privileges from default role: ${privileges.slice(0, 5).join(', ')}...`);
       }
       
       // Default privileges if none found
       if (privileges.length === 0) {
-        console.log(`[LOGIN DEBUG] No privileges found, using defaults`);
         privileges = [
           "fast_transaction", "send_to_kitchen", "void_unsent", "void_sent",
           "apply_discount", "admin_access", "kds_access", "manager_approval"
         ];
       }
 
-      console.log(`[LOGIN DEBUG] Returning ${privileges.length} privileges for employee ${employee.firstName} ${employee.lastName}`);
       res.json({ employee, privileges, salariedBypass, bypassJobCode });
     } catch (error) {
       console.error("Login error:", error);
