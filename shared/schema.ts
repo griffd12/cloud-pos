@@ -992,6 +992,12 @@ export type InsertDeviceHeartbeat = z.infer<typeof insertDeviceHeartbeatSchema>;
 export const JOB_CODE_TIP_MODES = ["not_eligible", "pooled", "direct", "both"] as const;
 export type JobCodeTipMode = typeof JOB_CODE_TIP_MODES[number];
 
+export const COMPENSATION_TYPES = ["hourly", "salaried"] as const;
+export type CompensationType = typeof COMPENSATION_TYPES[number];
+
+export const SALARY_PERIODS = ["weekly", "biweekly", "monthly", "annual"] as const;
+export type SalaryPeriod = typeof SALARY_PERIODS[number];
+
 export const jobCodes = pgTable("job_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
@@ -999,7 +1005,10 @@ export const jobCodes = pgTable("job_codes", {
   roleId: varchar("role_id").references(() => roles.id),
   name: text("name").notNull(),
   code: text("code").notNull(),
+  compensationType: text("compensation_type").default("hourly"), // "hourly" or "salaried"
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }),
+  salaryAmount: decimal("salary_amount", { precision: 12, scale: 2 }), // amount per salaryPeriod
+  salaryPeriod: text("salary_period"), // "weekly", "biweekly", "monthly", "annual"
   tipMode: text("tip_mode").default("not_eligible"),
   tipPoolWeight: decimal("tip_pool_weight", { precision: 5, scale: 2 }).default("1.00"),
   color: text("color").default("#3B82F6"),
@@ -1013,6 +1022,7 @@ export const employeeJobCodes = pgTable("employee_job_codes", {
   jobCodeId: varchar("job_code_id").notNull().references(() => jobCodes.id),
   payRate: decimal("pay_rate", { precision: 10, scale: 2 }),
   isPrimary: boolean("is_primary").default(false),
+  bypassClockIn: boolean("bypass_clock_in").default(false), // salaried employees can skip clock-in
 });
 
 export const jobCodesRelations = relations(jobCodes, ({ one, many }) => ({
