@@ -18,6 +18,7 @@ interface JobAssignment {
   jobCodeId: string;
   payRate: string;
   isPrimary: boolean;
+  bypassClockIn: boolean;
 }
 
 export default function EmployeesPage() {
@@ -83,6 +84,7 @@ export default function EmployeesPage() {
             jobCodeId: a.jobCodeId,
             payRate: a.payRate || "",
             isPrimary: a.isPrimary || false,
+            bypassClockIn: a.bypassClockIn || false,
           })));
         });
     } else {
@@ -123,6 +125,7 @@ export default function EmployeesPage() {
             jobCodeId: a.jobCodeId,
             payRate: a.payRate || null,
             isPrimary: a.isPrimary,
+            bypassClockIn: a.bypassClockIn,
           }))
         });
       }
@@ -149,6 +152,7 @@ export default function EmployeesPage() {
           jobCodeId: a.jobCodeId,
           payRate: a.payRate || null,
           isPrimary: a.isPrimary,
+          bypassClockIn: a.bypassClockIn,
         }))
       });
       return response.json();
@@ -212,7 +216,7 @@ export default function EmployeesPage() {
   };
 
   const addJobAssignment = () => {
-    setJobAssignments(prev => [...prev, { jobCodeId: "", payRate: "", isPrimary: prev.length === 0 }]);
+    setJobAssignments(prev => [...prev, { jobCodeId: "", payRate: "", isPrimary: prev.length === 0, bypassClockIn: false }]);
   };
 
   const removeJobAssignment = (index: number) => {
@@ -362,52 +366,77 @@ export default function EmployeesPage() {
                 {jobAssignments.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No jobs assigned</p>
                 ) : (
-                  jobAssignments.map((assignment, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Select
-                        value={assignment.jobCodeId}
-                        onValueChange={(v) => updateJobAssignment(index, "jobCodeId", v)}
-                      >
-                        <SelectTrigger className="flex-1" data-testid={`select-job-${index}`}>
-                          <SelectValue placeholder="Select job..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {jobCodes.filter(j => j.active).map((job) => (
-                            <SelectItem key={job.id} value={job.id}>
-                              {job.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="Rate"
-                        className="w-24"
-                        value={assignment.payRate}
-                        onChange={(e) => updateJobAssignment(index, "payRate", e.target.value)}
-                        data-testid={`input-pay-rate-${index}`}
-                      />
-                      <div className="flex items-center gap-1">
-                        <Checkbox
-                          checked={assignment.isPrimary}
-                          onCheckedChange={(c) => updateJobAssignment(index, "isPrimary", !!c)}
-                          data-testid={`checkbox-primary-${index}`}
-                        />
-                        <span className="text-xs text-muted-foreground">Primary</span>
+                  jobAssignments.map((assignment, index) => {
+                    const selectedJob = jobCodes.find(j => j.id === assignment.jobCodeId);
+                    const isSalaried = selectedJob?.compensationType === "salaried";
+                    return (
+                      <div key={index} className="space-y-2 border-b pb-2 last:border-b-0 last:pb-0">
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={assignment.jobCodeId}
+                            onValueChange={(v) => {
+                              updateJobAssignment(index, "jobCodeId", v);
+                              // Reset bypassClockIn if switching to a non-salaried job
+                              const newJob = jobCodes.find(j => j.id === v);
+                              if (newJob?.compensationType !== "salaried" && assignment.bypassClockIn) {
+                                updateJobAssignment(index, "bypassClockIn", false);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="flex-1" data-testid={`select-job-${index}`}>
+                              <SelectValue placeholder="Select job..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {jobCodes.filter(j => j.active).map((job) => (
+                                <SelectItem key={job.id} value={job.id}>
+                                  {job.name} {job.compensationType === "salaried" ? "(Salaried)" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Rate"
+                            className="w-24"
+                            value={assignment.payRate}
+                            onChange={(e) => updateJobAssignment(index, "payRate", e.target.value)}
+                            data-testid={`input-pay-rate-${index}`}
+                          />
+                          <div className="flex items-center gap-1">
+                            <Checkbox
+                              checked={assignment.isPrimary}
+                              onCheckedChange={(c) => updateJobAssignment(index, "isPrimary", !!c)}
+                              data-testid={`checkbox-primary-${index}`}
+                            />
+                            <span className="text-xs text-muted-foreground">Primary</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeJobAssignment(index)}
+                            data-testid={`button-remove-job-${index}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        {isSalaried && (
+                          <div className="flex items-center gap-2 pl-2">
+                            <Checkbox
+                              checked={assignment.bypassClockIn}
+                              onCheckedChange={(c) => updateJobAssignment(index, "bypassClockIn", !!c)}
+                              data-testid={`checkbox-bypass-clockin-${index}`}
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              Bypass clock-in (access POS without clocking in)
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeJobAssignment(index)}
-                        data-testid={`button-remove-job-${index}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
               <p className="text-xs text-muted-foreground">

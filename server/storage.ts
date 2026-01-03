@@ -2431,13 +2431,24 @@ export class DatabaseStorage implements IStorage {
   async setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean; bypassClockIn?: boolean }[]): Promise<EmployeeJobCode[]> {
     await db.delete(employeeJobCodes).where(eq(employeeJobCodes.employeeId, employeeId));
     if (assignments.length === 0) return [];
-    const values = assignments.map((assignment, index) => ({
-      employeeId,
-      jobCodeId: assignment.jobCodeId,
-      payRate: assignment.payRate || null,
-      isPrimary: assignment.isPrimary ?? (index === 0),
-      bypassClockIn: assignment.bypassClockIn ?? false,
-    }));
+    
+    // Fetch all job codes to validate bypassClockIn - only allowed for salaried jobs
+    const allJobCodes = await db.select().from(jobCodes);
+    const jobCodeMap = new Map(allJobCodes.map(jc => [jc.id, jc]));
+    
+    const values = assignments.map((assignment, index) => {
+      const job = jobCodeMap.get(assignment.jobCodeId);
+      // Backend guard: only allow bypassClockIn for salaried jobs
+      const validBypassClockIn = job?.compensationType === "salaried" ? (assignment.bypassClockIn ?? false) : false;
+      
+      return {
+        employeeId,
+        jobCodeId: assignment.jobCodeId,
+        payRate: assignment.payRate || null,
+        isPrimary: assignment.isPrimary ?? (index === 0),
+        bypassClockIn: validBypassClockIn,
+      };
+    });
     return db.insert(employeeJobCodes).values(values).returning();
   }
 
