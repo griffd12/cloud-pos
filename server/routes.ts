@@ -2135,6 +2135,363 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // CHECK CONTROL FUNCTIONS (Split, Transfer, Merge, Price Override)
+  // ============================================================================
+
+  // Split Check - Create new check(s) and move/share items
+  // Supports: moving items, sharing items (splitting an item across checks)
+  app.post("/api/checks/:id/split", async (req, res) => {
+    try {
+      const sourceCheckId = req.params.id;
+      const { employeeId, operations } = req.body;
+      // operations: Array of { type: 'move' | 'share', itemId: string, targetCheckIndex: number, shareRatio?: number }
+      // For share: creates new items with split quantities/amounts
+
+      if (!employeeId) {
+        return res.status(400).json({ message: "Employee ID required" });
+      }
+
+      const sourceCheck = await storage.getCheck(sourceCheckId);
+      if (!sourceCheck) {
+        return res.status(404).json({ message: "Source check not found" });
+      }
+      if (sourceCheck.status === "closed") {
+        return res.status(400).json({ message: "Cannot split a closed check" });
+      }
+
+      // Count how many new checks we need
+      const targetIndices = new Set(operations.map((op: any) => op.targetCheckIndex));
+      const newChecks: any[] = [];
+
+      // Create new checks as needed
+      for (const targetIndex of Array.from(targetIndices)) {
+        const checkNumber = await storage.getNextCheckNumber(sourceCheck.rvcId);
+        const rvc = await storage.getRvc(sourceCheck.rvcId);
+        let businessDate: string | undefined;
+        if (rvc) {
+          const property = await storage.getProperty(rvc.propertyId);
+          if (property) {
+            businessDate = resolveBusinessDate(new Date(), property);
+          }
+        }
+        const newCheck = await storage.createCheck({
+          checkNumber,
+          rvcId: sourceCheck.rvcId,
+          employeeId: sourceCheck.employeeId,
+          orderType: sourceCheck.orderType,
+          status: "open",
+          businessDate,
+          tableNumber: sourceCheck.tableNumber,
+          guestCount: 1,
+        });
+        newChecks.push({ index: targetIndex, check: newCheck });
+      }
+
+      const results: any[] = [];
+
+      // Process each operation
+      for (const op of operations) {
+        const targetCheck = newChecks.find((nc) => nc.index === op.targetCheckIndex)?.check;
+        if (!targetCheck) continue;
+
+        const item = await storage.getCheckItem(op.itemId);
+        if (!item) continue;
+
+        if (op.type === "move") {
+          // Move entire item to new check
+          await storage.updateCheckItem(op.itemId, { checkId: targetCheck.id });
+          results.push({ type: "move", itemId: op.itemId, newCheckId: targetCheck.id });
+        } else if (op.type === "share") {
+          // Share item: split the quantity and amount across checks
+          const shareRatio = op.shareRatio || 0.5; // Default to 50/50
+          const originalQty = item.quantity || 1;
+          const originalPrice = parseFloat(item.unitPrice || "0");
+
+          // Update original item with reduced quantity/value
+          const originalShare = 1 - shareRatio;
+          const newQtyOriginal = Math.max(1, Math.round(originalQty * originalShare));
+          const newPriceOriginal = originalPrice * originalShare;
+
+          await storage.updateCheckItem(op.itemId, {
+            quantity: newQtyOriginal,
+            unitPrice: newPriceOriginal.toFixed(2),
+          });
+
+          // Create new item on target check with shared portion
+          const sharedQty = Math.max(1, originalQty - newQtyOriginal);
+          const sharedPrice = originalPrice * shareRatio;
+
+          // Get business date
+          const rvc = await storage.getRvc(targetCheck.rvcId);
+          let businessDate: string | undefined;
+          if (rvc) {
+            const property = await storage.getProperty(rvc.propertyId);
+            if (property) {
+              businessDate = resolveBusinessDate(new Date(), property);
+            }
+          }
+
+          const newItem = await storage.createCheckItem({
+            checkId: targetCheck.id,
+            menuItemId: item.menuItemId,
+            menuItemName: `${item.menuItemName} (shared)`,
+            unitPrice: sharedPrice.toFixed(2),
+            modifiers: item.modifiers || [],
+            quantity: sharedQty,
+            itemStatus: "active",
+            sent: item.sent,
+            voided: false,
+            businessDate,
+          });
+
+          results.push({
+            type: "share",
+            originalItemId: op.itemId,
+            newItemId: newItem.id,
+            newCheckId: targetCheck.id,
+            shareRatio,
+          });
+        }
+      }
+
+      // Recalculate totals for all affected checks
+      await recalculateCheckTotals(sourceCheckId);
+      for (const nc of newChecks) {
+        await recalculateCheckTotals(nc.check.id);
+      }
+
+      // Log the action
+      await storage.createAuditLog({
+        rvcId: sourceCheck.rvcId,
+        employeeId,
+        action: "split_check",
+        targetType: "check",
+        targetId: sourceCheckId,
+        details: {
+          sourceCheckNumber: sourceCheck.checkNumber,
+          newCheckNumbers: newChecks.map((nc) => nc.check.checkNumber),
+          operationCount: operations.length,
+        },
+      });
+
+      // Return updated source check and new checks
+      const updatedSourceCheck = await storage.getCheck(sourceCheckId);
+      const sourceItems = await storage.getCheckItems(sourceCheckId);
+      const newChecksWithItems = await Promise.all(
+        newChecks.map(async (nc) => ({
+          check: await storage.getCheck(nc.check.id),
+          items: await storage.getCheckItems(nc.check.id),
+        }))
+      );
+
+      res.json({
+        sourceCheck: { check: updatedSourceCheck, items: sourceItems },
+        newChecks: newChecksWithItems,
+        results,
+      });
+    } catch (error) {
+      console.error("Split check error:", error);
+      res.status(500).json({ message: "Failed to split check" });
+    }
+  });
+
+  // Transfer Check - Move check ownership to another employee
+  app.post("/api/checks/:id/transfer", async (req, res) => {
+    try {
+      const checkId = req.params.id;
+      const { employeeId, toEmployeeId } = req.body;
+
+      if (!employeeId || !toEmployeeId) {
+        return res.status(400).json({ message: "Both employeeId and toEmployeeId required" });
+      }
+
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+      if (check.status === "closed") {
+        return res.status(400).json({ message: "Cannot transfer a closed check" });
+      }
+
+      const toEmployee = await storage.getEmployee(toEmployeeId);
+      if (!toEmployee) {
+        return res.status(400).json({ message: "Target employee not found" });
+      }
+
+      const fromEmployee = await storage.getEmployee(check.employeeId);
+
+      // Update check ownership
+      const updatedCheck = await storage.updateCheck(checkId, {
+        employeeId: toEmployeeId,
+      });
+
+      // Log the action
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "transfer_check",
+        targetType: "check",
+        targetId: checkId,
+        details: {
+          checkNumber: check.checkNumber,
+          fromEmployeeId: check.employeeId,
+          fromEmployeeName: fromEmployee ? `${fromEmployee.firstName} ${fromEmployee.lastName}` : "Unknown",
+          toEmployeeId,
+          toEmployeeName: `${toEmployee.firstName} ${toEmployee.lastName}`,
+        },
+      });
+
+      res.json(updatedCheck);
+    } catch (error) {
+      console.error("Transfer check error:", error);
+      res.status(500).json({ message: "Failed to transfer check" });
+    }
+  });
+
+  // Merge Checks - Combine multiple checks into one
+  app.post("/api/checks/merge", async (req, res) => {
+    try {
+      const { targetCheckId, sourceCheckIds, employeeId } = req.body;
+
+      if (!employeeId) {
+        return res.status(400).json({ message: "Employee ID required" });
+      }
+      if (!targetCheckId || !sourceCheckIds || sourceCheckIds.length === 0) {
+        return res.status(400).json({ message: "Target check and source checks required" });
+      }
+
+      const targetCheck = await storage.getCheck(targetCheckId);
+      if (!targetCheck) {
+        return res.status(404).json({ message: "Target check not found" });
+      }
+      if (targetCheck.status === "closed") {
+        return res.status(400).json({ message: "Cannot merge into a closed check" });
+      }
+
+      const mergedFromChecks: number[] = [];
+
+      // Move items from each source check to target
+      for (const sourceId of sourceCheckIds) {
+        if (sourceId === targetCheckId) continue;
+
+        const sourceCheck = await storage.getCheck(sourceId);
+        if (!sourceCheck || sourceCheck.status === "closed") continue;
+
+        const sourceItems = await storage.getCheckItems(sourceId);
+        for (const item of sourceItems) {
+          if (!item.voided) {
+            await storage.updateCheckItem(item.id, { checkId: targetCheckId });
+          }
+        }
+
+        // Close the source check (it's now empty)
+        await storage.updateCheck(sourceId, {
+          status: "closed",
+          closedAt: new Date(),
+        });
+
+        mergedFromChecks.push(sourceCheck.checkNumber);
+      }
+
+      // Recalculate target check totals
+      await recalculateCheckTotals(targetCheckId);
+
+      // Log the action
+      await storage.createAuditLog({
+        rvcId: targetCheck.rvcId,
+        employeeId,
+        action: "merge_checks",
+        targetType: "check",
+        targetId: targetCheckId,
+        details: {
+          targetCheckNumber: targetCheck.checkNumber,
+          mergedFromChecks,
+        },
+      });
+
+      // Return updated target check with items
+      const updatedCheck = await storage.getCheck(targetCheckId);
+      const items = await storage.getCheckItems(targetCheckId);
+
+      res.json({ check: updatedCheck, items });
+    } catch (error) {
+      console.error("Merge checks error:", error);
+      res.status(500).json({ message: "Failed to merge checks" });
+    }
+  });
+
+  // Price Override - Change price of an item
+  app.post("/api/check-items/:id/price-override", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const { newPrice, reason, employeeId, managerPin } = req.body;
+
+      if (!employeeId) {
+        return res.status(400).json({ message: "Employee ID required" });
+      }
+      if (typeof newPrice !== "number" || newPrice < 0) {
+        return res.status(400).json({ message: "Valid price required" });
+      }
+
+      const item = await storage.getCheckItem(itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+
+      const check = await storage.getCheck(item.checkId);
+
+      // Manager approval for price overrides
+      let managerApprovalId = null;
+      if (managerPin) {
+        const manager = await storage.getEmployeeByPin(managerPin);
+        if (!manager) {
+          return res.status(401).json({ message: "Invalid manager PIN" });
+        }
+        // Check if manager has price override approval privilege
+        if (manager.roleId) {
+          const privileges = await storage.getRolePrivileges(manager.roleId);
+          if (!privileges.includes("approve_price_override") && !privileges.includes("admin_access")) {
+            return res.status(403).json({ message: "Manager does not have price override approval privilege" });
+          }
+        }
+        managerApprovalId = manager.id;
+      }
+
+      const oldPrice = parseFloat(item.unitPrice || "0");
+
+      // Update the item price
+      const updatedItem = await storage.updateCheckItem(itemId, {
+        unitPrice: newPrice.toFixed(2),
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(item.checkId);
+
+      // Log the action
+      await storage.createAuditLog({
+        rvcId: check?.rvcId,
+        employeeId,
+        action: "price_override",
+        targetType: "check_item",
+        targetId: itemId,
+        details: {
+          menuItemName: item.menuItemName,
+          oldPrice,
+          newPrice,
+          reason,
+        },
+        reasonCode: reason,
+        managerApprovalId,
+      });
+
+      res.json(updatedItem);
+    } catch (error) {
+      console.error("Price override error:", error);
+      res.status(500).json({ message: "Failed to override price" });
+    }
+  });
+
+  // ============================================================================
   // REFUND ROUTES
   // ============================================================================
 
