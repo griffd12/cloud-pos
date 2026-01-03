@@ -7372,6 +7372,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // === CLOCKED IN STATUS REPORT ===
+  
+  // Get all employees currently clocked in
+  app.get("/api/reports/clocked-in-status", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      
+      // Get all time punches for this property
+      const punches = await storage.getTimePunches({ propertyId: propertyId as string });
+      
+      // Group punches by employee and business date to find those still clocked in
+      const employeePunches: Record<string, typeof punches> = {};
+      for (const punch of punches) {
+        const key = `${punch.employeeId}`;
+        if (!employeePunches[key]) {
+          employeePunches[key] = [];
+        }
+        employeePunches[key].push(punch);
+      }
+      
+      // Find employees who are currently clocked in (have clock_in without matching clock_out)
+      const clockedInEmployees: Array<{
+        employeeId: string;
+        clockInTime: Date;
+        businessDate: string;
+        jobCodeId: string | null;
+        durationMinutes: number;
+        isOnBreak: boolean;
+        breakType?: string;
+      }> = [];
+      
+      for (const [employeeId, empPunches] of Object.entries(employeePunches)) {
+        // Sort by timestamp descending to get most recent first
+        const sorted = [...empPunches].sort((a, b) => 
+          new Date(b.actualTimestamp).getTime() - new Date(a.actualTimestamp).getTime()
+        );
+        
+        // Find the most recent punch
+        const mostRecent = sorted[0];
+        if (mostRecent && mostRecent.punchType === "clock_in") {
+          // This employee is currently clocked in
+          const clockInTime = new Date(mostRecent.actualTimestamp);
+          const now = new Date();
+          const durationMinutes = Math.floor((now.getTime() - clockInTime.getTime()) / (1000 * 60));
+          
+          // Check if on break - look for break_start without break_end
+          const breakPunches = sorted.filter(p => p.punchType === "break_start" || p.punchType === "break_end");
+          let isOnBreak = false;
+          let breakType: string | undefined;
+          
+          if (breakPunches.length > 0) {
+            const mostRecentBreak = breakPunches[0];
+            if (mostRecentBreak.punchType === "break_start") {
+              isOnBreak = true;
+              // Try to get break type from notes or default to "unpaid"
+              breakType = mostRecentBreak.notes || "unpaid";
+            }
+          }
+          
+          clockedInEmployees.push({
+            employeeId,
+            clockInTime,
+            businessDate: mostRecent.businessDate,
+            jobCodeId: mostRecent.jobCodeId,
+            durationMinutes,
+            isOnBreak,
+            breakType,
+          });
+        }
+      }
+      
+      // Get employee details for the clocked in employees
+      const employeeIds = clockedInEmployees.map(e => e.employeeId);
+      const employees = await storage.getEmployees();
+      const employeeMap = new Map(employees.map(e => [e.id, e]));
+      
+      // Get job codes for display
+      const jobCodes = await storage.getJobCodes();
+      const jobCodeMap = new Map(jobCodes.map(j => [j.id, j]));
+      
+      // Build response with employee names and job info
+      const result = clockedInEmployees.map(ce => {
+        const employee = employeeMap.get(ce.employeeId);
+        const jobCode = ce.jobCodeId ? jobCodeMap.get(ce.jobCodeId) : null;
+        
+        return {
+          ...ce,
+          employeeName: employee ? `${employee.firstName} ${employee.lastName}` : "Unknown",
+          employeeNumber: employee?.employeeNumber || "",
+          jobName: jobCode?.name || "N/A",
+        };
+      });
+      
+      // Sort by clock in time (earliest first)
+      result.sort((a, b) => new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime());
+      
+      res.json({
+        propertyId,
+        timestamp: new Date().toISOString(),
+        totalClockedIn: result.length,
+        onBreak: result.filter(e => e.isOnBreak).length,
+        working: result.filter(e => !e.isOnBreak).length,
+        employees: result,
+      });
+    } catch (error) {
+      console.error("Clocked in status report error:", error);
+      res.status(500).json({ message: "Failed to generate clocked in status report" });
+    }
+  });
+
   // ============================================================================
   // OVERTIME RULES - Property-specific labor law configuration
   // ============================================================================
