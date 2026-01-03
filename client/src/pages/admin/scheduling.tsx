@@ -105,18 +105,26 @@ export default function SchedulingPage() {
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
     queryKey: ["/api/job-codes"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: employeeAssignments = [] } = useQuery<EmployeeAssignment[]>({
     queryKey: ["/api/employee-assignments"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
@@ -145,6 +153,8 @@ export default function SchedulingPage() {
       return res.json();
     },
     enabled: !!selectedProperty,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createShiftMutation = useMutation({
