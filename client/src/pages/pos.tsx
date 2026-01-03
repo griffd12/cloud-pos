@@ -665,41 +665,114 @@ export default function PosPage() {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
           {activeLayout?.mode === "custom_grid" && layoutCells.length > 0 ? (
-            <ScrollArea className="flex-1">
-              <div
-                className="grid gap-2 p-4"
-                style={{
-                  gridTemplateColumns: `repeat(${activeLayout.gridCols || 6}, minmax(80px, 1fr))`,
-                  gridTemplateRows: `repeat(${activeLayout.gridRows || 4}, 80px)`,
-                }}
-              >
-                {layoutCells.map((cell) => {
-                  const menuItem = allMenuItems.find(m => m.id === cell.menuItemId);
-                  if (!menuItem) return null;
-                  return (
+            <>
+              <ScrollArea className="flex-1">
+                <div
+                  className="grid gap-2 p-4"
+                  style={{
+                    gridTemplateColumns: `repeat(${activeLayout.gridCols || 6}, minmax(80px, 1fr))`,
+                    gridTemplateRows: `repeat(${activeLayout.gridRows || 4}, 80px)`,
+                  }}
+                >
+                  {layoutCells.map((cell) => {
+                    const menuItem = allMenuItems.find(m => m.id === cell.menuItemId);
+                    if (!menuItem) return null;
+                    return (
+                      <Button
+                        key={cell.id}
+                        className="h-full w-full flex flex-col items-center justify-center text-sm font-medium"
+                        style={{
+                          backgroundColor: cell.backgroundColor || "#3B82F6",
+                          color: cell.textColor || "#FFFFFF",
+                          gridRow: `${cell.rowIndex + 1} / span ${cell.rowSpan || 1}`,
+                          gridColumn: `${cell.colIndex + 1} / span ${cell.colSpan || 1}`,
+                        }}
+                        onClick={() => handleSelectItem(menuItem)}
+                        data-testid={`button-layout-cell-${cell.id}`}
+                      >
+                        <span className="truncate max-w-full">
+                          {cell.displayLabel || menuItem.shortName || menuItem.name}
+                        </span>
+                        <span className="text-xs opacity-70">
+                          ${parseFloat(menuItem.price || "0").toFixed(2)}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+
+              <div className="flex-shrink-0 border-t bg-card p-2">
+                <div className="flex gap-2 flex-wrap">
+                  <div className="h-14 flex-1 min-w-[100px]">
                     <Button
-                      key={cell.id}
-                      className="h-full w-full flex flex-col items-center justify-center text-sm font-medium"
-                      style={{
-                        backgroundColor: cell.backgroundColor || "#3B82F6",
-                        color: cell.textColor || "#FFFFFF",
-                        gridRow: `${cell.rowIndex + 1} / span ${cell.rowSpan || 1}`,
-                        gridColumn: `${cell.colIndex + 1} / span ${cell.colSpan || 1}`,
-                      }}
-                      onClick={() => handleSelectItem(menuItem)}
-                      data-testid={`button-layout-cell-${cell.id}`}
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowOrderTypeModal(true)}
+                      data-testid="button-new-check-fn-grid"
                     >
-                      <span className="truncate max-w-full">
-                        {cell.displayLabel || menuItem.shortName || menuItem.name}
-                      </span>
-                      <span className="text-xs opacity-70">
-                        ${parseFloat(menuItem.price || "0").toFixed(2)}
-                      </span>
+                      <Plus className="w-4 h-4 mr-2" />
+                      New Check
                     </Button>
-                  );
-                })}
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowOpenChecksModal(true)}
+                      data-testid="button-open-checks-grid"
+                    >
+                      <List className="w-4 h-4 mr-2" />
+                      Open Checks
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={handleLookupClick}
+                      data-testid="button-transaction-lookup-grid"
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Lookup
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => {
+                        if (currentCheck && checkItems.length > 0) {
+                          setCurrentCheck(null);
+                          setCheckItems([]);
+                        }
+                      }}
+                      disabled={!currentCheck || checkItems.filter(i => !i.voided).length === 0}
+                      data-testid="button-clear-check-grid"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Clear
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowFunctionsModal(true)}
+                      data-testid="button-functions-grid"
+                    >
+                      <Grid3X3 className="w-4 h-4 mr-2" />
+                      Functions
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </ScrollArea>
+            </>
           ) : (
             <>
               <div className="flex-shrink-0 border-b bg-card px-3 py-2 overflow-x-auto">
