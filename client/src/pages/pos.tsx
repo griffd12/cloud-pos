@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -592,63 +592,59 @@ export default function PosPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold" data-testid="text-pos-title">
-            Cloud POS
-          </h1>
-          <Separator orientation="vertical" className="h-6" />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <User className="w-4 h-4" />
-            <span data-testid="text-employee-name">
-              {currentEmployee.firstName} {currentEmployee.lastName}
-            </span>
+      <header className="flex-shrink-0 bg-card border-b px-3 py-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
+              <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold leading-tight" data-testid="text-rvc-name">
+                {currentRvc.name}
+              </span>
+              <span className="text-xs text-muted-foreground leading-tight" data-testid="text-pos-title">
+                Cloud POS
+              </span>
+            </div>
+          </div>
+          <Separator orientation="vertical" className="h-8" />
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center">
+              <User className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium leading-tight" data-testid="text-employee-name">
+                {currentEmployee.firstName} {currentEmployee.lastName}
+              </span>
+              <span className="text-xs text-muted-foreground leading-tight">
+                #{currentEmployee.employeeNumber || "---"}
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowOpenChecksModal(true)}
-            data-testid="button-open-checks"
-          >
-            <Clock className="w-4 h-4 mr-2" />
-            Open Checks
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLookupClick}
-            data-testid="button-transaction-lookup"
-          >
-            <Search className="w-4 h-4 mr-2" />
-            Lookup
-          </Button>
           {hasPrivilege("admin_access") && (
             <Link href="/admin">
-              <Button variant="ghost" size="sm" data-testid="button-admin">
-                <Settings className="w-4 h-4 mr-2" />
-                Admin
+              <Button variant="ghost" size="icon" data-testid="button-admin">
+                <Settings className="w-4 h-4" />
               </Button>
             </Link>
           )}
           {hasPrivilege("kds_access") && (
             <Link href="/kds">
-              <Button variant="ghost" size="sm" data-testid="button-kds">
-                <Receipt className="w-4 h-4 mr-2" />
-                KDS
+              <Button variant="ghost" size="icon" data-testid="button-kds">
+                <Receipt className="w-4 h-4" />
               </Button>
             </Link>
           )}
           <ThemeToggle />
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={logout}
             data-testid="button-sign-out"
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </header>
@@ -694,37 +690,84 @@ export default function PosPage() {
             </ScrollArea>
           ) : (
             <>
-              <div className="flex-shrink-0 border-b bg-muted/30 px-2 pt-2 overflow-x-auto">
-                <div className="flex gap-1 pb-2">
+              <div className="flex-shrink-0 border-b bg-card px-3 py-2 overflow-x-auto">
+                <div className="flex gap-2">
                   {slusLoading ? (
                     Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="h-10 w-28 bg-muted animate-pulse rounded-md flex-shrink-0" />
+                      <div key={i} className="h-12 w-32 bg-muted animate-pulse rounded-md flex-shrink-0" />
                     ))
                   ) : slus.length === 0 ? (
-                    <span className="text-sm text-muted-foreground px-2 py-2">No categories</span>
+                    <span className="text-sm text-muted-foreground px-2 py-3">No categories configured</span>
                   ) : (
                     slus.map((slu) => (
                       <Button
                         key={slu.id}
-                        variant={selectedSlu?.id === slu.id ? "default" : "outline"}
-                        className="h-10 px-4 flex-shrink-0 whitespace-nowrap"
+                        variant={selectedSlu?.id === slu.id ? "default" : "secondary"}
+                        className="h-12 px-5 flex-shrink-0 whitespace-nowrap text-sm font-semibold"
                         onClick={() => handleSelectSlu(slu)}
                         data-testid={`button-slu-tab-${slu.id}`}
                       >
-                        {slu.name}
+                        {slu.buttonLabel || slu.name}
                       </Button>
                     ))
                   )}
                 </div>
               </div>
 
-              <ScrollArea className="flex-1">
+              <ScrollArea className="flex-1 bg-background">
                 <MenuItemGrid
                   items={menuItems}
                   onSelectItem={handleSelectItem}
                   isLoading={itemsLoading && !!selectedSlu}
                 />
               </ScrollArea>
+
+              <div className="flex-shrink-0 border-t bg-card p-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="secondary"
+                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
+                    onClick={() => setShowOrderTypeModal(true)}
+                    data-testid="button-new-check-fn"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Check
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
+                    onClick={() => setShowOpenChecksModal(true)}
+                    data-testid="button-open-checks"
+                  >
+                    <List className="w-4 h-4 mr-2" />
+                    Open Checks
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
+                    onClick={handleLookupClick}
+                    data-testid="button-transaction-lookup"
+                  >
+                    <Search className="w-4 h-4 mr-2" />
+                    Lookup
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
+                    onClick={() => {
+                      if (currentCheck && checkItems.length > 0) {
+                        setCurrentCheck(null);
+                        setCheckItems([]);
+                      }
+                    }}
+                    disabled={!currentCheck || checkItems.filter(i => !i.voided).length === 0}
+                    data-testid="button-clear-check"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Clear
+                  </Button>
+                </div>
+              </div>
             </>
           )}
         </div>
