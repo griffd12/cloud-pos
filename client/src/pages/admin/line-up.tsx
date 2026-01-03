@@ -295,7 +295,7 @@ export default function LineUpPage() {
             >
               <div className="flex border-b bg-muted/50 sticky top-0 z-10">
                 <div
-                  className="flex-shrink-0 px-3 py-2 font-medium text-sm border-r"
+                  className="flex-shrink-0 px-3 py-2 font-medium text-sm border-r bg-muted/50 sticky left-0 z-20"
                   style={{ width: LEFT_COLUMN_WIDTH }}
                 >
                   Team member
@@ -321,7 +321,7 @@ export default function LineUpPage() {
                   data-testid={`row-employee-${row.employee.id}`}
                 >
                   <div
-                    className="flex-shrink-0 px-3 py-2 border-r"
+                    className="flex-shrink-0 px-3 py-2 border-r bg-background sticky left-0 z-10"
                     style={{ width: LEFT_COLUMN_WIDTH }}
                   >
                     <div className="text-sm font-medium truncate">
