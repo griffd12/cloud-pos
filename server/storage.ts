@@ -125,6 +125,7 @@ export interface IStorage {
 
   // Employee Assignments (multi-property)
   getEmployeeAssignments(employeeId: string): Promise<EmployeeAssignment[]>;
+  getAllEmployeeAssignments(): Promise<EmployeeAssignment[]>;
   setEmployeeAssignments(employeeId: string, propertyIds: string[]): Promise<EmployeeAssignment[]>;
 
   // Privileges
@@ -696,6 +697,10 @@ export class DatabaseStorage implements IStorage {
   // Employee Assignments (multi-property)
   async getEmployeeAssignments(employeeId: string): Promise<EmployeeAssignment[]> {
     return db.select().from(employeeAssignments).where(eq(employeeAssignments.employeeId, employeeId));
+  }
+
+  async getAllEmployeeAssignments(): Promise<EmployeeAssignment[]> {
+    return db.select().from(employeeAssignments);
   }
 
   async setEmployeeAssignments(employeeId: string, propertyIds: string[]): Promise<EmployeeAssignment[]> {

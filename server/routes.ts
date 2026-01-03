@@ -564,6 +564,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Employee Assignments (multi-property)
+  app.get("/api/employee-assignments", async (req, res) => {
+    const data = await storage.getAllEmployeeAssignments();
+    res.json(data);
+  });
+
   app.get("/api/employees/:id/assignments", async (req, res) => {
     const data = await storage.getEmployeeAssignments(req.params.id);
     res.json(data);

@@ -57,7 +57,7 @@ import {
   GripVertical,
   X,
 } from "lucide-react";
-import type { Employee, Property, Rvc, Shift, JobCode, EmployeeJobCode } from "@shared/schema";
+import type { Employee, Property, Rvc, Shift, JobCode, EmployeeJobCode, EmployeeAssignment } from "@shared/schema";
 
 const WEEKDAYS = [
   { key: 0, label: "Sun", short: "S" },
@@ -113,6 +113,10 @@ export default function SchedulingPage() {
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
     queryKey: ["/api/job-codes"],
+  });
+
+  const { data: employeeAssignments = [] } = useQuery<EmployeeAssignment[]>({
+    queryKey: ["/api/employee-assignments"],
   });
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
@@ -255,7 +259,15 @@ export default function SchedulingPage() {
   });
 
   const propertyRvcs = useMemo(() => rvcs.filter((r) => r.propertyId === selectedProperty), [rvcs, selectedProperty]);
-  const propertyEmployees = useMemo(() => employees.filter((e) => e.propertyId === selectedProperty && e.active), [employees, selectedProperty]);
+  
+  const propertyEmployees = useMemo(() => {
+    const assignedEmployeeIds = new Set(
+      employeeAssignments
+        .filter((a) => a.propertyId === selectedProperty)
+        .map((a) => a.employeeId)
+    );
+    return employees.filter((e) => e.active && (assignedEmployeeIds.has(e.id) || e.propertyId === selectedProperty));
+  }, [employees, employeeAssignments, selectedProperty]);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
