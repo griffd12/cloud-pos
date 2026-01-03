@@ -44,8 +44,6 @@ export function PriceOverrideModal({
     setNewPrice(cleaned);
   };
 
-  const priceDiff = newPrice ? parseFloat(newPrice) - currentPrice : 0;
-
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
@@ -80,11 +78,6 @@ export function PriceOverrideModal({
                   data-testid="input-new-price"
                 />
               </div>
-              {newPrice && priceDiff !== 0 && (
-                <p className={`text-sm ${priceDiff < 0 ? "text-green-600" : "text-amber-600"}`}>
-                  {priceDiff < 0 ? "Discount" : "Increase"}: ${Math.abs(priceDiff).toFixed(2)}
-                </p>
-              )}
             </div>
 
             <div className="space-y-2">
