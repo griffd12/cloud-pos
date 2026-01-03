@@ -27,6 +27,8 @@ export const properties = pgTable("properties", {
   currentBusinessDate: text("current_business_date"), // YYYY-MM-DD format, used for manual mode
   // Branding - custom sign-in logo for the property
   signInLogoUrl: text("sign_in_logo_url"),
+  // Auto clock-out settings - automatically clock out employees when business date changes
+  autoClockOutEnabled: boolean("auto_clock_out_enabled").default(false),
   active: boolean("active").default(true),
 });
 
