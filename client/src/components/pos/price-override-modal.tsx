@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,15 @@ export function PriceOverrideModal({
   const [newPrice, setNewPrice] = useState("");
   const [reason, setReason] = useState("");
   const [managerPin, setManagerPin] = useState("");
+
+  // Reset form when modal opens or item changes
+  useEffect(() => {
+    if (open) {
+      setNewPrice("");
+      setReason("");
+      setManagerPin("");
+    }
+  }, [open, item?.id]);
 
   const currentPrice = item ? parseFloat(item.unitPrice || "0") : 0;
 
