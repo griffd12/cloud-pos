@@ -131,6 +131,36 @@ The system includes a comprehensive Time & Attendance module with frontend admin
 - Shift uses: `shiftDate`, `startTime`, `endTime` as strings
 - Timecard uses: `clockInTime`, `clockOutTime` as timestamps, `totalHours` as decimal string
 
+### Payment Processing
+The system implements a PCI-compliant payment processing framework with gateway-agnostic adapters:
+
+**Architecture**:
+- **Gateway Adapters**: Pluggable payment processor adapters (`server/payments/adapters/`)
+- **Registry**: Central adapter factory and credential resolution (`server/payments/registry.ts`)
+- **Types**: Standardized request/response interfaces (`server/payments/types.ts`)
+
+**Supported Processors**:
+- **Stripe**: Payment intents with manual capture, tip adjustment via amount update
+- **Elavon Converge**: JSON API with ccauthonly/cccomplete/ccvoid/ccreturn transactions
+
+**PCI Compliance**:
+- No card data storage (no PAN, CVV, track data, EMV cryptograms)
+- Only safe data stored: transaction IDs, auth codes, last 4 digits, response codes
+- Credentials stored as Replit secrets with key prefix pattern (e.g., `STRIPE_SECRET_KEY`)
+- Database stores only the credential prefix reference
+
+**API Endpoints**:
+- `POST /api/payments/authorize` - Create authorization
+- `POST /api/payments/:id/capture` - Capture authorized payment (amount includes tip)
+- `POST /api/payments/:id/void` - Void uncaptured authorization
+- `POST /api/payments/:id/refund` - Refund captured payment
+- `POST /api/payments/:id/tip-adjust` - Adjust tip on authorized payment
+
+**Transaction Status Flow**:
+- `pending` → `authorized` → `captured` (success path)
+- `pending` → `authorized` → `voided` (cancellation)
+- `captured` → `refunded` (post-settlement refund)
+
 ## External Dependencies
 
 ### Database

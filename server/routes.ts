@@ -24,6 +24,13 @@ import {
   insertTipPoolPolicySchema, insertTipPoolRunSchema,
 } from "@shared/schema";
 import { z } from "zod";
+import {
+  createPaymentAdapter,
+  resolveCredentials,
+  getRegisteredGatewayTypes,
+  isGatewayTypeSupported,
+  getRequiredCredentialKeys,
+} from "./payments";
 
 const clients: Map<string, Set<WebSocket>> = new Map();
 
@@ -7668,6 +7675,471 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Delete overtime rule error:", error);
       res.status(500).json({ message: "Failed to delete overtime rule" });
+    }
+  });
+
+  // ============================================================================
+  // PAYMENT PROCESSORS (Admin Configuration)
+  // ============================================================================
+
+  app.get("/api/payment-processors", async (req, res) => {
+    try {
+      const propertyId = req.query.propertyId as string | undefined;
+      const processors = await storage.getPaymentProcessors(propertyId);
+      res.json(processors);
+    } catch (error) {
+      console.error("Get payment processors error:", error);
+      res.status(500).json({ message: "Failed to get payment processors" });
+    }
+  });
+
+  app.get("/api/payment-processors/gateway-types", async (req, res) => {
+    try {
+      const types = getRegisteredGatewayTypes();
+      res.json(types);
+    } catch (error) {
+      console.error("Get gateway types error:", error);
+      res.status(500).json({ message: "Failed to get gateway types" });
+    }
+  });
+
+  app.get("/api/payment-processors/:id", async (req, res) => {
+    try {
+      const processor = await storage.getPaymentProcessor(req.params.id);
+      if (!processor) {
+        return res.status(404).json({ message: "Payment processor not found" });
+      }
+      res.json(processor);
+    } catch (error) {
+      console.error("Get payment processor error:", error);
+      res.status(500).json({ message: "Failed to get payment processor" });
+    }
+  });
+
+  app.post("/api/payment-processors", async (req, res) => {
+    try {
+      const processor = await storage.createPaymentProcessor(req.body);
+      res.status(201).json(processor);
+    } catch (error) {
+      console.error("Create payment processor error:", error);
+      res.status(500).json({ message: "Failed to create payment processor" });
+    }
+  });
+
+  app.patch("/api/payment-processors/:id", async (req, res) => {
+    try {
+      const processor = await storage.updatePaymentProcessor(req.params.id, req.body);
+      if (!processor) {
+        return res.status(404).json({ message: "Payment processor not found" });
+      }
+      res.json(processor);
+    } catch (error) {
+      console.error("Update payment processor error:", error);
+      res.status(500).json({ message: "Failed to update payment processor" });
+    }
+  });
+
+  app.delete("/api/payment-processors/:id", async (req, res) => {
+    try {
+      const success = await storage.deletePaymentProcessor(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Payment processor not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete payment processor error:", error);
+      res.status(500).json({ message: "Failed to delete payment processor" });
+    }
+  });
+
+  app.post("/api/payment-processors/:id/test-connection", async (req, res) => {
+    try {
+      const processor = await storage.getPaymentProcessor(req.params.id);
+      if (!processor) {
+        return res.status(404).json({ message: "Payment processor not found" });
+      }
+
+      if (!isGatewayTypeSupported(processor.gatewayType)) {
+        return res.status(400).json({ message: `Unsupported gateway type: ${processor.gatewayType}` });
+      }
+
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+      if (!adapter.testConnection) {
+        return res.status(400).json({ message: "Gateway does not support connection testing" });
+      }
+
+      const result = await adapter.testConnection();
+      res.json(result);
+    } catch (error) {
+      console.error("Test connection error:", error);
+      res.status(500).json({ message: "Failed to test connection", success: false });
+    }
+  });
+
+  // ============================================================================
+  // PAYMENT GATEWAY OPERATIONS (Authorize, Capture, Void, Refund, Tip Adjust)
+  // ============================================================================
+
+  app.post("/api/payments/authorize", async (req, res) => {
+    try {
+      const { propertyId, amount, orderId, employeeId, workstationId, currency } = req.body;
+
+      if (!propertyId || !amount) {
+        return res.status(400).json({ message: "Property ID and amount required" });
+      }
+
+      const processor = await storage.getActivePaymentProcessor(propertyId);
+      if (!processor) {
+        return res.status(400).json({ message: "No active payment processor configured for this property" });
+      }
+
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      
+      // Validate all required credentials are present
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      if (missingKeys.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required credentials: ${missingKeys.map(k => `${processor.credentialKeyPrefix}_${k}`).join(', ')}` 
+        });
+      }
+
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+
+      const result = await adapter.authorize({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: currency || "usd",
+        orderId,
+        employeeId,
+        workstationId,
+      });
+
+      // Record the transaction - use responseMessage for errors since dedicated error fields don't exist
+      const transaction = await storage.createPaymentTransaction({
+        paymentProcessorId: processor.id,
+        gatewayTransactionId: result.transactionId || null,
+        authCode: result.authCode || null,
+        referenceNumber: result.referenceNumber || null,
+        cardBrand: result.cardBrand || null,
+        cardLast4: result.cardLast4 || null,
+        entryMode: result.entryMode || null,
+        authAmount: Math.round(amount * 100),
+        status: result.success ? "authorized" : "declined",
+        transactionType: "auth",
+        responseCode: result.success ? result.responseCode || null : result.errorCode || null,
+        responseMessage: result.success ? result.responseMessage || null : result.errorMessage || null,
+      });
+
+      res.json({
+        success: result.success,
+        transactionId: transaction.id,
+        gatewayTransactionId: result.transactionId,
+        authCode: result.authCode,
+        cardBrand: result.cardBrand,
+        cardLast4: result.cardLast4,
+        errorMessage: result.errorMessage,
+        declined: result.declined,
+        declineReason: result.declineReason,
+      });
+    } catch (error) {
+      console.error("Authorization error:", error);
+      res.status(500).json({ message: "Authorization failed", success: false });
+    }
+  });
+
+  app.post("/api/payments/capture", async (req, res) => {
+    try {
+      const { transactionId, amount, tipAmount } = req.body;
+
+      if (!transactionId) {
+        return res.status(400).json({ message: "Transaction ID required" });
+      }
+
+      const transaction = await storage.getPaymentTransaction(transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+
+      const processor = await storage.getPaymentProcessor(transaction.paymentProcessorId);
+      if (!processor) {
+        return res.status(400).json({ message: "Payment processor not found" });
+      }
+
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      
+      // Validate all required credentials are present
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      if (missingKeys.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required credentials: ${missingKeys.map(k => `${processor.credentialKeyPrefix}_${k}`).join(', ')}` 
+        });
+      }
+
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+
+      // Calculate total capture amount (base amount + tip)
+      const baseAmount = amount ? Math.round(amount * 100) : transaction.authAmount;
+      const tipAmountCents = tipAmount ? Math.round(tipAmount * 100) : 0;
+      const totalCaptureAmount = baseAmount + tipAmountCents;
+
+      const result = await adapter.capture({
+        transactionId: transaction.gatewayTransactionId || "",
+        amount: totalCaptureAmount,
+        tipAmount: tipAmountCents, // For reference/logging
+      });
+
+      // Update the transaction record
+      await storage.updatePaymentTransaction(transactionId, {
+        status: result.success ? "captured" : "capture_failed",
+        captureAmount: result.success ? totalCaptureAmount : null,
+        tipAmount: tipAmountCents,
+        responseCode: result.success ? result.responseCode || null : result.errorCode || null,
+        responseMessage: result.success ? result.responseMessage || null : result.errorMessage || null,
+      });
+
+      res.json({
+        success: result.success,
+        transactionId,
+        capturedAmount: result.capturedAmount,
+        errorMessage: result.errorMessage,
+      });
+    } catch (error) {
+      console.error("Capture error:", error);
+      res.status(500).json({ message: "Capture failed", success: false });
+    }
+  });
+
+  app.post("/api/payments/void", async (req, res) => {
+    try {
+      const { transactionId, reason } = req.body;
+
+      if (!transactionId) {
+        return res.status(400).json({ message: "Transaction ID required" });
+      }
+
+      const transaction = await storage.getPaymentTransaction(transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+
+      const processor = await storage.getPaymentProcessor(transaction.paymentProcessorId);
+      if (!processor) {
+        return res.status(400).json({ message: "Payment processor not found" });
+      }
+
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      
+      // Validate all required credentials are present
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      if (missingKeys.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required credentials: ${missingKeys.map(k => `${processor.credentialKeyPrefix}_${k}`).join(', ')}` 
+        });
+      }
+
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+
+      const result = await adapter.void({
+        transactionId: transaction.gatewayTransactionId || "",
+        reason,
+      });
+
+      // Update the transaction record
+      await storage.updatePaymentTransaction(transactionId, {
+        status: result.success ? "voided" : "void_failed",
+        responseCode: result.success ? result.responseCode || null : result.errorCode || null,
+        responseMessage: result.success ? result.responseMessage || null : result.errorMessage || null,
+      });
+
+      res.json({
+        success: result.success,
+        transactionId,
+        errorMessage: result.errorMessage,
+      });
+    } catch (error) {
+      console.error("Void error:", error);
+      res.status(500).json({ message: "Void failed", success: false });
+    }
+  });
+
+  app.post("/api/payments/refund", async (req, res) => {
+    try {
+      const { transactionId, amount, reason } = req.body;
+
+      if (!transactionId || !amount) {
+        return res.status(400).json({ message: "Transaction ID and amount required" });
+      }
+
+      const originalTransaction = await storage.getPaymentTransaction(transactionId);
+      if (!originalTransaction) {
+        return res.status(404).json({ message: "Original transaction not found" });
+      }
+
+      const processor = await storage.getPaymentProcessor(originalTransaction.paymentProcessorId);
+      if (!processor) {
+        return res.status(400).json({ message: "Payment processor not found" });
+      }
+
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      
+      // Validate all required credentials are present
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      if (missingKeys.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required credentials: ${missingKeys.map(k => `${processor.credentialKeyPrefix}_${k}`).join(', ')}` 
+        });
+      }
+
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+
+      const refundAmountCents = Math.round(amount * 100);
+
+      const result = await adapter.refund({
+        transactionId: originalTransaction.gatewayTransactionId || "",
+        amount: refundAmountCents,
+        reason,
+      });
+
+      // Create a new refund transaction record
+      const refundTransaction = await storage.createPaymentTransaction({
+        paymentProcessorId: processor.id,
+        gatewayTransactionId: result.transactionId || null,
+        authCode: null,
+        referenceNumber: originalTransaction.gatewayTransactionId,
+        cardBrand: originalTransaction.cardBrand,
+        cardLast4: originalTransaction.cardLast4,
+        entryMode: null,
+        authAmount: refundAmountCents,
+        status: result.success ? "refunded" : "refund_failed",
+        transactionType: "refund",
+        responseCode: result.success ? result.responseCode || null : result.errorCode || null,
+        responseMessage: result.success ? result.responseMessage || null : result.errorMessage || null,
+      });
+
+      res.json({
+        success: result.success,
+        transactionId: refundTransaction.id,
+        refundedAmount: result.refundedAmount,
+        errorMessage: result.errorMessage,
+      });
+    } catch (error) {
+      console.error("Refund error:", error);
+      res.status(500).json({ message: "Refund failed", success: false });
+    }
+  });
+
+  app.post("/api/payments/tip-adjust", async (req, res) => {
+    try {
+      const { transactionId, tipAmount } = req.body;
+
+      if (!transactionId || tipAmount === undefined) {
+        return res.status(400).json({ message: "Transaction ID and tip amount required" });
+      }
+
+      const transaction = await storage.getPaymentTransaction(transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+
+      const processor = await storage.getPaymentProcessor(transaction.paymentProcessorId);
+      if (!processor) {
+        return res.status(400).json({ message: "Payment processor not found" });
+      }
+
+      if (!processor.supportsTipAdjust) {
+        return res.status(400).json({ message: "Tip adjustment not supported by this processor" });
+      }
+
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      
+      // Validate all required credentials are present
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      if (missingKeys.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required credentials: ${missingKeys.map(k => `${processor.credentialKeyPrefix}_${k}`).join(', ')}` 
+        });
+      }
+
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+
+      if (!adapter.tipAdjust) {
+        return res.status(400).json({ message: "Gateway does not support tip adjustment" });
+      }
+
+      const tipAmountCents = Math.round(tipAmount * 100);
+
+      const result = await adapter.tipAdjust({
+        transactionId: transaction.gatewayTransactionId || "",
+        tipAmount: tipAmountCents,
+      });
+
+      // Update the transaction record
+      await storage.updatePaymentTransaction(transactionId, {
+        tipAmount: tipAmountCents,
+        captureAmount: result.newTotalAmount,
+        responseCode: result.success ? result.responseCode || null : result.errorCode || null,
+        responseMessage: result.success ? result.responseMessage || null : result.errorMessage || null,
+      });
+
+      res.json({
+        success: result.success,
+        transactionId,
+        newTotalAmount: result.newTotalAmount,
+        tipAmount: result.tipAmount,
+        errorMessage: result.errorMessage,
+      });
+    } catch (error) {
+      console.error("Tip adjust error:", error);
+      res.status(500).json({ message: "Tip adjustment failed", success: false });
+    }
+  });
+
+  // Get transaction status
+  app.get("/api/payments/transactions/:id", async (req, res) => {
+    try {
+      const transaction = await storage.getPaymentTransaction(req.params.id);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      res.json(transaction);
+    } catch (error) {
+      console.error("Get transaction error:", error);
+      res.status(500).json({ message: "Failed to get transaction" });
+    }
+  });
+
+  // Get transactions for a check payment
+  app.get("/api/payments/check-payment/:checkPaymentId/transactions", async (req, res) => {
+    try {
+      const transactions = await storage.getPaymentTransactions(req.params.checkPaymentId);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Get transactions error:", error);
+      res.status(500).json({ message: "Failed to get transactions" });
     }
   });
 

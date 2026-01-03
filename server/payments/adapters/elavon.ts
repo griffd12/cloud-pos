@@ -91,7 +91,7 @@ class ElavonConvergeAdapter implements PaymentGatewayAdapter {
     });
 
     try {
-      const response = await fetch(`${this.apiEndpoint}/processxml.do`, {
+      const response = await fetch(`${this.apiEndpoint}/processjson.do`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

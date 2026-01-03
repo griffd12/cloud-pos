@@ -7,6 +7,7 @@ import {
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
   tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
+  paymentProcessors, paymentTransactions,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
   devices, deviceEnrollmentTokens, deviceHeartbeats,
@@ -81,6 +82,8 @@ import {
   type TipAllocation, type InsertTipAllocation,
   type LaborSnapshot, type InsertLaborSnapshot,
   type OvertimeRule, type InsertOvertimeRule,
+  type PaymentProcessor, type InsertPaymentProcessor,
+  type PaymentTransaction, type InsertPaymentTransaction,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -292,6 +295,21 @@ export interface IStorage {
   getPayments(checkId: string): Promise<CheckPayment[]>;
   getAllPayments(): Promise<CheckPayment[]>;
   getAllCheckItems(): Promise<CheckItem[]>;
+
+  // Payment Processors
+  getPaymentProcessors(propertyId?: string): Promise<PaymentProcessor[]>;
+  getPaymentProcessor(id: string): Promise<PaymentProcessor | undefined>;
+  createPaymentProcessor(data: InsertPaymentProcessor): Promise<PaymentProcessor>;
+  updatePaymentProcessor(id: string, data: Partial<InsertPaymentProcessor>): Promise<PaymentProcessor | undefined>;
+  deletePaymentProcessor(id: string): Promise<boolean>;
+  getActivePaymentProcessor(propertyId: string): Promise<PaymentProcessor | undefined>;
+
+  // Payment Transactions
+  getPaymentTransactions(checkPaymentId?: string): Promise<PaymentTransaction[]>;
+  getPaymentTransaction(id: string): Promise<PaymentTransaction | undefined>;
+  getPaymentTransactionByGatewayId(gatewayTransactionId: string): Promise<PaymentTransaction | undefined>;
+  createPaymentTransaction(data: InsertPaymentTransaction): Promise<PaymentTransaction>;
+  updatePaymentTransaction(id: string, data: Partial<PaymentTransaction>): Promise<PaymentTransaction | undefined>;
 
   // Audit Logs
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
@@ -1512,6 +1530,68 @@ export class DatabaseStorage implements IStorage {
 
   async getAllCheckItems(): Promise<CheckItem[]> {
     return db.select().from(checkItems);
+  }
+
+  // Payment Processors
+  async getPaymentProcessors(propertyId?: string): Promise<PaymentProcessor[]> {
+    if (propertyId) {
+      return db.select().from(paymentProcessors).where(eq(paymentProcessors.propertyId, propertyId));
+    }
+    return db.select().from(paymentProcessors);
+  }
+
+  async getPaymentProcessor(id: string): Promise<PaymentProcessor | undefined> {
+    const [result] = await db.select().from(paymentProcessors).where(eq(paymentProcessors.id, id));
+    return result;
+  }
+
+  async createPaymentProcessor(data: InsertPaymentProcessor): Promise<PaymentProcessor> {
+    const [result] = await db.insert(paymentProcessors).values(data).returning();
+    return result;
+  }
+
+  async updatePaymentProcessor(id: string, data: Partial<InsertPaymentProcessor>): Promise<PaymentProcessor | undefined> {
+    const [result] = await db.update(paymentProcessors).set(data).where(eq(paymentProcessors.id, id)).returning();
+    return result;
+  }
+
+  async deletePaymentProcessor(id: string): Promise<boolean> {
+    const result = await db.delete(paymentProcessors).where(eq(paymentProcessors.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getActivePaymentProcessor(propertyId: string): Promise<PaymentProcessor | undefined> {
+    const [result] = await db.select().from(paymentProcessors)
+      .where(and(eq(paymentProcessors.propertyId, propertyId), eq(paymentProcessors.active, true)));
+    return result;
+  }
+
+  // Payment Transactions
+  async getPaymentTransactions(checkPaymentId?: string): Promise<PaymentTransaction[]> {
+    if (checkPaymentId) {
+      return db.select().from(paymentTransactions).where(eq(paymentTransactions.checkPaymentId, checkPaymentId));
+    }
+    return db.select().from(paymentTransactions);
+  }
+
+  async getPaymentTransaction(id: string): Promise<PaymentTransaction | undefined> {
+    const [result] = await db.select().from(paymentTransactions).where(eq(paymentTransactions.id, id));
+    return result;
+  }
+
+  async getPaymentTransactionByGatewayId(gatewayTransactionId: string): Promise<PaymentTransaction | undefined> {
+    const [result] = await db.select().from(paymentTransactions).where(eq(paymentTransactions.gatewayTransactionId, gatewayTransactionId));
+    return result;
+  }
+
+  async createPaymentTransaction(data: InsertPaymentTransaction): Promise<PaymentTransaction> {
+    const [result] = await db.insert(paymentTransactions).values(data).returning();
+    return result;
+  }
+
+  async updatePaymentTransaction(id: string, data: Partial<PaymentTransaction>): Promise<PaymentTransaction | undefined> {
+    const [result] = await db.update(paymentTransactions).set(data).where(eq(paymentTransactions.id, id)).returning();
+    return result;
   }
 
   // Audit Logs

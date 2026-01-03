@@ -63,14 +63,19 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
 
       // For terminal-based payments, you would use Stripe Terminal SDK
       // This is a simplified version for API-based auth
+      // requires_capture = auth successful, ready for capture
+      // requires_payment_method = still needs payment method, not yet authorized
+      const isAuthorized = paymentIntent.status === 'requires_capture';
       
       return {
-        success: paymentIntent.status === 'requires_capture' || paymentIntent.status === 'requires_payment_method',
+        success: isAuthorized,
         transactionId: paymentIntent.id,
-        authCode: paymentIntent.id.slice(-6).toUpperCase(), // Stripe doesn't have traditional auth codes
+        authCode: isAuthorized ? paymentIntent.id.slice(-6).toUpperCase() : undefined,
         referenceNumber: paymentIntent.id,
         responseCode: paymentIntent.status,
-        responseMessage: `Payment intent created: ${paymentIntent.status}`,
+        responseMessage: isAuthorized 
+          ? 'Authorization successful, ready for capture' 
+          : `Payment intent status: ${paymentIntent.status}`,
       };
     } catch (error) {
       const stripeError = error as Stripe.errors.StripeError;
@@ -88,8 +93,9 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
 
   async capture(request: CaptureRequest): Promise<CaptureResponse> {
     try {
-      // If tip is included, the total capture amount may be different
-      const captureAmount = request.amount + (request.tipAmount || 0);
+      // Capture the specified amount (which should already include tip if applicable)
+      // The caller is responsible for summing amount + tip before calling capture
+      const captureAmount = request.amount;
       
       const paymentIntent = await this.stripe.paymentIntents.capture(
         request.transactionId,
