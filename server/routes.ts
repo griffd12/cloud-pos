@@ -5050,21 +5050,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Calculate tax proportionally if check is closed, otherwise estimate
         if (check.status === "closed") {
           employeeData[empId].tax += parseFloat(check.taxTotal || "0");
-          employeeData[empId].total += parseFloat(check.total || "0");
+          const checkTotal = parseFloat(check.total || "0");
+          employeeData[empId].total += checkTotal;
           
-          // Get payments for closed checks
+          // Get payments for closed checks - cap at check total for over-tender
           const checkPayments = allPayments.filter(p => p.checkId === check.id);
+          const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+          const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
+          
           for (const payment of checkPayments) {
-            const amount = parseFloat(payment.amount || "0");
-            employeeData[empId].totalCollected += amount;
+            const tenderedAmount = parseFloat(payment.amount || "0");
+            const appliedAmount = tenderedAmount * ratio; // Cap at check total proportionally
+            employeeData[empId].totalCollected += appliedAmount;
             
             const tender = tenders.find(t => t.id === payment.tenderId);
             if (tender?.type === "cash") {
-              employeeData[empId].cashCollected += amount;
+              employeeData[empId].cashCollected += appliedAmount;
             } else if (tender?.type === "credit") {
-              employeeData[empId].creditCollected += amount;
+              employeeData[empId].creditCollected += appliedAmount;
             } else {
-              employeeData[empId].otherCollected += amount;
+              employeeData[empId].otherCollected += appliedAmount;
             }
           }
         } else {
