@@ -184,3 +184,19 @@ export function incrementDate(businessDate: string): string {
   
   return `${yyyy}-${mm}-${dd}`;
 }
+
+/**
+ * Checks if we just crossed the rollover time for a property.
+ * This is used to detect when auto clock-out should be triggered.
+ * 
+ * @param lastCheckedDate - The last known business date (YYYY-MM-DD)
+ * @param property - The property with settings
+ * @returns true if the business date has changed since lastCheckedDate
+ */
+export function hasBusinessDateChanged(
+  lastCheckedDate: string,
+  property: Pick<Property, 'businessDateRolloverTime' | 'businessDateMode' | 'currentBusinessDate' | 'timezone'>
+): boolean {
+  const currentBusinessDate = getCurrentBusinessDate(property);
+  return currentBusinessDate !== lastCheckedDate;
+}

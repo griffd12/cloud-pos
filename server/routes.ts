@@ -7372,6 +7372,115 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // === AUTO CLOCK-OUT ===
+  
+  // Process auto clock-out for a property when business date changes
+  app.post("/api/time-punches/auto-clock-out", async (req, res) => {
+    try {
+      const { propertyId, triggeredBy } = req.body;
+      
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+
+      // Get property and check if auto clock-out is enabled
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+
+      if (!property.autoClockOutEnabled) {
+        return res.status(400).json({ message: "Auto clock-out is not enabled for this property" });
+      }
+
+      // Get all time punches for this property to find clocked-in employees
+      const punches = await storage.getTimePunches({ propertyId });
+      
+      // Group punches by employee to find those still clocked in
+      const employeePunches: Record<string, typeof punches> = {};
+      for (const punch of punches) {
+        if (!employeePunches[punch.employeeId]) {
+          employeePunches[punch.employeeId] = [];
+        }
+        employeePunches[punch.employeeId].push(punch);
+      }
+
+      const now = new Date();
+      const businessDate = resolveBusinessDate(now, property);
+      const clockedOutEmployees: string[] = [];
+      
+      for (const [employeeId, empPunches] of Object.entries(employeePunches)) {
+        // Sort by timestamp descending to get most recent first
+        const sorted = [...empPunches].sort((a, b) => 
+          new Date(b.actualTimestamp).getTime() - new Date(a.actualTimestamp).getTime()
+        );
+        
+        // Find the most recent punch
+        const mostRecent = sorted[0];
+        if (mostRecent && mostRecent.punchType === "clock_in") {
+          // This employee is clocked in - auto clock them out
+          
+          // End any active break first
+          const activeBreak = await storage.getActiveBreak(employeeId);
+          if (activeBreak) {
+            const breakMinutes = Math.round((now.getTime() - new Date(activeBreak.startTime).getTime()) / 60000);
+            await storage.updateBreakSession(activeBreak.id, {
+              endTime: now,
+              actualMinutes: breakMinutes,
+            });
+            // Recalculate timecard for the break's business date
+            await storage.recalculateTimecard(employeeId, activeBreak.businessDate);
+          }
+
+          // Create clock-out punch with note indicating auto clock-out
+          await storage.createTimePunch({
+            propertyId,
+            employeeId,
+            punchType: "clock_out",
+            actualTimestamp: now,
+            businessDate,
+            notes: "Auto clock-out: Business date change",
+            source: "system",
+          });
+
+          // Recalculate timecard
+          await storage.recalculateTimecard(employeeId, businessDate);
+          
+          clockedOutEmployees.push(employeeId);
+        }
+      }
+
+      // Create audit log entry
+      if (clockedOutEmployees.length > 0) {
+        await storage.createAuditLog({
+          action: "auto_clock_out",
+          targetType: "time_punch",
+          targetId: propertyId,
+          employeeId: triggeredBy || null,
+          details: {
+            propertyId,
+            employeesClockedOut: clockedOutEmployees.length,
+            employeeIds: clockedOutEmployees,
+            businessDate,
+            timestamp: now.toISOString(),
+          },
+        });
+      }
+
+      res.json({
+        success: true,
+        clockedOutCount: clockedOutEmployees.length,
+        employeeIds: clockedOutEmployees,
+        message: clockedOutEmployees.length > 0 
+          ? `Auto clocked out ${clockedOutEmployees.length} employee(s)`
+          : "No employees were clocked in",
+      });
+    } catch (error) {
+      console.error("Auto clock-out error:", error);
+      res.status(500).json({ message: "Failed to process auto clock-out" });
+    }
+  });
+
   // === CLOCKED IN STATUS REPORT ===
   
   // Get all employees currently clocked in
