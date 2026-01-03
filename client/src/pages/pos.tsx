@@ -13,12 +13,18 @@ import { PaymentModal } from "@/components/pos/payment-modal";
 import { OpenChecksModal } from "@/components/pos/open-checks-modal";
 import { TransactionLookupModal } from "@/components/pos/transaction-lookup-modal";
 import { RefundModal } from "@/components/pos/refund-modal";
+import { FunctionsModal } from "@/components/pos/functions-modal";
+import { TransferCheckModal } from "@/components/pos/transfer-check-modal";
+import { SplitCheckModal } from "@/components/pos/split-check-modal";
+import { MergeChecksModal } from "@/components/pos/merge-checks-modal";
+import { ReopenCheckModal } from "@/components/pos/reopen-check-modal";
+import { PriceOverrideModal } from "@/components/pos/price-override-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3 } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -78,6 +84,12 @@ export default function PosPage() {
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [cashChangeDue, setCashChangeDue] = useState<number | null>(null);
   const [pendingCashOverTender, setPendingCashOverTender] = useState<{ tenderId: string; amount: number } | null>(null);
+  const [showFunctionsModal, setShowFunctionsModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showReopenModal, setShowReopenModal] = useState(false);
+  const [showPriceOverrideModal, setShowPriceOverrideModal] = useState(false);
 
   const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
@@ -780,6 +792,18 @@ export default function PosPage() {
                       Clear
                     </Button>
                   </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowFunctionsModal(true)}
+                      data-testid="button-functions"
+                    >
+                      <Grid3X3 className="w-4 h-4 mr-2" />
+                      Functions
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>
@@ -893,6 +917,131 @@ export default function PosPage() {
         employeeId={currentEmployee?.id || ""}
         managerApprovalId={refundManagerApprovalId}
         onComplete={handleRefundComplete}
+      />
+
+      <FunctionsModal
+        open={showFunctionsModal}
+        onClose={() => setShowFunctionsModal(false)}
+        hasActiveCheck={!!currentCheck}
+        onTransferCheck={() => {
+          setShowFunctionsModal(false);
+          setShowTransferModal(true);
+        }}
+        onSplitCheck={() => {
+          setShowFunctionsModal(false);
+          setShowSplitModal(true);
+        }}
+        onMergeChecks={() => {
+          setShowFunctionsModal(false);
+          setShowMergeModal(true);
+        }}
+        onReopenCheck={() => {
+          setShowFunctionsModal(false);
+          setShowReopenModal(true);
+        }}
+        onPriceOverride={() => {
+          setShowFunctionsModal(false);
+          if (selectedItemId) {
+            setShowPriceOverrideModal(true);
+          } else {
+            toast({
+              title: "No item selected",
+              description: "Select an item on the check first",
+              variant: "destructive",
+            });
+          }
+        }}
+        onAssignTable={() => {
+          toast({
+            title: "Coming Soon",
+            description: "Table assignment will be available in a future update",
+          });
+        }}
+        privileges={{
+          canTransfer: hasPrivilege("transfer_check"),
+          canSplit: hasPrivilege("split_check"),
+          canMerge: hasPrivilege("merge_checks"),
+          canReopen: hasPrivilege("reopen_check"),
+          canPriceOverride: hasPrivilege("price_override"),
+        }}
+      />
+
+      {currentCheck && currentEmployee && currentRvc && (
+        <TransferCheckModal
+          open={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
+          checkNumber={currentCheck.checkNumber}
+          currentEmployeeId={currentEmployee.id}
+          rvcId={currentRvc.id}
+          onTransfer={(toEmployeeId) => {
+            toast({
+              title: "Transfer Check",
+              description: `Check #${currentCheck.checkNumber} would be transferred. Backend implementation pending.`,
+            });
+            setShowTransferModal(false);
+          }}
+        />
+      )}
+
+      {currentCheck && (
+        <SplitCheckModal
+          open={showSplitModal}
+          onClose={() => setShowSplitModal(false)}
+          checkNumber={currentCheck.checkNumber}
+          items={checkItems}
+          onSplit={(itemIds) => {
+            toast({
+              title: "Split Check",
+              description: `${itemIds.length} items would be split to new check. Backend implementation pending.`,
+            });
+            setShowSplitModal(false);
+          }}
+        />
+      )}
+
+      {currentCheck && currentRvc && (
+        <MergeChecksModal
+          open={showMergeModal}
+          onClose={() => setShowMergeModal(false)}
+          currentCheckId={currentCheck.id}
+          currentCheckNumber={currentCheck.checkNumber}
+          rvcId={currentRvc.id}
+          onMerge={(checkIds) => {
+            toast({
+              title: "Merge Checks",
+              description: `${checkIds.length} checks would be merged. Backend implementation pending.`,
+            });
+            setShowMergeModal(false);
+          }}
+        />
+      )}
+
+      {currentRvc && (
+        <ReopenCheckModal
+          open={showReopenModal}
+          onClose={() => setShowReopenModal(false)}
+          rvcId={currentRvc.id}
+          onReopen={(checkId) => {
+            toast({
+              title: "Reopen Check",
+              description: "Check would be reopened. Backend implementation pending.",
+            });
+            setShowReopenModal(false);
+          }}
+        />
+      )}
+
+      <PriceOverrideModal
+        open={showPriceOverrideModal}
+        onClose={() => setShowPriceOverrideModal(false)}
+        item={checkItems.find(i => i.id === selectedItemId) || null}
+        onOverride={(itemId, newPrice, reason) => {
+          toast({
+            title: "Price Override",
+            description: `Price would be changed to $${newPrice.toFixed(2)}. Backend implementation pending.`,
+          });
+          setShowPriceOverrideModal(false);
+        }}
       />
     </div>
   );
