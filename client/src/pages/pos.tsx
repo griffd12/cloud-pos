@@ -192,7 +192,7 @@ export default function PosPage() {
       return response.json();
     },
     onSuccess: (newItem: CheckItem) => {
-      setCheckItems([...checkItems, newItem]);
+      setCheckItems((prev) => [...prev, newItem]);
       setShowModifierModal(false);
       setPendingItem(null);
       setItemModifierGroups([]);
@@ -554,7 +554,7 @@ export default function PosPage() {
             itemStatus: "pending", // Mark as pending until modifiers are selected
           });
           const pendingCheckItem = await response.json();
-          setCheckItems([...checkItems, pendingCheckItem]);
+          setCheckItems((prev) => [...prev, pendingCheckItem]);
           setEditingItem(pendingCheckItem); // Set as editing so we update it rather than create new
           queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
         }
@@ -572,7 +572,7 @@ export default function PosPage() {
           quantity: 1,
         });
         const newItem = await response.json();
-        setCheckItems([...checkItems, newItem]);
+        setCheckItems((prev) => [...prev, newItem]);
         queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
         queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
       }
