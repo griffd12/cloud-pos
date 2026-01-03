@@ -254,11 +254,11 @@ export function CheckPanel({
               size="lg"
               className="w-full h-full font-semibold"
               onClick={onSend}
-              disabled={unsentItems.length === 0 || !canSend || isSending}
+              disabled={!canSend || isSending}
               data-testid="button-send"
             >
               <Send className="w-4 h-4 mr-2" />
-              {isSending ? "Sending..." : `Send${unsentItems.length > 0 ? ` (${unsentItems.length})` : ""}`}
+              {isSending ? "Sending..." : unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
             </Button>
           </div>
           <div className="h-14">

@@ -2159,6 +2159,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Cannot split a closed check" });
       }
 
+      // Verify all items are sent before allowing split
+      const itemsToCheck = await storage.getCheckItems(sourceCheckId);
+      const unsentItemsOnCheck = itemsToCheck.filter(item => !item.sent && !item.voided);
+      if (unsentItemsOnCheck.length > 0) {
+        return res.status(400).json({ message: "Please send all unsent items first before splitting the check" });
+      }
+
       // Count how many new checks we need
       const targetIndices = new Set(operations.map((op: any) => op.targetCheckIndex));
       const newChecks: any[] = [];
@@ -2198,8 +2205,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!item) continue;
 
         if (op.type === "move") {
-          // Move entire item to new check - reset sent status so it can be sent from new check
-          await storage.updateCheckItem(op.itemId, { checkId: targetCheck.id, sent: false, roundId: null });
+          // Move entire item to new check - keep sent status (items must be sent before splitting)
+          await storage.updateCheckItem(op.itemId, { checkId: targetCheck.id });
           results.push({ type: "move", itemId: op.itemId, newCheckId: targetCheck.id });
         } else if (op.type === "share") {
           // Share item: split the quantity and amount across checks
@@ -2239,7 +2246,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             modifiers: item.modifiers || [],
             quantity: sharedQty,
             itemStatus: "active",
-            sent: false, // Reset sent status so shared item can be sent from new check
+            sent: item.sent, // Keep original sent status (items must be sent before splitting)
+            roundId: item.roundId, // Keep original round reference
             voided: false,
             businessDate,
           });
