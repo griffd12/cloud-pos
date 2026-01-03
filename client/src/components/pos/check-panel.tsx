@@ -1,8 +1,9 @@
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Check, CheckItem, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Check as CheckIcon, Clock } from "lucide-react";
+import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -17,8 +18,10 @@ interface CheckPanelProps {
   onNewCheck: () => void;
   onOpenChecks?: () => void;
   onChangeOrderType: () => void;
+  onPriceOverride?: (item: CheckItem) => void;
   canSend: boolean;
   canVoid: boolean;
+  canPriceOverride?: boolean;
   isSending?: boolean;
   subtotal?: number;
   tax?: number;
@@ -34,6 +37,183 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   pickup: "Pickup",
 };
 
+interface SwipeableItemProps {
+  item: CheckItem;
+  isSelected: boolean;
+  itemTotal: number;
+  canVoid: boolean;
+  canPriceOverride?: boolean;
+  onSelect: () => void;
+  onVoid: () => void;
+  onPriceOverride?: () => void;
+  onEditModifiers?: () => void;
+  formatPrice: (price: string | number | null) => string;
+}
+
+function SwipeableItem({
+  item,
+  isSelected,
+  itemTotal,
+  canVoid,
+  canPriceOverride,
+  onSelect,
+  onVoid,
+  onPriceOverride,
+  onEditModifiers,
+  formatPrice,
+}: SwipeableItemProps) {
+  const [isRevealed, setIsRevealed] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchStartX.current - touchEndX;
+    const deltaY = Math.abs(touchStartY.current - touchEndY);
+    
+    // Only trigger swipe if horizontal movement is significant and greater than vertical
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > deltaY) {
+      if (deltaX > 0) {
+        // Swipe left - reveal actions
+        setIsRevealed(true);
+      } else {
+        // Swipe right - hide actions
+        setIsRevealed(false);
+      }
+    }
+    
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
+  const handleClick = () => {
+    if (isRevealed) {
+      setIsRevealed(false);
+    } else {
+      onSelect();
+    }
+  };
+
+  return (
+    <div
+      className={`rounded-md transition-colors overflow-hidden ${
+        isSelected 
+          ? "bg-accent ring-1 ring-primary/20" 
+          : item.sent 
+            ? "bg-green-500/5 dark:bg-green-500/10" 
+            : "bg-muted/50"
+      }`}
+      data-testid={`check-item-${item.id}`}
+    >
+      <div className="relative flex">
+        {/* Main item content */}
+        <div
+          className={`flex-1 flex items-start gap-2 p-2.5 cursor-pointer hover-elevate active-elevate-2 transition-transform duration-200 ${
+            isRevealed ? "-translate-x-24" : "translate-x-0"
+          }`}
+          onClick={handleClick}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          data-testid={`button-select-item-${item.id}`}
+        >
+          <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+            {item.sent ? (
+              <CheckIcon className="w-4 h-4 text-green-500" />
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-1">
+              {item.quantity && item.quantity > 1 && (
+                <span className="text-xs font-semibold text-primary">{item.quantity}x</span>
+              )}
+              <span className="font-medium text-sm truncate">
+                {item.menuItemName}
+              </span>
+            </div>
+            {item.modifiers && item.modifiers.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {item.modifiers.map((mod, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`block text-left text-xs rounded ${
+                      !item.sent 
+                        ? "cursor-pointer text-muted-foreground hover:text-foreground" 
+                        : "text-muted-foreground/70 cursor-default"
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!item.sent && onEditModifiers) {
+                        onEditModifiers();
+                      }
+                    }}
+                    disabled={!!item.sent}
+                    data-testid={`button-modifier-${item.id}-${idx}`}
+                  >
+                    + {mod.name}
+                    {parseFloat(mod.priceDelta) > 0 && (
+                      <span className="ml-1 text-muted-foreground">
+                        (+{formatPrice(mod.priceDelta)})
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className="text-sm font-semibold tabular-nums flex-shrink-0">
+            {formatPrice(itemTotal)}
+          </span>
+        </div>
+        
+        {/* Swipe actions panel */}
+        <div 
+          className={`absolute right-0 top-0 bottom-0 flex items-stretch transition-opacity duration-200 ${
+            isRevealed ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+        >
+          {canPriceOverride && onPriceOverride && (
+            <button
+              className="w-12 bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsRevealed(false);
+                onPriceOverride();
+              }}
+              data-testid={`button-price-override-swipe-${item.id}`}
+            >
+              <DollarSign className="w-5 h-5" />
+            </button>
+          )}
+          {canVoid && (
+            <button
+              className="w-12 bg-destructive hover:bg-destructive/90 text-destructive-foreground flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsRevealed(false);
+                onVoid();
+              }}
+              data-testid={`button-void-swipe-${item.id}`}
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CheckPanel({
   check,
   items,
@@ -47,8 +227,10 @@ export function CheckPanel({
   onNewCheck,
   onOpenChecks,
   onChangeOrderType,
+  onPriceOverride,
   canSend,
   canVoid,
+  canPriceOverride = false,
   isSending,
   subtotal: propSubtotal,
   tax: propTax,
@@ -128,91 +310,19 @@ export function CheckPanel({
                 )) * (item.quantity || 1);
               
               return (
-                <div
+                <SwipeableItem
                   key={item.id}
-                  className={`rounded-md transition-colors ${
-                    isSelected 
-                      ? "bg-accent ring-1 ring-primary/20" 
-                      : item.sent 
-                        ? "bg-green-500/5 dark:bg-green-500/10" 
-                        : "bg-muted/50"
-                  }`}
-                  data-testid={`check-item-${item.id}`}
-                >
-                  <div
-                    className="flex items-start gap-2 p-2.5 cursor-pointer hover-elevate active-elevate-2"
-                    onClick={() => onSelectItem?.(isSelected ? null : item)}
-                    data-testid={`button-select-item-${item.id}`}
-                  >
-                    <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
-                      {item.sent ? (
-                        <CheckIcon className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <div className="w-2 h-2 rounded-full bg-amber-500" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-1">
-                        {item.quantity && item.quantity > 1 && (
-                          <span className="text-xs font-semibold text-primary">{item.quantity}x</span>
-                        )}
-                        <span className="font-medium text-sm truncate">
-                          {item.menuItemName}
-                        </span>
-                      </div>
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <div className="mt-1 space-y-0.5">
-                          {item.modifiers.map((mod, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              className={`block text-left text-xs rounded ${
-                                !item.sent 
-                                  ? "cursor-pointer text-muted-foreground hover:text-foreground" 
-                                  : "text-muted-foreground/70 cursor-default"
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!item.sent && onEditModifiers) {
-                                  onEditModifiers(item);
-                                }
-                              }}
-                              disabled={!!item.sent}
-                              data-testid={`button-modifier-${item.id}-${idx}`}
-                            >
-                              + {mod.name}
-                              {parseFloat(mod.priceDelta) > 0 && (
-                                <span className="ml-1 text-muted-foreground">
-                                  (+{formatPrice(mod.priceDelta)})
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-sm font-semibold tabular-nums flex-shrink-0">
-                      {formatPrice(itemTotal)}
-                    </span>
-                  </div>
-                  {isSelected && canVoid && (
-                    <div className="px-2.5 pb-2.5 pt-0">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onVoidItem(item);
-                        }}
-                        data-testid={`button-void-item-${item.id}`}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Void
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                  item={item}
+                  isSelected={isSelected}
+                  itemTotal={itemTotal}
+                  canVoid={canVoid}
+                  canPriceOverride={canPriceOverride}
+                  onSelect={() => onSelectItem?.(isSelected ? null : item)}
+                  onVoid={() => onVoidItem(item)}
+                  onPriceOverride={onPriceOverride ? () => onPriceOverride(item) : undefined}
+                  onEditModifiers={onEditModifiers ? () => onEditModifiers(item) : undefined}
+                  formatPrice={formatPrice}
+                />
               );
             })
           )}
@@ -246,34 +356,39 @@ export function CheckPanel({
         </div>
       </div>
 
-      <div className="flex-shrink-0 p-3 border-t space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="h-14">
-            <Button
-              variant="secondary"
-              size="lg"
-              className="w-full h-full font-semibold"
-              onClick={onSend}
-              disabled={!canSend || isSending}
-              data-testid="button-send"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              {isSending ? "Sending..." : unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
-            </Button>
-          </div>
-          <div className="h-14">
-            <Button
-              size="lg"
-              className="w-full h-full font-semibold"
-              onClick={onPay}
-              disabled={!paymentsReady}
-              data-testid="button-pay"
-            >
-              <CreditCard className="w-4 h-4 mr-2" />
-              {paymentsReady ? (activeItems.length === 0 ? "Close" : "Pay") : "Loading..."}
-            </Button>
-          </div>
+      <div className="flex-shrink-0 p-3 border-t bg-muted/30 space-y-2">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="lg"
+            className="flex-1"
+            onClick={onOpenChecks}
+            data-testid="button-open-checks"
+          >
+            Open Checks
+          </Button>
+          <Button
+            variant={unsentItems.length > 0 ? "default" : "secondary"}
+            size="lg"
+            className="flex-1"
+            onClick={onSend}
+            disabled={isSending}
+            data-testid="button-send-order"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            {unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
+          </Button>
         </div>
+        <Button
+          size="lg"
+          className="w-full bg-green-600 hover:bg-green-700 text-white"
+          onClick={onPay}
+          disabled={!paymentsReady}
+          data-testid="button-pay"
+        >
+          <CreditCard className="w-4 h-4 mr-2" />
+          {paidAmount > 0 ? `Pay Balance ${formatPrice(balanceDue)}` : `Pay ${formatPrice(total)}`}
+        </Button>
       </div>
     </div>
   );

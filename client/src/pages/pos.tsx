@@ -1032,8 +1032,13 @@ export default function PosPage() {
             onNewCheck={() => setShowOrderTypeModal(true)}
             onChangeOrderType={() => setShowOrderTypeModal(true)}
             onOpenChecks={() => setShowOpenChecksModal(true)}
+            onPriceOverride={(item) => {
+              setSelectedItemId(item.id);
+              setShowPriceOverrideModal(true);
+            }}
             canSend={hasPrivilege("send_to_kitchen")}
             canVoid={hasPrivilege("void_unsent") || hasPrivilege("void_sent")}
+            canPriceOverride={hasPrivilege("modify_price")}
             isSending={sendCheckMutation.isPending}
             subtotal={subtotal}
             tax={tax}
