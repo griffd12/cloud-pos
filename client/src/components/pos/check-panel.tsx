@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Check, CheckItem, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Check as CheckIcon, Plus, Clock } from "lucide-react";
+import { Trash2, Send, CreditCard, Check as CheckIcon, Plus, Clock, List } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -15,6 +15,7 @@ interface CheckPanelProps {
   selectedItemId?: string | null;
   onPay: () => void;
   onNewCheck: () => void;
+  onOpenChecks?: () => void;
   onChangeOrderType: () => void;
   canSend: boolean;
   canVoid: boolean;
@@ -44,6 +45,7 @@ export function CheckPanel({
   selectedItemId,
   onPay,
   onNewCheck,
+  onOpenChecks,
   onChangeOrderType,
   canSend,
   canVoid,
@@ -80,10 +82,18 @@ export function CheckPanel({
             <p className="text-muted-foreground text-sm">
               Select an item or start a new check
             </p>
-            <Button onClick={onNewCheck} data-testid="button-new-check">
-              <Plus className="w-4 h-4 mr-2" />
-              New Check
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button onClick={onNewCheck} data-testid="button-new-check">
+                <Plus className="w-4 h-4 mr-2" />
+                New Check
+              </Button>
+              {onOpenChecks && (
+                <Button variant="secondary" onClick={onOpenChecks} data-testid="button-open-checks-panel">
+                  <List className="w-4 h-4 mr-2" />
+                  Open Checks
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>

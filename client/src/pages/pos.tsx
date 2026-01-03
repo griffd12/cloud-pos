@@ -802,6 +802,7 @@ export default function PosPage() {
             onPay={() => setShowPaymentModal(true)}
             onNewCheck={() => setShowOrderTypeModal(true)}
             onChangeOrderType={() => setShowOrderTypeModal(true)}
+            onOpenChecks={() => setShowOpenChecksModal(true)}
             canSend={hasPrivilege("send_to_kitchen")}
             canVoid={hasPrivilege("void_unsent") || hasPrivilege("void_sent")}
             isSending={sendCheckMutation.isPending}
