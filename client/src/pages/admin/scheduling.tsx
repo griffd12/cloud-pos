@@ -90,6 +90,7 @@ export default function SchedulingPage() {
     repeatDays: [] as number[],
   });
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
+  const [filterEmployeeId, setFilterEmployeeId] = useState<string>("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -602,6 +603,22 @@ export default function SchedulingPage() {
           <Copy className="w-4 h-4 mr-2" />
           Copy Last Week
         </Button>
+
+        <Select value={filterEmployeeId} onValueChange={setFilterEmployeeId}>
+          <SelectTrigger className="w-[200px]" data-testid="select-filter-employee">
+            <SelectValue placeholder="All Employees" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Employees</SelectItem>
+            {propertyEmployees
+              .sort((a, b) => a.firstName.localeCompare(b.firstName))
+              .map((emp) => (
+                <SelectItem key={emp.id} value={emp.id}>
+                  {emp.firstName} {emp.lastName}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {!selectedProperty ? (
@@ -666,7 +683,9 @@ export default function SchedulingPage() {
                     })}
                   </DroppableRow>
 
-                  {propertyEmployees.map((emp) => {
+                  {propertyEmployees
+                    .filter((emp) => !filterEmployeeId || filterEmployeeId === "ALL" || emp.id === filterEmployeeId)
+                    .map((emp) => {
                     const empData = employeeShiftsMap[emp.id] || { shifts: [], weeklyHours: 0, weeklyCost: 0 };
                     return (
                       <DroppableRow key={emp.id} employeeId={emp.id}>

@@ -100,6 +100,7 @@ export default function LineUpPage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [filterEmployeeId, setFilterEmployeeId] = useState<string>("");
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -181,6 +182,7 @@ export default function LineUpPage() {
         };
       })
       .filter((row): row is EmployeeRowData => row !== null)
+      .filter((row) => !filterEmployeeId || filterEmployeeId === "ALL" || row.employee.id === filterEmployeeId)
       .sort((a, b) => a.employee.firstName.localeCompare(b.employee.firstName));
   })();
 
@@ -241,6 +243,23 @@ export default function LineUpPage() {
                   {prop.name}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterEmployeeId} onValueChange={setFilterEmployeeId}>
+            <SelectTrigger className="w-[200px]" data-testid="select-filter-employee">
+              <SelectValue placeholder="All Employees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Employees</SelectItem>
+              {employees
+                .filter((e) => e.active)
+                .sort((a, b) => a.firstName.localeCompare(b.firstName))
+                .map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>
