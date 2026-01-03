@@ -95,6 +95,12 @@ export default function PropertiesPage() {
       options: rolloverTimeOptions,
       description: "When the business day ends (e.g., 4 AM means sales until 3:59 AM count as previous day)",
     },
+    {
+      name: "autoClockOutEnabled",
+      label: "Auto Clock-Out",
+      type: "switch",
+      description: "Automatically clock out all employees when the business date changes",
+    },
   ];
 
   const createMutation = useMutation({
