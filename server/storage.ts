@@ -2378,6 +2378,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllEmployeeJobCodesForProperty(propertyId: string): Promise<Record<string, (EmployeeJobCode & { jobCode: JobCode })[]>> {
+    // First get all employee IDs that are assigned to this property (via employeeAssignments or direct propertyId)
+    const assignedEmployeeIds = await db
+      .select({ employeeId: employeeAssignments.employeeId })
+      .from(employeeAssignments)
+      .where(eq(employeeAssignments.propertyId, propertyId));
+    
+    const directEmployeeIds = await db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(eq(employees.propertyId, propertyId));
+    
+    const allEmployeeIds = new Set([
+      ...assignedEmployeeIds.map(e => e.employeeId),
+      ...directEmployeeIds.map(e => e.id)
+    ]);
+    
+    if (allEmployeeIds.size === 0) return {};
+    
     const results = await db
       .select({
         id: employeeJobCodes.id,
@@ -2389,8 +2407,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(employeeJobCodes)
       .innerJoin(jobCodes, eq(employeeJobCodes.jobCodeId, jobCodes.id))
-      .innerJoin(employees, eq(employeeJobCodes.employeeId, employees.id))
-      .where(eq(employees.propertyId, propertyId));
+      .where(inArray(employeeJobCodes.employeeId, Array.from(allEmployeeIds)));
     
     const grouped: Record<string, (EmployeeJobCode & { jobCode: JobCode })[]> = {};
     results.forEach(r => {
