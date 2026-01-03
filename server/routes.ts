@@ -2198,8 +2198,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!item) continue;
 
         if (op.type === "move") {
-          // Move entire item to new check
-          await storage.updateCheckItem(op.itemId, { checkId: targetCheck.id });
+          // Move entire item to new check - reset sent status so it can be sent from new check
+          await storage.updateCheckItem(op.itemId, { checkId: targetCheck.id, sent: false, roundId: null });
           results.push({ type: "move", itemId: op.itemId, newCheckId: targetCheck.id });
         } else if (op.type === "share") {
           // Share item: split the quantity and amount across checks
@@ -2239,7 +2239,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             modifiers: item.modifiers || [],
             quantity: sharedQty,
             itemStatus: "active",
-            sent: item.sent,
+            sent: false, // Reset sent status so shared item can be sent from new check
             voided: false,
             businessDate,
           });
