@@ -1,10 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import type { Check, CheckItem, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Star, Plus, Minus } from "lucide-react";
+import { Trash2, Send, CreditCard, Check as CheckIcon, Plus, Clock } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -63,45 +61,45 @@ export function CheckPanel({
 
   const activeItems = items.filter(item => !item.voided);
   const unsentItems = activeItems.filter(item => !item.sent);
+  const sentItems = activeItems.filter(item => item.sent);
   
-  // Use provided values or fall back to local calculation
   const subtotal = propSubtotal ?? 0;
   const tax = propTax ?? 0;
   const total = propTotal ?? (subtotal + tax);
+  const balanceDue = Math.max(0, total - paidAmount);
 
   if (!check) {
     return (
-      <Card className="h-full flex flex-col">
-        <CardHeader className="flex-shrink-0 pb-4">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-lg font-semibold">No Active Check</span>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 flex items-center justify-center">
+      <div className="h-full flex flex-col bg-card">
+        <div className="flex-shrink-0 px-4 py-3 border-b bg-muted/30">
+          <span className="text-base font-semibold text-muted-foreground">No Active Check</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center space-y-4">
+            <Clock className="w-12 h-12 mx-auto text-muted-foreground/50" />
             <p className="text-muted-foreground text-sm">
-              Start a new check or select an item to begin
+              Select an item or start a new check
             </p>
             <Button onClick={onNewCheck} data-testid="button-new-check">
               <Plus className="w-4 h-4 mr-2" />
               New Check
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader className="flex-shrink-0 pb-2 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-lg font-semibold" data-testid="text-check-number">
-            Check #{check.checkNumber}
+    <div className="h-full flex flex-col bg-card">
+      <div className="flex-shrink-0 px-4 py-3 border-b flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-lg font-bold tabular-nums" data-testid="text-check-number">
+            #{check.checkNumber}
           </span>
           <Badge
-            variant="outline"
-            className="cursor-pointer"
+            variant="secondary"
+            className="cursor-pointer font-medium"
             onClick={onChangeOrderType}
             data-testid="badge-order-type"
           >
@@ -110,87 +108,96 @@ export function CheckPanel({
         </div>
         {check.tableNumber && (
           <span className="text-sm text-muted-foreground">
-            Table: {check.tableNumber}
+            Tbl {check.tableNumber}
           </span>
         )}
-      </CardHeader>
-      
-      <Separator />
+      </div>
       
       <ScrollArea className="flex-1">
-        <CardContent className="pt-4 space-y-2">
+        <div className="p-3 space-y-1">
           {activeItems.length === 0 ? (
-            <p className="text-center text-muted-foreground text-sm py-8">
+            <p className="text-center text-muted-foreground text-sm py-12">
               No items on this check
             </p>
           ) : (
             activeItems.map((item) => {
               const isSelected = selectedItemId === item.id;
+              const itemTotal = (parseFloat(item.unitPrice || "0") +
+                (item.modifiers || []).reduce(
+                  (sum, m) => sum + parseFloat(m.priceDelta || "0"),
+                  0
+                )) * (item.quantity || 1);
+              
               return (
                 <div
                   key={item.id}
-                  className={`rounded-md ${isSelected ? "bg-accent" : ""}`}
+                  className={`rounded-md transition-colors ${
+                    isSelected 
+                      ? "bg-accent ring-1 ring-primary/20" 
+                      : item.sent 
+                        ? "bg-green-500/5 dark:bg-green-500/10" 
+                        : "bg-muted/50"
+                  }`}
                   data-testid={`check-item-${item.id}`}
                 >
                   <div
-                    className="flex items-start gap-2 p-2 cursor-pointer hover-elevate active-elevate-2"
+                    className="flex items-start gap-2 p-2.5 cursor-pointer hover-elevate active-elevate-2"
                     onClick={() => onSelectItem?.(isSelected ? null : item)}
                     data-testid={`button-select-item-${item.id}`}
                   >
+                    <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                      {item.sent ? (
+                        <CheckIcon className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {item.sent && (
-                          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" />
+                      <div className="flex items-baseline gap-1">
+                        {item.quantity && item.quantity > 1 && (
+                          <span className="text-xs font-semibold text-primary">{item.quantity}x</span>
                         )}
                         <span className="font-medium text-sm truncate">
-                          {item.quantity && item.quantity > 1 ? `${item.quantity}x ` : ""}
                           {item.menuItemName}
                         </span>
                       </div>
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {item.modifiers.map((mod, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className={`block text-left text-xs rounded ${
+                                !item.sent 
+                                  ? "cursor-pointer text-muted-foreground hover:text-foreground" 
+                                  : "text-muted-foreground/70 cursor-default"
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!item.sent && onEditModifiers) {
+                                  onEditModifiers(item);
+                                }
+                              }}
+                              disabled={!!item.sent}
+                              data-testid={`button-modifier-${item.id}-${idx}`}
+                            >
+                              + {mod.name}
+                              {parseFloat(mod.priceDelta) > 0 && (
+                                <span className="ml-1 text-muted-foreground">
+                                  (+{formatPrice(mod.priceDelta)})
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium tabular-nums">
-                        {formatPrice(
-                          (parseFloat(item.unitPrice || "0") +
-                            (item.modifiers || []).reduce(
-                              (sum, m) => sum + parseFloat(m.priceDelta || "0"),
-                              0
-                            )) *
-                            (item.quantity || 1)
-                        )}
-                      </span>
-                    </div>
+                    <span className="text-sm font-semibold tabular-nums flex-shrink-0">
+                      {formatPrice(itemTotal)}
+                    </span>
                   </div>
-                  {item.modifiers && item.modifiers.length > 0 && (
-                    <div className="ml-6 pb-2 space-y-0.5">
-                      {item.modifiers.map((mod, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          className={`block w-full text-left text-xs px-2 py-1 rounded hover-elevate active-elevate-2 ${
-                            !item.sent ? "cursor-pointer text-muted-foreground" : "text-muted-foreground/70 cursor-default"
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!item.sent && onEditModifiers) {
-                              onEditModifiers(item);
-                            }
-                          }}
-                          disabled={!!item.sent}
-                          data-testid={`button-modifier-${item.id}-${idx}`}
-                        >
-                          + {mod.name}
-                          {parseFloat(mod.priceDelta) > 0 && (
-                            <span className="ml-1">
-                              (+{formatPrice(mod.priceDelta)})
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   {isSelected && canVoid && (
-                    <div className="px-2 pb-2">
+                    <div className="px-2.5 pb-2.5 pt-0">
                       <Button
                         variant="destructive"
                         size="sm"
@@ -202,7 +209,7 @@ export function CheckPanel({
                         data-testid={`button-void-item-${item.id}`}
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
-                        Void Item
+                        Void
                       </Button>
                     </div>
                   )}
@@ -210,16 +217,14 @@ export function CheckPanel({
               );
             })
           )}
-        </CardContent>
+        </div>
       </ScrollArea>
 
-      <Separator />
-
-      <CardFooter className="flex-shrink-0 flex-col gap-4 pt-4">
-        <div className="w-full space-y-1">
+      <div className="flex-shrink-0 border-t bg-muted/30">
+        <div className="px-4 py-3 space-y-1">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="tabular-nums">{formatPrice(subtotal)}</span>
+            <span className="tabular-nums font-medium">{formatPrice(subtotal)}</span>
           </div>
           {tax > 0 && (
             <div className="flex justify-between text-sm">
@@ -227,41 +232,35 @@ export function CheckPanel({
               <span className="tabular-nums">{formatPrice(tax)}</span>
             </div>
           )}
-          <div className="flex justify-between text-sm font-medium pt-1">
-            <span>Total</span>
-            <span className="tabular-nums" data-testid="text-check-total">
-              {formatPrice(total)}
-            </span>
-          </div>
           {paidAmount > 0 && (
-            <>
-              <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
-                <span>Paid</span>
-                <span className="tabular-nums">-{formatPrice(paidAmount)}</span>
-              </div>
-              <div className="flex justify-between text-lg font-semibold">
-                <span>Balance Due</span>
-                <span className="tabular-nums" data-testid="text-balance-due">
-                  {formatPrice(Math.max(0, total - paidAmount))}
-                </span>
-              </div>
-            </>
+            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+              <span>Paid</span>
+              <span className="tabular-nums">-{formatPrice(paidAmount)}</span>
+            </div>
           )}
         </div>
+        <div className="px-4 py-3 border-t bg-card flex justify-between items-center">
+          <span className="font-semibold">{paidAmount > 0 ? "Balance" : "Total"}</span>
+          <span className="text-2xl font-bold tabular-nums" data-testid="text-check-total">
+            {formatPrice(paidAmount > 0 ? balanceDue : total)}
+          </span>
+        </div>
+      </div>
 
-        <div className="w-full grid grid-cols-2 gap-2">
+      <div className="flex-shrink-0 p-3 border-t space-y-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button
             variant="secondary"
-            className="h-12"
+            className="h-14 font-semibold"
             onClick={onSend}
             disabled={unsentItems.length === 0 || !canSend || isSending}
             data-testid="button-send"
           >
             <Send className="w-4 h-4 mr-2" />
-            {isSending ? "Sending..." : `Send (${unsentItems.length})`}
+            {isSending ? "Sending..." : `Send${unsentItems.length > 0 ? ` (${unsentItems.length})` : ""}`}
           </Button>
           <Button
-            className="h-12"
+            className="h-14 font-semibold"
             onClick={onPay}
             disabled={!paymentsReady}
             data-testid="button-pay"
@@ -270,7 +269,7 @@ export function CheckPanel({
             {paymentsReady ? (activeItems.length === 0 ? "Close" : "Pay") : "Loading..."}
           </Button>
         </div>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }
