@@ -4811,7 +4811,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const emp = employees.find(e => e.id === check.employeeId);
         const rvc = allRvcs.find(r => r.id === check.rvcId);
         const checkPayments = allPayments.filter(p => p.checkId === check.id);
-        const totalPaid = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        const checkTotal = parseFloat(check.total || "0");
+        const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        // Cap totalPaid at check total - for cash over-tender, we show what was applied to the check, not what customer handed over
+        const totalPaid = Math.min(totalTendered, checkTotal);
         
         const durationMinutes = check.openedAt && check.closedAt
           ? Math.floor((new Date(check.closedAt).getTime() - new Date(check.openedAt).getTime()) / 60000)
@@ -4826,7 +4829,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           guestCount: check.guestCount,
           subtotal: parseFloat(check.subtotal || "0"),
           tax: parseFloat(check.taxTotal || "0"),
-          total: parseFloat(check.total || "0"),
+          total: checkTotal,
           totalPaid,
           durationMinutes,
           openedAt: check.openedAt,
