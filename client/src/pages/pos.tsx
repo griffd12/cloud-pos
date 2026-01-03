@@ -324,6 +324,35 @@ export default function PosPage() {
     setCheckItems([]);
   };
 
+  const reopenCheckMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      const response = await apiRequest("POST", `/api/checks/${checkId}/reopen`, {
+        employeeId: currentEmployee?.id,
+      });
+      return response.json();
+    },
+    onSuccess: async (reopenedCheck: Check) => {
+      setShowReopenModal(false);
+      toast({ title: "Check Reopened", description: `Check #${reopenedCheck.checkNumber} is now open` });
+      // Load the reopened check
+      try {
+        const res = await fetch(`/api/checks/${reopenedCheck.id}`, { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentCheck(data.check);
+          setCheckItems(data.items);
+        }
+      } catch (e) {
+        console.error("Error loading reopened check:", e);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to reopen check", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handlePickupCheck = async (checkId: string) => {
     try {
       const res = await fetch(`/api/checks/${checkId}`, { credentials: "include" });
@@ -1095,12 +1124,9 @@ export default function PosPage() {
           onClose={() => setShowReopenModal(false)}
           rvcId={currentRvc.id}
           onReopen={(checkId) => {
-            toast({
-              title: "Reopen Check",
-              description: "Check would be reopened. Backend implementation pending.",
-            });
-            setShowReopenModal(false);
+            reopenCheckMutation.mutate(checkId);
           }}
+          isReopening={reopenCheckMutation.isPending}
         />
       )}
 

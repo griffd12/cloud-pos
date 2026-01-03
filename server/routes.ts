@@ -1985,6 +1985,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Reopen a closed check
+  app.post("/api/checks/:id/reopen", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { employeeId } = req.body;
+
+      if (!employeeId) {
+        return res.status(400).json({ message: "Employee ID required" });
+      }
+
+      const check = await storage.getCheck(id);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+      if (check.status !== "closed") {
+        return res.status(400).json({ message: "Only closed checks can be reopened" });
+      }
+
+      // Reopen the check
+      const reopenedCheck = await storage.updateCheck(id, {
+        status: "open",
+        closedAt: null,
+      });
+
+      // Log the action
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "reopen_check",
+        targetType: "check",
+        targetId: id,
+        details: { checkNumber: check.checkNumber },
+      });
+
+      res.json(reopenedCheck);
+    } catch (error) {
+      console.error("Reopen check error:", error);
+      res.status(500).json({ message: "Failed to reopen check" });
+    }
+  });
+
   // Get check with full details (items and payments) for refund preview
   app.get("/api/checks/:id/full-details", async (req, res) => {
     try {
