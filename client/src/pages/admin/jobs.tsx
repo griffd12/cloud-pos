@@ -23,6 +23,9 @@ export default function JobsPage() {
   const [hourlyRate, setHourlyRate] = useState("");
   const [tipMode, setTipMode] = useState("not_eligible");
   const [active, setActive] = useState(true);
+  const [compensationType, setCompensationType] = useState<"hourly" | "salaried">("hourly");
+  const [salaryAmount, setSalaryAmount] = useState("");
+  const [salaryPeriod, setSalaryPeriod] = useState<"weekly" | "biweekly" | "monthly" | "yearly">("yearly");
 
   const { data: jobs = [], isLoading } = useQuery<JobCode[]>({
     queryKey: ["/api/job-codes"],
@@ -39,6 +42,9 @@ export default function JobsPage() {
     setHourlyRate("");
     setTipMode("not_eligible");
     setActive(true);
+    setCompensationType("hourly");
+    setSalaryAmount("");
+    setSalaryPeriod("yearly");
   };
 
   useEffect(() => {
@@ -49,6 +55,9 @@ export default function JobsPage() {
       setHourlyRate(editingItem.hourlyRate || "");
       setTipMode(editingItem.tipMode || "not_eligible");
       setActive(editingItem.active ?? true);
+      setCompensationType((editingItem.compensationType as "hourly" | "salaried") || "hourly");
+      setSalaryAmount(editingItem.salaryAmount || "");
+      setSalaryPeriod((editingItem.salaryPeriod as "weekly" | "biweekly" | "monthly" | "yearly") || "yearly");
     } else {
       resetForm();
     }
@@ -71,9 +80,18 @@ export default function JobsPage() {
       ),
     },
     {
-      key: "hourlyRate",
-      header: "Default Rate",
-      render: (value) => value ? `$${parseFloat(value as string).toFixed(2)}/hr` : "-",
+      key: "compensationType",
+      header: "Type",
+      render: (value, row) => {
+        if (value === "salaried") {
+          const period = row.salaryPeriod || "yearly";
+          const amount = row.salaryAmount ? `$${parseFloat(row.salaryAmount).toLocaleString()}` : "";
+          const periodLabels: Record<string, string> = { weekly: "/wk", biweekly: "/bi-wk", monthly: "/mo", yearly: "/yr" };
+          return <Badge variant="secondary">Salaried {amount}{periodLabels[period]}</Badge>;
+        }
+        const rate = row.hourlyRate ? `$${parseFloat(row.hourlyRate).toFixed(2)}/hr` : "";
+        return <Badge variant="outline">Hourly {rate}</Badge>;
+      },
     },
     {
       key: "tipMode",
@@ -154,9 +172,12 @@ export default function JobsPage() {
       name,
       code,
       roleId: roleId === "none" ? null : roleId || null,
-      hourlyRate: hourlyRate || null,
+      hourlyRate: compensationType === "hourly" ? (hourlyRate || null) : null,
       tipMode,
       active,
+      compensationType,
+      salaryAmount: compensationType === "salaried" ? (salaryAmount || null) : null,
+      salaryPeriod: compensationType === "salaried" ? salaryPeriod : null,
     };
 
     if (editingItem) {
@@ -237,21 +258,68 @@ export default function JobsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="hourlyRate">Default Hourly Rate</Label>
-                <Input
-                  id="hourlyRate"
-                  data-testid="input-job-hourly-rate"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={hourlyRate}
-                  onChange={(e) => setHourlyRate(e.target.value)}
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Default rate used when no employee-specific rate is set
-                </p>
+                <Label>Compensation Type</Label>
+                <Select value={compensationType} onValueChange={(v) => setCompensationType(v as "hourly" | "salaried")}>
+                  <SelectTrigger data-testid="select-compensation-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hourly">Hourly</SelectItem>
+                    <SelectItem value="salaried">Salaried</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {compensationType === "hourly" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="hourlyRate">Default Hourly Rate</Label>
+                  <Input
+                    id="hourlyRate"
+                    data-testid="input-job-hourly-rate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Default rate used when no employee-specific rate is set
+                  </p>
+                </div>
+              )}
+
+              {compensationType === "salaried" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="salaryAmount">Salary Amount</Label>
+                    <Input
+                      id="salaryAmount"
+                      data-testid="input-salary-amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={salaryAmount}
+                      onChange={(e) => setSalaryAmount(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="salaryPeriod">Period</Label>
+                    <Select value={salaryPeriod} onValueChange={(v) => setSalaryPeriod(v as "weekly" | "biweekly" | "monthly" | "yearly")}>
+                      <SelectTrigger data-testid="select-salary-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-2">
                 <Label htmlFor="tipMode">Tip Mode</Label>
