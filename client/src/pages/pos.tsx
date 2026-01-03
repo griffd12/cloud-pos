@@ -1031,7 +1031,6 @@ export default function PosPage() {
             onPay={() => setShowPaymentModal(true)}
             onNewCheck={() => setShowOrderTypeModal(true)}
             onChangeOrderType={() => setShowOrderTypeModal(true)}
-            onOpenChecks={() => setShowOpenChecksModal(true)}
             onPriceOverride={(item) => {
               setSelectedItemId(item.id);
               setShowPriceOverrideModal(true);

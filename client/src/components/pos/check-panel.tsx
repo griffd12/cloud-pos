@@ -16,7 +16,6 @@ interface CheckPanelProps {
   selectedItemId?: string | null;
   onPay: () => void;
   onNewCheck: () => void;
-  onOpenChecks?: () => void;
   onChangeOrderType: () => void;
   onPriceOverride?: (item: CheckItem) => void;
   canSend: boolean;
@@ -257,7 +256,6 @@ export function CheckPanel({
   selectedItemId,
   onPay,
   onNewCheck,
-  onOpenChecks,
   onChangeOrderType,
   onPriceOverride,
   canSend,
@@ -389,28 +387,17 @@ export function CheckPanel({
       </div>
 
       <div className="flex-shrink-0 p-3 border-t bg-muted/30 space-y-2">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="lg"
-            className="flex-1"
-            onClick={onOpenChecks}
-            data-testid="button-open-checks"
-          >
-            Open Checks
-          </Button>
-          <Button
-            variant={unsentItems.length > 0 ? "default" : "secondary"}
-            size="lg"
-            className="flex-1"
-            onClick={onSend}
-            disabled={isSending}
-            data-testid="button-send-order"
-          >
-            <Send className="w-4 h-4 mr-2" />
-            {unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
-          </Button>
-        </div>
+        <Button
+          variant={unsentItems.length > 0 ? "default" : "secondary"}
+          size="lg"
+          className="w-full"
+          onClick={onSend}
+          disabled={isSending}
+          data-testid="button-send-order"
+        >
+          <Send className="w-4 h-4 mr-2" />
+          {unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
+        </Button>
         <Button
           size="lg"
           className="w-full bg-green-600 hover:bg-green-700 text-white"
