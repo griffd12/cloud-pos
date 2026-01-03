@@ -544,7 +544,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/employees", async (req, res) => {
     try {
-      const validated = insertEmployeeSchema.parse(req.body);
+      // Auto-assign employee number if not provided
+      let employeeData = { ...req.body };
+      if (!employeeData.employeeNumber) {
+        const existingEmployees = await storage.getEmployees();
+        const maxNum = existingEmployees.reduce((max, emp) => {
+          const num = parseInt(emp.employeeNumber, 10);
+          return isNaN(num) ? max : Math.max(max, num);
+        }, 0);
+        employeeData.employeeNumber = String(maxNum + 1).padStart(3, '0');
+      }
+      const validated = insertEmployeeSchema.parse(employeeData);
       const data = await storage.createEmployee(validated);
       res.status(201).json(data);
     } catch (error) {
@@ -5708,7 +5718,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // LINE UP API - Daily Schedule Timeline
   // ============================================================================
 
-  // Get line-up data for a specific day (shifts, timecards, breaks)
+  // Get line-up data for a specific day (shifts, timecards, breaks) - path params version
+  app.get("/api/line-up/:propertyId/:date", async (req, res) => {
+    try {
+      const { propertyId, date } = req.params;
+
+      // Get shifts for this date
+      const shifts = await storage.getShifts({
+        propertyId: propertyId,
+        startDate: date,
+        endDate: date,
+      });
+
+      // Get timecards for this business date
+      const timecards = await storage.getTimecards({
+        propertyId: propertyId,
+        businessDate: date,
+      });
+
+      // Get break sessions for this business date
+      const breakSessions = await storage.getBreakSessions({
+        propertyId: propertyId,
+        businessDate: date,
+      });
+
+      res.json({
+        shifts,
+        timecards,
+        breakSessions,
+      });
+    } catch (error) {
+      console.error("Get line-up data error:", error);
+      res.status(500).json({ message: "Failed to get line-up data" });
+    }
+  });
+
+  // Get line-up data for a specific day (legacy query params version)
   app.get("/api/line-up", async (req, res) => {
     try {
       const { propertyId, date } = req.query;

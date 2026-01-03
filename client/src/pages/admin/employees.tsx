@@ -181,7 +181,7 @@ export default function EmployeesPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!employeeNumber || !firstName || !lastName || !roleId) {
+    if (!firstName || !lastName || !roleId) {
       toast({ title: "Please fill all required fields", variant: "destructive" });
       return;
     }
@@ -280,13 +280,13 @@ export default function EmployeesPage() {
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="employeeNumber">Employee Number *</Label>
+              <Label htmlFor="employeeNumber">Employee Number (auto-assigned if blank)</Label>
               <Input 
                 id="employeeNumber"
                 data-testid="input-employee-number"
                 value={employeeNumber} 
                 onChange={(e) => setEmployeeNumber(e.target.value)}
-                placeholder="e.g., EMP001"
+                placeholder="Leave blank for auto-assign"
               />
             </div>
             
