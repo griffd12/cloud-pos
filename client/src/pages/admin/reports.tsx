@@ -266,6 +266,28 @@ interface SalesComparisonData {
   };
 }
 
+interface ClockedInEmployee {
+  employeeId: string;
+  employeeName: string;
+  employeeNumber: string;
+  clockInTime: string;
+  businessDate: string;
+  jobCodeId: string | null;
+  jobName: string;
+  durationMinutes: number;
+  isOnBreak: boolean;
+  breakType?: string;
+}
+
+interface ClockedInStatusData {
+  propertyId: string;
+  timestamp: string;
+  totalClockedIn: number;
+  onBreak: number;
+  working: number;
+  employees: ClockedInEmployee[];
+}
+
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
 
 function formatCurrency(value: number): string {
@@ -609,6 +631,25 @@ export default function ReportsPage() {
     enabled: !!selectedCheckId && checkModalOpen,
   });
 
+  const { data: clockedInData, isLoading: clockedInLoading } = useQuery<ClockedInStatusData>({
+    queryKey: ["/api/reports/clocked-in-status", selectedPropertyId],
+    queryFn: async () => {
+      if (selectedPropertyId === "all") {
+        // For "all" properties, we need to get the first property
+        const props = properties || [];
+        if (props.length === 0) throw new Error("No properties available");
+        const res = await fetch(`/api/reports/clocked-in-status?propertyId=${props[0].id}`);
+        if (!res.ok) throw new Error("Failed to fetch");
+        return res.json();
+      }
+      const res = await fetch(`/api/reports/clocked-in-status?propertyId=${selectedPropertyId}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: selectedPropertyId !== "all" || (properties && properties.length > 0),
+    refetchInterval: 60000, // Refresh every minute
+  });
+
   const handleViewCheck = (checkId: string) => {
     setSelectedCheckId(checkId);
     setCheckModalOpen(true);
@@ -775,6 +816,10 @@ export default function ReportsPage() {
           <TabsTrigger value="comparison" data-testid="tab-comparison">
             <GitCompare className="h-4 w-4 mr-2" />
             Compare
+          </TabsTrigger>
+          <TabsTrigger value="clocked-in" data-testid="tab-clocked-in">
+            <Clock className="h-4 w-4 mr-2" />
+            Clocked In
           </TabsTrigger>
         </TabsList>
 
@@ -1908,6 +1953,127 @@ export default function ReportsPage() {
                 No comparison data available
               </CardContent>
             </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="clocked-in" className="space-y-4">
+          {selectedPropertyId === "all" && (
+            <Card>
+              <CardContent className="py-6 text-center text-muted-foreground">
+                Please select a specific property to view clocked-in employees
+              </CardContent>
+            </Card>
+          )}
+          {selectedPropertyId !== "all" && (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Clocked In</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-total-clocked-in">
+                      {clockedInLoading ? "..." : clockedInData?.totalClockedIn || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">employees currently on shift</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Working</CardTitle>
+                    <UserCheck className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600" data-testid="text-working-count">
+                      {clockedInLoading ? "..." : clockedInData?.working || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">actively working</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">On Break</CardTitle>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-amber-600" data-testid="text-on-break-count">
+                      {clockedInLoading ? "..." : clockedInData?.onBreak || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">currently on break</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Clocked In Employees
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {clockedInLoading ? (
+                    <div className="py-8 text-center text-muted-foreground">Loading...</div>
+                  ) : clockedInData?.employees && clockedInData.employees.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Employee</TableHead>
+                          <TableHead>Job</TableHead>
+                          <TableHead>Clock In Time</TableHead>
+                          <TableHead>Duration</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {clockedInData.employees.map((emp) => {
+                          const hours = Math.floor(emp.durationMinutes / 60);
+                          const mins = emp.durationMinutes % 60;
+                          const durationStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                          return (
+                            <TableRow key={emp.employeeId} data-testid={`row-clocked-in-${emp.employeeId}`}>
+                              <TableCell>
+                                <div>
+                                  <span className="font-medium">{emp.employeeName}</span>
+                                  <span className="text-muted-foreground ml-2 text-xs">#{emp.employeeNumber}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>{emp.jobName}</TableCell>
+                              <TableCell>
+                                {new Date(emp.clockInTime).toLocaleTimeString("en-US", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                })}
+                              </TableCell>
+                              <TableCell className="font-mono">{durationStr}</TableCell>
+                              <TableCell>
+                                {emp.isOnBreak ? (
+                                  <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                    On Break
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                    Working
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="py-8 text-center text-muted-foreground">
+                      No employees currently clocked in
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
       </Tabs>
