@@ -1129,6 +1129,16 @@ export default function PosPage() {
         onClose={() => setShowFunctionsModal(false)}
         hasActiveCheck={!!currentCheck}
         onTransferCheck={() => {
+          const hasUnsentItems = checkItems.some(item => !item.sent);
+          if (hasUnsentItems) {
+            toast({
+              title: "Cannot Transfer Check",
+              description: "All items must be sent to KDS before transferring. Please send the order first.",
+              variant: "destructive",
+            });
+            setShowFunctionsModal(false);
+            return;
+          }
           setShowFunctionsModal(false);
           setShowTransferModal(true);
         }}
@@ -1147,6 +1157,16 @@ export default function PosPage() {
           setShowSplitModal(true);
         }}
         onMergeChecks={() => {
+          const hasUnsentItems = checkItems.some(item => !item.sent);
+          if (hasUnsentItems) {
+            toast({
+              title: "Cannot Merge Checks",
+              description: "All items must be sent to KDS before merging. Please send the order first.",
+              variant: "destructive",
+            });
+            setShowFunctionsModal(false);
+            return;
+          }
           setShowFunctionsModal(false);
           setShowMergeModal(true);
         }}
