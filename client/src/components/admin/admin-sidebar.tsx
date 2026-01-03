@@ -102,16 +102,11 @@ const menuGroups = [
     ],
   },
   {
-    label: "Tips & Labor",
-    items: [
-      { title: "Tip Pooling", url: "/admin/tip-pooling", icon: Coins },
-      { title: "Labor Analytics", url: "/admin/labor-analytics", icon: BarChart3 },
-    ],
-  },
-  {
     label: "Reports",
     items: [
       { title: "Reports Dashboard", url: "/admin/reports", icon: LayoutGrid },
+      { title: "Tip Pooling", url: "/admin/tip-pooling", icon: Coins },
+      { title: "Labor Analytics", url: "/admin/labor-analytics", icon: BarChart3 },
     ],
   },
   {
