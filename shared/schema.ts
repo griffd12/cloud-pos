@@ -427,6 +427,61 @@ export const menuItemModifierGroups = pgTable("menu_item_modifier_groups", {
 });
 
 // ============================================================================
+// PAYMENT PROCESSING - Gateway-agnostic payment processor configuration
+// ============================================================================
+
+// Supported payment gateway types
+export const PAYMENT_GATEWAY_TYPES = [
+  "stripe",
+  "elavon_converge",
+  "shift4",
+  "heartland",
+  "freedompay",
+  "eigen",
+] as const;
+export type PaymentGatewayType = (typeof PAYMENT_GATEWAY_TYPES)[number];
+
+// Payment transaction statuses
+export const PAYMENT_TRANSACTION_STATUSES = [
+  "pending",        // Transaction initiated
+  "authorized",     // Auth approved, awaiting capture
+  "captured",       // Funds captured/settled
+  "voided",         // Transaction voided before settlement
+  "refunded",       // Full refund processed
+  "partial_refund", // Partial refund processed
+  "declined",       // Authorization declined
+  "failed",         // Technical failure
+] as const;
+export type PaymentTransactionStatus = (typeof PAYMENT_TRANSACTION_STATUSES)[number];
+
+// Payment Processors - configured per property (credentials stored as secrets)
+export const paymentProcessors = pgTable("payment_processors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(), // Display name, e.g., "Main Credit Card Processor"
+  gatewayType: text("gateway_type").notNull(), // 'stripe', 'elavon_converge', etc.
+  // Environment settings
+  environment: text("environment").default("sandbox"), // 'sandbox' or 'production'
+  // Credential references - NOT the actual credentials, just the secret key names
+  // Actual credentials stored in Replit Secrets (e.g., STRIPE_API_KEY, ELAVON_MERCHANT_ID)
+  credentialKeyPrefix: text("credential_key_prefix").notNull(), // e.g., "STRIPE" or "ELAVON_MAIN"
+  // Gateway-specific settings (JSON) - endpoint URLs, merchant IDs, terminal IDs, etc.
+  gatewaySettings: jsonb("gateway_settings"), 
+  // Feature flags
+  supportsTokenization: boolean("supports_tokenization").default(true),
+  supportsTipAdjust: boolean("supports_tip_adjust").default(true),
+  supportsPartialAuth: boolean("supports_partial_auth").default(false),
+  supportsEmv: boolean("supports_emv").default(true),
+  supportsContactless: boolean("supports_contactless").default(true),
+  // Timing settings
+  authHoldMinutes: integer("auth_hold_minutes").default(1440), // How long auth is valid (24 hours default)
+  settlementTime: text("settlement_time").default("02:00"), // When batch closes (HH:MM)
+  // Status
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================================================
 // TENDERS, DISCOUNTS, SERVICE CHARGES
 // ============================================================================
 
@@ -438,8 +493,66 @@ export const tenders = pgTable("tenders", {
   name: text("name").notNull(),
   code: text("code").notNull(),
   type: text("type").notNull(), // 'cash', 'credit', 'gift', 'other'
+  paymentProcessorId: varchar("payment_processor_id").references(() => paymentProcessors.id), // Link to processor for card tenders
   active: boolean("active").default(true),
 });
+
+// Payment Transactions - tracks all gateway communications (NO card data stored)
+export const paymentTransactions = pgTable("payment_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  checkPaymentId: varchar("check_payment_id").references(() => checkPayments.id), // Links to POS payment
+  paymentProcessorId: varchar("payment_processor_id").notNull().references(() => paymentProcessors.id),
+  // Transaction identifiers from gateway
+  gatewayTransactionId: text("gateway_transaction_id"), // Transaction ID from processor
+  authCode: text("auth_code"), // Authorization code
+  referenceNumber: text("reference_number"), // Gateway reference number
+  // Safe card display info only (PCI compliant)
+  cardBrand: text("card_brand"), // 'visa', 'mastercard', 'amex', 'discover', etc.
+  cardLast4: text("card_last4"), // Last 4 digits only
+  cardExpiryMonth: integer("card_expiry_month"), // 1-12
+  cardExpiryYear: integer("card_expiry_year"), // e.g., 2025
+  entryMode: text("entry_mode"), // 'chip', 'contactless', 'swipe', 'manual', 'token'
+  // Amounts (in cents to avoid floating point issues)
+  authAmount: integer("auth_amount").notNull(), // Original authorized amount in cents
+  captureAmount: integer("capture_amount"), // Amount actually captured (may differ for tips)
+  tipAmount: integer("tip_amount").default(0), // Tip added after auth
+  // Transaction state
+  status: text("status").notNull().default("pending"), // See PAYMENT_TRANSACTION_STATUSES
+  transactionType: text("transaction_type").notNull(), // 'sale', 'auth', 'capture', 'void', 'refund'
+  // Gateway response details
+  responseCode: text("response_code"), // Gateway response code
+  responseMessage: text("response_message"), // Human-readable response
+  avsResult: text("avs_result"), // Address verification result
+  cvvResult: text("cvv_result"), // CVV verification result
+  // Timestamps
+  initiatedAt: timestamp("initiated_at").defaultNow(),
+  authorizedAt: timestamp("authorized_at"),
+  capturedAt: timestamp("captured_at"),
+  settledAt: timestamp("settled_at"),
+  // Terminal/device info
+  terminalId: text("terminal_id"), // Physical terminal identifier
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  // Refund tracking
+  originalTransactionId: varchar("original_transaction_id"), // For refunds/voids, links to original
+  refundedAmount: integer("refunded_amount").default(0), // Total refunded so far
+  // Batch/settlement info
+  batchId: text("batch_id"), // Settlement batch identifier
+  businessDate: text("business_date"), // YYYY-MM-DD
+});
+
+// Relations
+export const paymentProcessorsRelations = relations(paymentProcessors, ({ one, many }) => ({
+  property: one(properties, { fields: [paymentProcessors.propertyId], references: [properties.id] }),
+  transactions: many(paymentTransactions),
+}));
+
+export const paymentTransactionsRelations = relations(paymentTransactions, ({ one }) => ({
+  checkPayment: one(checkPayments, { fields: [paymentTransactions.checkPaymentId], references: [checkPayments.id] }),
+  paymentProcessor: one(paymentProcessors, { fields: [paymentTransactions.paymentProcessorId], references: [paymentProcessors.id] }),
+  workstation: one(workstations, { fields: [paymentTransactions.workstationId], references: [workstations.id] }),
+  employee: one(employees, { fields: [paymentTransactions.employeeId], references: [employees.id] }),
+}));
 
 export const discounts = pgTable("discounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -694,6 +807,8 @@ export const insertModifierGroupSchema = createInsertSchema(modifierGroups).omit
 export const insertModifierSchema = createInsertSchema(modifiers).omit({ id: true });
 export const insertModifierGroupModifierSchema = createInsertSchema(modifierGroupModifiers).omit({ id: true });
 export const insertMenuItemModifierGroupSchema = createInsertSchema(menuItemModifierGroups).omit({ id: true });
+export const insertPaymentProcessorSchema = createInsertSchema(paymentProcessors).omit({ id: true, createdAt: true });
+export const insertPaymentTransactionSchema = createInsertSchema(paymentTransactions).omit({ id: true, initiatedAt: true });
 export const insertTenderSchema = createInsertSchema(tenders).omit({ id: true });
 export const insertDiscountSchema = createInsertSchema(discounts).omit({ id: true });
 export const insertServiceChargeSchema = createInsertSchema(serviceCharges).omit({ id: true });
@@ -757,6 +872,10 @@ export type ModifierGroupModifier = typeof modifierGroupModifiers.$inferSelect;
 export type InsertModifierGroupModifier = z.infer<typeof insertModifierGroupModifierSchema>;
 export type MenuItemModifierGroup = typeof menuItemModifierGroups.$inferSelect;
 export type InsertMenuItemModifierGroup = z.infer<typeof insertMenuItemModifierGroupSchema>;
+export type PaymentProcessor = typeof paymentProcessors.$inferSelect;
+export type InsertPaymentProcessor = z.infer<typeof insertPaymentProcessorSchema>;
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type InsertPaymentTransaction = z.infer<typeof insertPaymentTransactionSchema>;
 export type Tender = typeof tenders.$inferSelect;
 export type InsertTender = z.infer<typeof insertTenderSchema>;
 export type Discount = typeof discounts.$inferSelect;
