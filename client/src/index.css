@@ -43,6 +43,9 @@
   --chart-3: 27 87% 42%;
   --chart-4: 280 65% 38%;
   --chart-5: 340 82% 40%;
+  --pos-success: 142 76% 36%;
+  --pos-warning: 38 92% 50%;
+  --pos-info: 210 100% 45%;
   --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -88,45 +91,48 @@
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
-  --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
-  --background: 0 0% 7%;
-  --foreground: 0 0% 98%;
-  --border: 0 0% 16%;
-  --card: 0 0% 9%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 0 0% 12%;
-  --sidebar: 0 0% 11%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-border: 0 0% 14%;
-  --sidebar-primary: 217 91% 42%;
-  --sidebar-primary-foreground: 217 91% 98%;
-  --sidebar-accent: 0 0% 14%;
-  --sidebar-accent-foreground: 0 0% 98%;
-  --sidebar-ring: 217 91% 42%;
-  --popover: 0 0% 13%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 0 0% 16%;
-  --primary: 217 91% 35%;
-  --primary-foreground: 217 91% 98%;
-  --secondary: 0 0% 16%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 210 6% 15%;
-  --muted-foreground: 210 6% 75%;
-  --accent: 210 8% 17%;
-  --accent-foreground: 210 8% 92%;
-  --destructive: 0 84% 32%;
-  --destructive-foreground: 0 84% 98%;
-  --input: 0 0% 30%;
-  --ring: 217 91% 42%;
-  --chart-1: 217 91% 65%;
-  --chart-2: 142 76% 58%;
-  --chart-3: 27 87% 62%;
-  --chart-4: 280 65% 68%;
-  --chart-5: 340 82% 65%;
+  --button-outline: rgba(255,255,255, .12);
+  --badge-outline: rgba(255,255,255, .08);
+  --opaque-button-border-intensity: 10;
+  --elevate-1: rgba(255,255,255, .05);
+  --elevate-2: rgba(255,255,255, .10);
+  --background: 220 25% 8%;
+  --foreground: 210 20% 98%;
+  --border: 220 20% 18%;
+  --card: 220 22% 11%;
+  --card-foreground: 210 20% 98%;
+  --card-border: 220 20% 16%;
+  --sidebar: 220 28% 12%;
+  --sidebar-foreground: 210 20% 98%;
+  --sidebar-border: 220 22% 18%;
+  --sidebar-primary: 210 100% 50%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 25% 18%;
+  --sidebar-accent-foreground: 210 20% 98%;
+  --sidebar-ring: 210 100% 50%;
+  --popover: 220 24% 14%;
+  --popover-foreground: 210 20% 98%;
+  --popover-border: 220 20% 20%;
+  --primary: 210 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 22% 20%;
+  --secondary-foreground: 210 20% 98%;
+  --muted: 220 18% 16%;
+  --muted-foreground: 220 12% 65%;
+  --accent: 220 20% 22%;
+  --accent-foreground: 210 20% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 220 18% 28%;
+  --ring: 210 100% 50%;
+  --chart-1: 210 100% 60%;
+  --chart-2: 142 76% 48%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 82% 55%;
+  --pos-success: 142 76% 42%;
+  --pos-warning: 38 92% 50%;
+  --pos-info: 210 100% 50%;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
@@ -172,6 +178,45 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* POS-specific utility classes */
+@layer utilities {
+  .pos-button {
+    @apply h-14 min-w-[80px] text-sm font-semibold rounded-md transition-colors;
+  }
+
+  .pos-button-lg {
+    @apply h-16 min-w-[100px] text-base font-semibold rounded-md transition-colors;
+  }
+
+  .pos-function-bar {
+    @apply flex gap-2 p-2 bg-card border-t;
+  }
+
+  .pos-slu-button {
+    @apply h-12 px-4 font-medium rounded-md whitespace-nowrap;
+  }
+
+  .pos-menu-item {
+    @apply h-24 p-3 flex flex-col justify-between rounded-md border;
+  }
+
+  .pos-check-item {
+    @apply flex items-start gap-2 p-2 rounded-md cursor-pointer;
+  }
+
+  .pos-check-item-sent {
+    @apply border-l-2 border-l-green-500 dark:border-l-green-400;
+  }
+
+  .pos-totals-row {
+    @apply flex justify-between items-center py-1;
+  }
+
+  .pos-grand-total {
+    @apply text-xl font-bold tabular-nums;
   }
 }
 
