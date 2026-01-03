@@ -1260,6 +1260,7 @@ export default function PosPage() {
       )}
 
       <PriceOverrideModal
+        key={selectedItemId || 'none'}
         open={showPriceOverrideModal}
         onClose={() => setShowPriceOverrideModal(false)}
         item={checkItems.find(i => i.id === selectedItemId) || null}
