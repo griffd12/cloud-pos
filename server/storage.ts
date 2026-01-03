@@ -1569,6 +1569,8 @@ export class DatabaseStorage implements IStorage {
             status: item.status,
             itemStatus: checkItem.itemStatus, // 'pending' or 'active'
             isReady: item.isReady || false,
+            isModified: item.isModified || false,
+            sortPriority: item.sortPriority || 0,
           });
         }
       }
@@ -1585,6 +1587,7 @@ export class DatabaseStorage implements IStorage {
         isRecalled: ticket.isRecalled || false,
         status: ticket.status,
         createdAt: ticket.createdAt,
+        subtotal: ticket.subtotal || check?.subtotal || null,
       });
     }
     return result;

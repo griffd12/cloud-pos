@@ -461,6 +461,7 @@ export function KdsDisplay({
                   createdAt={ticket.createdAt}
                   colorAlerts={colorAlerts}
                   isBlinking={blinkingTickets.has(ticket.id)}
+                  subtotal={ticket.subtotal}
                   onBump={onBump}
                   onRecall={onRecall}
                 />
@@ -478,6 +479,7 @@ export function KdsDisplay({
                   isPaid={ticket.isPaid}
                   createdAt={ticket.createdAt}
                   colorAlerts={colorAlerts}
+                  subtotal={ticket.subtotal}
                   onBump={onBump}
                   onRecall={onRecall}
                 />

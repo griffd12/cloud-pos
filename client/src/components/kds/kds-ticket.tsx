@@ -16,6 +16,8 @@ interface KdsItem {
   status: "pending" | "bumped" | "voided";
   itemStatus?: "pending" | "active";
   isReady?: boolean;
+  isModified?: boolean;
+  sortPriority?: number;
 }
 
 export interface ColorAlertSettings {
@@ -44,6 +46,7 @@ interface KdsTicketProps {
   colorAlerts?: ColorAlertSettings;
   itemSelectEnabled?: boolean;
   isBlinking?: boolean;
+  subtotal?: string | null;
   onBump: (ticketId: string) => void;
   onRecall?: (ticketId: string) => void;
 }
@@ -120,6 +123,7 @@ export function KdsTicket({
   colorAlerts = DEFAULT_COLOR_ALERTS,
   itemSelectEnabled = true,
   isBlinking = false,
+  subtotal,
   onBump,
   onRecall,
 }: KdsTicketProps) {
@@ -193,8 +197,17 @@ export function KdsTicket({
     }
   };
 
-  const activeItems = items.filter((item) => item.status !== "voided");
+  const activeItems = items
+    .filter((item) => item.status !== "voided")
+    .sort((a, b) => {
+      // Modified items appear first (higher priority)
+      if (a.isModified && !b.isModified) return -1;
+      if (!a.isModified && b.isModified) return 1;
+      // Then sort by sortPriority if set
+      return (b.sortPriority || 0) - (a.sortPriority || 0);
+    });
   const allItemsReady = activeItems.length > 0 && activeItems.every((item) => item.isReady);
+  const hasModifiedItems = activeItems.some((item) => item.isModified);
 
   const cardBgClass = hasAlert 
     ? `${COLOR_BACKGROUND_CLASSES[activeAlertColor] || ""}`
@@ -243,6 +256,11 @@ export function KdsTicket({
               PAID
             </Badge>
           )}
+          {hasModifiedItems && (
+            <Badge className="text-xs bg-orange-500 text-white">
+              MODIFIED
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge
@@ -268,7 +286,7 @@ export function KdsTicket({
               itemSelectEnabled && item.itemStatus !== "pending" && item.status !== "voided"
                 ? "cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
                 : ""
-            } ${item.isReady ? (hasAlert ? "bg-black/20" : "bg-green-500/10") : ""} ${item.itemStatus === "pending" ? "animate-pulse" : ""}`}
+            } ${item.isReady ? (hasAlert ? "bg-black/20" : "bg-green-500/10") : ""} ${item.itemStatus === "pending" ? "animate-pulse" : ""} ${item.isModified ? (hasAlert ? "border-l-2 border-current" : "border-l-2 border-orange-500 bg-orange-500/5") : ""}`}
             onClick={() => handleItemClick(item)}
             data-testid={`kds-item-${item.id}`}
           >
@@ -306,6 +324,11 @@ export function KdsTicket({
                 {item.itemStatus === "pending" && (
                   <Badge variant="outline" className="text-[10px] py-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
                     MODIFYING
+                  </Badge>
+                )}
+                {item.isModified && !item.itemStatus && (
+                  <Badge variant="outline" className="text-[10px] py-0 bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30">
+                    MODIFIED
                   </Badge>
                 )}
               </div>
@@ -351,6 +374,16 @@ export function KdsTicket({
           </div>
         )}
       </CardContent>
+
+      {subtotal && (
+        <>
+          <Separator className={hasAlert ? "bg-current/20" : ""} />
+          <div className={`px-4 py-2 flex items-center justify-between ${hasAlert ? "" : "text-muted-foreground"}`}>
+            <span className="text-sm font-medium">Subtotal</span>
+            <span className="text-sm font-bold tabular-nums">${parseFloat(subtotal).toFixed(2)}</span>
+          </div>
+        </>
+      )}
 
       <CardFooter className="pt-2">
         {!isDraft && !isPreview && !activeItems.some((i) => i.itemStatus === "pending") && (
