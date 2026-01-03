@@ -3700,6 +3700,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const totalWithTax = grossSales + taxTotal;
       
       // PAYMENTS - Based on businessDate (operating day when payment was applied)
+      // Important: p.amount is the TENDERED amount (what customer handed over).
+      // For over-tender (cash), we need to cap at the check total to get the actual payment applied.
       const paymentsInPeriod = allPayments.filter(p => {
         // Apply RVC filter via check
         if (validRvcIds) {
@@ -3716,9 +3718,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      const totalPayments = paymentsInPeriod.reduce((sum, p) => 
-        sum + parseFloat(p.amount || "0"), 0
-      );
+      // Group payments by check and calculate actual applied amount
+      // For each check, total applied payments cannot exceed check total
+      const checkPaymentMap = new Map<string, number>();
+      for (const p of paymentsInPeriod) {
+        const current = checkPaymentMap.get(p.checkId) || 0;
+        checkPaymentMap.set(p.checkId, current + parseFloat(p.amount || "0"));
+      }
+      
+      // Cap each check's payments at the check total
+      let totalPayments = 0;
+      checkPaymentMap.forEach((tenderedTotal, checkId) => {
+        const check = allChecks.find(c => c.id === checkId);
+        if (check) {
+          const checkTotal = parseFloat(check.total || "0");
+          // Actual applied payment is the lesser of tendered and check total
+          totalPayments += Math.min(tenderedTotal, checkTotal);
+        } else {
+          // If check not found (shouldn't happen), use tendered amount
+          totalPayments += tenderedTotal;
+        }
+      });
       // Tips would need to be tracked separately if the system supports them
       const totalTips = 0;
       
@@ -3976,14 +3996,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const tenderTotals: Record<string, { name: string; count: number; amount: number }> = {};
       
+      // Group payments by check to properly cap at check total
+      const paymentsByCheck = new Map<string, typeof paymentsInPeriod>();
       for (const payment of paymentsInPeriod) {
-        const id = payment.tenderId;
-        if (!tenderTotals[id]) {
-          tenderTotals[id] = { name: payment.tenderName, count: 0, amount: 0 };
-        }
-        tenderTotals[id].count += 1;
-        tenderTotals[id].amount += parseFloat(payment.amount);
+        const existing = paymentsByCheck.get(payment.checkId) || [];
+        existing.push(payment);
+        paymentsByCheck.set(payment.checkId, existing);
       }
+      
+      // Process each check's payments, capping total at check amount
+      paymentsByCheck.forEach((checkPayments, checkId) => {
+        const check = allChecks.find(c => c.id === checkId);
+        const checkTotal = check ? parseFloat(check.total || "0") : Infinity;
+        const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        
+        // Calculate ratio to cap if over-tendered
+        const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
+        
+        for (const payment of checkPayments) {
+          const id = payment.tenderId;
+          if (!tenderTotals[id]) {
+            tenderTotals[id] = { name: payment.tenderName, count: 0, amount: 0 };
+          }
+          tenderTotals[id].count += 1;
+          // Apply ratio to cap payment amount proportionally
+          tenderTotals[id].amount += parseFloat(payment.amount) * ratio;
+        }
+      });
       
       const totalAmount = Object.values(tenderTotals).reduce((sum, t) => sum + t.amount, 0);
       
@@ -4376,18 +4415,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         payments = payments.filter(p => p.tenderId === tenderId);
       }
       
+      // Group payments by check to calculate applied amounts (capped at check total)
+      const paymentsByCheck = new Map<string, typeof payments>();
+      for (const payment of payments) {
+        const existing = paymentsByCheck.get(payment.checkId) || [];
+        existing.push(payment);
+        paymentsByCheck.set(payment.checkId, existing);
+      }
+      
+      // Calculate applied amount ratios for each check
+      const paymentAppliedRatios = new Map<string, number>();
+      paymentsByCheck.forEach((checkPayments, checkId) => {
+        const check = allChecks.find(c => c.id === checkId);
+        const checkTotal = check ? parseFloat(check.total || "0") : Infinity;
+        const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
+        checkPayments.forEach(p => paymentAppliedRatios.set(p.id, ratio));
+      });
+      
       const result = payments.map(p => {
         const check = allChecks.find(c => c.id === p.checkId);
         const tender = allTenders.find(t => t.id === p.tenderId);
         const rvc = check ? allRvcs.find(r => r.id === check.rvcId) : null;
         const emp = check ? employees.find(e => e.id === check.employeeId) : null;
+        const ratio = paymentAppliedRatios.get(p.id) || 1;
         
         return {
           id: p.id,
           checkNumber: check?.checkNumber || 0,
           tenderName: tender?.name || "Unknown",
           tenderType: tender?.type || "unknown",
-          amount: parseFloat(p.amount || "0"),
+          amount: parseFloat(p.amount || "0") * ratio, // Applied amount, not tendered
           tipAmount: 0, // Tips would need separate tracking
           employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
           rvcName: rvc?.name || "Unknown",
@@ -4400,11 +4458,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const p of payments) {
         const tender = allTenders.find(t => t.id === p.tenderId);
         const name = tender?.name || "Unknown";
+        const ratio = paymentAppliedRatios.get(p.id) || 1;
         if (!summary[name]) {
           summary[name] = { count: 0, amount: 0, tips: 0 };
         }
         summary[name].count += 1;
-        summary[name].amount += parseFloat(p.amount || "0");
+        summary[name].amount += parseFloat(p.amount || "0") * ratio; // Applied amount
         // Tips would need separate tracking
       }
       
