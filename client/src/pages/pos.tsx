@@ -700,15 +700,17 @@ export default function PosPage() {
                     <span className="text-sm text-muted-foreground px-2 py-3">No categories configured</span>
                   ) : (
                     slus.map((slu) => (
-                      <Button
-                        key={slu.id}
-                        variant={selectedSlu?.id === slu.id ? "default" : "secondary"}
-                        className="h-12 px-5 flex-shrink-0 whitespace-nowrap text-sm font-semibold"
-                        onClick={() => handleSelectSlu(slu)}
-                        data-testid={`button-slu-tab-${slu.id}`}
-                      >
-                        {slu.buttonLabel || slu.name}
-                      </Button>
+                      <div key={slu.id} className="h-12 flex-shrink-0">
+                        <Button
+                          variant={selectedSlu?.id === slu.id ? "default" : "secondary"}
+                          size="lg"
+                          className="h-full px-5 whitespace-nowrap text-sm font-semibold"
+                          onClick={() => handleSelectSlu(slu)}
+                          data-testid={`button-slu-tab-${slu.id}`}
+                        >
+                          {slu.buttonLabel || slu.name}
+                        </Button>
+                      </div>
                     ))
                   )}
                 </div>
@@ -724,48 +726,60 @@ export default function PosPage() {
 
               <div className="flex-shrink-0 border-t bg-card p-2">
                 <div className="flex gap-2 flex-wrap">
-                  <Button
-                    variant="secondary"
-                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
-                    onClick={() => setShowOrderTypeModal(true)}
-                    data-testid="button-new-check-fn"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Check
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
-                    onClick={() => setShowOpenChecksModal(true)}
-                    data-testid="button-open-checks"
-                  >
-                    <List className="w-4 h-4 mr-2" />
-                    Open Checks
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
-                    onClick={handleLookupClick}
-                    data-testid="button-transaction-lookup"
-                  >
-                    <Search className="w-4 h-4 mr-2" />
-                    Lookup
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="h-14 px-4 flex-1 min-w-[100px] font-semibold"
-                    onClick={() => {
-                      if (currentCheck && checkItems.length > 0) {
-                        setCurrentCheck(null);
-                        setCheckItems([]);
-                      }
-                    }}
-                    disabled={!currentCheck || checkItems.filter(i => !i.voided).length === 0}
-                    data-testid="button-clear-check"
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Clear
-                  </Button>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowOrderTypeModal(true)}
+                      data-testid="button-new-check-fn"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      New Check
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowOpenChecksModal(true)}
+                      data-testid="button-open-checks"
+                    >
+                      <List className="w-4 h-4 mr-2" />
+                      Open Checks
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={handleLookupClick}
+                      data-testid="button-transaction-lookup"
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Lookup
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => {
+                        if (currentCheck && checkItems.length > 0) {
+                          setCurrentCheck(null);
+                          setCheckItems([]);
+                        }
+                      }}
+                      disabled={!currentCheck || checkItems.filter(i => !i.voided).length === 0}
+                      data-testid="button-clear-check"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Clear
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>

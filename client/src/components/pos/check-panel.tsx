@@ -249,25 +249,31 @@ export function CheckPanel({
 
       <div className="flex-shrink-0 p-3 border-t space-y-2">
         <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="secondary"
-            className="h-14 font-semibold"
-            onClick={onSend}
-            disabled={unsentItems.length === 0 || !canSend || isSending}
-            data-testid="button-send"
-          >
-            <Send className="w-4 h-4 mr-2" />
-            {isSending ? "Sending..." : `Send${unsentItems.length > 0 ? ` (${unsentItems.length})` : ""}`}
-          </Button>
-          <Button
-            className="h-14 font-semibold"
-            onClick={onPay}
-            disabled={!paymentsReady}
-            data-testid="button-pay"
-          >
-            <CreditCard className="w-4 h-4 mr-2" />
-            {paymentsReady ? (activeItems.length === 0 ? "Close" : "Pay") : "Loading..."}
-          </Button>
+          <div className="h-14">
+            <Button
+              variant="secondary"
+              size="lg"
+              className="w-full h-full font-semibold"
+              onClick={onSend}
+              disabled={unsentItems.length === 0 || !canSend || isSending}
+              data-testid="button-send"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              {isSending ? "Sending..." : `Send${unsentItems.length > 0 ? ` (${unsentItems.length})` : ""}`}
+            </Button>
+          </div>
+          <div className="h-14">
+            <Button
+              size="lg"
+              className="w-full h-full font-semibold"
+              onClick={onPay}
+              disabled={!paymentsReady}
+              data-testid="button-pay"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              {paymentsReady ? (activeItems.length === 0 ? "Close" : "Pay") : "Loading..."}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

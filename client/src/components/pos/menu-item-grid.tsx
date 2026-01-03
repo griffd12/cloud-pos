@@ -42,25 +42,26 @@ export function MenuItemGrid({ items, onSelectItem, isLoading }: MenuItemGridPro
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-4">
       {items.map((item) => (
-        <Button
-          key={item.id}
-          variant="secondary"
-          className="h-24 flex flex-col items-center justify-center p-3 relative overflow-visible gap-1"
-          onClick={() => onSelectItem(item)}
-          data-testid={`button-menu-item-${item.id}`}
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-center line-clamp-2">
-              {item.shortName || item.name}
+        <div key={item.id} className="h-24">
+          <Button
+            variant="secondary"
+            className="w-full h-full flex flex-col items-center justify-center relative overflow-visible gap-1"
+            onClick={() => onSelectItem(item)}
+            data-testid={`button-menu-item-${item.id}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-center line-clamp-2">
+                {item.shortName || item.name}
+              </span>
+              {item.hasRequiredModifiers && (
+                <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+              )}
+            </div>
+            <span className="text-base font-bold tabular-nums">
+              {formatPrice(item.price)}
             </span>
-            {item.hasRequiredModifiers && (
-              <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-            )}
-          </div>
-          <span className="text-base font-bold tabular-nums">
-            {formatPrice(item.price)}
-          </span>
-        </Button>
+          </Button>
+        </div>
       ))}
     </div>
   );
