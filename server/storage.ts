@@ -387,7 +387,7 @@ export interface IStorage {
   getEmployeeJobCodes(employeeId: string): Promise<EmployeeJobCode[]>;
   getEmployeeJobCodesWithDetails(employeeId: string): Promise<(EmployeeJobCode & { jobCode: JobCode })[]>;
   getAllEmployeeJobCodesForProperty(propertyId: string): Promise<Record<string, (EmployeeJobCode & { jobCode: JobCode })[]>>;
-  setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[]): Promise<EmployeeJobCode[]>;
+  setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean; bypassClockIn?: boolean }[]): Promise<EmployeeJobCode[]>;
 
   // Pay Periods
   getPayPeriods(propertyId: string): Promise<PayPeriod[]>;
@@ -2361,6 +2361,7 @@ export class DatabaseStorage implements IStorage {
         jobCodeId: employeeJobCodes.jobCodeId,
         payRate: employeeJobCodes.payRate,
         isPrimary: employeeJobCodes.isPrimary,
+        bypassClockIn: employeeJobCodes.bypassClockIn,
         jobCode: jobCodes,
       })
       .from(employeeJobCodes)
@@ -2373,6 +2374,7 @@ export class DatabaseStorage implements IStorage {
       jobCodeId: r.jobCodeId,
       payRate: r.payRate,
       isPrimary: r.isPrimary,
+      bypassClockIn: r.bypassClockIn,
       jobCode: r.jobCode,
     }));
   }
@@ -2403,6 +2405,7 @@ export class DatabaseStorage implements IStorage {
         jobCodeId: employeeJobCodes.jobCodeId,
         payRate: employeeJobCodes.payRate,
         isPrimary: employeeJobCodes.isPrimary,
+        bypassClockIn: employeeJobCodes.bypassClockIn,
         jobCode: jobCodes,
       })
       .from(employeeJobCodes)
@@ -2418,13 +2421,14 @@ export class DatabaseStorage implements IStorage {
         jobCodeId: r.jobCodeId,
         payRate: r.payRate,
         isPrimary: r.isPrimary,
+        bypassClockIn: r.bypassClockIn,
         jobCode: r.jobCode,
       });
     });
     return grouped;
   }
 
-  async setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean }[]): Promise<EmployeeJobCode[]> {
+  async setEmployeeJobCodes(employeeId: string, assignments: { jobCodeId: string; payRate?: string; isPrimary?: boolean; bypassClockIn?: boolean }[]): Promise<EmployeeJobCode[]> {
     await db.delete(employeeJobCodes).where(eq(employeeJobCodes.employeeId, employeeId));
     if (assignments.length === 0) return [];
     const values = assignments.map((assignment, index) => ({
@@ -2432,6 +2436,7 @@ export class DatabaseStorage implements IStorage {
       jobCodeId: assignment.jobCodeId,
       payRate: assignment.payRate || null,
       isPrimary: assignment.isPrimary ?? (index === 0),
+      bypassClockIn: assignment.bypassClockIn ?? false,
     }));
     return db.insert(employeeJobCodes).values(values).returning();
   }

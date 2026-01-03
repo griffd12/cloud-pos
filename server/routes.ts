@@ -340,15 +340,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       let privileges: string[] = [];
-      if (employee.roleId) {
+      let salariedBypass = false;
+      let bypassJobCode = null;
+
+      // Check if employee has a salaried job with bypassClockIn enabled
+      const jobAssignments = await storage.getEmployeeJobCodesWithDetails(employee.id);
+      const bypassJob = jobAssignments.find(j => j.bypassClockIn && j.jobCode?.compensationType === "salaried");
+      
+      if (bypassJob && bypassJob.jobCode?.roleId) {
+        // Salaried employee with bypass - load privileges from job's role
+        privileges = await storage.getRolePrivileges(bypassJob.jobCode.roleId);
+        salariedBypass = true;
+        bypassJobCode = bypassJob.jobCode;
+      } else if (employee.roleId) {
+        // Fall back to employee's default role (for admin access)
         privileges = await storage.getRolePrivileges(employee.roleId);
       }
+      
+      // Default privileges if none found
       privileges = privileges.length > 0 ? privileges : [
         "fast_transaction", "send_to_kitchen", "void_unsent", "void_sent",
         "apply_discount", "admin_access", "kds_access", "manager_approval"
       ];
 
-      res.json({ employee, privileges });
+      res.json({ employee, privileges, salariedBypass, bypassJobCode });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });

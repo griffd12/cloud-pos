@@ -29,6 +29,8 @@ import { useToast } from "@/hooks/use-toast";
 interface LoginResponse {
   employee: Employee;
   privileges: string[];
+  salariedBypass?: boolean;
+  bypassJobCode?: JobCode | null;
 }
 
 interface ClockStatusResponse {
@@ -49,6 +51,8 @@ export default function LoginPage() {
     setPrivileges,
     setIsClockedIn,
     setCurrentTimecard,
+    setIsSalariedBypass,
+    setCurrentJobCode,
     currentEmployee,
     currentRvc,
   } = usePosContext();
@@ -83,6 +87,22 @@ export default function LoginPage() {
       return response.json() as Promise<LoginResponse>;
     },
     onSuccess: async (data) => {
+      // For salaried bypass, skip clock-in check - they have privileges without clocking in
+      if (data.salariedBypass) {
+        setCurrentEmployee(data.employee);
+        setPrivileges(data.privileges);
+        setIsClockedIn(true); // Treat salaried bypass as "always clocked in" for POS access
+        setIsSalariedBypass(true);
+        setCurrentJobCode(data.bypassJobCode || null);
+        const rvc = rvcs.find((r) => r.id === selectedRvcId);
+        if (rvc) {
+          setCurrentRvc(rvc);
+        }
+        navigate("/pos");
+        return;
+      }
+
+      // Normal hourly flow - check clock status
       const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include" });
       let isClockedIn = false;
       let todayTimecard = null;
@@ -96,6 +116,7 @@ export default function LoginPage() {
       setPrivileges(data.privileges);
       setIsClockedIn(isClockedIn);
       setCurrentTimecard(todayTimecard);
+      setIsSalariedBypass(false);
       const rvc = rvcs.find((r) => r.id === selectedRvcId);
       if (rvc) {
         setCurrentRvc(rvc);

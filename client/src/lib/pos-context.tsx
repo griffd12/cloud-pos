@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode, type Dispatch, type SetStateAction } from "react";
-import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard } from "@shared/schema";
+import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode } from "@shared/schema";
 
 interface SelectedModifier {
   id: string;
@@ -18,6 +18,8 @@ interface PosContextType {
   privileges: string[];
   isClockedIn: boolean;
   currentTimecard: Timecard | null;
+  isSalariedBypass: boolean;
+  currentJobCode: JobCode | null;
   
   setCurrentEmployee: (employee: Employee | null) => void;
   setCurrentRvc: (rvc: Rvc | null) => void;
@@ -29,6 +31,8 @@ interface PosContextType {
   setPrivileges: (privileges: string[]) => void;
   setIsClockedIn: (value: boolean) => void;
   setCurrentTimecard: (timecard: Timecard | null) => void;
+  setIsSalariedBypass: (value: boolean) => void;
+  setCurrentJobCode: (jobCode: JobCode | null) => void;
   
   hasPrivilege: (code: string) => boolean;
   logout: () => void;
@@ -47,6 +51,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [privileges, setPrivileges] = useState<string[]>([]);
   const [isClockedIn, setIsClockedIn] = useState<boolean>(false);
   const [currentTimecard, setCurrentTimecard] = useState<Timecard | null>(null);
+  const [isSalariedBypass, setIsSalariedBypass] = useState<boolean>(false);
+  const [currentJobCode, setCurrentJobCode] = useState<JobCode | null>(null);
 
   const hasPrivilege = useCallback((code: string) => {
     return privileges.includes(code);
@@ -62,6 +68,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
     setPrivileges([]);
     setIsClockedIn(false);
     setCurrentTimecard(null);
+    setIsSalariedBypass(false);
+    setCurrentJobCode(null);
   }, []);
 
   return (
@@ -77,6 +85,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
         privileges,
         isClockedIn,
         currentTimecard,
+        isSalariedBypass,
+        currentJobCode,
         setCurrentEmployee,
         setCurrentRvc,
         setCurrentCheck,
@@ -87,6 +97,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
         setPrivileges,
         setIsClockedIn,
         setCurrentTimecard,
+        setIsSalariedBypass,
+        setCurrentJobCode,
         hasPrivilege,
         logout,
       }}
