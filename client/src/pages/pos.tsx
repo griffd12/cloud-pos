@@ -295,6 +295,7 @@ export default function PosPage() {
       console.log("Payment result:", result, "status:", result.status);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
       if (result.status === "closed") {
         console.log("Check is closed, clearing state");
         if (result.isCashOverTender && result.tenderedAmount && total > 0) {
