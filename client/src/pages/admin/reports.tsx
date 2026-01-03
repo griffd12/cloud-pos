@@ -355,6 +355,8 @@ interface CheckDetailData {
     openedAt?: string | null;
     closedAt?: string | null;
     paidAmount?: number;
+    tenderedAmount?: number;
+    changeDue?: number;
   };
   items: CheckItem[];
 }
@@ -2016,11 +2018,19 @@ export default function ReportsPage() {
                       <span>Total</span>
                       <span>{formatCurrency(parseFloat(checkDetailData.check.total || "0"))}</span>
                     </div>
-                    {checkDetailData.check.paidAmount !== undefined && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Paid</span>
-                        <span className="text-green-600 dark:text-green-400">{formatCurrency(checkDetailData.check.paidAmount)}</span>
-                      </div>
+                    {checkDetailData.check.tenderedAmount !== undefined && checkDetailData.check.tenderedAmount > 0 && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Tendered</span>
+                          <span className="text-green-600 dark:text-green-400">{formatCurrency(checkDetailData.check.tenderedAmount)}</span>
+                        </div>
+                        {(checkDetailData.check.changeDue ?? 0) > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Change Due</span>
+                            <span>{formatCurrency(checkDetailData.check.changeDue ?? 0)}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

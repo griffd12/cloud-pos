@@ -1782,9 +1782,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const payments = await storage.getPayments(req.params.id);
     const totalTendered = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
     const checkTotal = parseFloat(check.total || "0");
-    // Cap paidAmount at check total - for cash over-tender, show what was applied to the check
+    // For cash over-tender: paidAmount is what was applied, changeDue is difference
     const paidAmount = Math.min(totalTendered, checkTotal);
-    res.json({ check: { ...check, paidAmount }, items });
+    const changeDue = Math.max(0, totalTendered - checkTotal);
+    res.json({ check: { ...check, paidAmount, tenderedAmount: totalTendered, changeDue }, items });
   });
 
   app.post("/api/checks", async (req, res) => {
