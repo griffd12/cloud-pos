@@ -4,15 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DollarSign, Loader2 } from "lucide-react";
+import { DollarSign, Loader2, ShieldCheck } from "lucide-react";
 import type { CheckItem } from "@shared/schema";
 
 interface PriceOverrideModalProps {
   open: boolean;
   onClose: () => void;
   item: CheckItem | null;
-  onOverride: (itemId: string, newPrice: number, reason: string) => void;
+  onOverride: (itemId: string, newPrice: number, reason: string, managerPin?: string) => void;
   isOverriding?: boolean;
+  requireManagerApproval?: boolean;
 }
 
 export function PriceOverrideModal({
@@ -21,15 +22,17 @@ export function PriceOverrideModal({
   item,
   onOverride,
   isOverriding,
+  requireManagerApproval = true,
 }: PriceOverrideModalProps) {
   const [newPrice, setNewPrice] = useState("");
   const [reason, setReason] = useState("");
+  const [managerPin, setManagerPin] = useState("");
 
   const currentPrice = item ? parseFloat(item.unitPrice || "0") : 0;
 
   const handleOverride = () => {
     if (item && newPrice && reason) {
-      onOverride(item.id, parseFloat(newPrice), reason);
+      onOverride(item.id, parseFloat(newPrice), reason, requireManagerApproval ? managerPin : undefined);
     }
   };
 
@@ -95,6 +98,24 @@ export function PriceOverrideModal({
                 data-testid="input-override-reason"
               />
             </div>
+
+            {requireManagerApproval && (
+              <div className="space-y-2">
+                <Label htmlFor="managerPin" className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  Manager PIN (required)
+                </Label>
+                <Input
+                  id="managerPin"
+                  type="password"
+                  inputMode="numeric"
+                  placeholder="Enter manager PIN"
+                  value={managerPin}
+                  onChange={(e) => setManagerPin(e.target.value)}
+                  data-testid="input-manager-pin"
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -104,7 +125,7 @@ export function PriceOverrideModal({
           </Button>
           <Button
             onClick={handleOverride}
-            disabled={!newPrice || !reason || isOverriding}
+            disabled={!newPrice || !reason || (requireManagerApproval && !managerPin) || isOverriding}
             data-testid="button-confirm-override"
           >
             {isOverriding ? (

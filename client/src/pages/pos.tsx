@@ -15,7 +15,7 @@ import { TransactionLookupModal } from "@/components/pos/transaction-lookup-moda
 import { RefundModal } from "@/components/pos/refund-modal";
 import { FunctionsModal } from "@/components/pos/functions-modal";
 import { TransferCheckModal } from "@/components/pos/transfer-check-modal";
-import { SplitCheckModal } from "@/components/pos/split-check-modal";
+import { AdvancedSplitCheckModal } from "@/components/pos/advanced-split-check-modal";
 import { MergeChecksModal } from "@/components/pos/merge-checks-modal";
 import { ReopenCheckModal } from "@/components/pos/reopen-check-modal";
 import { PriceOverrideModal } from "@/components/pos/price-override-modal";
@@ -334,7 +334,6 @@ export default function PosPage() {
     onSuccess: async (reopenedCheck: Check) => {
       setShowReopenModal(false);
       toast({ title: "Check Reopened", description: `Check #${reopenedCheck.checkNumber} is now open` });
-      // Load the reopened check
       try {
         const res = await fetch(`/api/checks/${reopenedCheck.id}`, { credentials: "include" });
         if (res.ok) {
@@ -350,6 +349,109 @@ export default function PosPage() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to reopen check", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const transferCheckMutation = useMutation({
+    mutationFn: async (toEmployeeId: string) => {
+      if (!currentCheck) throw new Error("No check selected");
+      const response = await apiRequest("POST", `/api/checks/${currentCheck.id}/transfer`, {
+        employeeId: currentEmployee?.id,
+        toEmployeeId,
+      });
+      return response.json();
+    },
+    onSuccess: (updatedCheck: Check) => {
+      setShowTransferModal(false);
+      toast({ title: "Check Transferred", description: `Check #${updatedCheck.checkNumber} transferred successfully` });
+      setCurrentCheck(null);
+      setCheckItems([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to transfer check", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const splitCheckMutation = useMutation({
+    mutationFn: async (operations: Array<{ type: "move" | "share"; itemId: string; targetCheckIndex: number; shareRatio?: number }>) => {
+      if (!currentCheck) throw new Error("No check selected");
+      const response = await apiRequest("POST", `/api/checks/${currentCheck.id}/split`, {
+        employeeId: currentEmployee?.id,
+        operations,
+      });
+      return response.json();
+    },
+    onSuccess: (result: any) => {
+      setShowSplitModal(false);
+      const newCheckCount = result.newChecks?.length || 0;
+      toast({ 
+        title: "Check Split", 
+        description: `Created ${newCheckCount} new check(s) from split` 
+      });
+      if (result.sourceCheck) {
+        setCurrentCheck(result.sourceCheck.check);
+        setCheckItems(result.sourceCheck.items);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to split check", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const mergeChecksMutation = useMutation({
+    mutationFn: async (sourceCheckIds: string[]) => {
+      if (!currentCheck) throw new Error("No check selected");
+      const response = await apiRequest("POST", "/api/checks/merge", {
+        targetCheckId: currentCheck.id,
+        sourceCheckIds,
+        employeeId: currentEmployee?.id,
+      });
+      return response.json();
+    },
+    onSuccess: (result: any) => {
+      setShowMergeModal(false);
+      toast({ title: "Checks Merged", description: "All items combined into current check" });
+      if (result.check && result.items) {
+        setCurrentCheck(result.check);
+        setCheckItems(result.items);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to merge checks", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const priceOverrideMutation = useMutation({
+    mutationFn: async ({ itemId, newPrice, reason, managerPin }: { itemId: string; newPrice: number; reason: string; managerPin?: string }) => {
+      const response = await apiRequest("POST", `/api/check-items/${itemId}/price-override`, {
+        newPrice,
+        reason,
+        employeeId: currentEmployee?.id,
+        managerPin,
+      });
+      return response.json();
+    },
+    onSuccess: async () => {
+      setShowPriceOverrideModal(false);
+      toast({ title: "Price Updated", description: "Item price has been overridden" });
+      if (currentCheck) {
+        try {
+          const res = await fetch(`/api/checks/${currentCheck.id}`, { credentials: "include" });
+          if (res.ok) {
+            const data = await res.json();
+            setCurrentCheck(data.check);
+            setCheckItems(data.items);
+          }
+        } catch (e) {
+          console.error("Error reloading check:", e);
+        }
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to override price", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1076,28 +1178,22 @@ export default function PosPage() {
           currentEmployeeId={currentEmployee.id}
           rvcId={currentRvc.id}
           onTransfer={(toEmployeeId) => {
-            toast({
-              title: "Transfer Check",
-              description: `Check #${currentCheck.checkNumber} would be transferred. Backend implementation pending.`,
-            });
-            setShowTransferModal(false);
+            transferCheckMutation.mutate(toEmployeeId);
           }}
+          isTransferring={transferCheckMutation.isPending}
         />
       )}
 
       {currentCheck && (
-        <SplitCheckModal
+        <AdvancedSplitCheckModal
           open={showSplitModal}
           onClose={() => setShowSplitModal(false)}
-          checkNumber={currentCheck.checkNumber}
+          check={currentCheck}
           items={checkItems}
-          onSplit={(itemIds) => {
-            toast({
-              title: "Split Check",
-              description: `${itemIds.length} items would be split to new check. Backend implementation pending.`,
-            });
-            setShowSplitModal(false);
+          onSplit={(operations) => {
+            splitCheckMutation.mutate(operations);
           }}
+          isSplitting={splitCheckMutation.isPending}
         />
       )}
 
@@ -1109,12 +1205,9 @@ export default function PosPage() {
           currentCheckNumber={currentCheck.checkNumber}
           rvcId={currentRvc.id}
           onMerge={(checkIds) => {
-            toast({
-              title: "Merge Checks",
-              description: `${checkIds.length} checks would be merged. Backend implementation pending.`,
-            });
-            setShowMergeModal(false);
+            mergeChecksMutation.mutate(checkIds);
           }}
+          isMerging={mergeChecksMutation.isPending}
         />
       )}
 
@@ -1134,13 +1227,10 @@ export default function PosPage() {
         open={showPriceOverrideModal}
         onClose={() => setShowPriceOverrideModal(false)}
         item={checkItems.find(i => i.id === selectedItemId) || null}
-        onOverride={(itemId, newPrice, reason) => {
-          toast({
-            title: "Price Override",
-            description: `Price would be changed to $${newPrice.toFixed(2)}. Backend implementation pending.`,
-          });
-          setShowPriceOverrideModal(false);
+        onOverride={(itemId, newPrice, reason, managerPin) => {
+          priceOverrideMutation.mutate({ itemId, newPrice, reason, managerPin });
         }}
+        isOverriding={priceOverrideMutation.isPending}
       />
     </div>
   );
