@@ -22,6 +22,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { format, startOfWeek, endOfWeek, addDays } from "date-fns";
 import {
@@ -32,8 +37,17 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
 } from "lucide-react";
-import type { Employee, Property, Timecard, TimecardException, JobCode } from "@shared/schema";
+import type { Employee, Property, Timecard, TimecardException, JobCode, TimePunch } from "@shared/schema";
+
+interface PunchPair {
+  clockIn: TimePunch;
+  clockOut: TimePunch | null;
+  duration: number; // in minutes
+}
 
 export default function TimecardsPage() {
   const { toast } = useToast();
@@ -41,6 +55,7 @@ export default function TimecardsPage() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [editingTimecard, setEditingTimecard] = useState<Timecard | null>(null);
   const [editForm, setEditForm] = useState({ clockIn: "", clockOut: "", reason: "" });
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -61,6 +76,12 @@ export default function TimecardsPage() {
 
   const { data: timecards = [], isLoading } = useQuery<Timecard[]>({
     queryKey: [`/api/timecards?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`],
+    enabled: !!selectedProperty,
+  });
+
+  // Fetch time punches for detailed view
+  const { data: timePunches = [] } = useQuery<TimePunch[]>({
+    queryKey: [`/api/time-punches?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`],
     enabled: !!selectedProperty,
   });
 
@@ -90,7 +111,7 @@ export default function TimecardsPage() {
   const resolveExceptionMutation = useMutation({
     mutationFn: async (data: { id: string; notes: string }) => {
       return apiRequest("POST", `/api/timecard-exceptions/${data.id}/resolve`, {
-        resolvedById: "current-manager", // Would come from auth context
+        resolvedById: "current-manager",
         resolutionNotes: data.notes,
       });
     },
@@ -129,9 +150,63 @@ export default function TimecardsPage() {
     return parseFloat(String(hours)).toFixed(2);
   };
 
+  const formatDuration = (minutes: number) => {
+    const hrs = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+    if (hrs > 0) {
+      return `${hrs}h ${mins}m`;
+    }
+    return `${mins}m`;
+  };
+
   const getDayTimecards = (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd");
     return timecards.filter((tc) => tc.businessDate === dateStr);
+  };
+
+  // Get punch pairs for an employee on a specific day
+  const getEmployeePunchPairs = (employeeId: string, businessDate: string): PunchPair[] => {
+    const employeePunches = timePunches
+      .filter((p) => p.employeeId === employeeId && p.businessDate === businessDate)
+      .sort((a, b) => new Date(a.actualTimestamp).getTime() - new Date(b.actualTimestamp).getTime());
+
+    const pairs: PunchPair[] = [];
+    const clockIns = employeePunches.filter((p) => p.punchType === "clock_in");
+    const clockOuts = employeePunches.filter((p) => p.punchType === "clock_out");
+
+    for (const clockIn of clockIns) {
+      // Find the next clock out after this clock in
+      const clockOut = clockOuts.find(
+        (out) => new Date(out.actualTimestamp) > new Date(clockIn.actualTimestamp)
+      );
+      
+      // Calculate duration
+      let duration = 0;
+      if (clockOut) {
+        duration = (new Date(clockOut.actualTimestamp).getTime() - new Date(clockIn.actualTimestamp).getTime()) / 60000;
+        // Remove this clock out from consideration for future pairs
+        const outIndex = clockOuts.indexOf(clockOut);
+        if (outIndex > -1) {
+          clockOuts.splice(outIndex, 1);
+        }
+      }
+
+      pairs.push({ clockIn, clockOut: clockOut || null, duration });
+    }
+
+    return pairs;
+  };
+
+  const toggleExpanded = (key: string) => {
+    setExpandedEmployees((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -140,7 +215,7 @@ export default function TimecardsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-timecards-title">Timecards</h1>
           <p className="text-muted-foreground">Review and edit employee timecards</p>
@@ -153,7 +228,7 @@ export default function TimecardsPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="flex-1 max-w-xs">
           <select
             className="w-full p-2 border rounded-md bg-background"
@@ -252,6 +327,7 @@ export default function TimecardsPage() {
           {weekDays.map((day) => {
             const dayCards = getDayTimecards(day);
             if (dayCards.length === 0) return null;
+            const dateStr = format(day, "yyyy-MM-dd");
 
             return (
               <Card key={day.toISOString()}>
@@ -266,6 +342,7 @@ export default function TimecardsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-8"></TableHead>
                         <TableHead>Employee</TableHead>
                         <TableHead>Job</TableHead>
                         <TableHead>Rate</TableHead>
@@ -281,44 +358,116 @@ export default function TimecardsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dayCards.map((tc) => (
-                        <TableRow key={tc.id}>
-                          <TableCell className="font-medium">
-                            {getEmployeeName(tc.employeeId)}
-                          </TableCell>
-                          <TableCell>{getJobName(tc.jobCodeId)}</TableCell>
-                          <TableCell className="tabular-nums">{formatPay(tc.payRate)}</TableCell>
-                          <TableCell>{formatTime(tc.clockInTime)}</TableCell>
-                          <TableCell>{formatTime(tc.clockOutTime)}</TableCell>
-                          <TableCell className="tabular-nums">{formatHours(tc.regularHours)}</TableCell>
-                          <TableCell className="tabular-nums">{formatHours(tc.overtimeHours)}</TableCell>
-                          <TableCell className="tabular-nums">{formatHours(tc.doubleTimeHours)}</TableCell>
-                          <TableCell className="tabular-nums">{tc.breakMinutes || 0}m</TableCell>
-                          <TableCell className="tabular-nums font-semibold">{formatHours(tc.totalHours)}</TableCell>
-                          <TableCell>
-                            <Badge variant={tc.status === "approved" ? "default" : "secondary"}>
-                              {tc.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingTimecard(tc);
-                                setEditForm({
-                                  clockIn: tc.clockInTime ? format(new Date(tc.clockInTime), "HH:mm") : "",
-                                  clockOut: tc.clockOutTime ? format(new Date(tc.clockOutTime), "HH:mm") : "",
-                                  reason: "",
-                                });
-                              }}
-                              data-testid={`button-edit-timecard-${tc.id}`}
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {dayCards.map((tc) => {
+                        const punchPairs = getEmployeePunchPairs(tc.employeeId, tc.businessDate);
+                        const expandKey = `${tc.employeeId}-${tc.businessDate}`;
+                        const isExpanded = expandedEmployees.has(expandKey);
+                        const hasPunches = punchPairs.length > 0;
+
+                        return (
+                          <Collapsible key={tc.id} asChild open={isExpanded}>
+                            <>
+                              <TableRow className={hasPunches ? "cursor-pointer hover-elevate" : ""} onClick={() => hasPunches && toggleExpanded(expandKey)}>
+                                <TableCell>
+                                  {hasPunches && (
+                                    <CollapsibleTrigger asChild>
+                                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => e.stopPropagation()}>
+                                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                      </Button>
+                                    </CollapsibleTrigger>
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {getEmployeeName(tc.employeeId)}
+                                  {punchPairs.length > 1 && (
+                                    <Badge variant="outline" className="ml-2 text-xs">
+                                      {punchPairs.length} shifts
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>{getJobName(tc.jobCodeId)}</TableCell>
+                                <TableCell className="tabular-nums">{formatPay(tc.payRate)}</TableCell>
+                                <TableCell>{formatTime(tc.clockInTime)}</TableCell>
+                                <TableCell>{formatTime(tc.clockOutTime)}</TableCell>
+                                <TableCell className="tabular-nums">{formatHours(tc.regularHours)}</TableCell>
+                                <TableCell className="tabular-nums">{formatHours(tc.overtimeHours)}</TableCell>
+                                <TableCell className="tabular-nums">{formatHours(tc.doubleTimeHours)}</TableCell>
+                                <TableCell className="tabular-nums">{tc.breakMinutes || 0}m</TableCell>
+                                <TableCell className="tabular-nums font-semibold">{formatHours(tc.totalHours)}</TableCell>
+                                <TableCell>
+                                  <Badge variant={tc.status === "approved" ? "default" : "secondary"}>
+                                    {tc.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingTimecard(tc);
+                                      setEditForm({
+                                        clockIn: tc.clockInTime ? format(new Date(tc.clockInTime), "HH:mm") : "",
+                                        clockOut: tc.clockOutTime ? format(new Date(tc.clockOutTime), "HH:mm") : "",
+                                        reason: "",
+                                      });
+                                    }}
+                                    data-testid={`button-edit-timecard-${tc.id}`}
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                              <CollapsibleContent asChild>
+                                <TableRow className="bg-muted/30">
+                                  <TableCell colSpan={13} className="p-0">
+                                    <div className="px-8 py-3">
+                                      <div className="text-sm font-medium text-muted-foreground mb-2">
+                                        Individual Punches
+                                      </div>
+                                      <div className="space-y-2">
+                                        {punchPairs.map((pair, idx) => (
+                                          <div 
+                                            key={pair.clockIn.id} 
+                                            className="flex items-center gap-4 p-2 bg-background rounded-md border"
+                                          >
+                                            <Badge variant="outline" className="text-xs">
+                                              Shift {idx + 1}
+                                            </Badge>
+                                            <div className="flex items-center gap-2">
+                                              <Clock className="w-3 h-3 text-muted-foreground" />
+                                              <span className="font-medium">{formatTime(pair.clockIn.actualTimestamp)}</span>
+                                            </div>
+                                            <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                                            <div className="flex items-center gap-2">
+                                              <Clock className="w-3 h-3 text-muted-foreground" />
+                                              <span className="font-medium">
+                                                {pair.clockOut ? formatTime(pair.clockOut.actualTimestamp) : (
+                                                  <Badge variant="secondary">Still Working</Badge>
+                                                )}
+                                              </span>
+                                            </div>
+                                            {pair.clockOut && (
+                                              <Badge variant="outline">
+                                                {formatDuration(pair.duration)}
+                                              </Badge>
+                                            )}
+                                            {pair.clockIn.jobCodeId && (
+                                              <Badge variant="secondary" className="text-xs">
+                                                {getJobName(pair.clockIn.jobCodeId)}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              </CollapsibleContent>
+                            </>
+                          </Collapsible>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
