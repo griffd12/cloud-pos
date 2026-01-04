@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Check, CheckItem, CheckPayment, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign, CircleDollarSign } from "lucide-react";
+import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign, CircleDollarSign, User, X } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -29,6 +29,8 @@ interface CheckPanelProps {
   paymentsReady?: boolean;
   authorizedPayments?: CheckPayment[];
   onTipCapture?: (payment: CheckPayment) => void;
+  customerName?: string | null;
+  onRemoveCustomer?: () => void;
 }
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
@@ -271,6 +273,8 @@ export function CheckPanel({
   paymentsReady = true,
   authorizedPayments = [],
   onTipCapture,
+  customerName,
+  onRemoveCustomer,
 }: CheckPanelProps) {
   const formatPrice = (price: string | number | null) => {
     const numPrice = typeof price === "string" ? parseFloat(price) : (price || 0);
@@ -327,6 +331,29 @@ export function CheckPanel({
           </span>
         )}
       </div>
+      
+      {customerName && (
+        <div className="flex-shrink-0 px-4 py-2 border-b bg-blue-50 dark:bg-blue-950/30 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <User className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300 truncate" data-testid="text-customer-name">
+              {customerName}
+            </span>
+          </div>
+          {onRemoveCustomer && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-blue-600 dark:text-blue-400 hover:text-red-600 dark:hover:text-red-400"
+              onClick={onRemoveCustomer}
+              data-testid="button-remove-customer"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      )}
       
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-1">

@@ -9561,6 +9561,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/loyalty-members/:id", async (req, res) => {
+    try {
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Member not found" });
+      res.json(member);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get loyalty member" });
+    }
+  });
+
   app.post("/api/loyalty-members", async (req, res) => {
     try {
       const member = await storage.createLoyaltyMember(req.body);

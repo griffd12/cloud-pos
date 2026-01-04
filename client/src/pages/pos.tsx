@@ -128,6 +128,38 @@ export default function PosPage() {
   const authorizedPayments = (paymentInfo?.payments || []).filter(
     (p: CheckPayment) => p.paymentStatus === "authorized"
   );
+
+  // Fetch customer details when a customer is attached to the check
+  const { data: attachedCustomer } = useQuery<{ firstName: string; lastName: string } | null>({
+    queryKey: ["/api/loyalty-members", currentCheck?.customerId],
+    queryFn: async () => {
+      if (!currentCheck?.customerId) return null;
+      const res = await fetch(`/api/loyalty-members/${currentCheck.customerId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!currentCheck?.customerId,
+  });
+
+  const customerName = attachedCustomer 
+    ? `${attachedCustomer.firstName} ${attachedCustomer.lastName}` 
+    : null;
+
+  // Mutation to remove customer from check
+  const removeCustomerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/pos/checks/${currentCheck?.id}/customer`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Customer Removed", description: "Customer removed from this check" });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", currentCheck?.customerId] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to remove customer", variant: "destructive" });
+    },
+  });
   
   // Handler for opening tip capture dialog
   const handleTipCapture = (payment: CheckPayment) => {
@@ -1169,6 +1201,8 @@ export default function PosPage() {
             paymentsReady={paymentsReady}
             authorizedPayments={authorizedPayments}
             onTipCapture={handleTipCapture}
+            customerName={customerName}
+            onRemoveCustomer={currentCheck?.customerId ? () => removeCustomerMutation.mutate() : undefined}
           />
         </div>
       </div>
