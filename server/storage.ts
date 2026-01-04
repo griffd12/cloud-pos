@@ -3213,12 +3213,14 @@ export class DatabaseStorage implements IStorage {
     const workedMinutes = totalMinutes - unpaidBreakMinutes;
     const totalHoursWorked = workedMinutes / 60;
 
-    // Get property from employee for OT rule lookup
+    // Get property from employee or from the punch records for OT rule lookup
     const employee = await this.getEmployee(employeeId);
-    if (!employee?.propertyId) return undefined;
+    // Try to get propertyId from employee, or fall back to the first punch's propertyId
+    const propertyId = employee?.propertyId || (punches.length > 0 ? punches[0].propertyId : null);
+    if (!propertyId) return undefined;
     
     // Get active overtime rule for this property
-    const otRule = await this.getActiveOvertimeRule(employee.propertyId);
+    const otRule = await this.getActiveOvertimeRule(propertyId);
     
     // Apply OT rules - default to 8 hours regular if no rule configured
     const dailyRegular = otRule?.dailyOvertimeThreshold ? parseFloat(otRule.dailyOvertimeThreshold) : 8;
@@ -3300,7 +3302,7 @@ export class DatabaseStorage implements IStorage {
       return this.updateTimecard(existing[0].id, timecardData);
     } else {
       return this.createTimecard({
-        propertyId: employee.propertyId,
+        propertyId,
         employeeId,
         businessDate,
         ...timecardData,
