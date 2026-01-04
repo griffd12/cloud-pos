@@ -379,7 +379,7 @@ export interface IStorage {
   removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
   voidKdsTicketItem(checkItemId: string): Promise<void>;
   bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
-  recallKdsTicket(id: string): Promise<KdsTicket | undefined>;
+  recallKdsTicket(id: string, scope?: 'expo' | 'all'): Promise<KdsTicket | undefined>;
   getBumpedKdsTickets(filters: { rvcId?: string; stationType?: string; limit?: number }): Promise<any[]>;
   markKdsItemReady(ticketItemId: string): Promise<void>;
   unmarkKdsItemReady(ticketItemId: string): Promise<void>;
@@ -1960,13 +1960,20 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async recallKdsTicket(id: string): Promise<KdsTicket | undefined> {
+  async recallKdsTicket(id: string, scope?: 'expo' | 'all'): Promise<KdsTicket | undefined> {
+    // scope determines which stations to recall to:
+    // 'expo' = only expeditor stations see the recalled ticket
+    // 'all' = all stations see the recalled ticket (default behavior)
+    const recallScope = scope || 'all';
+    
     const [result] = await db.update(kdsTickets).set({
       status: "active",
       isRecalled: true,
       recalledAt: new Date(),
       bumpedAt: null,
       bumpedByEmployeeId: null,
+      // If expo-only recall, set station type to expo so only expo sees it
+      ...(recallScope === 'expo' ? { stationType: 'expo' } : {}),
     }).where(eq(kdsTickets.id, id)).returning();
     
     if (result) {

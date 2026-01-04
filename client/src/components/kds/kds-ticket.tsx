@@ -278,6 +278,12 @@ export function KdsTicket({
 
       <Separator className={hasAlert ? "bg-current/20" : ""} />
 
+      {isRecalled && (
+        <div className="px-3 py-1.5 text-center text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+          Recalled
+        </div>
+      )}
+
       <CardContent className="flex-1 py-3 space-y-1">
         {activeItems.map((item) => (
           <div

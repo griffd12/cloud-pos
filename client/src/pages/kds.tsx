@@ -242,6 +242,7 @@ export default function KdsPage() {
         isBumpingAll={bumpAllMutation.isPending}
         deviceSettings={deviceSettings}
         rvcId={currentRvc?.id}
+        propertyId={propertyId}
       />
     </div>
   );

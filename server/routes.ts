@@ -2992,8 +2992,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/kds-tickets/:id/recall", async (req, res) => {
     try {
       const ticketId = req.params.id;
+      const { scope } = req.body; // 'expo' or 'all' - determines which stations to recall to
 
-      const updated = await storage.recallKdsTicket(ticketId);
+      const updated = await storage.recallKdsTicket(ticketId, scope);
 
       broadcastKdsUpdate();
       res.json(updated);
