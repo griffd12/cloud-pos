@@ -42,24 +42,51 @@ import {
 
 const clients: Map<string, Set<WebSocket>> = new Map();
 
-function broadcastKdsUpdate(rvcId?: string) {
-  const channel = rvcId || "all";
-  const channelClients = clients.get(channel);
+// Generic POS event broadcaster for real-time updates
+interface PosEvent {
+  type: string;
+  payload?: Record<string, unknown>;
+}
+
+function broadcastPosEvent(event: PosEvent, channel?: string) {
+  const targetChannel = channel || "all";
+  const channelClients = clients.get(targetChannel);
   if (channelClients) {
     channelClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "kds_update" }));
+        client.send(JSON.stringify(event));
       }
     });
   }
-  const allClients = clients.get("all");
-  if (allClients) {
-    allClients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "kds_update" }));
-      }
-    });
+  // Always also broadcast to "all" channel if a specific channel was targeted
+  if (channel && channel !== "all") {
+    const allClients = clients.get("all");
+    if (allClients) {
+      allClients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(event));
+        }
+      });
+    }
   }
+}
+
+function broadcastKdsUpdate(rvcId?: string) {
+  broadcastPosEvent({ type: "kds_update" }, rvcId || "all");
+}
+
+function broadcastLoyaltyUpdate(customerId: string, newBalance: number, lifetimePoints: number) {
+  broadcastPosEvent({
+    type: "loyalty_update",
+    payload: { customerId, currentPoints: newBalance, lifetimePoints }
+  });
+}
+
+function broadcastCheckUpdate(checkId: string, status: string) {
+  broadcastPosEvent({
+    type: "check_update",
+    payload: { checkId, status }
+  });
 }
 
 // Shared helper to send unsent items to KDS with proper round and ticket creation
@@ -10701,6 +10728,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         r.active && 
         (pointsAfter >= (r.pointsCost || 0))
       );
+
+      // Broadcast real-time update to all connected clients
+      broadcastLoyaltyUpdate(member.id, pointsAfter, lifetimeAfter);
 
       res.json({
         success: true,
