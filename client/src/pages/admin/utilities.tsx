@@ -207,14 +207,18 @@ export default function UtilitiesPage() {
     });
   };
 
+  // Calculate total records to DELETE (excluding loyaltyMembers which are just RESET, not deleted)
   const totalRecords = summary
     ? summary.checks + summary.checkItems + summary.payments + summary.rounds + summary.kdsTickets + summary.auditLogs +
       summary.fiscalPeriods + summary.cashTransactions + summary.drawerAssignments + summary.safeCounts +
-      summary.giftCardTransactions + summary.giftCards + summary.loyaltyTransactions + summary.loyaltyRedemptions + summary.loyaltyMembers +
+      summary.giftCardTransactions + summary.giftCards + summary.loyaltyTransactions + summary.loyaltyRedemptions +
       summary.onlineOrders + summary.inventoryTransactions + summary.inventoryStock +
       summary.salesForecasts + summary.laborForecasts + summary.managerAlerts +
       summary.itemAvailability + summary.prepItems + summary.offlineQueue + summary.accountingExports
     : 0;
+  
+  // Loyalty members are reset (points zeroed), not deleted - show separately
+  const membersToReset = summary?.loyaltyMembers || 0;
 
   const canSubmit = acknowledged && pin.length > 0 && confirmText === "RESET" && selectedPropertyId;
 
@@ -335,12 +339,26 @@ export default function UtilitiesPage() {
                   {totalRecords.toLocaleString()}
                 </div>
               </div>
+              
+              {membersToReset > 0 && (
+                <div className="flex items-center justify-between p-4 border rounded-md bg-muted/30">
+                  <div>
+                    <div className="font-medium">Loyalty Members to Reset</div>
+                    <div className="text-sm text-muted-foreground">
+                      Points will be zeroed (members not deleted)
+                    </div>
+                  </div>
+                  <div className="text-2xl font-bold tabular-nums text-muted-foreground" data-testid="text-members-reset">
+                    {membersToReset.toLocaleString()}
+                  </div>
+                </div>
+              )}
 
               <Button
                 variant="destructive"
                 className="w-full"
                 onClick={() => setShowResetDialog(true)}
-                disabled={totalRecords === 0}
+                disabled={totalRecords === 0 && membersToReset === 0}
                 data-testid="button-open-reset-dialog"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
