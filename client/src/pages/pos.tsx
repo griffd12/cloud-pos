@@ -977,6 +977,30 @@ export default function PosPage() {
                       Functions
                     </Button>
                   </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowCustomerModal(true)}
+                      data-testid="button-customer-grid"
+                    >
+                      <Star className="w-4 h-4 mr-2" />
+                      Loyalty
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowGiftCardModal(true)}
+                      data-testid="button-gift-card-grid"
+                    >
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Gift Card
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>
