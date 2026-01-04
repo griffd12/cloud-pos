@@ -8983,12 +8983,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const stripe = new Stripe(stripeSecretKey);
 
       // Create PaymentIntent - amount should be in cents
+      // For POS, we only accept card payments (not Cash App, Klarna, Amazon Pay, etc.)
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount * 100), // Convert dollars to cents
         currency: "usd",
-        automatic_payment_methods: {
-          enabled: true,
-        },
+        payment_method_types: ["card"], // Card only for POS
         metadata: {
           checkId: checkId || "",
           tenderId: tenderId || "",
@@ -9041,7 +9040,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Get business date from check's RVC property or use current date as fallback
       let businessDate = new Date().toISOString().split("T")[0];
       if (check.rvcId) {
-        const rvc = await storage.getRevenueCenter(check.rvcId);
+        const rvc = await storage.getRvc(check.rvcId);
         if (rvc?.propertyId) {
           const property = await storage.getProperty(rvc.propertyId);
           if (property) {

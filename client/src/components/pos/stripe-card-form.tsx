@@ -219,6 +219,7 @@ export function StripeCardForm(props: StripeCardFormProps) {
     mode: "payment" as const,
     amount: Math.round(props.amount * 100), // Amount in cents
     currency: "usd",
+    paymentMethodTypes: ["card"], // Card only for POS - no Cash App, Klarna, Amazon Pay
     appearance: {
       theme: "stripe" as const,
       variables: {
