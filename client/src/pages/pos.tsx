@@ -1441,6 +1441,10 @@ export default function PosPage() {
             title: "Customer Attached",
             description: `${customer.firstName} ${customer.lastName} linked to check`,
           });
+          // Update local check state with the new customerId so the UI shows the customer name
+          if (currentCheck) {
+            setCurrentCheck({ ...currentCheck, customerId: customer.id });
+          }
           queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
         }}
       />
