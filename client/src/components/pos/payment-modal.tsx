@@ -347,13 +347,14 @@ export function PaymentModal({
         terminalDeviceId: terminal.id,
         checkId: check.id,
         tenderId: cardTender.id,
-        amount: Math.round(cardAmount * 100), // Convert to cents
+        amount: Math.round(cardAmount * 100), // Amount in cents for backend
         employeeId,
         workstationId,
       });
       
       const session = await res.json() as TerminalSession;
       setTerminalSession(session);
+      setCardPaymentStep("terminal");
       setPaymentMethod("terminal");
       setTerminalPolling(true);
       
@@ -504,7 +505,7 @@ export function PaymentModal({
     
     setSelectedTerminal(terminal);
     setCardAmount(amount);
-    setCardPaymentStep("method");
+    setCardPaymentStep("terminal");
     setPaymentMethod("terminal");
     setIsProcessingCard(true);
     
@@ -513,7 +514,7 @@ export function PaymentModal({
         terminalDeviceId: terminal.id,
         checkId: check.id,
         tenderId: cardTender.id,
-        amount: Math.round(amount * 100), // Convert to cents
+        amount: Math.round(amount * 100), // Amount in cents for backend
         employeeId,
         workstationId,
       });
