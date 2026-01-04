@@ -5,11 +5,17 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PosProvider } from "@/lib/pos-context";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import PosPage from "@/pages/pos";
 import KdsPage from "@/pages/kds";
 import AdminLayout from "@/pages/admin/index";
+
+function GlobalWebSocket() {
+  usePosWebSocket();
+  return null;
+}
 
 function Router() {
   return (
@@ -31,6 +37,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <PosProvider>
+            <GlobalWebSocket />
             <Router />
             <Toaster />
           </PosProvider>

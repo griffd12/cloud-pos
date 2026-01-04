@@ -23,7 +23,6 @@ import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
@@ -66,10 +65,6 @@ interface SelectedModifier {
 
 export default function PosPage() {
   const { toast } = useToast();
-  
-  // Real-time WebSocket updates for loyalty, checks, and KDS
-  usePosWebSocket();
-  
   const {
     currentEmployee,
     currentRvc,

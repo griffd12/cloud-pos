@@ -71,6 +71,7 @@ function broadcastPosEvent(event: PosEvent, channel?: string) {
   }
 }
 
+// Event broadcasters for real-time updates across the system
 function broadcastKdsUpdate(rvcId?: string) {
   broadcastPosEvent({ type: "kds_update" }, rvcId || "all");
 }
@@ -82,10 +83,57 @@ function broadcastLoyaltyUpdate(customerId: string, newBalance: number, lifetime
   });
 }
 
-function broadcastCheckUpdate(checkId: string, status: string) {
+function broadcastCheckUpdate(checkId: string, status?: string, rvcId?: string) {
   broadcastPosEvent({
     type: "check_update",
-    payload: { checkId, status }
+    payload: { checkId, status, rvcId }
+  }, rvcId || "all");
+}
+
+function broadcastCheckItemUpdate(checkId: string, itemId?: string) {
+  broadcastPosEvent({
+    type: "check_item_update",
+    payload: { checkId, itemId }
+  });
+}
+
+function broadcastPaymentUpdate(checkId: string, paymentId?: string) {
+  broadcastPosEvent({
+    type: "payment_update",
+    payload: { checkId, paymentId }
+  });
+}
+
+function broadcastMenuUpdate() {
+  broadcastPosEvent({ type: "menu_update" });
+}
+
+function broadcastEmployeeUpdate() {
+  broadcastPosEvent({ type: "employee_update" });
+}
+
+function broadcastAdminUpdate(entityType: string, entityId?: string) {
+  broadcastPosEvent({
+    type: "admin_update",
+    payload: { entityType, entityId }
+  });
+}
+
+function broadcastInventoryUpdate(itemId?: string) {
+  broadcastPosEvent({
+    type: "inventory_update",
+    payload: { itemId }
+  });
+}
+
+function broadcastScheduleUpdate() {
+  broadcastPosEvent({ type: "schedule_update" });
+}
+
+function broadcastReportUpdate(reportType?: string) {
+  broadcastPosEvent({
+    type: "report_update",
+    payload: { reportType }
   });
 }
 
@@ -1871,6 +1919,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "open",
         businessDate,
       });
+      
+      // Broadcast real-time update for new check
+      broadcastCheckUpdate(check.id, "open", rvcId);
+      
       res.status(201).json(check);
     } catch (error) {
       console.error("Create check error:", error);
@@ -1930,6 +1982,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate and persist check totals
       await recalculateCheckTotals(checkId);
+
+      // Broadcast real-time update for new item
+      broadcastCheckItemUpdate(checkId, finalItem.id);
 
       res.status(201).json(finalItem);
     } catch (error) {
@@ -2193,9 +2248,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
 
         console.log("Closing check, returning status:", updatedCheck?.status);
+        
+        // Broadcast real-time update for check closure
+        broadcastCheckUpdate(checkId, "closed", check?.rvcId);
+        broadcastPaymentUpdate(checkId);
+        
         return res.json({ ...updatedCheck, paidAmount });
       }
 
+      // Broadcast real-time update for partial payment
+      broadcastPaymentUpdate(checkId);
+      
       res.json({ ...check, paidAmount });
     } catch (error) {
       console.error("Payment error:", error);

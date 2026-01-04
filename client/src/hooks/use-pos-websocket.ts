@@ -9,6 +9,12 @@ interface PosEvent {
     lifetimePoints?: number;
     checkId?: string;
     status?: string;
+    itemId?: string;
+    paymentId?: string;
+    entityType?: string;
+    entityId?: string;
+    reportType?: string;
+    rvcId?: string;
   };
 }
 
@@ -86,6 +92,8 @@ export function usePosWebSocket() {
 }
 
 function handlePosEvent(event: PosEvent) {
+  const getKeyString = (key: unknown): string => String(key ?? "");
+  
   switch (event.type) {
     case "loyalty_update":
       if (event.payload?.customerId) {
@@ -95,26 +103,125 @@ function handlePosEvent(event: PosEvent) {
         queryClient.invalidateQueries({ 
           queryKey: ["/api/loyalty-members", event.payload.customerId] 
         });
-        queryClient.invalidateQueries({ 
-          queryKey: ["/api/loyalty-members"] 
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["/api/pos/customers/search"]
-        });
       }
+      queryClient.invalidateQueries({ 
+        queryKey: ["/api/loyalty-members"] 
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) => 
+          getKeyString(query.queryKey[0]).includes("/api/pos/customers")
+      });
       break;
 
     case "check_update":
       if (event.payload?.checkId) {
-        queryClient.invalidateQueries({ 
-          queryKey: ["/api/checks", event.payload.checkId] 
+        const checkId = event.payload.checkId;
+        queryClient.invalidateQueries({
+          predicate: (query) => 
+            query.queryKey.some(k => k === checkId)
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => 
+          getKeyString(query.queryKey[0]).includes("/api/checks")
+      });
+      break;
+
+    case "check_item_update":
+      if (event.payload?.checkId) {
+        const checkId = event.payload.checkId;
+        queryClient.invalidateQueries({
+          predicate: (query) => 
+            query.queryKey.some(k => k === checkId)
+        });
+      }
+      break;
+
+    case "payment_update":
+      if (event.payload?.checkId) {
+        const checkId = event.payload.checkId;
+        queryClient.invalidateQueries({
+          predicate: (query) => 
+            query.queryKey.some(k => k === checkId)
+        });
+      }
+      queryClient.invalidateQueries({
+        predicate: (query) => 
+          getKeyString(query.queryKey[0]).includes("/api/checks")
+      });
       break;
 
     case "kds_update":
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      break;
+
+    case "menu_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/menu-items") ||
+            key.includes("/api/slus") ||
+            key.includes("/api/modifier");
+        }
+      });
+      break;
+
+    case "employee_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => 
+          getKeyString(query.queryKey[0]).includes("/api/employees")
+      });
+      break;
+
+    case "admin_update":
+      const entityType = event.payload?.entityType;
+      if (entityType) {
+        queryClient.invalidateQueries({
+          predicate: (query) => 
+            getKeyString(query.queryKey[0]).includes(`/api/${entityType}`)
+        });
+      }
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/properties") || key.includes("/api/rvcs");
+        }
+      });
+      break;
+
+    case "inventory_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/inventory") ||
+            key.includes("/api/prep-items") ||
+            key.includes("/api/item-availability");
+        }
+      });
+      break;
+
+    case "schedule_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/shifts") ||
+            key.includes("/api/timecards") ||
+            key.includes("/api/time-punches") ||
+            key.includes("/api/schedules");
+        }
+      });
+      break;
+
+    case "report_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/reports") ||
+            key.includes("/api/fiscal") ||
+            key.includes("/api/sales-forecast") ||
+            key.includes("/api/labor-forecast");
+        }
+      });
       break;
 
     default:
