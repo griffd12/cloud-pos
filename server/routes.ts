@@ -10853,7 +10853,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         currentBalance: initialBalance,
         status: "active",
         activatedAt: new Date(),
-        activatedByEmployeeId: employeeId,
+        activatedById: employeeId,
       });
 
       // Create activation transaction

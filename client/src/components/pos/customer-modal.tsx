@@ -102,7 +102,7 @@ export function CustomerModal({
     enabled: !!selectedCustomer?.id,
   });
 
-  const { data: loyaltyPrograms = [] } = useQuery<any[]>({
+  const { data: loyaltyPrograms = [], isLoading: isLoadingPrograms } = useQuery<any[]>({
     queryKey: ["/api/loyalty-programs"],
     enabled: open && showEnrollForm,
   });
@@ -330,10 +330,23 @@ export function CustomerModal({
                     />
                   </div>
                 </div>
+                {!isLoadingPrograms && loyaltyPrograms.length > 0 && !loyaltyPrograms.some((p) => p.active) && (
+                  <div className="p-3 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md">
+                    No active loyalty program found. Please configure a loyalty program in Admin.
+                  </div>
+                )}
+                {!isLoadingPrograms && loyaltyPrograms.length === 0 && (
+                  <div className="p-3 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md">
+                    No loyalty program configured. Please set up a loyalty program in Admin.
+                  </div>
+                )}
                 <Button
                   onClick={() => enrollMutation.mutate()}
                   disabled={
                     enrollMutation.isPending ||
+                    isLoadingPrograms ||
+                    loyaltyPrograms.length === 0 ||
+                    !loyaltyPrograms.some((p) => p.active) ||
                     !enrollForm.firstName ||
                     !enrollForm.lastName ||
                     (!enrollForm.phone && !enrollForm.email)
@@ -341,12 +354,12 @@ export function CustomerModal({
                   className="w-full"
                   data-testid="button-submit-enroll"
                 >
-                  {enrollMutation.isPending ? (
+                  {enrollMutation.isPending || isLoadingPrograms ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <UserPlus className="w-4 h-4 mr-2" />
                   )}
-                  Enroll Customer
+                  {isLoadingPrograms ? "Loading Programs..." : "Enroll Customer"}
                 </Button>
               </div>
             ) : (
