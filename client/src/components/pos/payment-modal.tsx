@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Tender, Check, TerminalDevice, TerminalSession, CheckPayment } from "@shared/schema";
 import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor, Clock, Receipt } from "lucide-react";
+import { StripeCardForm } from "./stripe-card-form";
 
 interface PaymentModalProps {
   open: boolean;
@@ -1135,109 +1136,61 @@ export function PaymentModal({
             )}
 
             {paymentMethod === "manual" && (
-              <>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input
-                      id="cardNumber"
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="4242 4242 4242 4242"
-                      value={cardNumber}
-                      onChange={handleCardNumberChange}
-                      disabled={isProcessingCard}
-                      className="text-lg tabular-nums tracking-wider"
-                      data-testid="input-card-number"
-                    />
-                  </div>
+              <StripeCardForm
+                amount={cardAmount}
+                checkId={check?.id || ""}
+                tenderId={cardTender?.id || ""}
+                employeeId={employeeId}
+                workstationId={workstationId}
+                propertyId={propertyId}
+                onSuccess={async (result) => {
+                  try {
+                    // Record the payment in our system
+                    const recordRes = await apiRequest("POST", "/api/stripe/record-payment", {
+                      paymentIntentId: result.paymentIntentId,
+                      checkId: check?.id,
+                      tenderId: cardTender?.id,
+                      amount: cardAmount,
+                      employeeId,
+                      workstationId,
+                      cardBrand: result.cardBrand,
+                      cardLast4: result.cardLast4,
+                    });
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cardExpiry">Expiry</Label>
-                      <Input
-                        id="cardExpiry"
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="MM/YY"
-                        value={cardExpiry}
-                        onChange={handleExpiryChange}
-                        disabled={isProcessingCard}
-                        className="tabular-nums"
-                        data-testid="input-card-expiry"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cardCvv">CVV</Label>
-                      <Input
-                        id="cardCvv"
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="123"
-                        value={cardCvv}
-                        onChange={handleCvvChange}
-                        disabled={isProcessingCard}
-                        className="tabular-nums"
-                        data-testid="input-card-cvv"
-                      />
-                    </div>
-                  </div>
+                    const recordData = await recordRes.json();
+                    
+                    if (recordData.success) {
+                      toast({
+                        title: "Payment Approved",
+                        description: `$${cardAmount.toFixed(2)} charged successfully`,
+                      });
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cardName">Name on Card (optional)</Label>
-                    <Input
-                      id="cardName"
-                      type="text"
-                      placeholder="JOHN DOE"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value.toUpperCase())}
-                      disabled={isProcessingCard}
-                      className="uppercase"
-                      data-testid="input-card-name"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-                  <p className="font-medium mb-1">Test Cards</p>
-                  <p>Approve: 4242 4242 4242 4242</p>
-                  <p>Decline: 4000 0000 0000 0002</p>
-                  <p className="text-xs mt-2 opacity-75">Uses property's configured processor (or demo mode if none)</p>
-                </div>
-
-                <Separator />
-
-                <div className="flex gap-3">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={() => setPaymentMethod("select")}
-                    disabled={isProcessingCard}
-                    data-testid="button-cancel-card"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Cancel
-                  </Button>
-                  <Button 
-                    className="flex-1"
-                    onClick={processCardPayment}
-                    disabled={isProcessingCard || cardNumber.replace(/\s/g, "").length < 15}
-                    data-testid="button-process-card"
-                  >
-                    {isProcessingCard ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CheckIcon className="w-4 h-4 mr-2" />
-                        Charge ${cardAmount.toFixed(2)}
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </>
+                      // Invalidate check queries to refresh data
+                      queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
+                      
+                      // Notify parent and close
+                      onPayment(cardTender!.id, cardAmount, false, recordData.checkPaymentId);
+                      resetCardEntry();
+                    } else {
+                      throw new Error(recordData.message || "Failed to record payment");
+                    }
+                  } catch (error) {
+                    toast({
+                      variant: "destructive",
+                      title: "Error",
+                      description: error instanceof Error ? error.message : "Failed to record payment",
+                    });
+                  }
+                }}
+                onCancel={() => setPaymentMethod("select")}
+                onError={(message) => {
+                  toast({
+                    variant: "destructive",
+                    title: "Payment Failed",
+                    description: message,
+                  });
+                }}
+              />
             )}
           </div>
         </DialogContent>

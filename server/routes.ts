@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import Stripe from "stripe";
 import { storage } from "./storage";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { resolveBusinessDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
@@ -8912,7 +8913,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           await recalculateCheckTotals(session.checkId);
           const updatedCheck = await storage.getCheck(session.checkId);
           if (updatedCheck) {
-            const totalPaid = parseFloat(updatedCheck.amountPaid || "0");
+            const allPayments = await storage.getPayments(session.checkId);
+            const totalPaid = allPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
             const checkTotal = parseFloat(updatedCheck.total || "0");
             if (totalPaid >= checkTotal && checkTotal > 0) {
               await storage.updateCheck(session.checkId, { status: "closed", closedAt: new Date() });
@@ -8956,6 +8958,135 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Simulate terminal callback error:", error);
       res.status(500).json({ message: "Failed to simulate callback" });
+    }
+  });
+
+  // ============================================================================
+  // STRIPE MANUAL CARD ENTRY - PaymentIntent API for secure card processing
+  // ============================================================================
+
+  // Create a PaymentIntent for manual card entry (Stripe Elements)
+  app.post("/api/stripe/create-payment-intent", async (req, res) => {
+    try {
+      const { amount, checkId, tenderId, employeeId, workstationId, propertyId } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ message: "Valid amount is required" });
+      }
+
+      // Get Stripe secret key from environment
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeSecretKey) {
+        return res.status(500).json({ message: "Stripe is not configured. Please add STRIPE_SECRET_KEY." });
+      }
+
+      const stripe = new Stripe(stripeSecretKey);
+
+      // Create PaymentIntent - amount should be in cents
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert dollars to cents
+        currency: "usd",
+        automatic_payment_methods: {
+          enabled: true,
+        },
+        metadata: {
+          checkId: checkId || "",
+          tenderId: tenderId || "",
+          employeeId: employeeId || "",
+          workstationId: workstationId || "",
+          propertyId: propertyId || "",
+        },
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      });
+    } catch (error) {
+      console.error("Create PaymentIntent error:", error);
+      const stripeError = error as Stripe.errors.StripeError;
+      res.status(500).json({ 
+        message: stripeError.message || "Failed to create payment intent" 
+      });
+    }
+  });
+
+  // Record a completed Stripe payment after successful card charge
+  app.post("/api/stripe/record-payment", async (req, res) => {
+    try {
+      const { 
+        paymentIntentId, 
+        checkId, 
+        tenderId, 
+        amount, 
+        employeeId, 
+        cardBrand, 
+        cardLast4 
+      } = req.body;
+
+      if (!paymentIntentId || !checkId || !tenderId || !amount) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+
+      const tender = await storage.getTender(tenderId);
+      if (!tender) {
+        return res.status(404).json({ message: "Tender not found" });
+      }
+
+      // Get business date from check's RVC property or use current date as fallback
+      let businessDate = new Date().toISOString().split("T")[0];
+      if (check.rvcId) {
+        const rvc = await storage.getRevenueCenter(check.rvcId);
+        if (rvc?.propertyId) {
+          const property = await storage.getProperty(rvc.propertyId);
+          if (property) {
+            businessDate = resolveBusinessDate(new Date(), property);
+          }
+        }
+      }
+
+      // Create check payment record (Stripe payment processed directly, no processor record needed)
+      const checkPayment = await storage.createPayment({
+        checkId,
+        tenderId,
+        tenderName: tender.name,
+        amount: amount.toString(),
+        employeeId,
+        businessDate,
+        paymentStatus: "completed",
+      });
+
+      // Calculate total paid and check if check should be closed
+      const allPayments = await storage.getPayments(checkId);
+      const totalPaid = allPayments.reduce((sum: number, p: { amount: string | null }) => 
+        sum + parseFloat(p.amount || "0"), 0);
+      const checkTotal = parseFloat(check.total || "0");
+
+      let updatedCheck = check;
+      if (totalPaid >= checkTotal) {
+        const result = await storage.updateCheck(checkId, {
+          status: "closed",
+          closedAt: new Date(),
+        });
+        if (result) updatedCheck = result;
+      }
+
+      res.json({
+        success: true,
+        checkPaymentId: checkPayment.id,
+        paymentIntentId,
+        cardBrand,
+        cardLast4,
+        check: updatedCheck,
+      });
+    } catch (error) {
+      console.error("Record Stripe payment error:", error);
+      res.status(500).json({ message: "Failed to record payment" });
     }
   });
 
