@@ -2423,6 +2423,10 @@ export class DatabaseStorage implements IStorage {
         roundsResult = await tx.delete(rounds).where(inArray(rounds.checkId, checkIds));
       }
 
+      // 5b. Delete loyalty transactions and redemptions BEFORE checks (they reference checks)
+      const loyaltyTransResult = await tx.delete(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
+      const loyaltyRedemptionResult = await tx.delete(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
+
       // 6. Delete audit logs and checks
       const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
       const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
@@ -2485,9 +2489,7 @@ export class DatabaseStorage implements IStorage {
       // 4c. Gift card transactions (keep gift cards themselves as they are enterprise-wide assets)
       const giftCardTransResult = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
 
-      // 4d. Loyalty transactions and redemptions (keep members as they are program-scoped)
-      const loyaltyTransResult = await tx.delete(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
-      const loyaltyRedemptionResult = await tx.delete(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
+      // 4d. Loyalty transactions and redemptions already deleted in step 5b (before checks)
 
       // 4e. Online orders
       const onlineOrdersResult = await tx.delete(onlineOrders).where(eq(onlineOrders.propertyId, propertyId));
