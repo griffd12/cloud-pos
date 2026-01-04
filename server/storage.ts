@@ -2396,6 +2396,17 @@ export class DatabaseStorage implements IStorage {
         kdsResult = await tx.delete(kdsTickets).where(inArray(kdsTickets.id, allKdsTicketIds));
       }
 
+      // 2b. Get refund IDs that reference our checks
+      const refundRecords = await tx.select({ id: refunds.id }).from(refunds).where(inArray(refunds.originalCheckId, checkIds.length > 0 ? checkIds : ['__none__']));
+      const refundIds = refundRecords.map(r => r.id);
+
+      // 2c. Delete refund_payments and refund_items (must come before check_payments/check_items)
+      if (refundIds.length > 0) {
+        await tx.delete(refundPayments).where(inArray(refundPayments.refundId, refundIds));
+        await tx.delete(refundItems).where(inArray(refundItems.refundId, refundIds));
+        await tx.delete(refunds).where(inArray(refunds.id, refundIds));
+      }
+
       // 3. Delete check_payments and check_discounts
       if (checkIds.length > 0) {
         paymentsResult = await tx.delete(checkPayments).where(inArray(checkPayments.checkId, checkIds));
