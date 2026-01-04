@@ -670,6 +670,7 @@ export const checks = pgTable("checks", {
   checkNumber: integer("check_number").notNull(),
   rvcId: varchar("rvc_id").notNull().references(() => rvcs.id),
   employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  customerId: varchar("customer_id"), // Links to loyaltyMembers for customer tracking
   orderType: text("order_type").notNull(), // 'dine_in', 'take_out', 'delivery', 'pickup'
   status: text("status").notNull().default("open"), // 'open', 'closed', 'voided'
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).default("0"),
@@ -682,6 +683,8 @@ export const checks = pgTable("checks", {
   openedAt: timestamp("opened_at").defaultNow(),
   closedAt: timestamp("closed_at"),
   businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this check belongs to
+  loyaltyPointsEarned: integer("loyalty_points_earned"), // Points earned on this check
+  loyaltyPointsRedeemed: integer("loyalty_points_redeemed"), // Points redeemed on this check
 });
 
 // Rounds (each send creates a round)
@@ -2193,10 +2196,25 @@ export const loyaltyRewards = pgTable("loyalty_rewards", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Loyalty Redemptions - tracks when rewards are redeemed at POS
+export const loyaltyRedemptions = pgTable("loyalty_redemptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => loyaltyMembers.id),
+  rewardId: varchar("reward_id").notNull().references(() => loyaltyRewards.id),
+  checkId: varchar("check_id").references(() => checks.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  pointsUsed: integer("points_used").default(0),
+  discountApplied: decimal("discount_applied", { precision: 10, scale: 2 }),
+  status: text("status").default("applied"), // 'applied', 'voided'
+  employeeId: varchar("employee_id").references(() => employees.id),
+  redeemedAt: timestamp("redeemed_at").defaultNow(),
+});
+
 export const insertLoyaltyProgramSchema = createInsertSchema(loyaltyPrograms).omit({ id: true, createdAt: true });
 export const insertLoyaltyMemberSchema = createInsertSchema(loyaltyMembers).omit({ id: true, enrolledAt: true });
 export const insertLoyaltyTransactionSchema = createInsertSchema(loyaltyTransactions).omit({ id: true, createdAt: true });
 export const insertLoyaltyRewardSchema = createInsertSchema(loyaltyRewards).omit({ id: true, createdAt: true });
+export const insertLoyaltyRedemptionSchema = createInsertSchema(loyaltyRedemptions).omit({ id: true, redeemedAt: true });
 
 export type LoyaltyProgram = typeof loyaltyPrograms.$inferSelect;
 export type InsertLoyaltyProgram = z.infer<typeof insertLoyaltyProgramSchema>;
@@ -2206,6 +2224,8 @@ export type LoyaltyTransaction = typeof loyaltyTransactions.$inferSelect;
 export type InsertLoyaltyTransaction = z.infer<typeof insertLoyaltyTransactionSchema>;
 export type LoyaltyReward = typeof loyaltyRewards.$inferSelect;
 export type InsertLoyaltyReward = z.infer<typeof insertLoyaltyRewardSchema>;
+export type LoyaltyRedemption = typeof loyaltyRedemptions.$inferSelect;
+export type InsertLoyaltyRedemption = z.infer<typeof insertLoyaltyRedemptionSchema>;
 
 // ============================================================================
 // PHASE 3: ONLINE ORDERING INTEGRATION

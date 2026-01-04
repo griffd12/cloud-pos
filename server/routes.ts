@@ -10373,5 +10373,648 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // POS CUSTOMER MANAGEMENT
+  // ============================================================================
+
+  // Search for customers (loyalty members)
+  app.get("/api/pos/customers/search", async (req, res) => {
+    try {
+      const { query, programId } = req.query;
+      const members = await storage.getLoyaltyMembers(
+        programId as string | undefined,
+        query as string | undefined
+      );
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to search customers" });
+    }
+  });
+
+  // Get customer details with history
+  app.get("/api/pos/customers/:id", async (req, res) => {
+    try {
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Customer not found" });
+
+      // Get recent checks for this customer
+      const recentChecks = await storage.getChecksByCustomer(member.id, 10);
+      
+      // Get loyalty transactions
+      const transactions = await storage.getLoyaltyTransactionsByMember(member.id);
+      
+      // Get available rewards
+      const rewards = await storage.getLoyaltyRewards(member.programId);
+      const availableRewards = rewards.filter(r => 
+        r.active && 
+        (member.currentPoints || 0) >= (r.pointsCost || 0)
+      );
+
+      res.json({
+        customer: member,
+        recentChecks,
+        transactions,
+        availableRewards,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get customer details" });
+    }
+  });
+
+  // Attach customer to check
+  app.post("/api/pos/checks/:checkId/customer", async (req, res) => {
+    try {
+      const { customerId } = req.body;
+      const check = await storage.attachCustomerToCheck(req.params.checkId, customerId);
+      if (!check) return res.status(404).json({ message: "Check not found" });
+      res.json(check);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to attach customer" });
+    }
+  });
+
+  // Detach customer from check
+  app.delete("/api/pos/checks/:checkId/customer", async (req, res) => {
+    try {
+      const check = await storage.detachCustomerFromCheck(req.params.checkId);
+      if (!check) return res.status(404).json({ message: "Check not found" });
+      res.json(check);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to detach customer" });
+    }
+  });
+
+  // Update customer profile from POS
+  app.patch("/api/pos/customers/:id", async (req, res) => {
+    try {
+      const { firstName, lastName, phone, email, notes } = req.body;
+      const updated = await storage.updateLoyaltyMember(req.params.id, {
+        firstName,
+        lastName,
+        phone,
+        email,
+        notes,
+      });
+      if (!updated) return res.status(404).json({ message: "Customer not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update customer" });
+    }
+  });
+
+  // Add manual points to customer
+  app.post("/api/pos/customers/:id/add-points", async (req, res) => {
+    try {
+      const { points, reason, employeeId } = req.body;
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Customer not found" });
+
+      const pointsBefore = member.currentPoints || 0;
+      const pointsAfter = pointsBefore + points;
+      const lifetimeBefore = member.lifetimePoints || 0;
+      const lifetimeAfter = lifetimeBefore + (points > 0 ? points : 0);
+
+      // Update member points
+      await storage.updateLoyaltyMember(member.id, {
+        currentPoints: pointsAfter,
+        lifetimePoints: lifetimeAfter,
+      });
+
+      // Create transaction record
+      const transaction = await storage.createLoyaltyTransaction({
+        memberId: member.id,
+        transactionType: "adjust",
+        points,
+        pointsBefore,
+        pointsAfter,
+        employeeId,
+        reason: reason || "Manual adjustment from POS",
+      });
+
+      res.json({ 
+        success: true, 
+        transaction,
+        newBalance: pointsAfter,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to add points" });
+    }
+  });
+
+  // Get customer's last order for reorder
+  app.get("/api/pos/customers/:id/last-order", async (req, res) => {
+    try {
+      const checks = await storage.getChecksByCustomer(req.params.id, 1);
+      if (checks.length === 0) {
+        return res.json({ lastOrder: null, items: [] });
+      }
+
+      const lastCheck = checks[0];
+      const items = await storage.getCheckItems(lastCheck.id);
+
+      res.json({
+        lastOrder: lastCheck,
+        items: items.filter(i => !i.voided),
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get last order" });
+    }
+  });
+
+  // Reorder last order - copy items to current check
+  app.post("/api/pos/checks/:checkId/reorder/:customerId", async (req, res) => {
+    try {
+      const { checkId, customerId } = req.params;
+      
+      // Get customer's last order
+      const checks = await storage.getChecksByCustomer(customerId, 1);
+      if (checks.length === 0) {
+        return res.status(404).json({ message: "No previous orders found" });
+      }
+
+      const lastCheck = checks[0];
+      const items = await storage.getCheckItems(lastCheck.id);
+      const validItems = items.filter(i => !i.voided);
+
+      // Add items to current check
+      for (const item of validItems) {
+        await storage.createCheckItem({
+          checkId,
+          menuItemId: item.menuItemId,
+          menuItemName: item.menuItemName,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity || 1,
+          modifiers: item.modifiers,
+          itemStatus: "active",
+        });
+      }
+
+      await recalculateCheckTotals(checkId);
+      const updatedCheck = await storage.getCheck(checkId);
+      const newItems = await storage.getCheckItems(checkId);
+
+      res.json({
+        check: updatedCheck,
+        items: newItems,
+        itemsAdded: validItems.length,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reorder" });
+    }
+  });
+
+  // ============================================================================
+  // POS LOYALTY OPERATIONS
+  // ============================================================================
+
+  // Earn points on check payment
+  app.post("/api/pos/loyalty/earn", async (req, res) => {
+    try {
+      const { checkId, customerId, employeeId } = req.body;
+      
+      const check = await storage.getCheck(checkId);
+      if (!check) return res.status(404).json({ message: "Check not found" });
+      
+      const member = await storage.getLoyaltyMember(customerId);
+      if (!member) return res.status(404).json({ message: "Customer not found" });
+
+      // Get the loyalty program to determine points per dollar
+      const programs = await storage.getLoyaltyPrograms();
+      const program = programs.find(p => p.id === member.programId);
+      if (!program) return res.status(404).json({ message: "Loyalty program not found" });
+
+      const checkTotal = parseFloat(check.total || "0");
+      const pointsPerDollar = parseFloat(program.pointsPerDollar || "1");
+      const pointsEarned = Math.floor(checkTotal * pointsPerDollar);
+
+      if (pointsEarned <= 0) {
+        return res.json({ 
+          success: true, 
+          pointsEarned: 0,
+          message: "No points earned",
+        });
+      }
+
+      const pointsBefore = member.currentPoints || 0;
+      const pointsAfter = pointsBefore + pointsEarned;
+      const lifetimeBefore = member.lifetimePoints || 0;
+      const lifetimeAfter = lifetimeBefore + pointsEarned;
+
+      // Update member points
+      await storage.updateLoyaltyMember(member.id, {
+        currentPoints: pointsAfter,
+        lifetimePoints: lifetimeAfter,
+        lastVisitAt: new Date(),
+      });
+
+      // Update check with points earned
+      await storage.updateCheck(checkId, {
+        loyaltyPointsEarned: pointsEarned,
+      });
+
+      // Create transaction record
+      const transaction = await storage.createLoyaltyTransaction({
+        memberId: member.id,
+        propertyId: undefined,
+        transactionType: "earn",
+        points: pointsEarned,
+        pointsBefore,
+        pointsAfter,
+        checkId,
+        checkTotal: check.total,
+        employeeId,
+        reason: `Earned on check #${check.checkNumber}`,
+      });
+
+      // Check for auto-award rewards
+      const rewards = await storage.getLoyaltyRewards(member.programId);
+      const memberTransactions = await storage.getLoyaltyTransactionsByMember(member.id);
+      const autoAwardedRewards: string[] = [];
+      
+      for (const reward of rewards) {
+        if (!reward.active || !reward.autoAwardAtPoints) continue;
+        
+        const threshold = reward.autoAwardAtPoints;
+        if (lifetimeBefore < threshold && lifetimeAfter >= threshold) {
+          if (reward.autoAwardOnce) {
+            const alreadyAwarded = memberTransactions.some(
+              t => t.reason?.includes(`Auto-awarded: ${reward.name}`)
+            );
+            if (alreadyAwarded) continue;
+          }
+          
+          // Create auto-award transaction
+          await storage.createLoyaltyTransaction({
+            memberId: member.id,
+            transactionType: "earn",
+            points: 0,
+            pointsBefore: pointsAfter,
+            pointsAfter: pointsAfter,
+            employeeId,
+            reason: `Auto-awarded: ${reward.name} (reached ${threshold} lifetime points)`,
+          });
+          
+          autoAwardedRewards.push(reward.name);
+        }
+      }
+
+      // Check for available rewards to prompt
+      const availableRewards = rewards.filter(r => 
+        r.active && 
+        (pointsAfter >= (r.pointsCost || 0))
+      );
+
+      res.json({
+        success: true,
+        pointsEarned,
+        newBalance: pointsAfter,
+        lifetimePoints: lifetimeAfter,
+        transaction,
+        autoAwardedRewards,
+        availableRewards,
+      });
+    } catch (error: any) {
+      console.error("Loyalty earn error:", error);
+      res.status(500).json({ message: error.message || "Failed to earn points" });
+    }
+  });
+
+  // Get available rewards for customer
+  app.get("/api/pos/loyalty/:customerId/available-rewards", async (req, res) => {
+    try {
+      const member = await storage.getLoyaltyMember(req.params.customerId);
+      if (!member) return res.status(404).json({ message: "Customer not found" });
+
+      const rewards = await storage.getLoyaltyRewards(member.programId);
+      const availableRewards = rewards.filter(r => 
+        r.active && 
+        (member.currentPoints || 0) >= (r.pointsCost || 0)
+      );
+
+      res.json({
+        currentPoints: member.currentPoints,
+        availableRewards,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get available rewards" });
+    }
+  });
+
+  // Redeem a reward on a check
+  app.post("/api/pos/loyalty/redeem", async (req, res) => {
+    try {
+      const { customerId, rewardId, checkId, employeeId, propertyId } = req.body;
+
+      const member = await storage.getLoyaltyMember(customerId);
+      if (!member) return res.status(404).json({ message: "Customer not found" });
+
+      const reward = await storage.getLoyaltyReward(rewardId);
+      if (!reward) return res.status(404).json({ message: "Reward not found" });
+
+      const check = await storage.getCheck(checkId);
+      if (!check) return res.status(404).json({ message: "Check not found" });
+
+      // Check if member has enough points
+      const pointsCost = reward.pointsCost || 0;
+      if ((member.currentPoints || 0) < pointsCost) {
+        return res.status(400).json({ message: "Insufficient points" });
+      }
+
+      // Calculate discount amount
+      let discountAmount = "0";
+      if (reward.rewardType === "discount") {
+        if (reward.discountAmount) {
+          discountAmount = reward.discountAmount;
+        } else if (reward.discountPercent) {
+          const checkTotal = parseFloat(check.total || "0");
+          const percent = parseFloat(reward.discountPercent);
+          discountAmount = (checkTotal * percent / 100).toFixed(2);
+        }
+      }
+
+      // Deduct points
+      const pointsBefore = member.currentPoints || 0;
+      const pointsAfter = pointsBefore - pointsCost;
+
+      await storage.updateLoyaltyMember(member.id, {
+        currentPoints: pointsAfter,
+      });
+
+      // Create redemption record
+      const redemption = await storage.createLoyaltyRedemption({
+        memberId: member.id,
+        rewardId: reward.id,
+        checkId,
+        propertyId,
+        pointsUsed: pointsCost,
+        discountApplied: discountAmount,
+        status: "applied",
+        employeeId,
+      });
+
+      // Create loyalty transaction
+      await storage.createLoyaltyTransaction({
+        memberId: member.id,
+        propertyId,
+        transactionType: "redeem",
+        points: -pointsCost,
+        pointsBefore,
+        pointsAfter,
+        checkId,
+        employeeId,
+        reason: `Redeemed: ${reward.name}`,
+      });
+
+      // Update check loyalty points redeemed
+      await storage.updateCheck(checkId, {
+        loyaltyPointsRedeemed: (check.loyaltyPointsRedeemed || 0) + pointsCost,
+      });
+
+      // Update reward redemption count
+      await storage.updateLoyaltyReward(reward.id, {
+        redemptionCount: (reward.redemptionCount || 0) + 1,
+      });
+
+      res.json({
+        success: true,
+        redemption,
+        discountAmount,
+        newBalance: pointsAfter,
+        reward,
+      });
+    } catch (error: any) {
+      console.error("Loyalty redeem error:", error);
+      res.status(500).json({ message: error.message || "Failed to redeem reward" });
+    }
+  });
+
+  // Customer self-enrollment in loyalty program
+  app.post("/api/pos/loyalty/enroll", async (req, res) => {
+    try {
+      const { programId, firstName, lastName, phone, email } = req.body;
+
+      // Check if customer already exists
+      const existingByPhone = phone ? await storage.getLoyaltyMemberByIdentifier(phone) : null;
+      const existingByEmail = email ? await storage.getLoyaltyMemberByIdentifier(email) : null;
+
+      if (existingByPhone || existingByEmail) {
+        return res.status(400).json({ 
+          message: "Customer already enrolled",
+          existingMember: existingByPhone || existingByEmail,
+        });
+      }
+
+      // Generate member number
+      const memberNumber = `LM${Date.now().toString(36).toUpperCase()}`;
+
+      const member = await storage.createLoyaltyMember({
+        programId,
+        memberNumber,
+        firstName,
+        lastName,
+        phone,
+        email,
+        status: "active",
+        currentPoints: 0,
+        lifetimePoints: 0,
+      });
+
+      res.status(201).json({
+        success: true,
+        member,
+        message: "Successfully enrolled in loyalty program",
+      });
+    } catch (error: any) {
+      console.error("Enrollment error:", error);
+      res.status(500).json({ message: error.message || "Failed to enroll" });
+    }
+  });
+
+  // ============================================================================
+  // POS GIFT CARD OPERATIONS
+  // ============================================================================
+
+  // Sell/activate a new gift card
+  app.post("/api/pos/gift-cards/sell", async (req, res) => {
+    try {
+      const { cardNumber, initialBalance, propertyId, employeeId, checkId } = req.body;
+
+      // Check if card already exists
+      const existing = await storage.getGiftCardByNumber(cardNumber);
+      if (existing) {
+        return res.status(400).json({ message: "Gift card number already exists" });
+      }
+
+      // Create the gift card
+      const giftCard = await storage.createGiftCard({
+        cardNumber,
+        propertyId,
+        initialBalance,
+        currentBalance: initialBalance,
+        status: "active",
+        activatedAt: new Date(),
+        activatedByEmployeeId: employeeId,
+      });
+
+      // Create activation transaction
+      await storage.createGiftCardTransaction({
+        giftCardId: giftCard.id,
+        transactionType: "activate",
+        amount: initialBalance,
+        balanceBefore: "0",
+        balanceAfter: initialBalance,
+        propertyId,
+        checkId,
+        employeeId,
+        notes: "Initial activation",
+      });
+
+      res.status(201).json({
+        success: true,
+        giftCard,
+        message: `Gift card activated with $${initialBalance} balance`,
+      });
+    } catch (error: any) {
+      console.error("Gift card sell error:", error);
+      res.status(500).json({ message: error.message || "Failed to activate gift card" });
+    }
+  });
+
+  // Reload an existing gift card
+  app.post("/api/pos/gift-cards/reload", async (req, res) => {
+    try {
+      const { cardNumber, amount, propertyId, employeeId, checkId } = req.body;
+
+      const giftCard = await storage.getGiftCardByNumber(cardNumber);
+      if (!giftCard) {
+        return res.status(404).json({ message: "Gift card not found" });
+      }
+
+      if (giftCard.status !== "active") {
+        return res.status(400).json({ message: `Gift card is ${giftCard.status}` });
+      }
+
+      const currentBalance = parseFloat(giftCard.currentBalance || "0");
+      const reloadAmount = parseFloat(amount);
+      const newBalance = (currentBalance + reloadAmount).toFixed(2);
+
+      // Update gift card balance
+      await storage.updateGiftCard(giftCard.id, {
+        currentBalance: newBalance,
+      });
+
+      // Create reload transaction
+      await storage.createGiftCardTransaction({
+        giftCardId: giftCard.id,
+        transactionType: "reload",
+        amount,
+        balanceBefore: giftCard.currentBalance,
+        balanceAfter: newBalance,
+        propertyId,
+        checkId,
+        employeeId,
+        notes: `Reloaded $${amount}`,
+      });
+
+      res.json({
+        success: true,
+        cardNumber: giftCard.cardNumber,
+        previousBalance: currentBalance.toFixed(2),
+        reloadAmount: reloadAmount.toFixed(2),
+        newBalance,
+      });
+    } catch (error: any) {
+      console.error("Gift card reload error:", error);
+      res.status(500).json({ message: error.message || "Failed to reload gift card" });
+    }
+  });
+
+  // Check gift card balance
+  app.get("/api/pos/gift-cards/balance/:cardNumber", async (req, res) => {
+    try {
+      const giftCard = await storage.getGiftCardByNumber(req.params.cardNumber);
+      if (!giftCard) {
+        return res.status(404).json({ message: "Gift card not found" });
+      }
+
+      // Get recent transactions
+      const transactions = await storage.getGiftCardTransactions(giftCard.id);
+      const recentTransactions = transactions.slice(0, 5);
+
+      res.json({
+        cardNumber: giftCard.cardNumber,
+        currentBalance: giftCard.currentBalance,
+        status: giftCard.status,
+        activatedAt: giftCard.activatedAt,
+        expiresAt: giftCard.expiresAt,
+        recentTransactions,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check balance" });
+    }
+  });
+
+  // Redeem gift card on a check
+  app.post("/api/pos/gift-cards/redeem", async (req, res) => {
+    try {
+      const { cardNumber, amount, propertyId, employeeId, checkId, pin } = req.body;
+
+      const giftCard = await storage.getGiftCardByNumber(cardNumber);
+      if (!giftCard) {
+        return res.status(404).json({ message: "Gift card not found" });
+      }
+
+      if (giftCard.status !== "active") {
+        return res.status(400).json({ message: `Gift card is ${giftCard.status}` });
+      }
+
+      // Validate PIN if required
+      if (giftCard.pin && giftCard.pin !== pin) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+
+      const currentBalance = parseFloat(giftCard.currentBalance || "0");
+      const redeemAmount = parseFloat(amount);
+
+      if (redeemAmount > currentBalance) {
+        return res.status(400).json({ 
+          message: "Insufficient balance",
+          currentBalance: currentBalance.toFixed(2),
+          requestedAmount: redeemAmount.toFixed(2),
+        });
+      }
+
+      const newBalance = (currentBalance - redeemAmount).toFixed(2);
+
+      // Update gift card balance
+      await storage.updateGiftCard(giftCard.id, {
+        currentBalance: newBalance,
+      });
+
+      // Create redemption transaction
+      const transaction = await storage.createGiftCardTransaction({
+        giftCardId: giftCard.id,
+        transactionType: "redeem",
+        amount: `-${amount}`,
+        balanceBefore: giftCard.currentBalance,
+        balanceAfter: newBalance,
+        propertyId,
+        checkId,
+        employeeId,
+        notes: `Redeemed on check`,
+      });
+
+      res.json({
+        success: true,
+        transaction,
+        amountRedeemed: redeemAmount.toFixed(2),
+        remainingBalance: newBalance,
+      });
+    } catch (error: any) {
+      console.error("Gift card redeem error:", error);
+      res.status(500).json({ message: error.message || "Failed to redeem gift card" });
+    }
+  });
+
   return httpServer;
 }

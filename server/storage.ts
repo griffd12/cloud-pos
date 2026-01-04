@@ -21,7 +21,7 @@ import {
   // Phase 1-3 new tables
   offlineOrderQueue, fiscalPeriods, cashDrawers, drawerAssignments, cashTransactions, safeCounts,
   giftCards, giftCardTransactions, glMappings, accountingExports,
-  loyaltyPrograms, loyaltyMembers, loyaltyTransactions, loyaltyRewards,
+  loyaltyPrograms, loyaltyMembers, loyaltyTransactions, loyaltyRewards, loyaltyRedemptions,
   onlineOrderSources, onlineOrders, inventoryItems, inventoryStock, inventoryTransactions, recipes,
   salesForecasts, laborForecasts, managerAlerts, alertSubscriptions, itemAvailability, prepItems,
   type Enterprise, type InsertEnterprise,
@@ -107,6 +107,7 @@ import {
   type LoyaltyMember, type InsertLoyaltyMember,
   type LoyaltyTransaction, type InsertLoyaltyTransaction,
   type LoyaltyReward, type InsertLoyaltyReward,
+  type LoyaltyRedemption, type InsertLoyaltyRedemption,
   type OnlineOrderSource, type InsertOnlineOrderSource,
   type OnlineOrder, type InsertOnlineOrder,
   type InventoryItem, type InsertInventoryItem,
@@ -610,7 +611,19 @@ export interface IStorage {
   createLoyaltyTransaction(data: InsertLoyaltyTransaction): Promise<LoyaltyTransaction>;
   getLoyaltyTransactionsByMember(memberId: string): Promise<LoyaltyTransaction[]>;
   getLoyaltyRewards(programId: string): Promise<LoyaltyReward[]>;
+  getLoyaltyReward(id: string): Promise<LoyaltyReward | undefined>;
   createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward>;
+  updateLoyaltyReward(id: string, data: Partial<InsertLoyaltyReward>): Promise<LoyaltyReward | undefined>;
+  
+  // Loyalty Redemptions
+  getLoyaltyRedemptionsByMember(memberId: string): Promise<LoyaltyRedemption[]>;
+  getLoyaltyRedemptionsByCheck(checkId: string): Promise<LoyaltyRedemption[]>;
+  createLoyaltyRedemption(data: InsertLoyaltyRedemption): Promise<LoyaltyRedemption>;
+  
+  // Check customer operations
+  getChecksByCustomer(customerId: string, limit?: number): Promise<Check[]>;
+  attachCustomerToCheck(checkId: string, customerId: string): Promise<Check | undefined>;
+  detachCustomerFromCheck(checkId: string): Promise<Check | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3941,6 +3954,57 @@ export class DatabaseStorage implements IStorage {
 
   async createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward> {
     const [result] = await db.insert(loyaltyRewards).values(data).returning();
+    return result;
+  }
+
+  async getLoyaltyReward(id: string): Promise<LoyaltyReward | undefined> {
+    const [result] = await db.select().from(loyaltyRewards).where(eq(loyaltyRewards.id, id));
+    return result;
+  }
+
+  async updateLoyaltyReward(id: string, data: Partial<InsertLoyaltyReward>): Promise<LoyaltyReward | undefined> {
+    const [result] = await db.update(loyaltyRewards).set(data).where(eq(loyaltyRewards.id, id)).returning();
+    return result;
+  }
+
+  // Loyalty Redemptions
+  async getLoyaltyRedemptionsByMember(memberId: string): Promise<LoyaltyRedemption[]> {
+    return db.select().from(loyaltyRedemptions).where(eq(loyaltyRedemptions.memberId, memberId));
+  }
+
+  async getLoyaltyRedemptionsByCheck(checkId: string): Promise<LoyaltyRedemption[]> {
+    return db.select().from(loyaltyRedemptions).where(eq(loyaltyRedemptions.checkId, checkId));
+  }
+
+  async createLoyaltyRedemption(data: InsertLoyaltyRedemption): Promise<LoyaltyRedemption> {
+    const [result] = await db.insert(loyaltyRedemptions).values(data).returning();
+    return result;
+  }
+
+  // Check customer operations
+  async getChecksByCustomer(customerId: string, limit?: number): Promise<Check[]> {
+    const query = db.select().from(checks)
+      .where(eq(checks.customerId, customerId))
+      .orderBy(sql`${checks.openedAt} DESC`);
+    if (limit) {
+      return query.limit(limit);
+    }
+    return query;
+  }
+
+  async attachCustomerToCheck(checkId: string, customerId: string): Promise<Check | undefined> {
+    const [result] = await db.update(checks)
+      .set({ customerId })
+      .where(eq(checks.id, checkId))
+      .returning();
+    return result;
+  }
+
+  async detachCustomerFromCheck(checkId: string): Promise<Check | undefined> {
+    const [result] = await db.update(checks)
+      .set({ customerId: null })
+      .where(eq(checks.id, checkId))
+      .returning();
     return result;
   }
 
