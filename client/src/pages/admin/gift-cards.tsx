@@ -96,7 +96,7 @@ export default function GiftCardsPage() {
     mutationFn: async (data: InsertGiftCard) => {
       const cardData = {
         ...data,
-        balance: data.initialBalance,
+        currentBalance: data.initialBalance,
         cardNumber: data.cardNumber || generateCardNumber(),
       };
       const response = await apiRequest("POST", "/api/gift-cards", cardData);
