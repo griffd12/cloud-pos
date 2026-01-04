@@ -310,11 +310,18 @@ export default function LoginPage() {
     setClockStep("pin");
   };
 
+  // Initialize selectedRvcId from saved currentRvc or default to first RVC
   useEffect(() => {
     if (rvcs.length > 0 && !selectedRvcId) {
-      setSelectedRvcId(rvcs[0].id);
+      // If there's a saved RVC from previous session, use that
+      if (currentRvc && rvcs.find(r => r.id === currentRvc.id)) {
+        setSelectedRvcId(currentRvc.id);
+      } else {
+        // Otherwise default to first RVC
+        setSelectedRvcId(rvcs[0].id);
+      }
     }
-  }, [rvcs, selectedRvcId]);
+  }, [rvcs, selectedRvcId, currentRvc]);
 
   useEffect(() => {
     if (currentEmployee && currentRvc) {
