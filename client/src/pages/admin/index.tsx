@@ -52,6 +52,7 @@ import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
 import PaymentProcessorsPage from "./payment-processors";
+import TerminalDevicesPage from "./terminal-devices";
 import OnboardingPage from "./onboarding";
 
 function AdminDashboard() {
@@ -267,6 +268,7 @@ export default function AdminLayout() {
               <Route path="/admin/print-classes" component={PrintClassesPage} />
               <Route path="/admin/order-devices" component={OrderDevicesPage} />
               <Route path="/admin/workstations" component={WorkstationsPage} />
+              <Route path="/admin/terminal-devices" component={TerminalDevicesPage} />
               <Route path="/admin/printers" component={PrintersPage} />
               <Route path="/admin/kds-devices" component={KdsDevicesPage} />
               <Route path="/admin/pos-layouts" component={PosLayoutsPage} />

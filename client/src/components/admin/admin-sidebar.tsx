@@ -68,6 +68,7 @@ const menuGroups = [
     label: "Devices & Routing",
     items: [
       { title: "Workstations", url: "/admin/workstations", icon: MonitorSmartphone },
+      { title: "Terminal Devices", url: "/admin/terminal-devices", icon: CreditCard },
       { title: "Printers", url: "/admin/printers", icon: Printer },
       { title: "KDS Devices", url: "/admin/kds-devices", icon: Tv2 },
       { title: "Order Devices", url: "/admin/order-devices", icon: Monitor },

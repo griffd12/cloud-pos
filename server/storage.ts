@@ -7,7 +7,7 @@ import {
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
   tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
-  paymentProcessors, paymentTransactions,
+  paymentProcessors, paymentTransactions, terminalDevices, terminalSessions,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
   devices, deviceEnrollmentTokens, deviceHeartbeats,
@@ -84,6 +84,8 @@ import {
   type OvertimeRule, type InsertOvertimeRule,
   type PaymentProcessor, type InsertPaymentProcessor,
   type PaymentTransaction, type InsertPaymentTransaction,
+  type TerminalDevice, type InsertTerminalDevice,
+  type TerminalSession, type InsertTerminalSession,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -310,6 +312,22 @@ export interface IStorage {
   getPaymentTransactionByGatewayId(gatewayTransactionId: string): Promise<PaymentTransaction | undefined>;
   createPaymentTransaction(data: InsertPaymentTransaction): Promise<PaymentTransaction>;
   updatePaymentTransaction(id: string, data: Partial<PaymentTransaction>): Promise<PaymentTransaction | undefined>;
+
+  // Terminal Devices (EMV Card Readers)
+  getTerminalDevices(propertyId?: string): Promise<TerminalDevice[]>;
+  getTerminalDevice(id: string): Promise<TerminalDevice | undefined>;
+  getTerminalDevicesByWorkstation(workstationId: string): Promise<TerminalDevice[]>;
+  createTerminalDevice(data: InsertTerminalDevice): Promise<TerminalDevice>;
+  updateTerminalDevice(id: string, data: Partial<InsertTerminalDevice>): Promise<TerminalDevice | undefined>;
+  deleteTerminalDevice(id: string): Promise<boolean>;
+  updateTerminalDeviceStatus(id: string, status: string, lastHeartbeat?: Date): Promise<TerminalDevice | undefined>;
+
+  // Terminal Sessions (Active payment sessions on terminals)
+  getTerminalSessions(terminalDeviceId?: string, status?: string): Promise<TerminalSession[]>;
+  getTerminalSession(id: string): Promise<TerminalSession | undefined>;
+  getActiveTerminalSession(terminalDeviceId: string): Promise<TerminalSession | undefined>;
+  createTerminalSession(data: InsertTerminalSession): Promise<TerminalSession>;
+  updateTerminalSession(id: string, data: Partial<TerminalSession>): Promise<TerminalSession | undefined>;
 
   // Audit Logs
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
@@ -1591,6 +1609,87 @@ export class DatabaseStorage implements IStorage {
 
   async updatePaymentTransaction(id: string, data: Partial<PaymentTransaction>): Promise<PaymentTransaction | undefined> {
     const [result] = await db.update(paymentTransactions).set(data).where(eq(paymentTransactions.id, id)).returning();
+    return result;
+  }
+
+  // Terminal Devices (EMV Card Readers)
+  async getTerminalDevices(propertyId?: string): Promise<TerminalDevice[]> {
+    if (propertyId) {
+      return db.select().from(terminalDevices).where(eq(terminalDevices.propertyId, propertyId)).orderBy(terminalDevices.name);
+    }
+    return db.select().from(terminalDevices).orderBy(terminalDevices.name);
+  }
+
+  async getTerminalDevice(id: string): Promise<TerminalDevice | undefined> {
+    const [result] = await db.select().from(terminalDevices).where(eq(terminalDevices.id, id));
+    return result;
+  }
+
+  async getTerminalDevicesByWorkstation(workstationId: string): Promise<TerminalDevice[]> {
+    return db.select().from(terminalDevices).where(eq(terminalDevices.workstationId, workstationId)).orderBy(terminalDevices.name);
+  }
+
+  async createTerminalDevice(data: InsertTerminalDevice): Promise<TerminalDevice> {
+    const [result] = await db.insert(terminalDevices).values(data).returning();
+    return result;
+  }
+
+  async updateTerminalDevice(id: string, data: Partial<InsertTerminalDevice>): Promise<TerminalDevice | undefined> {
+    const [result] = await db.update(terminalDevices).set(data).where(eq(terminalDevices.id, id)).returning();
+    return result;
+  }
+
+  async deleteTerminalDevice(id: string): Promise<boolean> {
+    const result = await db.delete(terminalDevices).where(eq(terminalDevices.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async updateTerminalDeviceStatus(id: string, status: string, lastHeartbeat?: Date): Promise<TerminalDevice | undefined> {
+    const updateData: Partial<TerminalDevice> = { status };
+    if (lastHeartbeat) {
+      updateData.lastHeartbeat = lastHeartbeat;
+    }
+    const [result] = await db.update(terminalDevices).set(updateData).where(eq(terminalDevices.id, id)).returning();
+    return result;
+  }
+
+  // Terminal Sessions (Active payment sessions on terminals)
+  async getTerminalSessions(terminalDeviceId?: string, status?: string): Promise<TerminalSession[]> {
+    const conditions = [];
+    if (terminalDeviceId) {
+      conditions.push(eq(terminalSessions.terminalDeviceId, terminalDeviceId));
+    }
+    if (status) {
+      conditions.push(eq(terminalSessions.status, status));
+    }
+    if (conditions.length > 0) {
+      return db.select().from(terminalSessions).where(and(...conditions)).orderBy(desc(terminalSessions.initiatedAt));
+    }
+    return db.select().from(terminalSessions).orderBy(desc(terminalSessions.initiatedAt));
+  }
+
+  async getTerminalSession(id: string): Promise<TerminalSession | undefined> {
+    const [result] = await db.select().from(terminalSessions).where(eq(terminalSessions.id, id));
+    return result;
+  }
+
+  async getActiveTerminalSession(terminalDeviceId: string): Promise<TerminalSession | undefined> {
+    const activeStatuses = ['pending', 'processing', 'awaiting_card', 'card_inserted', 'pin_entry'];
+    const [result] = await db.select().from(terminalSessions)
+      .where(and(
+        eq(terminalSessions.terminalDeviceId, terminalDeviceId),
+        inArray(terminalSessions.status, activeStatuses)
+      ));
+    return result;
+  }
+
+  async createTerminalSession(data: InsertTerminalSession): Promise<TerminalSession> {
+    const [result] = await db.insert(terminalSessions).values(data).returning();
+    return result;
+  }
+
+  async updateTerminalSession(id: string, data: Partial<TerminalSession>): Promise<TerminalSession | undefined> {
+    const [result] = await db.update(terminalSessions).set(data).where(eq(terminalSessions.id, id)).returning();
     return result;
   }
 

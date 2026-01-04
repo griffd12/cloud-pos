@@ -24,6 +24,11 @@ import {
   insertTipPoolPolicySchema, insertTipPoolRunSchema,
   // Payment schemas
   insertPaymentProcessorSchema,
+  insertTerminalDeviceSchema,
+  insertTerminalSessionSchema,
+  TERMINAL_MODELS,
+  TERMINAL_CONNECTION_TYPES,
+  TERMINAL_DEVICE_STATUSES,
 } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -8383,6 +8388,350 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("POS card payment error:", error);
       res.status(500).json({ success: false, message: "Payment processing failed" });
+    }
+  });
+
+  // ============================================================================
+  // TERMINAL DEVICES - EMV Card Reader Management
+  // ============================================================================
+
+  // Get terminal device metadata (models, connection types, statuses)
+  app.get("/api/terminal-devices/metadata", async (req, res) => {
+    res.json({
+      models: TERMINAL_MODELS,
+      connectionTypes: TERMINAL_CONNECTION_TYPES,
+      statuses: TERMINAL_DEVICE_STATUSES,
+    });
+  });
+
+  // Get all terminal devices for a property
+  app.get("/api/terminal-devices", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const devices = await storage.getTerminalDevices(propertyId as string);
+      res.json(devices);
+    } catch (error) {
+      console.error("Get terminal devices error:", error);
+      res.status(500).json({ message: "Failed to get terminal devices" });
+    }
+  });
+
+  // Get terminal devices for a specific workstation
+  app.get("/api/terminal-devices/workstation/:workstationId", async (req, res) => {
+    try {
+      const devices = await storage.getTerminalDevicesByWorkstation(req.params.workstationId);
+      res.json(devices);
+    } catch (error) {
+      console.error("Get workstation terminal devices error:", error);
+      res.status(500).json({ message: "Failed to get terminal devices" });
+    }
+  });
+
+  // Get a single terminal device
+  app.get("/api/terminal-devices/:id", async (req, res) => {
+    try {
+      const device = await storage.getTerminalDevice(req.params.id);
+      if (!device) {
+        return res.status(404).json({ message: "Terminal device not found" });
+      }
+      res.json(device);
+    } catch (error) {
+      console.error("Get terminal device error:", error);
+      res.status(500).json({ message: "Failed to get terminal device" });
+    }
+  });
+
+  // Create a terminal device
+  app.post("/api/terminal-devices", async (req, res) => {
+    try {
+      const parsed = insertTerminalDeviceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid terminal device data", errors: parsed.error.flatten().fieldErrors });
+      }
+      const device = await storage.createTerminalDevice(parsed.data);
+      res.status(201).json(device);
+    } catch (error) {
+      console.error("Create terminal device error:", error);
+      res.status(500).json({ message: "Failed to create terminal device" });
+    }
+  });
+
+  // Update a terminal device
+  app.patch("/api/terminal-devices/:id", async (req, res) => {
+    try {
+      const parsed = insertTerminalDeviceSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid terminal device data", errors: parsed.error.flatten().fieldErrors });
+      }
+      const device = await storage.updateTerminalDevice(req.params.id, parsed.data);
+      if (!device) {
+        return res.status(404).json({ message: "Terminal device not found" });
+      }
+      res.json(device);
+    } catch (error) {
+      console.error("Update terminal device error:", error);
+      res.status(500).json({ message: "Failed to update terminal device" });
+    }
+  });
+
+  // Delete a terminal device
+  app.delete("/api/terminal-devices/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteTerminalDevice(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Terminal device not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete terminal device error:", error);
+      res.status(500).json({ message: "Failed to delete terminal device" });
+    }
+  });
+
+  // Update terminal device status (for heartbeat/status polling)
+  app.post("/api/terminal-devices/:id/heartbeat", async (req, res) => {
+    try {
+      const { status } = req.body;
+      const device = await storage.updateTerminalDeviceStatus(
+        req.params.id,
+        status || "online",
+        new Date()
+      );
+      if (!device) {
+        return res.status(404).json({ message: "Terminal device not found" });
+      }
+      res.json(device);
+    } catch (error) {
+      console.error("Terminal heartbeat error:", error);
+      res.status(500).json({ message: "Failed to update terminal status" });
+    }
+  });
+
+  // ============================================================================
+  // TERMINAL SESSIONS - Payment sessions on EMV terminals
+  // ============================================================================
+
+  // Get terminal sessions
+  app.get("/api/terminal-sessions", async (req, res) => {
+    try {
+      const { terminalDeviceId, status } = req.query;
+      const sessions = await storage.getTerminalSessions(
+        terminalDeviceId as string,
+        status as string
+      );
+      res.json(sessions);
+    } catch (error) {
+      console.error("Get terminal sessions error:", error);
+      res.status(500).json({ message: "Failed to get terminal sessions" });
+    }
+  });
+
+  // Get a single terminal session
+  app.get("/api/terminal-sessions/:id", async (req, res) => {
+    try {
+      const session = await storage.getTerminalSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Terminal session not found" });
+      }
+      res.json(session);
+    } catch (error) {
+      console.error("Get terminal session error:", error);
+      res.status(500).json({ message: "Failed to get terminal session" });
+    }
+  });
+
+  // Get active session for a terminal
+  app.get("/api/terminal-devices/:terminalId/active-session", async (req, res) => {
+    try {
+      const session = await storage.getActiveTerminalSession(req.params.terminalId);
+      res.json(session || null);
+    } catch (error) {
+      console.error("Get active terminal session error:", error);
+      res.status(500).json({ message: "Failed to get active session" });
+    }
+  });
+
+  // Create a terminal session (initiate payment on terminal)
+  app.post("/api/terminal-sessions", async (req, res) => {
+    try {
+      const parsed = insertTerminalSessionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid session data", errors: parsed.error.flatten().fieldErrors });
+      }
+
+      // Check if terminal has an active session
+      const activeSession = await storage.getActiveTerminalSession(parsed.data.terminalDeviceId);
+      if (activeSession) {
+        return res.status(409).json({ 
+          message: "Terminal has an active payment session",
+          activeSessionId: activeSession.id,
+        });
+      }
+
+      // Get the terminal to verify it exists and is online
+      const terminal = await storage.getTerminalDevice(parsed.data.terminalDeviceId);
+      if (!terminal) {
+        return res.status(404).json({ message: "Terminal device not found" });
+      }
+      if (terminal.status !== "online") {
+        return res.status(400).json({ message: `Terminal is ${terminal.status}, cannot initiate payment` });
+      }
+
+      // Set session expiration (5 minutes from now)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 5);
+
+      const session = await storage.createTerminalSession({
+        ...parsed.data,
+        status: "pending",
+        expiresAt,
+      });
+
+      // Update terminal status to busy
+      await storage.updateTerminalDeviceStatus(terminal.id, "busy");
+
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Create terminal session error:", error);
+      res.status(500).json({ message: "Failed to create terminal session" });
+    }
+  });
+
+  // Update terminal session status
+  app.patch("/api/terminal-sessions/:id", async (req, res) => {
+    try {
+      const session = await storage.getTerminalSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Terminal session not found" });
+      }
+
+      const { status, statusMessage, processorReference, paymentTransactionId, metadata } = req.body;
+      
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (statusMessage) updateData.statusMessage = statusMessage;
+      if (processorReference) updateData.processorReference = processorReference;
+      if (paymentTransactionId) updateData.paymentTransactionId = paymentTransactionId;
+      if (metadata) updateData.metadata = metadata;
+
+      // If session is complete (approved, declined, cancelled, timeout, error), set completedAt
+      const terminalStatuses = ["approved", "declined", "cancelled", "timeout", "error"];
+      if (status && terminalStatuses.includes(status)) {
+        updateData.completedAt = new Date();
+        
+        // Reset terminal status to online
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+      }
+
+      const updated = await storage.updateTerminalSession(req.params.id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update terminal session error:", error);
+      res.status(500).json({ message: "Failed to update terminal session" });
+    }
+  });
+
+  // Cancel a terminal session
+  app.post("/api/terminal-sessions/:id/cancel", async (req, res) => {
+    try {
+      const session = await storage.getTerminalSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Terminal session not found" });
+      }
+
+      const activeStatuses = ["pending", "processing", "awaiting_card", "card_inserted", "pin_entry"];
+      if (!activeStatuses.includes(session.status || "")) {
+        return res.status(400).json({ message: "Session is not active, cannot cancel" });
+      }
+
+      const updated = await storage.updateTerminalSession(req.params.id, {
+        status: "cancelled",
+        statusMessage: req.body.reason || "Cancelled by user",
+        completedAt: new Date(),
+      });
+
+      // Reset terminal status
+      await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Cancel terminal session error:", error);
+      res.status(500).json({ message: "Failed to cancel terminal session" });
+    }
+  });
+
+  // Simulate terminal callback (for testing/demo)
+  app.post("/api/terminal-sessions/:id/simulate-callback", async (req, res) => {
+    try {
+      const session = await storage.getTerminalSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Terminal session not found" });
+      }
+
+      const { action } = req.body; // 'approve' or 'decline'
+      
+      if (action === "approve") {
+        // Create a payment transaction for the approved payment
+        const terminal = await storage.getTerminalDevice(session.terminalDeviceId);
+        const processor = terminal?.paymentProcessorId 
+          ? await storage.getPaymentProcessor(terminal.paymentProcessorId)
+          : null;
+
+        let transaction = null;
+        if (processor) {
+          transaction = await storage.createPaymentTransaction({
+            paymentProcessorId: processor.id,
+            gatewayTransactionId: `SIM-${Date.now()}`,
+            authCode: "SIM" + Math.floor(Math.random() * 100000).toString().padStart(6, "0"),
+            cardBrand: "visa",
+            cardLast4: "4242",
+            entryMode: "contactless",
+            authAmount: session.amount,
+            status: "authorized",
+            transactionType: "auth",
+            responseCode: "00",
+            responseMessage: "Approved (Simulated)",
+            workstationId: session.workstationId || undefined,
+            employeeId: session.employeeId || undefined,
+            terminalId: terminal?.terminalId || terminal?.id,
+          });
+        }
+
+        await storage.updateTerminalSession(session.id, {
+          status: "approved",
+          statusMessage: "Payment approved",
+          paymentTransactionId: transaction?.id,
+          completedAt: new Date(),
+        });
+
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+        res.json({
+          success: true,
+          approved: true,
+          transactionId: transaction?.id,
+          authCode: transaction?.authCode,
+          cardLast4: transaction?.cardLast4,
+          cardBrand: transaction?.cardBrand,
+        });
+      } else {
+        await storage.updateTerminalSession(session.id, {
+          status: "declined",
+          statusMessage: "Card declined",
+          completedAt: new Date(),
+        });
+
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+        res.json({
+          success: false,
+          declined: true,
+          declineReason: "Insufficient funds (Simulated)",
+        });
+      }
+    } catch (error) {
+      console.error("Simulate terminal callback error:", error);
+      res.status(500).json({ message: "Failed to simulate callback" });
     }
   });
 

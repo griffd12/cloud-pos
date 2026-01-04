@@ -554,6 +554,86 @@ export const paymentTransactionsRelations = relations(paymentTransactions, ({ on
   employee: one(employees, { fields: [paymentTransactions.employeeId], references: [employees.id] }),
 }));
 
+// ============================================================================
+// PAYMENT TERMINAL DEVICES (External EMV Card Readers)
+// ============================================================================
+
+// Terminal device statuses
+export const TERMINAL_DEVICE_STATUSES = ["online", "offline", "busy", "error", "maintenance"] as const;
+export type TerminalDeviceStatus = (typeof TERMINAL_DEVICE_STATUSES)[number];
+
+// Terminal session statuses
+export const TERMINAL_SESSION_STATUSES = ["pending", "processing", "awaiting_card", "card_inserted", "pin_entry", "approved", "declined", "cancelled", "timeout", "error"] as const;
+export type TerminalSessionStatus = (typeof TERMINAL_SESSION_STATUSES)[number];
+
+// Terminal device models (common EMV terminals)
+export const TERMINAL_MODELS = ["pax_a920", "pax_s300", "verifone_vx520", "verifone_vx820", "verifone_p400", "ingenico_lane_3000", "ingenico_lane_5000", "stripe_s700", "stripe_m2", "stripe_wisepos_e", "bbpos_chipper", "generic"] as const;
+export type TerminalModel = (typeof TERMINAL_MODELS)[number];
+
+// Connection types for terminals
+export const TERMINAL_CONNECTION_TYPES = ["ethernet", "wifi", "usb", "bluetooth", "cloud"] as const;
+export type TerminalConnectionType = (typeof TERMINAL_CONNECTION_TYPES)[number];
+
+// Terminal Devices - Physical EMV card readers
+export const terminalDevices = pgTable("terminal_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  paymentProcessorId: varchar("payment_processor_id").references(() => paymentProcessors.id),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  name: text("name").notNull(),
+  model: text("model").notNull(), // See TERMINAL_MODELS
+  serialNumber: text("serial_number"),
+  terminalId: text("terminal_id"), // Processor-assigned terminal ID
+  connectionType: text("connection_type").default("ethernet"), // See TERMINAL_CONNECTION_TYPES
+  networkAddress: text("network_address"), // IP address or hostname for network terminals
+  port: integer("port"), // Network port if applicable
+  cloudDeviceId: text("cloud_device_id"), // For cloud-connected terminals (e.g., Stripe Terminal device ID)
+  status: text("status").default("offline"), // See TERMINAL_DEVICE_STATUSES
+  lastHeartbeat: timestamp("last_heartbeat"),
+  capabilities: jsonb("capabilities"), // Supported features: {contactless, chip, swipe, pinDebit, cashback}
+  firmwareVersion: text("firmware_version"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Terminal Sessions - Active payment sessions on terminals
+export const terminalSessions = pgTable("terminal_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  terminalDeviceId: varchar("terminal_device_id").notNull().references(() => terminalDevices.id),
+  checkId: varchar("check_id").references(() => checks.id),
+  tenderId: varchar("tender_id").references(() => tenders.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  amount: integer("amount").notNull(), // Amount in cents
+  tipAmount: integer("tip_amount").default(0), // Pre-set tip if any
+  currency: text("currency").default("usd"),
+  status: text("status").default("pending"), // See TERMINAL_SESSION_STATUSES
+  statusMessage: text("status_message"), // Human-readable status message
+  processorReference: text("processor_reference"), // Reference ID from processor SDK
+  paymentTransactionId: varchar("payment_transaction_id").references(() => paymentTransactions.id),
+  initiatedAt: timestamp("initiated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  expiresAt: timestamp("expires_at"), // Session timeout
+  metadata: jsonb("metadata"), // Additional processor-specific data
+});
+
+// Relations
+export const terminalDevicesRelations = relations(terminalDevices, ({ one, many }) => ({
+  property: one(properties, { fields: [terminalDevices.propertyId], references: [properties.id] }),
+  paymentProcessor: one(paymentProcessors, { fields: [terminalDevices.paymentProcessorId], references: [paymentProcessors.id] }),
+  workstation: one(workstations, { fields: [terminalDevices.workstationId], references: [workstations.id] }),
+  sessions: many(terminalSessions),
+}));
+
+export const terminalSessionsRelations = relations(terminalSessions, ({ one }) => ({
+  terminalDevice: one(terminalDevices, { fields: [terminalSessions.terminalDeviceId], references: [terminalDevices.id] }),
+  check: one(checks, { fields: [terminalSessions.checkId], references: [checks.id] }),
+  tender: one(tenders, { fields: [terminalSessions.tenderId], references: [tenders.id] }),
+  employee: one(employees, { fields: [terminalSessions.employeeId], references: [employees.id] }),
+  workstation: one(workstations, { fields: [terminalSessions.workstationId], references: [workstations.id] }),
+  paymentTransaction: one(paymentTransactions, { fields: [terminalSessions.paymentTransactionId], references: [paymentTransactions.id] }),
+}));
+
 export const discounts = pgTable("discounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
@@ -809,6 +889,13 @@ export const insertModifierGroupModifierSchema = createInsertSchema(modifierGrou
 export const insertMenuItemModifierGroupSchema = createInsertSchema(menuItemModifierGroups).omit({ id: true });
 export const insertPaymentProcessorSchema = createInsertSchema(paymentProcessors).omit({ id: true, createdAt: true });
 export const insertPaymentTransactionSchema = createInsertSchema(paymentTransactions).omit({ id: true, initiatedAt: true });
+export const insertTerminalDeviceSchema = createInsertSchema(terminalDevices).omit({ id: true, createdAt: true }).extend({
+  port: z.coerce.number().optional(),
+});
+export const insertTerminalSessionSchema = createInsertSchema(terminalSessions).omit({ id: true, initiatedAt: true }).extend({
+  amount: z.coerce.number(),
+  tipAmount: z.coerce.number().optional(),
+});
 export const insertTenderSchema = createInsertSchema(tenders).omit({ id: true });
 export const insertDiscountSchema = createInsertSchema(discounts).omit({ id: true });
 export const insertServiceChargeSchema = createInsertSchema(serviceCharges).omit({ id: true });
@@ -876,6 +963,10 @@ export type PaymentProcessor = typeof paymentProcessors.$inferSelect;
 export type InsertPaymentProcessor = z.infer<typeof insertPaymentProcessorSchema>;
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
 export type InsertPaymentTransaction = z.infer<typeof insertPaymentTransactionSchema>;
+export type TerminalDevice = typeof terminalDevices.$inferSelect;
+export type InsertTerminalDevice = z.infer<typeof insertTerminalDeviceSchema>;
+export type TerminalSession = typeof terminalSessions.$inferSelect;
+export type InsertTerminalSession = z.infer<typeof insertTerminalSessionSchema>;
 export type Tender = typeof tenders.$inferSelect;
 export type InsertTender = z.infer<typeof insertTenderSchema>;
 export type Discount = typeof discounts.$inferSelect;
