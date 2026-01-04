@@ -594,6 +594,23 @@ export interface IStorage {
   createOvertimeRule(data: InsertOvertimeRule): Promise<OvertimeRule>;
   updateOvertimeRule(id: string, data: Partial<InsertOvertimeRule>): Promise<OvertimeRule | undefined>;
   deleteOvertimeRule(id: string): Promise<boolean>;
+
+  // ============================================================================
+  // LOYALTY PROGRAMS
+  // ============================================================================
+
+  getLoyaltyPrograms(enterpriseId?: string): Promise<LoyaltyProgram[]>;
+  createLoyaltyProgram(data: InsertLoyaltyProgram): Promise<LoyaltyProgram>;
+  updateLoyaltyProgram(id: string, data: Partial<InsertLoyaltyProgram>): Promise<LoyaltyProgram | undefined>;
+  getLoyaltyMembers(programId?: string, search?: string): Promise<LoyaltyMember[]>;
+  getLoyaltyMember(id: string): Promise<LoyaltyMember | undefined>;
+  getLoyaltyMemberByIdentifier(identifier: string): Promise<LoyaltyMember | undefined>;
+  createLoyaltyMember(data: InsertLoyaltyMember): Promise<LoyaltyMember>;
+  updateLoyaltyMember(id: string, data: Partial<InsertLoyaltyMember>): Promise<LoyaltyMember | undefined>;
+  createLoyaltyTransaction(data: InsertLoyaltyTransaction): Promise<LoyaltyTransaction>;
+  getLoyaltyTransactionsByMember(memberId: string): Promise<LoyaltyTransaction[]>;
+  getLoyaltyRewards(programId: string): Promise<LoyaltyReward[]>;
+  createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward>;
 }
 
 export class DatabaseStorage implements IStorage {

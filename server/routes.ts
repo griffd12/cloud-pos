@@ -9604,7 +9604,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check for auto-awards after earning points
       const autoAwardedRewards: string[] = [];
       const rewards = await storage.getLoyaltyRewards(member.programId);
-      const memberTransactions = await (storage as any).getLoyaltyTransactionsByMember(member.id);
+      const memberTransactions = await storage.getLoyaltyTransactionsByMember(member.id);
       
       for (const reward of rewards) {
         if (!reward.active || !reward.autoAwardAtPoints) continue;
