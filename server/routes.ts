@@ -8153,5 +8153,238 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // POS CARD PAYMENT - Unified endpoint for processing card payments from POS
+  // Routes through the property's configured payment processor
+  // ============================================================================
+
+  // Get payment processor config for a property (for frontend to know what mode we're in)
+  app.get("/api/pos/payment-config/:propertyId", async (req, res) => {
+    try {
+      const processor = await storage.getActivePaymentProcessor(req.params.propertyId);
+      
+      if (!processor) {
+        return res.json({
+          configured: false,
+          mode: "demo",
+          message: "No payment processor configured - running in demo mode",
+        });
+      }
+
+      // Check if credentials are available
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      const credentialsConfigured = missingKeys.length === 0;
+
+      res.json({
+        configured: true,
+        credentialsConfigured,
+        processorId: processor.id,
+        processorName: processor.name,
+        gatewayType: processor.gatewayType,
+        environment: processor.environment || "sandbox",
+        mode: credentialsConfigured ? (processor.environment === "production" ? "live" : "test") : "demo",
+        supportsTokenization: processor.supportsTokenization,
+        supportsTipAdjust: processor.supportsTipAdjust,
+        supportsPartialAuth: processor.supportsPartialAuth,
+      });
+    } catch (error) {
+      console.error("Get payment config error:", error);
+      res.status(500).json({ message: "Failed to get payment config" });
+    }
+  });
+
+  // Process a card payment from the POS
+  // This is the main endpoint the POS frontend calls when processing a credit/debit card
+  app.post("/api/pos/process-card-payment", async (req, res) => {
+    try {
+      const { checkId, tenderId, amount, cardData, employeeId, workstationId } = req.body;
+
+      if (!checkId || !tenderId || !amount) {
+        return res.status(400).json({ success: false, message: "Check ID, tender ID, and amount required" });
+      }
+
+      // Get the check to find the property
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ success: false, message: "Check not found" });
+      }
+
+      // Get the RVC to find the property
+      const rvc = await storage.getRvc(check.rvcId);
+      if (!rvc) {
+        return res.status(404).json({ success: false, message: "RVC not found" });
+      }
+
+      const propertyId = rvc.propertyId;
+
+      // Get the tender to check if it has a linked processor
+      const tender = await storage.getTender(tenderId);
+      if (!tender) {
+        return res.status(404).json({ success: false, message: "Tender not found" });
+      }
+
+      // Get the payment processor - either from tender or property default
+      let processor = null;
+      if (tender.paymentProcessorId) {
+        processor = await storage.getPaymentProcessor(tender.paymentProcessorId);
+      }
+      if (!processor) {
+        processor = await storage.getActivePaymentProcessor(propertyId);
+      }
+
+      // If no processor configured, run in demo mode
+      if (!processor) {
+        // Demo mode - simulate approval based on test card patterns
+        const cleanCardNumber = cardData?.cardNumber?.replace(/\s/g, "") || "";
+        const isDeclineCard = cleanCardNumber.startsWith("4000000000000002");
+        
+        if (isDeclineCard) {
+          return res.json({
+            success: false,
+            declined: true,
+            declineReason: "Insufficient funds (demo decline)",
+            message: "Card declined",
+          });
+        }
+
+        // Demo approval
+        return res.json({
+          success: true,
+          approved: true,
+          transactionId: `DEMO-${Date.now()}`,
+          authCode: "DEMO",
+          cardLast4: cleanCardNumber.slice(-4) || "0000",
+          cardBrand: cleanCardNumber.startsWith("4") ? "visa" : cleanCardNumber.startsWith("5") ? "mastercard" : "card",
+          message: "Payment approved (demo mode)",
+          demoMode: true,
+        });
+      }
+
+      // Check if credentials are configured
+      const requiredKeys = getRequiredCredentialKeys(processor.gatewayType);
+      const credentials = resolveCredentials(processor.credentialKeyPrefix, requiredKeys);
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+
+      // If credentials not configured, fall back to demo mode
+      if (missingKeys.length > 0) {
+        const cleanCardNumber = cardData?.cardNumber?.replace(/\s/g, "") || "";
+        const isDeclineCard = cleanCardNumber.startsWith("4000000000000002");
+        
+        if (isDeclineCard) {
+          return res.json({
+            success: false,
+            declined: true,
+            declineReason: "Insufficient funds (demo decline)",
+            message: "Card declined",
+          });
+        }
+
+        return res.json({
+          success: true,
+          approved: true,
+          transactionId: `DEMO-${Date.now()}`,
+          authCode: "DEMO",
+          cardLast4: cleanCardNumber.slice(-4) || "0000",
+          cardBrand: cleanCardNumber.startsWith("4") ? "visa" : cleanCardNumber.startsWith("5") ? "mastercard" : "card",
+          message: `Payment approved (credentials not configured for ${processor.name})`,
+          demoMode: true,
+        });
+      }
+
+      // Production/test mode with real processor
+      const settings = (processor.gatewaySettings as Record<string, any>) || {};
+      const environment = (processor.environment as "sandbox" | "production") || "sandbox";
+
+      // For sandbox/test environment, we can simulate without hitting the real gateway
+      if (environment === "sandbox") {
+        const cleanCardNumber = cardData?.cardNumber?.replace(/\s/g, "") || "";
+        const isDeclineCard = cleanCardNumber.startsWith("4000000000000002");
+        
+        // Create a transaction record for test mode
+        const transaction = await storage.createPaymentTransaction({
+          paymentProcessorId: processor.id,
+          gatewayTransactionId: `TEST-${Date.now()}`,
+          authCode: isDeclineCard ? null : "TEST123",
+          cardBrand: cleanCardNumber.startsWith("4") ? "visa" : cleanCardNumber.startsWith("5") ? "mastercard" : "card",
+          cardLast4: cleanCardNumber.slice(-4) || "0000",
+          entryMode: "manual",
+          authAmount: Math.round(amount * 100),
+          status: isDeclineCard ? "declined" : "authorized",
+          transactionType: "auth",
+          responseCode: isDeclineCard ? "05" : "00",
+          responseMessage: isDeclineCard ? "Declined" : "Approved",
+          employeeId,
+          workstationId,
+        });
+
+        if (isDeclineCard) {
+          return res.json({
+            success: false,
+            declined: true,
+            declineReason: "Insufficient funds (test decline card)",
+            message: "Card declined",
+            transactionId: transaction.id,
+          });
+        }
+
+        return res.json({
+          success: true,
+          approved: true,
+          transactionId: transaction.id,
+          gatewayTransactionId: transaction.gatewayTransactionId,
+          authCode: transaction.authCode,
+          cardLast4: transaction.cardLast4,
+          cardBrand: transaction.cardBrand,
+          message: `Payment approved (${processor.gatewayType} test mode)`,
+          testMode: true,
+        });
+      }
+
+      // Production mode requires tokenized payment data, not raw card numbers
+      // This endpoint is for demo/test purposes only
+      // In production, integrate processor-specific tokenization:
+      // - Stripe: Use Stripe Elements to get PaymentMethod ID
+      // - Elavon: Use Converge hosted payment page to get token
+      // - Others: Use their respective secure tokenization SDKs
+      
+      // For now, reject production requests that contain raw card data
+      if (cardData?.cardNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Production mode requires tokenized payment data. Raw card numbers are not accepted for PCI compliance.",
+          requiresTokenization: true,
+          gatewayType: processor.gatewayType,
+        });
+      }
+
+      // If we get here with a paymentToken (future implementation), we can process it
+      const { paymentToken } = req.body;
+      if (!paymentToken) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment token required for production transactions. Please configure payment terminal integration.",
+          requiresTokenization: true,
+          gatewayType: processor.gatewayType,
+        });
+      }
+
+      // Future: Process tokenized payment through adapter
+      // const adapter = createPaymentAdapter(processor.gatewayType, credentials, settings, environment);
+      // const result = await adapter.authorize({ ... paymentToken ... });
+      
+      return res.status(501).json({
+        success: false,
+        message: "Production card processing requires payment terminal or tokenization integration. Contact support for setup.",
+        gatewayType: processor.gatewayType,
+      });
+
+    } catch (error) {
+      console.error("POS card payment error:", error);
+      res.status(500).json({ success: false, message: "Payment processing failed" });
+    }
+  });
+
   return httpServer;
 }

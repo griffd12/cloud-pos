@@ -177,7 +177,7 @@ export function PaymentModal({
 
     const cleanCardNumber = cardNumber.replace(/\s/g, "");
     
-    // Basic validation for UI demonstration
+    // Basic validation
     if (cleanCardNumber.length < 15) {
       toast({ title: "Invalid card number", variant: "destructive" });
       return;
@@ -193,40 +193,51 @@ export function PaymentModal({
 
     setIsProcessingCard(true);
 
-    // IMPORTANT: This is a TEST MODE simulation only.
-    // In production, you would NEVER send raw card data to your server.
-    // Instead, use one of these PCI-compliant approaches:
-    // 1. Stripe Terminal - physical card readers that tokenize cards
-    // 2. Stripe Elements - client-side tokenization for online payments
-    // 3. Payment terminal integration (PAX, Verifone, etc.) that handles card data
-    
-    // Simulate processing delay for demo purposes
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Test card logic - simulate responses based on card number
-    const isDeclineCard = cleanCardNumber.startsWith("4000000000000002");
-    const isSuccessCard = cleanCardNumber.startsWith("4242424242424242") || 
-                          cleanCardNumber.startsWith("4") || 
-                          cleanCardNumber.startsWith("5");
-    
-    if (isDeclineCard) {
-      setIsProcessingCard(false);
-      toast({ title: "Card Declined", description: "Insufficient funds (test decline card)", variant: "destructive" });
-      return;
-    }
-    
-    if (isSuccessCard) {
-      // Record the payment on the check
-      // In production, this would include the transaction ID from the payment processor
-      onPayment(cardTender.id, cardAmount, false);
-      resetCardEntry();
-      toast({ 
-        title: "Card Approved", 
-        description: `Charged $${cardAmount.toFixed(2)} to card ending in ${cleanCardNumber.slice(-4)} (TEST MODE)` 
+    try {
+      // Call the unified POS card payment endpoint
+      // This routes through the property's configured payment processor
+      const response = await apiRequest("POST", "/api/pos/process-card-payment", {
+        checkId: check.id,
+        tenderId: cardTender.id,
+        amount: cardAmount,
+        cardData: {
+          cardNumber: cleanCardNumber,
+          expMonth: parseInt(cardExpiry.slice(0, 2)),
+          expYear: parseInt("20" + cardExpiry.slice(3)),
+          cvv: cardCvv,
+          cardholderName: cardName || undefined,
+        },
       });
-    } else {
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Payment approved - record it on the check
+        onPayment(cardTender.id, cardAmount, false, result.transactionId);
+        resetCardEntry();
+        
+        const modeLabel = result.demoMode ? " (Demo)" : result.testMode ? " (Test)" : "";
+        toast({ 
+          title: "Card Approved", 
+          description: `$${cardAmount.toFixed(2)} charged to ${result.cardBrand || "card"} ending ${result.cardLast4}${modeLabel}` 
+        });
+      } else {
+        // Payment declined
+        toast({ 
+          title: "Card Declined", 
+          description: result.declineReason || result.message || "Please try another card", 
+          variant: "destructive" 
+        });
+      }
+    } catch (error: any) {
+      console.error("Card payment error:", error);
+      toast({ 
+        title: "Payment Failed", 
+        description: error.message || "Unable to process card payment", 
+        variant: "destructive" 
+      });
+    } finally {
       setIsProcessingCard(false);
-      toast({ title: "Invalid card", variant: "destructive" });
     }
   };
 
@@ -327,10 +338,10 @@ export function PaymentModal({
             </div>
 
             <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-              <p className="font-medium mb-1">Test Cards (Demo Mode)</p>
+              <p className="font-medium mb-1">Test Cards</p>
               <p>Approve: 4242 4242 4242 4242</p>
               <p>Decline: 4000 0000 0000 0002</p>
-              <p className="text-xs mt-2 opacity-75">Any Visa/MC number will approve in test mode</p>
+              <p className="text-xs mt-2 opacity-75">Uses property's configured processor (or demo mode if none)</p>
             </div>
 
             <Separator />
