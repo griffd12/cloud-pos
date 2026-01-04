@@ -2424,7 +2424,15 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 5b. Delete loyalty transactions and redemptions BEFORE checks (they reference checks)
-      const loyaltyTransResult = await tx.delete(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
+      // Must delete by BOTH propertyId AND checkId since checkId is the FK constraint
+      let loyaltyTransResult = { rowCount: 0 };
+      if (checkIds.length > 0) {
+        loyaltyTransResult = await tx.delete(loyaltyTransactions).where(inArray(loyaltyTransactions.checkId, checkIds));
+      }
+      // Also delete by propertyId to catch any orphaned transactions
+      const additionalLoyaltyTrans = await tx.delete(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
+      loyaltyTransResult = { rowCount: (loyaltyTransResult.rowCount || 0) + (additionalLoyaltyTrans.rowCount || 0) };
+      
       const loyaltyRedemptionResult = await tx.delete(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
 
       // 6. Delete audit logs and checks
