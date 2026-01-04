@@ -2,12 +2,12 @@ import { useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
-  PaymentElement,
+  CardElement,
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
-import { Loader2, CreditCard, X, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, CreditCard, X, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
@@ -28,6 +28,22 @@ interface StripeCardFormProps {
   onCancel: () => void;
   onError: (message: string) => void;
 }
+
+const cardStyle = {
+  style: {
+    base: {
+      fontSize: "16px",
+      color: "#1a1a1a",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      "::placeholder": {
+        color: "#6b7280",
+      },
+    },
+    invalid: {
+      color: "#dc2626",
+    },
+  },
+};
 
 function CheckoutForm({
   amount,
@@ -51,19 +67,15 @@ function CheckoutForm({
       return;
     }
 
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMessage(null);
 
     try {
-      // First validate the form
-      const { error: submitError } = await elements.submit();
-      if (submitError) {
-        setErrorMessage(submitError.message || "Please check your card details");
-        setIsProcessing(false);
-        return;
-      }
-
-      // Create PaymentIntent on the server
       const intentRes = await apiRequest("POST", "/api/stripe/create-payment-intent", {
         amount,
         checkId,
@@ -78,15 +90,14 @@ function CheckoutForm({
         throw new Error(intentData.message || "Failed to create payment");
       }
 
-      // Confirm the payment
-      const { error, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        clientSecret: intentData.clientSecret,
-        confirmParams: {
-          return_url: window.location.href,
-        },
-        redirect: "if_required",
-      });
+      const { error, paymentIntent } = await stripe.confirmCardPayment(
+        intentData.clientSecret,
+        {
+          payment_method: {
+            card: cardElement,
+          },
+        }
+      );
 
       if (error) {
         setErrorMessage(error.message || "Payment failed");
@@ -95,24 +106,10 @@ function CheckoutForm({
       }
 
       if (paymentIntent && paymentIntent.status === "succeeded") {
-        // Get card details from the payment method
-        let cardBrand: string | undefined;
-        let cardLast4: string | undefined;
-        
-        if (paymentIntent.payment_method && typeof paymentIntent.payment_method === "string") {
-          try {
-            // We can't fetch payment method details from client, use metadata if available
-            cardBrand = "card";
-            cardLast4 = "****";
-          } catch {
-            // Ignore error, card details are optional
-          }
-        }
-
         onSuccess({
           paymentIntentId: paymentIntent.id,
-          cardBrand,
-          cardLast4,
+          cardBrand: "card",
+          cardLast4: "****",
         });
       } else {
         setErrorMessage("Payment was not completed");
@@ -128,15 +125,18 @@ function CheckoutForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="flex items-center gap-4">
-        <div className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-center shrink-0">
-          <p className="text-xs opacity-90">Charging</p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="bg-primary text-primary-foreground rounded-lg px-4 py-2 shrink-0">
           <p className="text-2xl font-bold tabular-nums" data-testid="text-stripe-amount">
             ${amount.toFixed(2)}
           </p>
         </div>
 
-        <div className="flex-1 flex gap-2">
+        <div className="flex-1 min-w-[280px] bg-white border rounded-lg p-3">
+          <CardElement options={cardStyle} />
+        </div>
+
+        <div className="flex gap-2 shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -149,7 +149,6 @@ function CheckoutForm({
           </Button>
           <Button
             type="submit"
-            className="flex-1"
             disabled={!stripe || !elements || isProcessing}
             data-testid="button-stripe-pay"
           >
@@ -161,24 +160,11 @@ function CheckoutForm({
             ) : (
               <>
                 <CreditCard className="w-4 h-4 mr-2" />
-                Pay Now
+                Pay ${amount.toFixed(2)}
               </>
             )}
           </Button>
         </div>
-      </div>
-
-      <div className="bg-card border rounded-lg p-3">
-        <PaymentElement
-          options={{
-            layout: {
-              type: "accordion",
-              defaultCollapsed: false,
-              radios: false,
-              spacedAccordionItems: false,
-            },
-          }}
-        />
       </div>
 
       {errorMessage && (
@@ -189,10 +175,6 @@ function CheckoutForm({
           </p>
         </div>
       )}
-
-      <p className="text-xs text-muted-foreground text-center">
-        Secured by Stripe
-      </p>
     </form>
   );
 }
@@ -215,22 +197,8 @@ export function StripeCardForm(props: StripeCardFormProps) {
     );
   }
 
-  const options = {
-    mode: "payment" as const,
-    amount: Math.round(props.amount * 100), // Amount in cents
-    currency: "usd",
-    paymentMethodTypes: ["card"], // Card only for POS - no Cash App, Klarna, Amazon Pay
-    appearance: {
-      theme: "stripe" as const,
-      variables: {
-        colorPrimary: "#0f172a",
-        borderRadius: "8px",
-      },
-    },
-  };
-
   return (
-    <Elements stripe={stripePromise} options={options}>
+    <Elements stripe={stripePromise}>
       <CheckoutForm {...props} />
     </Elements>
   );
