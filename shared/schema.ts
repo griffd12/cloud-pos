@@ -1843,3 +1843,687 @@ export type LaborSnapshot = typeof laborSnapshots.$inferSelect;
 export type InsertLaborSnapshot = z.infer<typeof insertLaborSnapshotSchema>;
 export type OvertimeRule = typeof overtimeRules.$inferSelect;
 export type InsertOvertimeRule = z.infer<typeof insertOvertimeRuleSchema>;
+
+// ============================================================================
+// PHASE 1: OFFLINE ORDER QUEUE
+// ============================================================================
+
+export const OFFLINE_ORDER_STATUSES = ["pending", "syncing", "synced", "failed", "conflict"] as const;
+export type OfflineOrderStatus = typeof OFFLINE_ORDER_STATUSES[number];
+
+export const offlineOrderQueue = pgTable("offline_order_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  localId: text("local_id").notNull(), // Client-generated UUID for deduplication
+  orderData: jsonb("order_data").notNull(), // Full check/items payload
+  status: text("status").default("pending"),
+  syncAttempts: integer("sync_attempts").default(0),
+  lastSyncAttempt: timestamp("last_sync_attempt"),
+  syncedCheckId: varchar("synced_check_id"), // After successful sync
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  syncedAt: timestamp("synced_at"),
+});
+
+export const insertOfflineOrderQueueSchema = createInsertSchema(offlineOrderQueue).omit({ id: true, createdAt: true, syncedAt: true });
+export type OfflineOrderQueue = typeof offlineOrderQueue.$inferSelect;
+export type InsertOfflineOrderQueue = z.infer<typeof insertOfflineOrderQueueSchema>;
+
+// ============================================================================
+// PHASE 2: FISCAL CLOSE / END-OF-DAY
+// ============================================================================
+
+export const FISCAL_PERIOD_STATUSES = ["open", "closing", "closed", "reopened"] as const;
+export type FiscalPeriodStatus = typeof FISCAL_PERIOD_STATUSES[number];
+
+export const fiscalPeriods = pgTable("fiscal_periods", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  businessDate: text("business_date").notNull(), // YYYY-MM-DD
+  status: text("status").default("open"),
+  openedAt: timestamp("opened_at").defaultNow(),
+  closedAt: timestamp("closed_at"),
+  closedById: varchar("closed_by_id").references(() => employees.id),
+  reopenedAt: timestamp("reopened_at"),
+  reopenedById: varchar("reopened_by_id").references(() => employees.id),
+  reopenReason: text("reopen_reason"),
+  // Financial Totals
+  grossSales: decimal("gross_sales", { precision: 12, scale: 2 }).default("0"),
+  netSales: decimal("net_sales", { precision: 12, scale: 2 }).default("0"),
+  taxCollected: decimal("tax_collected", { precision: 12, scale: 2 }).default("0"),
+  discountsTotal: decimal("discounts_total", { precision: 12, scale: 2 }).default("0"),
+  refundsTotal: decimal("refunds_total", { precision: 12, scale: 2 }).default("0"),
+  tipsTotal: decimal("tips_total", { precision: 12, scale: 2 }).default("0"),
+  serviceChargesTotal: decimal("service_charges_total", { precision: 12, scale: 2 }).default("0"),
+  checkCount: integer("check_count").default(0),
+  guestCount: integer("guest_count").default(0),
+  // Cash Reconciliation
+  cashExpected: decimal("cash_expected", { precision: 12, scale: 2 }).default("0"),
+  cashActual: decimal("cash_actual", { precision: 12, scale: 2 }),
+  cashVariance: decimal("cash_variance", { precision: 12, scale: 2 }),
+  // Card Totals
+  cardTotal: decimal("card_total", { precision: 12, scale: 2 }).default("0"),
+  // Notes
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const fiscalPeriodsRelations = relations(fiscalPeriods, ({ one }) => ({
+  property: one(properties, { fields: [fiscalPeriods.propertyId], references: [properties.id] }),
+  closedBy: one(employees, { fields: [fiscalPeriods.closedById], references: [employees.id] }),
+  reopenedBy: one(employees, { fields: [fiscalPeriods.reopenedById], references: [employees.id] }),
+}));
+
+export const insertFiscalPeriodSchema = createInsertSchema(fiscalPeriods).omit({ id: true, createdAt: true });
+export type FiscalPeriod = typeof fiscalPeriods.$inferSelect;
+export type InsertFiscalPeriod = z.infer<typeof insertFiscalPeriodSchema>;
+
+// ============================================================================
+// PHASE 2: CASH MANAGEMENT
+// ============================================================================
+
+export const DRAWER_STATUSES = ["assigned", "active", "counting", "closed"] as const;
+export type DrawerStatus = typeof DRAWER_STATUSES[number];
+
+export const cashDrawers = pgTable("cash_drawers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  name: text("name").notNull(),
+  active: boolean("active").default(true),
+});
+
+export const drawerAssignments = pgTable("drawer_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  drawerId: varchar("drawer_id").notNull().references(() => cashDrawers.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  businessDate: text("business_date").notNull(),
+  status: text("status").default("assigned"),
+  openingAmount: decimal("opening_amount", { precision: 12, scale: 2 }).notNull(),
+  expectedAmount: decimal("expected_amount", { precision: 12, scale: 2 }).default("0"),
+  actualAmount: decimal("actual_amount", { precision: 12, scale: 2 }),
+  variance: decimal("variance", { precision: 12, scale: 2 }),
+  openedAt: timestamp("opened_at").defaultNow(),
+  closedAt: timestamp("closed_at"),
+  closedById: varchar("closed_by_id").references(() => employees.id),
+  notes: text("notes"),
+});
+
+export const CASH_TRANSACTION_TYPES = ["sale", "refund", "paid_in", "paid_out", "drop", "pickup"] as const;
+export type CashTransactionType = typeof CASH_TRANSACTION_TYPES[number];
+
+export const cashTransactions = pgTable("cash_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  drawerId: varchar("drawer_id").references(() => cashDrawers.id),
+  assignmentId: varchar("assignment_id").references(() => drawerAssignments.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  transactionType: text("transaction_type").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  businessDate: text("business_date").notNull(),
+  checkId: varchar("check_id").references(() => checks.id),
+  reason: text("reason"),
+  managerApprovalId: varchar("manager_approval_id").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const safeCounts = pgTable("safe_counts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  businessDate: text("business_date").notNull(),
+  countType: text("count_type").notNull().default("daily"), // opening, mid_day, closing, daily
+  expectedAmount: decimal("expected_amount", { precision: 12, scale: 2 }),
+  actualAmount: decimal("actual_amount", { precision: 12, scale: 2 }).notNull(),
+  variance: decimal("variance", { precision: 12, scale: 2 }),
+  // Denomination breakdown
+  denominations: jsonb("denominations"), // { "100": 5, "50": 10, ... }
+  notes: text("notes"),
+  verifiedById: varchar("verified_by_id").references(() => employees.id),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCashDrawerSchema = createInsertSchema(cashDrawers).omit({ id: true });
+export const insertDrawerAssignmentSchema = createInsertSchema(drawerAssignments).omit({ id: true, openedAt: true });
+export const insertCashTransactionSchema = createInsertSchema(cashTransactions).omit({ id: true, createdAt: true });
+export const insertSafeCountSchema = createInsertSchema(safeCounts).omit({ id: true, createdAt: true });
+
+export type CashDrawer = typeof cashDrawers.$inferSelect;
+export type InsertCashDrawer = z.infer<typeof insertCashDrawerSchema>;
+export type DrawerAssignment = typeof drawerAssignments.$inferSelect;
+export type InsertDrawerAssignment = z.infer<typeof insertDrawerAssignmentSchema>;
+export type CashTransaction = typeof cashTransactions.$inferSelect;
+export type InsertCashTransaction = z.infer<typeof insertCashTransactionSchema>;
+export type SafeCount = typeof safeCounts.$inferSelect;
+export type InsertSafeCount = z.infer<typeof insertSafeCountSchema>;
+
+// ============================================================================
+// PHASE 2: GIFT CARDS
+// ============================================================================
+
+export const GIFT_CARD_STATUSES = ["active", "redeemed", "expired", "cancelled", "suspended"] as const;
+export type GiftCardStatus = typeof GIFT_CARD_STATUSES[number];
+
+export const giftCards = pgTable("gift_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  cardNumber: text("card_number").notNull().unique(),
+  pin: text("pin"), // Optional PIN for verification
+  initialBalance: decimal("initial_balance", { precision: 12, scale: 2 }).notNull(),
+  currentBalance: decimal("current_balance", { precision: 12, scale: 2 }).notNull(),
+  status: text("status").default("active"),
+  activatedAt: timestamp("activated_at"),
+  activatedById: varchar("activated_by_id").references(() => employees.id),
+  expiresAt: timestamp("expires_at"),
+  lastUsedAt: timestamp("last_used_at"),
+  purchaserName: text("purchaser_name"),
+  recipientName: text("recipient_name"),
+  recipientEmail: text("recipient_email"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const GIFT_CARD_TRANSACTION_TYPES = ["activation", "reload", "redemption", "refund", "adjustment", "expiration"] as const;
+export type GiftCardTransactionType = typeof GIFT_CARD_TRANSACTION_TYPES[number];
+
+export const giftCardTransactions = pgTable("gift_card_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  giftCardId: varchar("gift_card_id").notNull().references(() => giftCards.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  transactionType: text("transaction_type").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  balanceBefore: decimal("balance_before", { precision: 12, scale: 2 }).notNull(),
+  balanceAfter: decimal("balance_after", { precision: 12, scale: 2 }).notNull(),
+  checkId: varchar("check_id").references(() => checks.id),
+  checkPaymentId: varchar("check_payment_id").references(() => checkPayments.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGiftCardSchema = createInsertSchema(giftCards).omit({ id: true, createdAt: true });
+export const insertGiftCardTransactionSchema = createInsertSchema(giftCardTransactions).omit({ id: true, createdAt: true });
+
+export type GiftCard = typeof giftCards.$inferSelect;
+export type InsertGiftCard = z.infer<typeof insertGiftCardSchema>;
+export type GiftCardTransaction = typeof giftCardTransactions.$inferSelect;
+export type InsertGiftCardTransaction = z.infer<typeof insertGiftCardTransactionSchema>;
+
+// ============================================================================
+// PHASE 2: ACCOUNTING EXPORT
+// ============================================================================
+
+export const EXPORT_STATUSES = ["pending", "processing", "completed", "failed"] as const;
+export type ExportStatus = typeof EXPORT_STATUSES[number];
+
+export const glMappings = pgTable("gl_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  sourceType: text("source_type").notNull(), // revenue, tax, tender, discount, service_charge, labor
+  sourceId: varchar("source_id"), // ID of the source entity (tender, tax group, etc.)
+  glAccountCode: text("gl_account_code").notNull(),
+  glAccountName: text("gl_account_name"),
+  debitCredit: text("debit_credit").default("credit"), // debit or credit
+  description: text("description"),
+  active: boolean("active").default(true),
+});
+
+export const accountingExports = pgTable("accounting_exports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  exportType: text("export_type").notNull().default("daily"), // daily, weekly, monthly, custom
+  formatType: text("format_type").notNull().default("csv"), // csv, qbo, iif, json
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  status: text("status").default("pending"),
+  generatedAt: timestamp("generated_at"),
+  generatedById: varchar("generated_by_id").references(() => employees.id),
+  downloadUrl: text("download_url"),
+  errorMessage: text("error_message"),
+  // Summary data
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }),
+  totalTax: decimal("total_tax", { precision: 12, scale: 2 }),
+  totalLabor: decimal("total_labor", { precision: 12, scale: 2 }),
+  rowCount: integer("row_count"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGlMappingSchema = createInsertSchema(glMappings).omit({ id: true });
+export const insertAccountingExportSchema = createInsertSchema(accountingExports).omit({ id: true, createdAt: true });
+
+export type GlMapping = typeof glMappings.$inferSelect;
+export type InsertGlMapping = z.infer<typeof insertGlMappingSchema>;
+export type AccountingExport = typeof accountingExports.$inferSelect;
+export type InsertAccountingExport = z.infer<typeof insertAccountingExportSchema>;
+
+// ============================================================================
+// PHASE 3: LOYALTY PROGRAM
+// ============================================================================
+
+export const LOYALTY_PROGRAM_TYPES = ["points", "visits", "spend", "tiered"] as const;
+export type LoyaltyProgramType = typeof LOYALTY_PROGRAM_TYPES[number];
+
+export const loyaltyPrograms = pgTable("loyalty_programs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  name: text("name").notNull(),
+  programType: text("program_type").notNull().default("points"),
+  // Points earning rules
+  pointsPerDollar: decimal("points_per_dollar", { precision: 5, scale: 2 }).default("1"),
+  minimumPointsRedeem: integer("minimum_points_redeem").default(100),
+  pointsRedemptionValue: decimal("points_redemption_value", { precision: 10, scale: 4 }).default("0.01"), // $ per point
+  // Visit-based rules
+  visitsForReward: integer("visits_for_reward").default(10),
+  // Tier configuration
+  tierConfig: jsonb("tier_config"), // { tiers: [{ name: "Gold", threshold: 1000, multiplier: 1.5 }] }
+  // Expiration
+  pointsExpirationDays: integer("points_expiration_days"), // null = never expires
+  // Status
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const MEMBER_STATUSES = ["active", "inactive", "suspended"] as const;
+export type MemberStatus = typeof MEMBER_STATUSES[number];
+
+export const loyaltyMembers = pgTable("loyalty_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  programId: varchar("program_id").notNull().references(() => loyaltyPrograms.id),
+  memberNumber: text("member_number").notNull().unique(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  birthDate: text("birth_date"), // MM-DD format for birthday rewards
+  currentPoints: integer("current_points").default(0),
+  lifetimePoints: integer("lifetime_points").default(0),
+  currentTier: text("current_tier").default("standard"),
+  visitCount: integer("visit_count").default(0),
+  lifetimeSpend: decimal("lifetime_spend", { precision: 12, scale: 2 }).default("0"),
+  status: text("status").default("active"),
+  enrolledAt: timestamp("enrolled_at").defaultNow(),
+  lastVisitAt: timestamp("last_visit_at"),
+  pointsExpirationDate: timestamp("points_expiration_date"),
+  notes: text("notes"),
+});
+
+export const LOYALTY_TRANSACTION_TYPES = ["earn", "redeem", "adjust", "expire", "transfer"] as const;
+export type LoyaltyTransactionType = typeof LOYALTY_TRANSACTION_TYPES[number];
+
+export const loyaltyTransactions = pgTable("loyalty_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => loyaltyMembers.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  transactionType: text("transaction_type").notNull(),
+  points: integer("points").notNull(), // Positive for earn, negative for redeem
+  pointsBefore: integer("points_before").notNull(),
+  pointsAfter: integer("points_after").notNull(),
+  checkId: varchar("check_id").references(() => checks.id),
+  checkTotal: decimal("check_total", { precision: 12, scale: 2 }),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const loyaltyRewards = pgTable("loyalty_rewards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  programId: varchar("program_id").notNull().references(() => loyaltyPrograms.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  rewardType: text("reward_type").notNull().default("discount"), // discount, free_item, points_multiplier
+  pointsCost: integer("points_cost").default(0),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }),
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }),
+  freeMenuItemId: varchar("free_menu_item_id").references(() => menuItems.id),
+  minPurchase: decimal("min_purchase", { precision: 10, scale: 2 }),
+  maxRedemptions: integer("max_redemptions"), // null = unlimited
+  redemptionCount: integer("redemption_count").default(0),
+  validFrom: timestamp("valid_from"),
+  validUntil: timestamp("valid_until"),
+  tierRequired: text("tier_required"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLoyaltyProgramSchema = createInsertSchema(loyaltyPrograms).omit({ id: true, createdAt: true });
+export const insertLoyaltyMemberSchema = createInsertSchema(loyaltyMembers).omit({ id: true, enrolledAt: true });
+export const insertLoyaltyTransactionSchema = createInsertSchema(loyaltyTransactions).omit({ id: true, createdAt: true });
+export const insertLoyaltyRewardSchema = createInsertSchema(loyaltyRewards).omit({ id: true, createdAt: true });
+
+export type LoyaltyProgram = typeof loyaltyPrograms.$inferSelect;
+export type InsertLoyaltyProgram = z.infer<typeof insertLoyaltyProgramSchema>;
+export type LoyaltyMember = typeof loyaltyMembers.$inferSelect;
+export type InsertLoyaltyMember = z.infer<typeof insertLoyaltyMemberSchema>;
+export type LoyaltyTransaction = typeof loyaltyTransactions.$inferSelect;
+export type InsertLoyaltyTransaction = z.infer<typeof insertLoyaltyTransactionSchema>;
+export type LoyaltyReward = typeof loyaltyRewards.$inferSelect;
+export type InsertLoyaltyReward = z.infer<typeof insertLoyaltyRewardSchema>;
+
+// ============================================================================
+// PHASE 3: ONLINE ORDERING INTEGRATION
+// ============================================================================
+
+export const ORDER_SOURCES = ["pos", "web", "mobile_app", "doordash", "ubereats", "grubhub", "phone", "catering"] as const;
+export type OrderSource = typeof ORDER_SOURCES[number];
+
+export const ONLINE_ORDER_STATUSES = ["received", "confirmed", "preparing", "ready", "picked_up", "delivered", "cancelled", "refunded"] as const;
+export type OnlineOrderStatus = typeof ONLINE_ORDER_STATUSES[number];
+
+export const onlineOrderSources = pgTable("online_order_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  sourceName: text("source_name").notNull(), // doordash, ubereats, website, etc.
+  sourceType: text("source_type").notNull(), // marketplace, direct, phone
+  apiKeyPrefix: text("api_key_prefix"), // For API credentials (actual stored in secrets)
+  webhookUrl: text("webhook_url"),
+  autoAccept: boolean("auto_accept").default(false),
+  autoConfirmMinutes: integer("auto_confirm_minutes").default(5),
+  defaultRvcId: varchar("default_rvc_id").references(() => rvcs.id),
+  menuMappings: jsonb("menu_mappings"), // Maps external item IDs to local menu item IDs
+  commissionPercent: decimal("commission_percent", { precision: 5, scale: 2 }),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const onlineOrders = pgTable("online_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  sourceId: varchar("source_id").references(() => onlineOrderSources.id),
+  externalOrderId: text("external_order_id").notNull(), // Order ID from the external system
+  status: text("status").default("received"),
+  orderType: text("order_type").default("pickup"), // pickup, delivery
+  // Customer info
+  customerName: text("customer_name"),
+  customerPhone: text("customer_phone"),
+  customerEmail: text("customer_email"),
+  deliveryAddress: text("delivery_address"),
+  deliveryInstructions: text("delivery_instructions"),
+  // Timing
+  scheduledTime: timestamp("scheduled_time"), // When customer wants it
+  estimatedPrepMinutes: integer("estimated_prep_minutes"),
+  confirmedAt: timestamp("confirmed_at"),
+  readyAt: timestamp("ready_at"),
+  pickedUpAt: timestamp("picked_up_at"),
+  deliveredAt: timestamp("delivered_at"),
+  // Financials
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
+  taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).default("0"),
+  deliveryFee: decimal("delivery_fee", { precision: 10, scale: 2 }).default("0"),
+  serviceFee: decimal("service_fee", { precision: 10, scale: 2 }).default("0"),
+  tip: decimal("tip", { precision: 10, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull(),
+  commission: decimal("commission", { precision: 10, scale: 2 }).default("0"),
+  // Items as JSON (may differ from local menu structure)
+  items: jsonb("items").notNull(),
+  // Link to POS check when injected
+  checkId: varchar("check_id").references(() => checks.id),
+  injectedAt: timestamp("injected_at"),
+  injectedById: varchar("injected_by_id").references(() => employees.id),
+  // Raw data for debugging
+  rawPayload: jsonb("raw_payload"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOnlineOrderSourceSchema = createInsertSchema(onlineOrderSources).omit({ id: true, createdAt: true });
+export const insertOnlineOrderSchema = createInsertSchema(onlineOrders).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type OnlineOrderSource = typeof onlineOrderSources.$inferSelect;
+export type InsertOnlineOrderSource = z.infer<typeof insertOnlineOrderSourceSchema>;
+export type OnlineOrder = typeof onlineOrders.$inferSelect;
+export type InsertOnlineOrder = z.infer<typeof insertOnlineOrderSchema>;
+
+// ============================================================================
+// PHASE 3: INVENTORY MANAGEMENT
+// ============================================================================
+
+export const INVENTORY_UNIT_TYPES = ["each", "oz", "lb", "kg", "g", "ml", "l", "gal", "qt", "pt", "cup", "tbsp", "tsp"] as const;
+export type InventoryUnitType = typeof INVENTORY_UNIT_TYPES[number];
+
+export const inventoryItems = pgTable("inventory_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  name: text("name").notNull(),
+  sku: text("sku"),
+  category: text("category"),
+  unitType: text("unit_type").default("each"),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 4 }),
+  parLevel: decimal("par_level", { precision: 10, scale: 2 }), // Ideal stock level
+  reorderPoint: decimal("reorder_point", { precision: 10, scale: 2 }), // When to reorder
+  reorderQuantity: decimal("reorder_quantity", { precision: 10, scale: 2 }),
+  vendorId: varchar("vendor_id"),
+  vendorSku: text("vendor_sku"),
+  shelfLifeDays: integer("shelf_life_days"),
+  storageLocation: text("storage_location"),
+  trackInventory: boolean("track_inventory").default(true),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const inventoryStock = pgTable("inventory_stock", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  inventoryItemId: varchar("inventory_item_id").notNull().references(() => inventoryItems.id),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  currentQuantity: decimal("current_quantity", { precision: 12, scale: 4 }).default("0"),
+  lastCountDate: text("last_count_date"),
+  lastCountQuantity: decimal("last_count_quantity", { precision: 12, scale: 4 }),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const INVENTORY_TRANSACTION_TYPES = ["receive", "sale", "waste", "transfer", "adjustment", "count"] as const;
+export type InventoryTransactionType = typeof INVENTORY_TRANSACTION_TYPES[number];
+
+export const inventoryTransactions = pgTable("inventory_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  inventoryItemId: varchar("inventory_item_id").notNull().references(() => inventoryItems.id),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  transactionType: text("transaction_type").notNull(),
+  quantity: decimal("quantity", { precision: 12, scale: 4 }).notNull(), // Positive for add, negative for remove
+  quantityBefore: decimal("quantity_before", { precision: 12, scale: 4 }),
+  quantityAfter: decimal("quantity_after", { precision: 12, scale: 4 }),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 4 }),
+  totalCost: decimal("total_cost", { precision: 12, scale: 2 }),
+  businessDate: text("business_date"),
+  checkId: varchar("check_id").references(() => checks.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  reason: text("reason"),
+  referenceNumber: text("reference_number"), // PO number, invoice number, etc.
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Recipe linking (menu item to ingredients)
+export const recipes = pgTable("recipes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuItemId: varchar("menu_item_id").notNull().references(() => menuItems.id),
+  inventoryItemId: varchar("inventory_item_id").notNull().references(() => inventoryItems.id),
+  quantity: decimal("quantity", { precision: 10, scale: 4 }).notNull(), // Amount used per menu item
+  unitType: text("unit_type"),
+  wastePercent: decimal("waste_percent", { precision: 5, scale: 2 }).default("0"), // Account for prep waste
+});
+
+export const insertInventoryItemSchema = createInsertSchema(inventoryItems).omit({ id: true, createdAt: true });
+export const insertInventoryStockSchema = createInsertSchema(inventoryStock).omit({ id: true, updatedAt: true });
+export const insertInventoryTransactionSchema = createInsertSchema(inventoryTransactions).omit({ id: true, createdAt: true });
+export const insertRecipeSchema = createInsertSchema(recipes).omit({ id: true });
+
+export type InventoryItem = typeof inventoryItems.$inferSelect;
+export type InsertInventoryItem = z.infer<typeof insertInventoryItemSchema>;
+export type InventoryStock = typeof inventoryStock.$inferSelect;
+export type InsertInventoryStock = z.infer<typeof insertInventoryStockSchema>;
+export type InventoryTransaction = typeof inventoryTransactions.$inferSelect;
+export type InsertInventoryTransaction = z.infer<typeof insertInventoryTransactionSchema>;
+export type Recipe = typeof recipes.$inferSelect;
+export type InsertRecipe = z.infer<typeof insertRecipeSchema>;
+
+// ============================================================================
+// PHASE 3: LABOR FORECASTING
+// ============================================================================
+
+export const salesForecasts = pgTable("sales_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  forecastDate: text("forecast_date").notNull(), // YYYY-MM-DD
+  dayOfWeek: integer("day_of_week"), // 0-6
+  // Hourly projections
+  hourlyProjections: jsonb("hourly_projections"), // { "11": 500, "12": 1200, ... }
+  projectedSales: decimal("projected_sales", { precision: 12, scale: 2 }),
+  projectedGuests: integer("projected_guests"),
+  projectedChecks: integer("projected_checks"),
+  // Actual values (filled after day completes)
+  actualSales: decimal("actual_sales", { precision: 12, scale: 2 }),
+  actualGuests: integer("actual_guests"),
+  actualChecks: integer("actual_checks"),
+  // Model info
+  modelVersion: text("model_version"),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  // Notes
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const laborForecasts = pgTable("labor_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  forecastDate: text("forecast_date").notNull(),
+  jobCodeId: varchar("job_code_id").references(() => jobCodes.id),
+  // Hourly labor needs
+  hourlyNeeds: jsonb("hourly_needs"), // { "11": 2, "12": 4, ... } (employees needed per hour)
+  totalHoursNeeded: decimal("total_hours_needed", { precision: 8, scale: 2 }),
+  projectedLaborCost: decimal("projected_labor_cost", { precision: 12, scale: 2 }),
+  targetLaborPercent: decimal("target_labor_percent", { precision: 5, scale: 2 }).default("25"),
+  // Actual values
+  actualHoursWorked: decimal("actual_hours_worked", { precision: 8, scale: 2 }),
+  actualLaborCost: decimal("actual_labor_cost", { precision: 12, scale: 2 }),
+  actualLaborPercent: decimal("actual_labor_percent", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSalesForecastSchema = createInsertSchema(salesForecasts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertLaborForecastSchema = createInsertSchema(laborForecasts).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type SalesForecast = typeof salesForecasts.$inferSelect;
+export type InsertSalesForecast = z.infer<typeof insertSalesForecastSchema>;
+export type LaborForecast = typeof laborForecasts.$inferSelect;
+export type InsertLaborForecast = z.infer<typeof insertLaborForecastSchema>;
+
+// ============================================================================
+// QUICK WIN: MANAGER ALERTS
+// ============================================================================
+
+export const ALERT_TYPES = ["void", "discount", "refund", "overtime", "exception", "hardware", "inventory", "security", "cash_variance"] as const;
+export type AlertType = typeof ALERT_TYPES[number];
+
+export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;
+export type AlertSeverity = typeof ALERT_SEVERITIES[number];
+
+export const managerAlerts = pgTable("manager_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").default("warning"),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  // Context
+  employeeId: varchar("employee_id").references(() => employees.id),
+  checkId: varchar("check_id").references(() => checks.id),
+  targetType: text("target_type"),
+  targetId: varchar("target_id"),
+  metadata: jsonb("metadata"), // Additional context
+  // Status
+  read: boolean("read").default(false),
+  readAt: timestamp("read_at"),
+  readById: varchar("read_by_id").references(() => employees.id),
+  acknowledged: boolean("acknowledged").default(false),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  acknowledgedById: varchar("acknowledged_by_id").references(() => employees.id),
+  resolution: text("resolution"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const alertSubscriptions = pgTable("alert_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity"), // null = all severities
+  notifyEmail: boolean("notify_email").default(false),
+  notifySms: boolean("notify_sms").default(false),
+  notifyPush: boolean("notify_push").default(true),
+  active: boolean("active").default(true),
+});
+
+export const insertManagerAlertSchema = createInsertSchema(managerAlerts).omit({ id: true, createdAt: true });
+export const insertAlertSubscriptionSchema = createInsertSchema(alertSubscriptions).omit({ id: true });
+
+export type ManagerAlert = typeof managerAlerts.$inferSelect;
+export type InsertManagerAlert = z.infer<typeof insertManagerAlertSchema>;
+export type AlertSubscription = typeof alertSubscriptions.$inferSelect;
+export type InsertAlertSubscription = z.infer<typeof insertAlertSubscriptionSchema>;
+
+// ============================================================================
+// QUICK WIN: PREP COUNTDOWN / ITEM AVAILABILITY
+// ============================================================================
+
+export const itemAvailability = pgTable("item_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuItemId: varchar("menu_item_id").notNull().references(() => menuItems.id),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  businessDate: text("business_date").notNull(),
+  // Quantity tracking
+  initialQuantity: integer("initial_quantity"), // Set at start of day
+  currentQuantity: integer("current_quantity"),
+  soldQuantity: integer("sold_quantity").default(0),
+  // Status
+  isAvailable: boolean("is_available").default(true),
+  is86ed: boolean("is_86ed").default(false), // Item has been 86'd (out of stock)
+  eightySixedAt: timestamp("eighty_sixed_at"),
+  eightySixedById: varchar("eighty_sixed_by_id").references(() => employees.id),
+  // Alerts
+  lowStockThreshold: integer("low_stock_threshold").default(5),
+  alertSent: boolean("alert_sent").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const prepItems = pgTable("prep_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(),
+  category: text("category"),
+  parLevel: integer("par_level").notNull(),
+  currentLevel: integer("current_level").default(0),
+  unit: text("unit").default("each"),
+  shelfLifeHours: integer("shelf_life_hours"),
+  prepInstructions: text("prep_instructions"),
+  // Linked menu items that consume this prep item
+  menuItemIds: text("menu_item_ids").array(),
+  consumptionPerItem: decimal("consumption_per_item", { precision: 5, scale: 2 }).default("1"),
+  // Status
+  lastPrepAt: timestamp("last_prep_at"),
+  lastPrepById: varchar("last_prep_by_id").references(() => employees.id),
+  lastPrepQuantity: integer("last_prep_quantity"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertItemAvailabilitySchema = createInsertSchema(itemAvailability).omit({ id: true, updatedAt: true });
+export const insertPrepItemSchema = createInsertSchema(prepItems).omit({ id: true, createdAt: true });
+
+export type ItemAvailability = typeof itemAvailability.$inferSelect;
+export type InsertItemAvailability = z.infer<typeof insertItemAvailabilitySchema>;
+export type PrepItem = typeof prepItems.$inferSelect;
+export type InsertPrepItem = z.infer<typeof insertPrepItemSchema>;

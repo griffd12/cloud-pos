@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte, or, ilike } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees, employeeAssignments,
   majorGroups, familyGroups,
@@ -18,6 +18,12 @@ import {
   employeeAvailability, availabilityExceptions, timeOffRequests,
   shiftTemplates, shifts, shiftCoverRequests, shiftCoverOffers, shiftCoverApprovals,
   tipPoolPolicies, tipPoolRuns, tipAllocations, laborSnapshots, overtimeRules,
+  // Phase 1-3 new tables
+  offlineOrderQueue, fiscalPeriods, cashDrawers, drawerAssignments, cashTransactions, safeCounts,
+  giftCards, giftCardTransactions, glMappings, accountingExports,
+  loyaltyPrograms, loyaltyMembers, loyaltyTransactions, loyaltyRewards,
+  onlineOrderSources, onlineOrders, inventoryItems, inventoryStock, inventoryTransactions, recipes,
+  salesForecasts, laborForecasts, managerAlerts, alertSubscriptions, itemAvailability, prepItems,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
   type Rvc, type InsertRvc,
@@ -86,6 +92,33 @@ import {
   type PaymentTransaction, type InsertPaymentTransaction,
   type TerminalDevice, type InsertTerminalDevice,
   type TerminalSession, type InsertTerminalSession,
+  // Phase 1-3 new types
+  type OfflineOrderQueue, type InsertOfflineOrderQueue,
+  type FiscalPeriod, type InsertFiscalPeriod,
+  type CashDrawer, type InsertCashDrawer,
+  type DrawerAssignment, type InsertDrawerAssignment,
+  type CashTransaction, type InsertCashTransaction,
+  type SafeCount, type InsertSafeCount,
+  type GiftCard, type InsertGiftCard,
+  type GiftCardTransaction, type InsertGiftCardTransaction,
+  type GlMapping, type InsertGlMapping,
+  type AccountingExport, type InsertAccountingExport,
+  type LoyaltyProgram, type InsertLoyaltyProgram,
+  type LoyaltyMember, type InsertLoyaltyMember,
+  type LoyaltyTransaction, type InsertLoyaltyTransaction,
+  type LoyaltyReward, type InsertLoyaltyReward,
+  type OnlineOrderSource, type InsertOnlineOrderSource,
+  type OnlineOrder, type InsertOnlineOrder,
+  type InventoryItem, type InsertInventoryItem,
+  type InventoryStock, type InsertInventoryStock,
+  type InventoryTransaction, type InsertInventoryTransaction,
+  type Recipe, type InsertRecipe,
+  type SalesForecast, type InsertSalesForecast,
+  type LaborForecast, type InsertLaborForecast,
+  type ManagerAlert, type InsertManagerAlert,
+  type AlertSubscription, type InsertAlertSubscription,
+  type ItemAvailability, type InsertItemAvailability,
+  type PrepItem, type InsertPrepItem,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -3604,6 +3637,538 @@ export class DatabaseStorage implements IStorage {
   async deleteOvertimeRule(id: string): Promise<boolean> {
     const result = await db.delete(overtimeRules).where(eq(overtimeRules.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // ============================================================================
+  // FISCAL PERIODS
+  // ============================================================================
+
+  async getFiscalPeriods(propertyId: string, startDate?: string, endDate?: string): Promise<FiscalPeriod[]> {
+    const conditions = [eq(fiscalPeriods.propertyId, propertyId)];
+    if (startDate) conditions.push(gte(fiscalPeriods.businessDate, startDate));
+    if (endDate) conditions.push(lte(fiscalPeriods.businessDate, endDate));
+    return db.select().from(fiscalPeriods).where(and(...conditions)).orderBy(desc(fiscalPeriods.businessDate));
+  }
+
+  async getFiscalPeriod(id: string): Promise<FiscalPeriod | undefined> {
+    const [result] = await db.select().from(fiscalPeriods).where(eq(fiscalPeriods.id, id));
+    return result;
+  }
+
+  async getFiscalPeriodByDate(propertyId: string, businessDate: string): Promise<FiscalPeriod | undefined> {
+    const [result] = await db.select().from(fiscalPeriods)
+      .where(and(eq(fiscalPeriods.propertyId, propertyId), eq(fiscalPeriods.businessDate, businessDate)));
+    return result;
+  }
+
+  async createFiscalPeriod(data: InsertFiscalPeriod): Promise<FiscalPeriod> {
+    const [result] = await db.insert(fiscalPeriods).values(data).returning();
+    return result;
+  }
+
+  async updateFiscalPeriod(id: string, data: Partial<InsertFiscalPeriod>): Promise<FiscalPeriod | undefined> {
+    const [result] = await db.update(fiscalPeriods).set(data).where(eq(fiscalPeriods.id, id)).returning();
+    return result;
+  }
+
+  async calculateFiscalPeriodTotals(propertyId: string, businessDate: string): Promise<any> {
+    // Get all RVCs for this property
+    const propertyRvcs = await db.select().from(rvcs).where(eq(rvcs.propertyId, propertyId));
+    const rvcIds = propertyRvcs.map(r => r.id);
+    
+    if (rvcIds.length === 0) {
+      return { grossSales: "0", netSales: "0", taxCollected: "0", discountsTotal: "0", checkCount: 0, cashExpected: "0", cardTotal: "0", tipsTotal: "0", serviceChargesTotal: "0", refundsTotal: "0", guestCount: 0 };
+    }
+
+    // Get all checks for this business date and property's RVCs
+    const dayChecks = await db.select().from(checks)
+      .where(and(inArray(checks.rvcId, rvcIds), eq(checks.businessDate, businessDate)));
+
+    let grossSales = 0, netSales = 0, taxCollected = 0, discountsTotal = 0, cashExpected = 0, cardTotal = 0, tipsTotal = 0, serviceChargesTotal = 0, refundsTotal = 0, guestCount = 0;
+
+    for (const check of dayChecks) {
+      grossSales += parseFloat(check.subtotal || "0");
+      taxCollected += parseFloat(check.tax || check.taxTotal || "0");
+      netSales += parseFloat(check.total || "0");
+      guestCount += check.guestCount || 1;
+      serviceChargesTotal += parseFloat(check.serviceChargeTotal || "0");
+      
+      // Aggregate discounts from check record (stored as discountTotal on check)
+      discountsTotal += parseFloat(check.discountTotal || "0");
+      
+      // Also check the checkDiscounts table for detailed discount records
+      const discountRecords = await db.select().from(checkDiscounts).where(eq(checkDiscounts.checkId, check.id));
+      for (const discount of discountRecords) {
+        // Only add if not already counted in check.discountTotal
+        if (!check.discountTotal || check.discountTotal === "0") {
+          discountsTotal += parseFloat(discount.amount || "0");
+        }
+      }
+      
+      const payments = await db.select().from(checkPayments).where(eq(checkPayments.checkId, check.id));
+      for (const payment of payments) {
+        const tender = await this.getTender(payment.tenderId);
+        if (tender?.type === "cash") {
+          cashExpected += parseFloat(payment.amount || "0");
+        } else if (tender?.type === "credit" || tender?.type === "debit") {
+          cardTotal += parseFloat(payment.amount || "0");
+        }
+        tipsTotal += parseFloat(payment.tip || "0");
+      }
+      
+      // Get refunds for this check
+      const checkRefunds = await db.select().from(refunds).where(eq(refunds.checkId, check.id));
+      for (const refund of checkRefunds) {
+        refundsTotal += parseFloat(refund.amount || "0");
+      }
+    }
+
+    return {
+      grossSales: grossSales.toFixed(2),
+      netSales: netSales.toFixed(2),
+      taxCollected: taxCollected.toFixed(2),
+      discountsTotal: discountsTotal.toFixed(2),
+      tipsTotal: tipsTotal.toFixed(2),
+      serviceChargesTotal: serviceChargesTotal.toFixed(2),
+      refundsTotal: refundsTotal.toFixed(2),
+      checkCount: dayChecks.length,
+      guestCount,
+      cashExpected: cashExpected.toFixed(2),
+      cardTotal: cardTotal.toFixed(2),
+    };
+  }
+
+  async getHistoricalSalesData(propertyId: string, weeks: number): Promise<FiscalPeriod[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - (weeks * 7));
+    return this.getFiscalPeriods(propertyId, startDate.toISOString().split("T")[0]);
+  }
+
+  // ============================================================================
+  // CASH MANAGEMENT
+  // ============================================================================
+
+  async getCashDrawers(propertyId: string): Promise<CashDrawer[]> {
+    return db.select().from(cashDrawers).where(eq(cashDrawers.propertyId, propertyId));
+  }
+
+  async getCashDrawer(id: string): Promise<CashDrawer | undefined> {
+    const [result] = await db.select().from(cashDrawers).where(eq(cashDrawers.id, id));
+    return result;
+  }
+
+  async createCashDrawer(data: InsertCashDrawer): Promise<CashDrawer> {
+    const [result] = await db.insert(cashDrawers).values(data).returning();
+    return result;
+  }
+
+  async getDrawerAssignments(propertyId?: string, employeeId?: string, businessDate?: string): Promise<DrawerAssignment[]> {
+    const conditions = [];
+    if (businessDate) conditions.push(eq(drawerAssignments.businessDate, businessDate));
+    if (employeeId) conditions.push(eq(drawerAssignments.employeeId, employeeId));
+    
+    // Join with cashDrawers to filter by propertyId for security
+    if (propertyId) {
+      const propertyDrawers = await db.select().from(cashDrawers).where(eq(cashDrawers.propertyId, propertyId));
+      const drawerIds = propertyDrawers.map(d => d.id);
+      if (drawerIds.length === 0) return [];
+      conditions.push(inArray(drawerAssignments.drawerId, drawerIds));
+    }
+    
+    return db.select().from(drawerAssignments).where(conditions.length > 0 ? and(...conditions) : undefined);
+  }
+
+  async getDrawerAssignment(id: string): Promise<DrawerAssignment | undefined> {
+    const [result] = await db.select().from(drawerAssignments).where(eq(drawerAssignments.id, id));
+    return result;
+  }
+
+  async createDrawerAssignment(data: InsertDrawerAssignment): Promise<DrawerAssignment> {
+    const [result] = await db.insert(drawerAssignments).values(data).returning();
+    return result;
+  }
+
+  async updateDrawerAssignment(id: string, data: Partial<InsertDrawerAssignment>): Promise<DrawerAssignment | undefined> {
+    const [result] = await db.update(drawerAssignments).set(data).where(eq(drawerAssignments.id, id)).returning();
+    return result;
+  }
+
+  async createCashTransaction(data: InsertCashTransaction): Promise<CashTransaction> {
+    const [result] = await db.insert(cashTransactions).values(data).returning();
+    return result;
+  }
+
+  async getSafeCounts(propertyId: string, businessDate?: string): Promise<SafeCount[]> {
+    const conditions = [eq(safeCounts.propertyId, propertyId)];
+    if (businessDate) conditions.push(eq(safeCounts.businessDate, businessDate));
+    return db.select().from(safeCounts).where(and(...conditions));
+  }
+
+  async createSafeCount(data: InsertSafeCount): Promise<SafeCount> {
+    const [result] = await db.insert(safeCounts).values(data).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // GIFT CARDS
+  // ============================================================================
+
+  async getGiftCards(propertyId?: string, status?: string): Promise<GiftCard[]> {
+    const conditions = [];
+    if (propertyId) conditions.push(eq(giftCards.propertyId, propertyId));
+    if (status) conditions.push(eq(giftCards.status, status));
+    return db.select().from(giftCards).where(conditions.length > 0 ? and(...conditions) : undefined);
+  }
+
+  async getGiftCard(id: string): Promise<GiftCard | undefined> {
+    const [result] = await db.select().from(giftCards).where(eq(giftCards.id, id));
+    return result;
+  }
+
+  async getGiftCardByNumber(cardNumber: string): Promise<GiftCard | undefined> {
+    const [result] = await db.select().from(giftCards).where(eq(giftCards.cardNumber, cardNumber));
+    return result;
+  }
+
+  async createGiftCard(data: InsertGiftCard): Promise<GiftCard> {
+    const [result] = await db.insert(giftCards).values(data).returning();
+    return result;
+  }
+
+  async updateGiftCard(id: string, data: Partial<InsertGiftCard>): Promise<GiftCard | undefined> {
+    const [result] = await db.update(giftCards).set(data).where(eq(giftCards.id, id)).returning();
+    return result;
+  }
+
+  async getGiftCardTransactions(giftCardId: string): Promise<GiftCardTransaction[]> {
+    return db.select().from(giftCardTransactions).where(eq(giftCardTransactions.giftCardId, giftCardId)).orderBy(desc(giftCardTransactions.createdAt));
+  }
+
+  async createGiftCardTransaction(data: InsertGiftCardTransaction): Promise<GiftCardTransaction> {
+    const [result] = await db.insert(giftCardTransactions).values(data).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // LOYALTY PROGRAMS
+  // ============================================================================
+
+  async getLoyaltyPrograms(enterpriseId?: string): Promise<LoyaltyProgram[]> {
+    if (enterpriseId) {
+      return db.select().from(loyaltyPrograms).where(eq(loyaltyPrograms.enterpriseId, enterpriseId));
+    }
+    return db.select().from(loyaltyPrograms);
+  }
+
+  async createLoyaltyProgram(data: InsertLoyaltyProgram): Promise<LoyaltyProgram> {
+    const [result] = await db.insert(loyaltyPrograms).values(data).returning();
+    return result;
+  }
+
+  async updateLoyaltyProgram(id: string, data: Partial<InsertLoyaltyProgram>): Promise<LoyaltyProgram | undefined> {
+    const [result] = await db.update(loyaltyPrograms).set(data).where(eq(loyaltyPrograms.id, id)).returning();
+    return result;
+  }
+
+  async getLoyaltyMembers(programId?: string, search?: string): Promise<LoyaltyMember[]> {
+    const conditions = [];
+    if (programId) conditions.push(eq(loyaltyMembers.programId, programId));
+    if (search) {
+      conditions.push(or(
+        ilike(loyaltyMembers.firstName, `%${search}%`),
+        ilike(loyaltyMembers.lastName, `%${search}%`),
+        ilike(loyaltyMembers.email, `%${search}%`),
+        ilike(loyaltyMembers.phone, `%${search}%`),
+        ilike(loyaltyMembers.memberNumber, `%${search}%`)
+      ));
+    }
+    return db.select().from(loyaltyMembers).where(conditions.length > 0 ? and(...conditions) : undefined);
+  }
+
+  async getLoyaltyMember(id: string): Promise<LoyaltyMember | undefined> {
+    const [result] = await db.select().from(loyaltyMembers).where(eq(loyaltyMembers.id, id));
+    return result;
+  }
+
+  async getLoyaltyMemberByIdentifier(identifier: string): Promise<LoyaltyMember | undefined> {
+    const [result] = await db.select().from(loyaltyMembers).where(or(
+      eq(loyaltyMembers.memberNumber, identifier),
+      eq(loyaltyMembers.phone, identifier),
+      eq(loyaltyMembers.email, identifier)
+    ));
+    return result;
+  }
+
+  async createLoyaltyMember(data: InsertLoyaltyMember): Promise<LoyaltyMember> {
+    const [result] = await db.insert(loyaltyMembers).values(data).returning();
+    return result;
+  }
+
+  async updateLoyaltyMember(id: string, data: Partial<InsertLoyaltyMember>): Promise<LoyaltyMember | undefined> {
+    const [result] = await db.update(loyaltyMembers).set(data).where(eq(loyaltyMembers.id, id)).returning();
+    return result;
+  }
+
+  async createLoyaltyTransaction(data: InsertLoyaltyTransaction): Promise<LoyaltyTransaction> {
+    const [result] = await db.insert(loyaltyTransactions).values(data).returning();
+    return result;
+  }
+
+  async getLoyaltyRewards(programId: string): Promise<LoyaltyReward[]> {
+    return db.select().from(loyaltyRewards).where(eq(loyaltyRewards.programId, programId));
+  }
+
+  async createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward> {
+    const [result] = await db.insert(loyaltyRewards).values(data).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // INVENTORY MANAGEMENT
+  // ============================================================================
+
+  async getInventoryItems(propertyId?: string, category?: string): Promise<InventoryItem[]> {
+    const conditions = [];
+    if (propertyId) conditions.push(eq(inventoryItems.propertyId, propertyId));
+    if (category) conditions.push(eq(inventoryItems.category, category));
+    return db.select().from(inventoryItems).where(conditions.length > 0 ? and(...conditions) : undefined);
+  }
+
+  async getInventoryItem(id: string): Promise<InventoryItem | undefined> {
+    const [result] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, id));
+    return result;
+  }
+
+  async createInventoryItem(data: InsertInventoryItem): Promise<InventoryItem> {
+    const [result] = await db.insert(inventoryItems).values(data).returning();
+    return result;
+  }
+
+  async updateInventoryItem(id: string, data: Partial<InsertInventoryItem>): Promise<InventoryItem | undefined> {
+    const [result] = await db.update(inventoryItems).set(data).where(eq(inventoryItems.id, id)).returning();
+    return result;
+  }
+
+  async getInventoryStock(propertyId: string): Promise<InventoryStock[]> {
+    return db.select().from(inventoryStock).where(eq(inventoryStock.propertyId, propertyId));
+  }
+
+  async getInventoryStockByItem(inventoryItemId: string, propertyId: string): Promise<InventoryStock | undefined> {
+    const [result] = await db.select().from(inventoryStock)
+      .where(and(eq(inventoryStock.inventoryItemId, inventoryItemId), eq(inventoryStock.propertyId, propertyId)));
+    return result;
+  }
+
+  async createInventoryStock(data: InsertInventoryStock): Promise<InventoryStock> {
+    const [result] = await db.insert(inventoryStock).values(data).returning();
+    return result;
+  }
+
+  async updateInventoryStock(id: string, data: Partial<InsertInventoryStock>): Promise<InventoryStock | undefined> {
+    const [result] = await db.update(inventoryStock).set({ ...data, updatedAt: new Date() }).where(eq(inventoryStock.id, id)).returning();
+    return result;
+  }
+
+  async createInventoryTransaction(data: InsertInventoryTransaction): Promise<InventoryTransaction> {
+    const [result] = await db.insert(inventoryTransactions).values(data).returning();
+    return result;
+  }
+
+  async getRecipes(menuItemId?: string): Promise<Recipe[]> {
+    if (menuItemId) {
+      return db.select().from(recipes).where(eq(recipes.menuItemId, menuItemId));
+    }
+    return db.select().from(recipes);
+  }
+
+  async createRecipe(data: InsertRecipe): Promise<Recipe> {
+    const [result] = await db.insert(recipes).values(data).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // ONLINE ORDERING
+  // ============================================================================
+
+  async getOnlineOrderSources(propertyId: string): Promise<OnlineOrderSource[]> {
+    return db.select().from(onlineOrderSources).where(eq(onlineOrderSources.propertyId, propertyId));
+  }
+
+  async createOnlineOrderSource(data: InsertOnlineOrderSource): Promise<OnlineOrderSource> {
+    const [result] = await db.insert(onlineOrderSources).values(data).returning();
+    return result;
+  }
+
+  async getOnlineOrders(propertyId: string, status?: string, startDate?: string, endDate?: string): Promise<OnlineOrder[]> {
+    const conditions = [eq(onlineOrders.propertyId, propertyId)];
+    if (status) conditions.push(eq(onlineOrders.status, status));
+    return db.select().from(onlineOrders).where(and(...conditions)).orderBy(desc(onlineOrders.createdAt));
+  }
+
+  async getOnlineOrder(id: string): Promise<OnlineOrder | undefined> {
+    const [result] = await db.select().from(onlineOrders).where(eq(onlineOrders.id, id));
+    return result;
+  }
+
+  async createOnlineOrder(data: InsertOnlineOrder): Promise<OnlineOrder> {
+    const [result] = await db.insert(onlineOrders).values(data).returning();
+    return result;
+  }
+
+  async updateOnlineOrder(id: string, data: Partial<InsertOnlineOrder>): Promise<OnlineOrder | undefined> {
+    const [result] = await db.update(onlineOrders).set({ ...data, updatedAt: new Date() }).where(eq(onlineOrders.id, id)).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // MANAGER ALERTS
+  // ============================================================================
+
+  async getManagerAlerts(propertyId: string, alertType?: string, read?: boolean, acknowledged?: boolean): Promise<ManagerAlert[]> {
+    const conditions = [eq(managerAlerts.propertyId, propertyId)];
+    if (alertType) conditions.push(eq(managerAlerts.alertType, alertType));
+    if (read !== undefined) conditions.push(eq(managerAlerts.read, read));
+    if (acknowledged !== undefined) conditions.push(eq(managerAlerts.acknowledged, acknowledged));
+    return db.select().from(managerAlerts).where(and(...conditions)).orderBy(desc(managerAlerts.createdAt));
+  }
+
+  async getUnreadAlertCount(propertyId: string): Promise<number> {
+    const result = await db.select().from(managerAlerts)
+      .where(and(eq(managerAlerts.propertyId, propertyId), eq(managerAlerts.read, false)));
+    return result.length;
+  }
+
+  async createManagerAlert(data: InsertManagerAlert): Promise<ManagerAlert> {
+    const [result] = await db.insert(managerAlerts).values(data).returning();
+    return result;
+  }
+
+  async updateManagerAlert(id: string, data: Partial<InsertManagerAlert>): Promise<ManagerAlert | undefined> {
+    const [result] = await db.update(managerAlerts).set(data).where(eq(managerAlerts.id, id)).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // ITEM AVAILABILITY / PREP
+  // ============================================================================
+
+  async getItemAvailability(propertyId: string, rvcId?: string, businessDate?: string): Promise<ItemAvailability[]> {
+    const conditions = [eq(itemAvailability.propertyId, propertyId)];
+    if (rvcId) conditions.push(eq(itemAvailability.rvcId, rvcId));
+    if (businessDate) conditions.push(eq(itemAvailability.businessDate, businessDate));
+    return db.select().from(itemAvailability).where(and(...conditions));
+  }
+
+  async createItemAvailability(data: InsertItemAvailability): Promise<ItemAvailability> {
+    const [result] = await db.insert(itemAvailability).values(data).returning();
+    return result;
+  }
+
+  async updateItemAvailability(id: string, data: Partial<InsertItemAvailability>): Promise<ItemAvailability | undefined> {
+    const [result] = await db.update(itemAvailability).set({ ...data, updatedAt: new Date() }).where(eq(itemAvailability.id, id)).returning();
+    return result;
+  }
+
+  async getPrepItems(propertyId: string): Promise<PrepItem[]> {
+    return db.select().from(prepItems).where(eq(prepItems.propertyId, propertyId));
+  }
+
+  async createPrepItem(data: InsertPrepItem): Promise<PrepItem> {
+    const [result] = await db.insert(prepItems).values(data).returning();
+    return result;
+  }
+
+  async updatePrepItem(id: string, data: Partial<InsertPrepItem>): Promise<PrepItem | undefined> {
+    const [result] = await db.update(prepItems).set(data).where(eq(prepItems.id, id)).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // SALES & LABOR FORECASTING
+  // ============================================================================
+
+  async getSalesForecasts(propertyId: string, startDate?: string, endDate?: string): Promise<SalesForecast[]> {
+    const conditions = [eq(salesForecasts.propertyId, propertyId)];
+    if (startDate) conditions.push(gte(salesForecasts.forecastDate, startDate));
+    if (endDate) conditions.push(lte(salesForecasts.forecastDate, endDate));
+    return db.select().from(salesForecasts).where(and(...conditions)).orderBy(salesForecasts.forecastDate);
+  }
+
+  async createSalesForecast(data: InsertSalesForecast): Promise<SalesForecast> {
+    const [result] = await db.insert(salesForecasts).values(data).returning();
+    return result;
+  }
+
+  async getLaborForecasts(propertyId: string, startDate?: string, endDate?: string): Promise<LaborForecast[]> {
+    const conditions = [eq(laborForecasts.propertyId, propertyId)];
+    if (startDate) conditions.push(gte(laborForecasts.forecastDate, startDate));
+    if (endDate) conditions.push(lte(laborForecasts.forecastDate, endDate));
+    return db.select().from(laborForecasts).where(and(...conditions)).orderBy(laborForecasts.forecastDate);
+  }
+
+  async createLaborForecast(data: InsertLaborForecast): Promise<LaborForecast> {
+    const [result] = await db.insert(laborForecasts).values(data).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // ACCOUNTING / GL MAPPINGS
+  // ============================================================================
+
+  async getGlMappings(propertyId?: string, enterpriseId?: string): Promise<GlMapping[]> {
+    const conditions = [];
+    if (propertyId) conditions.push(eq(glMappings.propertyId, propertyId));
+    if (enterpriseId) conditions.push(eq(glMappings.enterpriseId, enterpriseId));
+    return db.select().from(glMappings).where(conditions.length > 0 ? and(...conditions) : undefined);
+  }
+
+  async createGlMapping(data: InsertGlMapping): Promise<GlMapping> {
+    const [result] = await db.insert(glMappings).values(data).returning();
+    return result;
+  }
+
+  async getAccountingExports(propertyId: string): Promise<AccountingExport[]> {
+    return db.select().from(accountingExports).where(eq(accountingExports.propertyId, propertyId)).orderBy(desc(accountingExports.createdAt));
+  }
+
+  async createAccountingExport(data: InsertAccountingExport): Promise<AccountingExport> {
+    const [result] = await db.insert(accountingExports).values(data).returning();
+    return result;
+  }
+
+  async updateAccountingExport(id: string, data: Partial<InsertAccountingExport>): Promise<AccountingExport | undefined> {
+    const [result] = await db.update(accountingExports).set(data).where(eq(accountingExports.id, id)).returning();
+    return result;
+  }
+
+  // ============================================================================
+  // OFFLINE ORDER QUEUE
+  // ============================================================================
+
+  async getOfflineOrderQueue(propertyId: string, status?: string): Promise<OfflineOrderQueue[]> {
+    const conditions = [eq(offlineOrderQueue.propertyId, propertyId)];
+    if (status) conditions.push(eq(offlineOrderQueue.status, status));
+    return db.select().from(offlineOrderQueue).where(and(...conditions)).orderBy(desc(offlineOrderQueue.createdAt));
+  }
+
+  async getOfflineOrderByLocalId(localId: string): Promise<OfflineOrderQueue | undefined> {
+    const [result] = await db.select().from(offlineOrderQueue).where(eq(offlineOrderQueue.localId, localId));
+    return result;
+  }
+
+  async getOfflineOrderQueueItem(id: string): Promise<OfflineOrderQueue | undefined> {
+    const [result] = await db.select().from(offlineOrderQueue).where(eq(offlineOrderQueue.id, id));
+    return result;
+  }
+
+  async createOfflineOrderQueue(data: InsertOfflineOrderQueue): Promise<OfflineOrderQueue> {
+    const [result] = await db.insert(offlineOrderQueue).values(data).returning();
+    return result;
+  }
+
+  async updateOfflineOrderQueue(id: string, data: Partial<InsertOfflineOrderQueue>): Promise<OfflineOrderQueue | undefined> {
+    const [result] = await db.update(offlineOrderQueue).set(data).where(eq(offlineOrderQueue.id, id)).returning();
+    return result;
   }
 }
 

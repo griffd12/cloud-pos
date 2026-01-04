@@ -161,6 +161,86 @@ The system implements a PCI-compliant payment processing framework with gateway-
 - `pending` → `authorized` → `voided` (cancellation)
 - `captured` → `refunded` (post-settlement refund)
 
+### Enterprise Features (Phase 1-3)
+
+The system now includes comprehensive enterprise-grade features:
+
+**Fiscal Close / End-of-Day** (`fiscal_periods` table):
+- Business date management with open/closed/reopened status
+- Automatic calculation of daily totals (gross sales, net sales, tax, tips)
+- Cash reconciliation with variance tracking
+- API: `/api/fiscal-periods`, `/api/fiscal-periods/current/:propertyId`, `/api/fiscal-periods/:id/close`
+
+**Cash Management** (`cash_drawers`, `drawer_assignments`, `cash_transactions`, `safe_counts`):
+- Cash drawer configuration per workstation
+- Drawer assignments per employee per business date
+- Paid in/out, drops, pickups with audit trail
+- Safe count recording with denomination breakdown
+- Automatic variance alerts when closing drawers
+- API: `/api/cash-drawers`, `/api/drawer-assignments`, `/api/cash-transactions`, `/api/safe-counts`
+
+**Gift Cards** (`gift_cards`, `gift_card_transactions`):
+- Enterprise-wide or property-specific gift cards
+- Activation, reload, redemption, and refund flows
+- Balance tracking with full transaction history
+- PIN protection support
+- API: `/api/gift-cards`, `/api/gift-cards/lookup/:cardNumber`, `/api/gift-cards/:id/redeem`
+
+**Loyalty Programs** (`loyalty_programs`, `loyalty_members`, `loyalty_transactions`, `loyalty_rewards`):
+- Points-based, visits-based, spend-based, or tiered programs
+- Member management with points earning/redemption
+- Reward catalog with redemption tracking
+- Birthday rewards support
+- API: `/api/loyalty-programs`, `/api/loyalty-members`, `/api/loyalty-members/:id/earn`
+
+**Online Ordering Integration** (`online_order_sources`, `online_orders`):
+- Support for DoorDash, UberEats, GrubHub, and direct ordering
+- Order injection from external sources to POS checks
+- Menu mapping configuration
+- Commission tracking
+- API: `/api/online-order-sources`, `/api/online-orders`, `/api/online-orders/:id/inject`
+
+**Inventory Management** (`inventory_items`, `inventory_stock`, `inventory_transactions`, `recipes`):
+- Item catalog with SKU, par levels, reorder points
+- Stock tracking per property with quantity on hand
+- Transaction types: receive, sale, waste, transfer, adjustment, count
+- Recipe costing linking menu items to ingredients
+- Low stock alerts
+- API: `/api/inventory-items`, `/api/inventory-stock`, `/api/inventory-transactions`, `/api/recipes`
+
+**Sales & Labor Forecasting** (`sales_forecasts`, `labor_forecasts`):
+- Daily sales projections based on historical data
+- Hourly labor needs calculation
+- Target labor percentage comparison
+- API: `/api/sales-forecasts`, `/api/labor-forecasts`, `/api/sales-forecasts/generate`
+
+**Manager Alerts** (`manager_alerts`, `alert_subscriptions`):
+- Alert types: void, discount, refund, overtime, exception, hardware, inventory, security, cash_variance
+- Severity levels: info, warning, critical
+- Read/acknowledge workflow
+- Subscription-based notifications
+- API: `/api/manager-alerts`, `/api/manager-alerts/unread-count/:propertyId`
+
+**Item Availability / Prep Countdown** (`item_availability`, `prep_items`):
+- Daily quantity tracking per menu item
+- 86'd (sold out) status management
+- Low stock threshold alerts
+- Prep item tracking with consumption per menu item
+- API: `/api/item-availability`, `/api/item-availability/:id/86`, `/api/prep-items`
+
+**Offline Order Queue** (`offline_order_queue`):
+- Client-side order capture during network outages
+- Deduplication via localId
+- Sync retry with attempt tracking
+- Conflict detection
+- API: `/api/offline-queue`, `/api/offline-queue/:id/sync`
+
+**Accounting Export** (`gl_mappings`, `accounting_exports`):
+- GL account code mapping for revenue, tax, tenders, labor
+- Export generation in CSV/QBO/IIF formats
+- Date range reporting
+- API: `/api/gl-mappings`, `/api/accounting-exports/generate`
+
 ## External Dependencies
 
 ### Database

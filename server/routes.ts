@@ -9107,5 +9107,1200 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // FISCAL CLOSE / END-OF-DAY ROUTES
+  // ============================================================================
+
+  app.get("/api/fiscal-periods", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      const periods = await storage.getFiscalPeriods(
+        propertyId as string,
+        startDate as string,
+        endDate as string
+      );
+      res.json(periods);
+    } catch (error) {
+      console.error("Get fiscal periods error:", error);
+      res.status(500).json({ message: "Failed to get fiscal periods" });
+    }
+  });
+
+  app.get("/api/fiscal-periods/:id", async (req, res) => {
+    try {
+      const period = await storage.getFiscalPeriod(req.params.id);
+      if (!period) return res.status(404).json({ message: "Fiscal period not found" });
+      res.json(period);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get fiscal period" });
+    }
+  });
+
+  app.get("/api/fiscal-periods/current/:propertyId", async (req, res) => {
+    try {
+      const property = await storage.getProperty(req.params.propertyId);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+      
+      const businessDate = resolveBusinessDate(new Date(), property);
+      let period = await storage.getFiscalPeriodByDate(req.params.propertyId, businessDate);
+      
+      // Create if doesn't exist
+      if (!period) {
+        period = await storage.createFiscalPeriod({
+          propertyId: req.params.propertyId,
+          businessDate,
+          status: "open",
+        });
+      }
+      res.json(period);
+    } catch (error) {
+      console.error("Get current fiscal period error:", error);
+      res.status(500).json({ message: "Failed to get current fiscal period" });
+    }
+  });
+
+  app.post("/api/fiscal-periods/:id/close", async (req, res) => {
+    try {
+      const { employeeId, cashActual, notes } = req.body;
+      const period = await storage.getFiscalPeriod(req.params.id);
+      if (!period) return res.status(404).json({ message: "Fiscal period not found" });
+
+      // Calculate financial totals from checks
+      const totals = await storage.calculateFiscalPeriodTotals(period.propertyId, period.businessDate);
+      
+      const cashVariance = cashActual !== undefined ? 
+        parseFloat(cashActual) - parseFloat(totals.cashExpected || "0") : null;
+
+      const updated = await storage.updateFiscalPeriod(req.params.id, {
+        status: "closed",
+        closedAt: new Date(),
+        closedById: employeeId,
+        ...totals,
+        cashActual: cashActual?.toString(),
+        cashVariance: cashVariance?.toString(),
+        notes,
+      });
+
+      // Create audit log
+      await storage.createAuditLog({
+        employeeId,
+        action: "fiscal_close",
+        targetType: "fiscal_period",
+        targetId: req.params.id,
+        details: { businessDate: period.businessDate, ...totals },
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Close fiscal period error:", error);
+      res.status(500).json({ message: "Failed to close fiscal period" });
+    }
+  });
+
+  app.post("/api/fiscal-periods/:id/reopen", async (req, res) => {
+    try {
+      const { employeeId, reason } = req.body;
+      const period = await storage.getFiscalPeriod(req.params.id);
+      if (!period) return res.status(404).json({ message: "Fiscal period not found" });
+
+      const updated = await storage.updateFiscalPeriod(req.params.id, {
+        status: "reopened",
+        reopenedAt: new Date(),
+        reopenedById: employeeId,
+        reopenReason: reason,
+      });
+
+      await storage.createAuditLog({
+        employeeId,
+        action: "fiscal_reopen",
+        targetType: "fiscal_period",
+        targetId: req.params.id,
+        details: { reason },
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reopen fiscal period" });
+    }
+  });
+
+  // ============================================================================
+  // CASH MANAGEMENT ROUTES
+  // ============================================================================
+
+  app.get("/api/cash-drawers", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const drawers = await storage.getCashDrawers(propertyId as string);
+      res.json(drawers);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get cash drawers" });
+    }
+  });
+
+  app.post("/api/cash-drawers", async (req, res) => {
+    try {
+      const drawer = await storage.createCashDrawer(req.body);
+      res.status(201).json(drawer);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create cash drawer" });
+    }
+  });
+
+  app.get("/api/drawer-assignments", async (req, res) => {
+    try {
+      const { propertyId, employeeId, businessDate } = req.query;
+      // Require propertyId for security - prevents cross-property data exposure
+      if (!propertyId) {
+        return res.status(400).json({ message: "propertyId is required" });
+      }
+      const assignments = await storage.getDrawerAssignments(
+        propertyId as string,
+        employeeId as string,
+        businessDate as string
+      );
+      res.json(assignments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get drawer assignments" });
+    }
+  });
+
+  app.post("/api/drawer-assignments", async (req, res) => {
+    try {
+      const assignment = await storage.createDrawerAssignment(req.body);
+      res.status(201).json(assignment);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create drawer assignment" });
+    }
+  });
+
+  app.post("/api/drawer-assignments/:id/close", async (req, res) => {
+    try {
+      const { actualAmount, closedById, notes } = req.body;
+      const assignment = await storage.getDrawerAssignment(req.params.id);
+      if (!assignment) return res.status(404).json({ message: "Assignment not found" });
+
+      const variance = parseFloat(actualAmount) - parseFloat(assignment.expectedAmount || "0");
+
+      const updated = await storage.updateDrawerAssignment(req.params.id, {
+        status: "closed",
+        actualAmount: actualAmount.toString(),
+        variance: variance.toString(),
+        closedAt: new Date(),
+        closedById,
+        notes,
+      });
+
+      // Create variance alert if significant
+      if (Math.abs(variance) > 5) {
+        await storage.createManagerAlert({
+          propertyId: assignment.drawerId ? 
+            (await storage.getCashDrawer(assignment.drawerId))?.propertyId || "" : "",
+          alertType: "cash_variance",
+          severity: Math.abs(variance) > 20 ? "critical" : "warning",
+          title: "Cash Drawer Variance",
+          message: `Drawer variance of $${variance.toFixed(2)}`,
+          employeeId: assignment.employeeId,
+          metadata: { assignmentId: req.params.id, variance },
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to close drawer assignment" });
+    }
+  });
+
+  app.post("/api/cash-transactions", async (req, res) => {
+    try {
+      const transaction = await storage.createCashTransaction(req.body);
+      
+      // Update drawer assignment expected amount
+      if (req.body.assignmentId) {
+        const assignment = await storage.getDrawerAssignment(req.body.assignmentId);
+        if (assignment) {
+          const delta = ["sale", "paid_in", "pickup"].includes(req.body.transactionType) ?
+            parseFloat(req.body.amount) : -parseFloat(req.body.amount);
+          await storage.updateDrawerAssignment(req.body.assignmentId, {
+            expectedAmount: (parseFloat(assignment.expectedAmount || "0") + delta).toString(),
+          });
+        }
+      }
+      
+      res.status(201).json(transaction);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create cash transaction" });
+    }
+  });
+
+  app.get("/api/safe-counts", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      const counts = await storage.getSafeCounts(propertyId as string, businessDate as string);
+      res.json(counts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get safe counts" });
+    }
+  });
+
+  app.post("/api/safe-counts", async (req, res) => {
+    try {
+      const count = await storage.createSafeCount(req.body);
+      res.status(201).json(count);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create safe count" });
+    }
+  });
+
+  // ============================================================================
+  // GIFT CARD ROUTES
+  // ============================================================================
+
+  app.get("/api/gift-cards", async (req, res) => {
+    try {
+      const { propertyId, status } = req.query;
+      const cards = await storage.getGiftCards(propertyId as string, status as string);
+      res.json(cards);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get gift cards" });
+    }
+  });
+
+  app.get("/api/gift-cards/lookup/:cardNumber", async (req, res) => {
+    try {
+      const card = await storage.getGiftCardByNumber(req.params.cardNumber);
+      if (!card) return res.status(404).json({ message: "Gift card not found" });
+      res.json(card);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to lookup gift card" });
+    }
+  });
+
+  app.post("/api/gift-cards", async (req, res) => {
+    try {
+      const card = await storage.createGiftCard(req.body);
+      
+      // Create activation transaction
+      await storage.createGiftCardTransaction({
+        giftCardId: card.id,
+        propertyId: req.body.propertyId,
+        transactionType: "activation",
+        amount: req.body.initialBalance,
+        balanceBefore: "0",
+        balanceAfter: req.body.initialBalance,
+        employeeId: req.body.activatedById,
+      });
+
+      res.status(201).json(card);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create gift card" });
+    }
+  });
+
+  app.post("/api/gift-cards/:id/reload", async (req, res) => {
+    try {
+      const { amount, employeeId, propertyId } = req.body;
+      const card = await storage.getGiftCard(req.params.id);
+      if (!card) return res.status(404).json({ message: "Gift card not found" });
+
+      const newBalance = parseFloat(card.currentBalance) + parseFloat(amount);
+      
+      const updated = await storage.updateGiftCard(req.params.id, {
+        currentBalance: newBalance.toString(),
+      });
+
+      await storage.createGiftCardTransaction({
+        giftCardId: card.id,
+        propertyId,
+        transactionType: "reload",
+        amount,
+        balanceBefore: card.currentBalance,
+        balanceAfter: newBalance.toString(),
+        employeeId,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reload gift card" });
+    }
+  });
+
+  app.post("/api/gift-cards/:id/redeem", async (req, res) => {
+    try {
+      const { amount, checkId, employeeId, propertyId, checkPaymentId } = req.body;
+      const card = await storage.getGiftCard(req.params.id);
+      if (!card) return res.status(404).json({ message: "Gift card not found" });
+      if (card.status !== "active") return res.status(400).json({ message: "Gift card is not active" });
+
+      const redeemAmount = Math.min(parseFloat(amount), parseFloat(card.currentBalance));
+      const newBalance = parseFloat(card.currentBalance) - redeemAmount;
+
+      const updateData: any = {
+        currentBalance: newBalance.toString(),
+        lastUsedAt: new Date(),
+      };
+      if (newBalance === 0) {
+        updateData.status = "redeemed";
+      }
+
+      const updated = await storage.updateGiftCard(req.params.id, updateData);
+
+      await storage.createGiftCardTransaction({
+        giftCardId: card.id,
+        propertyId,
+        transactionType: "redemption",
+        amount: redeemAmount.toString(),
+        balanceBefore: card.currentBalance,
+        balanceAfter: newBalance.toString(),
+        checkId,
+        checkPaymentId,
+        employeeId,
+      });
+
+      res.json({ ...updated, redeemedAmount: redeemAmount });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to redeem gift card" });
+    }
+  });
+
+  app.get("/api/gift-cards/:id/transactions", async (req, res) => {
+    try {
+      const transactions = await storage.getGiftCardTransactions(req.params.id);
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get gift card transactions" });
+    }
+  });
+
+  // ============================================================================
+  // LOYALTY PROGRAM ROUTES
+  // ============================================================================
+
+  app.get("/api/loyalty-programs", async (req, res) => {
+    try {
+      const { enterpriseId } = req.query;
+      const programs = await storage.getLoyaltyPrograms(enterpriseId as string);
+      res.json(programs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get loyalty programs" });
+    }
+  });
+
+  app.post("/api/loyalty-programs", async (req, res) => {
+    try {
+      const program = await storage.createLoyaltyProgram(req.body);
+      res.status(201).json(program);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create loyalty program" });
+    }
+  });
+
+  app.put("/api/loyalty-programs/:id", async (req, res) => {
+    try {
+      const program = await storage.updateLoyaltyProgram(req.params.id, req.body);
+      res.json(program);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update loyalty program" });
+    }
+  });
+
+  app.get("/api/loyalty-members", async (req, res) => {
+    try {
+      const { programId, search } = req.query;
+      const members = await storage.getLoyaltyMembers(programId as string, search as string);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get loyalty members" });
+    }
+  });
+
+  app.get("/api/loyalty-members/lookup/:identifier", async (req, res) => {
+    try {
+      // Can lookup by member number, phone, or email
+      const member = await storage.getLoyaltyMemberByIdentifier(req.params.identifier);
+      if (!member) return res.status(404).json({ message: "Member not found" });
+      res.json(member);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to lookup member" });
+    }
+  });
+
+  app.post("/api/loyalty-members", async (req, res) => {
+    try {
+      const member = await storage.createLoyaltyMember(req.body);
+      res.status(201).json(member);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create loyalty member" });
+    }
+  });
+
+  app.post("/api/loyalty-members/:id/earn", async (req, res) => {
+    try {
+      const { points, checkId, checkTotal, propertyId, employeeId, reason } = req.body;
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Member not found" });
+
+      const newPoints = (member.currentPoints || 0) + points;
+      const newLifetime = (member.lifetimePoints || 0) + points;
+
+      const updated = await storage.updateLoyaltyMember(req.params.id, {
+        currentPoints: newPoints,
+        lifetimePoints: newLifetime,
+        visitCount: (member.visitCount || 0) + 1,
+        lifetimeSpend: (parseFloat(member.lifetimeSpend || "0") + parseFloat(checkTotal || "0")).toString(),
+        lastVisitAt: new Date(),
+      });
+
+      await storage.createLoyaltyTransaction({
+        memberId: member.id,
+        propertyId,
+        transactionType: "earn",
+        points,
+        pointsBefore: member.currentPoints || 0,
+        pointsAfter: newPoints,
+        checkId,
+        checkTotal,
+        employeeId,
+        reason,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to earn points" });
+    }
+  });
+
+  app.post("/api/loyalty-members/:id/redeem", async (req, res) => {
+    try {
+      const { points, checkId, propertyId, employeeId, reason } = req.body;
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Member not found" });
+      if ((member.currentPoints || 0) < points) {
+        return res.status(400).json({ message: "Insufficient points" });
+      }
+
+      const newPoints = (member.currentPoints || 0) - points;
+
+      const updated = await storage.updateLoyaltyMember(req.params.id, {
+        currentPoints: newPoints,
+      });
+
+      await storage.createLoyaltyTransaction({
+        memberId: member.id,
+        propertyId,
+        transactionType: "redeem",
+        points: -points,
+        pointsBefore: member.currentPoints || 0,
+        pointsAfter: newPoints,
+        checkId,
+        employeeId,
+        reason,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to redeem points" });
+    }
+  });
+
+  app.get("/api/loyalty-rewards", async (req, res) => {
+    try {
+      const { programId } = req.query;
+      const rewards = await storage.getLoyaltyRewards(programId as string);
+      res.json(rewards);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get loyalty rewards" });
+    }
+  });
+
+  app.post("/api/loyalty-rewards", async (req, res) => {
+    try {
+      const reward = await storage.createLoyaltyReward(req.body);
+      res.status(201).json(reward);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create loyalty reward" });
+    }
+  });
+
+  // ============================================================================
+  // INVENTORY MANAGEMENT ROUTES
+  // ============================================================================
+
+  app.get("/api/inventory-items", async (req, res) => {
+    try {
+      const { propertyId, category } = req.query;
+      const items = await storage.getInventoryItems(propertyId as string, category as string);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get inventory items" });
+    }
+  });
+
+  app.post("/api/inventory-items", async (req, res) => {
+    try {
+      const item = await storage.createInventoryItem(req.body);
+      res.status(201).json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create inventory item" });
+    }
+  });
+
+  app.put("/api/inventory-items/:id", async (req, res) => {
+    try {
+      const item = await storage.updateInventoryItem(req.params.id, req.body);
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update inventory item" });
+    }
+  });
+
+  app.get("/api/inventory-stock", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const stock = await storage.getInventoryStock(propertyId as string);
+      res.json(stock);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get inventory stock" });
+    }
+  });
+
+  app.post("/api/inventory-transactions", async (req, res) => {
+    try {
+      const { inventoryItemId, propertyId, transactionType, quantity, unitCost, employeeId, reason, referenceNumber, businessDate } = req.body;
+
+      // Get current stock
+      let stock = await storage.getInventoryStockByItem(inventoryItemId, propertyId);
+      const currentQty = stock ? parseFloat(stock.currentQuantity || "0") : 0;
+      const newQty = currentQty + parseFloat(quantity);
+
+      // Create transaction
+      const transaction = await storage.createInventoryTransaction({
+        inventoryItemId,
+        propertyId,
+        transactionType,
+        quantity: quantity.toString(),
+        quantityBefore: currentQty.toString(),
+        quantityAfter: newQty.toString(),
+        unitCost: unitCost?.toString(),
+        totalCost: unitCost ? (parseFloat(unitCost) * Math.abs(parseFloat(quantity))).toString() : undefined,
+        businessDate,
+        employeeId,
+        reason,
+        referenceNumber,
+      });
+
+      // Update stock
+      if (stock) {
+        await storage.updateInventoryStock(stock.id, {
+          currentQuantity: newQty.toString(),
+        });
+      } else {
+        await storage.createInventoryStock({
+          inventoryItemId,
+          propertyId,
+          currentQuantity: newQty.toString(),
+        });
+      }
+
+      // Check for low stock alert
+      const item = await storage.getInventoryItem(inventoryItemId);
+      if (item && item.reorderPoint && newQty <= parseFloat(item.reorderPoint)) {
+        await storage.createManagerAlert({
+          propertyId,
+          alertType: "inventory",
+          severity: newQty <= 0 ? "critical" : "warning",
+          title: "Low Inventory Alert",
+          message: `${item.name} is low on stock (${newQty} remaining)`,
+          metadata: { inventoryItemId, currentQuantity: newQty, reorderPoint: item.reorderPoint },
+        });
+      }
+
+      res.status(201).json(transaction);
+    } catch (error) {
+      console.error("Inventory transaction error:", error);
+      res.status(500).json({ message: "Failed to create inventory transaction" });
+    }
+  });
+
+  app.get("/api/recipes", async (req, res) => {
+    try {
+      const { menuItemId } = req.query;
+      const recipes = await storage.getRecipes(menuItemId as string);
+      res.json(recipes);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get recipes" });
+    }
+  });
+
+  app.post("/api/recipes", async (req, res) => {
+    try {
+      const recipe = await storage.createRecipe(req.body);
+      res.status(201).json(recipe);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create recipe" });
+    }
+  });
+
+  // ============================================================================
+  // ONLINE ORDERING ROUTES
+  // ============================================================================
+
+  app.get("/api/online-order-sources", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const sources = await storage.getOnlineOrderSources(propertyId as string);
+      res.json(sources);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get online order sources" });
+    }
+  });
+
+  app.post("/api/online-order-sources", async (req, res) => {
+    try {
+      const source = await storage.createOnlineOrderSource(req.body);
+      res.status(201).json(source);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create online order source" });
+    }
+  });
+
+  app.get("/api/online-orders", async (req, res) => {
+    try {
+      const { propertyId, status, startDate, endDate } = req.query;
+      const orders = await storage.getOnlineOrders(
+        propertyId as string,
+        status as string,
+        startDate as string,
+        endDate as string
+      );
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get online orders" });
+    }
+  });
+
+  app.post("/api/online-orders", async (req, res) => {
+    try {
+      const order = await storage.createOnlineOrder(req.body);
+      
+      // Create manager alert for new order
+      await storage.createManagerAlert({
+        propertyId: req.body.propertyId,
+        rvcId: req.body.rvcId,
+        alertType: "security", // Using security as general notification
+        severity: "info",
+        title: "New Online Order",
+        message: `New ${req.body.orderType} order from ${req.body.customerName || "Customer"}`,
+        metadata: { orderId: order.id, externalOrderId: req.body.externalOrderId },
+      });
+
+      res.status(201).json(order);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create online order" });
+    }
+  });
+
+  app.put("/api/online-orders/:id", async (req, res) => {
+    try {
+      const order = await storage.updateOnlineOrder(req.params.id, req.body);
+      res.json(order);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update online order" });
+    }
+  });
+
+  app.post("/api/online-orders/:id/inject", async (req, res) => {
+    try {
+      const { employeeId } = req.body;
+      const order = await storage.getOnlineOrder(req.params.id);
+      if (!order) return res.status(404).json({ message: "Order not found" });
+
+      // Create a POS check from the online order
+      const check = await storage.createCheck({
+        rvcId: order.rvcId || undefined,
+        employeeId,
+        orderType: order.orderType === "delivery" ? "delivery" : "pickup",
+        guestName: order.customerName,
+        notes: `Online Order: ${order.externalOrderId}`,
+      });
+
+      // Add items from online order
+      const items = order.items as any[];
+      for (const item of items) {
+        await storage.createCheckItem({
+          checkId: check.id,
+          menuItemId: item.menuItemId,
+          menuItemName: item.name,
+          unitPrice: item.price,
+          quantity: item.quantity || 1,
+          modifiers: item.modifiers || [],
+        });
+      }
+
+      // Update online order with check link
+      await storage.updateOnlineOrder(req.params.id, {
+        checkId: check.id,
+        status: "confirmed",
+        confirmedAt: new Date(),
+        injectedAt: new Date(),
+        injectedById: employeeId,
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(check.id);
+      const updatedCheck = await storage.getCheck(check.id);
+
+      res.json({ check: updatedCheck, order });
+    } catch (error) {
+      console.error("Inject online order error:", error);
+      res.status(500).json({ message: "Failed to inject online order" });
+    }
+  });
+
+  // ============================================================================
+  // MANAGER ALERTS ROUTES
+  // ============================================================================
+
+  app.get("/api/manager-alerts", async (req, res) => {
+    try {
+      const { propertyId, alertType, read, acknowledged } = req.query;
+      const alerts = await storage.getManagerAlerts(
+        propertyId as string,
+        alertType as string,
+        read === "true" ? true : read === "false" ? false : undefined,
+        acknowledged === "true" ? true : acknowledged === "false" ? false : undefined
+      );
+      res.json(alerts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get manager alerts" });
+    }
+  });
+
+  app.get("/api/manager-alerts/unread-count/:propertyId", async (req, res) => {
+    try {
+      const count = await storage.getUnreadAlertCount(req.params.propertyId);
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get unread count" });
+    }
+  });
+
+  app.post("/api/manager-alerts/:id/read", async (req, res) => {
+    try {
+      const { employeeId } = req.body;
+      const alert = await storage.updateManagerAlert(req.params.id, {
+        read: true,
+        readAt: new Date(),
+        readById: employeeId,
+      });
+      res.json(alert);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark alert as read" });
+    }
+  });
+
+  app.post("/api/manager-alerts/:id/acknowledge", async (req, res) => {
+    try {
+      const { employeeId, resolution } = req.body;
+      const alert = await storage.updateManagerAlert(req.params.id, {
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+        acknowledgedById: employeeId,
+        resolution,
+      });
+      res.json(alert);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to acknowledge alert" });
+    }
+  });
+
+  // ============================================================================
+  // ITEM AVAILABILITY / PREP COUNTDOWN ROUTES
+  // ============================================================================
+
+  app.get("/api/item-availability", async (req, res) => {
+    try {
+      const { propertyId, rvcId, businessDate } = req.query;
+      const availability = await storage.getItemAvailability(
+        propertyId as string,
+        rvcId as string,
+        businessDate as string
+      );
+      res.json(availability);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get item availability" });
+    }
+  });
+
+  app.post("/api/item-availability", async (req, res) => {
+    try {
+      const availability = await storage.createItemAvailability(req.body);
+      res.status(201).json(availability);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create item availability" });
+    }
+  });
+
+  app.put("/api/item-availability/:id", async (req, res) => {
+    try {
+      const availability = await storage.updateItemAvailability(req.params.id, req.body);
+      res.json(availability);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update item availability" });
+    }
+  });
+
+  app.post("/api/item-availability/:id/86", async (req, res) => {
+    try {
+      const { employeeId } = req.body;
+      const availability = await storage.updateItemAvailability(req.params.id, {
+        is86ed: true,
+        isAvailable: false,
+        eightySixedAt: new Date(),
+        eightySixedById: employeeId,
+        currentQuantity: 0,
+      });
+
+      // Get the menu item name for the alert
+      const item = await storage.getItemAvailability(req.params.id);
+      const menuItem = item?.menuItemId ? await storage.getMenuItem(item.menuItemId) : null;
+
+      // Create alert
+      if (item) {
+        await storage.createManagerAlert({
+          propertyId: item.propertyId,
+          rvcId: item.rvcId || undefined,
+          alertType: "inventory",
+          severity: "warning",
+          title: "Item 86'd",
+          message: `${menuItem?.name || "Item"} has been 86'd (sold out)`,
+          employeeId,
+          metadata: { menuItemId: item.menuItemId },
+        });
+      }
+
+      res.json(availability);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to 86 item" });
+    }
+  });
+
+  app.get("/api/prep-items", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const items = await storage.getPrepItems(propertyId as string);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get prep items" });
+    }
+  });
+
+  app.post("/api/prep-items", async (req, res) => {
+    try {
+      const item = await storage.createPrepItem(req.body);
+      res.status(201).json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create prep item" });
+    }
+  });
+
+  app.post("/api/prep-items/:id/update-level", async (req, res) => {
+    try {
+      const { quantity, employeeId } = req.body;
+      const item = await storage.updatePrepItem(req.params.id, {
+        currentLevel: quantity,
+        lastPrepAt: new Date(),
+        lastPrepById: employeeId,
+        lastPrepQuantity: quantity,
+      });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update prep level" });
+    }
+  });
+
+  // ============================================================================
+  // LABOR FORECASTING ROUTES
+  // ============================================================================
+
+  app.get("/api/sales-forecasts", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      const forecasts = await storage.getSalesForecasts(
+        propertyId as string,
+        startDate as string,
+        endDate as string
+      );
+      res.json(forecasts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get sales forecasts" });
+    }
+  });
+
+  app.post("/api/sales-forecasts", async (req, res) => {
+    try {
+      const forecast = await storage.createSalesForecast(req.body);
+      res.status(201).json(forecast);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create sales forecast" });
+    }
+  });
+
+  app.post("/api/sales-forecasts/generate", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.body;
+      
+      // Simple forecast generation based on historical data
+      const historicalData = await storage.getHistoricalSalesData(propertyId, 8); // Last 8 weeks
+      
+      const forecasts = [];
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      for (let date = start; date <= end; date.setDate(date.getDate() + 1)) {
+        const dayOfWeek = date.getDay();
+        const dateStr = date.toISOString().split("T")[0];
+        
+        // Average sales for this day of week from historical data
+        const dayData = historicalData.filter(d => new Date(d.businessDate).getDay() === dayOfWeek);
+        const avgSales = dayData.length > 0 ? 
+          dayData.reduce((sum, d) => sum + parseFloat(d.netSales || "0"), 0) / dayData.length : 
+          1000; // Default if no history
+
+        const forecast = await storage.createSalesForecast({
+          propertyId,
+          forecastDate: dateStr,
+          dayOfWeek,
+          projectedSales: avgSales.toFixed(2),
+          projectedGuests: Math.round(avgSales / 15), // Assume $15 avg check
+          projectedChecks: Math.round(avgSales / 25), // Assume $25 avg check
+          confidence: "0.75",
+        });
+        forecasts.push(forecast);
+      }
+
+      res.json(forecasts);
+    } catch (error) {
+      console.error("Generate forecasts error:", error);
+      res.status(500).json({ message: "Failed to generate forecasts" });
+    }
+  });
+
+  app.get("/api/labor-forecasts", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      const forecasts = await storage.getLaborForecasts(
+        propertyId as string,
+        startDate as string,
+        endDate as string
+      );
+      res.json(forecasts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get labor forecasts" });
+    }
+  });
+
+  app.post("/api/labor-forecasts/generate", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate, targetLaborPercent } = req.body;
+      
+      // Get sales forecasts for the period
+      const salesForecasts = await storage.getSalesForecasts(propertyId, startDate, endDate);
+      const jobCodes = await storage.getJobCodes(propertyId);
+      
+      const laborForecasts = [];
+      
+      for (const salesForecast of salesForecasts) {
+        const projectedSales = parseFloat(salesForecast.projectedSales || "0");
+        const laborBudget = projectedSales * (targetLaborPercent / 100);
+        
+        for (const jobCode of jobCodes) {
+          const hourlyRate = parseFloat(jobCode.hourlyRate || "15");
+          const hoursNeeded = laborBudget / jobCodes.length / hourlyRate;
+          
+          const forecast = await storage.createLaborForecast({
+            propertyId,
+            forecastDate: salesForecast.forecastDate,
+            jobCodeId: jobCode.id,
+            totalHoursNeeded: hoursNeeded.toFixed(2),
+            projectedLaborCost: (hoursNeeded * hourlyRate).toFixed(2),
+            targetLaborPercent: targetLaborPercent.toString(),
+          });
+          laborForecasts.push(forecast);
+        }
+      }
+
+      res.json(laborForecasts);
+    } catch (error) {
+      console.error("Generate labor forecasts error:", error);
+      res.status(500).json({ message: "Failed to generate labor forecasts" });
+    }
+  });
+
+  // ============================================================================
+  // ACCOUNTING EXPORT ROUTES
+  // ============================================================================
+
+  app.get("/api/gl-mappings", async (req, res) => {
+    try {
+      const { propertyId, enterpriseId } = req.query;
+      const mappings = await storage.getGlMappings(propertyId as string, enterpriseId as string);
+      res.json(mappings);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get GL mappings" });
+    }
+  });
+
+  app.post("/api/gl-mappings", async (req, res) => {
+    try {
+      const mapping = await storage.createGlMapping(req.body);
+      res.status(201).json(mapping);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create GL mapping" });
+    }
+  });
+
+  app.get("/api/accounting-exports", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const exports = await storage.getAccountingExports(propertyId as string);
+      res.json(exports);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get accounting exports" });
+    }
+  });
+
+  app.post("/api/accounting-exports/generate", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate, formatType, employeeId } = req.body;
+
+      // Create export record
+      const exportRecord = await storage.createAccountingExport({
+        propertyId,
+        exportType: "custom",
+        formatType: formatType || "csv",
+        startDate,
+        endDate,
+        status: "processing",
+        generatedById: employeeId,
+      });
+
+      // Generate export data (simplified - would be more complex in production)
+      const fiscalPeriods = await storage.getFiscalPeriods(propertyId, startDate, endDate);
+      
+      let totalRevenue = 0;
+      let totalTax = 0;
+      let rowCount = 0;
+
+      for (const period of fiscalPeriods) {
+        totalRevenue += parseFloat(period.netSales || "0");
+        totalTax += parseFloat(period.taxCollected || "0");
+        rowCount++;
+      }
+
+      // Update export record
+      const updated = await storage.updateAccountingExport(exportRecord.id, {
+        status: "completed",
+        generatedAt: new Date(),
+        totalRevenue: totalRevenue.toString(),
+        totalTax: totalTax.toString(),
+        rowCount,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Generate accounting export error:", error);
+      res.status(500).json({ message: "Failed to generate accounting export" });
+    }
+  });
+
+  // ============================================================================
+  // OFFLINE ORDER QUEUE ROUTES
+  // ============================================================================
+
+  app.get("/api/offline-queue", async (req, res) => {
+    try {
+      const { propertyId, status } = req.query;
+      const queue = await storage.getOfflineOrderQueue(propertyId as string, status as string);
+      res.json(queue);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get offline queue" });
+    }
+  });
+
+  app.post("/api/offline-queue", async (req, res) => {
+    try {
+      // Check for duplicate by localId
+      const existing = await storage.getOfflineOrderByLocalId(req.body.localId);
+      if (existing) {
+        return res.json(existing); // Idempotent - return existing record
+      }
+
+      const queueItem = await storage.createOfflineOrderQueue(req.body);
+      res.status(201).json(queueItem);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to queue offline order" });
+    }
+  });
+
+  app.post("/api/offline-queue/:id/sync", async (req, res) => {
+    try {
+      const queueItem = await storage.getOfflineOrderQueueItem(req.params.id);
+      if (!queueItem) return res.status(404).json({ message: "Queue item not found" });
+
+      // Attempt to sync
+      await storage.updateOfflineOrderQueue(req.params.id, {
+        status: "syncing",
+        syncAttempts: (queueItem.syncAttempts || 0) + 1,
+        lastSyncAttempt: new Date(),
+      });
+
+      try {
+        // Create the actual check from the order data
+        const orderData = queueItem.orderData as any;
+        const check = await storage.createCheck({
+          rvcId: queueItem.rvcId || undefined,
+          employeeId: queueItem.employeeId || undefined,
+          orderType: orderData.orderType,
+          guestName: orderData.guestName,
+          notes: orderData.notes,
+        });
+
+        // Add items
+        for (const item of orderData.items || []) {
+          await storage.createCheckItem({
+            checkId: check.id,
+            menuItemId: item.menuItemId,
+            menuItemName: item.menuItemName,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            modifiers: item.modifiers,
+          });
+        }
+
+        await recalculateCheckTotals(check.id);
+
+        // Mark as synced
+        await storage.updateOfflineOrderQueue(req.params.id, {
+          status: "synced",
+          syncedCheckId: check.id,
+          syncedAt: new Date(),
+        });
+
+        const finalCheck = await storage.getCheck(check.id);
+        res.json({ success: true, check: finalCheck });
+      } catch (syncError: any) {
+        await storage.updateOfflineOrderQueue(req.params.id, {
+          status: "failed",
+          errorMessage: syncError.message,
+        });
+        throw syncError;
+      }
+    } catch (error: any) {
+      console.error("Sync offline order error:", error);
+      res.status(500).json({ message: error.message || "Failed to sync offline order" });
+    }
+  });
+
   return httpServer;
 }
