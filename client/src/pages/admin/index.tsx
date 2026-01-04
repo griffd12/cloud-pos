@@ -56,6 +56,14 @@ import TerminalDevicesPage from "./terminal-devices";
 import OnboardingPage from "./onboarding";
 import GiftCardsPage from "./gift-cards";
 import LoyaltyPage from "./loyalty";
+import FiscalClosePage from "./fiscal-close";
+import CashManagementPage from "./cash-management";
+import OnlineOrderingPage from "./online-ordering";
+import InventoryPage from "./inventory";
+import ForecastingPage from "./forecasting";
+import ManagerAlertsPage from "./manager-alerts";
+import ItemAvailabilityPage from "./item-availability";
+import AccountingExportPage from "./accounting-export";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -289,6 +297,14 @@ export default function AdminLayout() {
               <Route path="/admin/onboarding" component={OnboardingPage} />
               <Route path="/admin/gift-cards" component={GiftCardsPage} />
               <Route path="/admin/loyalty" component={LoyaltyPage} />
+              <Route path="/admin/fiscal-close" component={FiscalClosePage} />
+              <Route path="/admin/cash-management" component={CashManagementPage} />
+              <Route path="/admin/online-ordering" component={OnlineOrderingPage} />
+              <Route path="/admin/inventory" component={InventoryPage} />
+              <Route path="/admin/forecasting" component={ForecastingPage} />
+              <Route path="/admin/manager-alerts" component={ManagerAlertsPage} />
+              <Route path="/admin/item-availability" component={ItemAvailabilityPage} />
+              <Route path="/admin/accounting-export" component={AccountingExportPage} />
             </Switch>
           </main>
         </div>

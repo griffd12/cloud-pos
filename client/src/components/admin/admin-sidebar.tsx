@@ -40,6 +40,14 @@ import {
   Scale,
   Wallet,
   ClipboardCheck,
+  Calendar,
+  Banknote,
+  ShoppingBag,
+  Package,
+  TrendingUp,
+  Bell,
+  CheckCircle,
+  FileText,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -118,6 +126,19 @@ const menuGroups = [
       { title: "Reports Dashboard", url: "/admin/reports", icon: LayoutGrid },
       { title: "Tip Pooling", url: "/admin/tip-pooling", icon: Coins },
       { title: "Labor Analytics", url: "/admin/labor-analytics", icon: BarChart3 },
+      { title: "Forecasting", url: "/admin/forecasting", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { title: "Fiscal Close", url: "/admin/fiscal-close", icon: Calendar },
+      { title: "Cash Management", url: "/admin/cash-management", icon: Banknote },
+      { title: "Online Ordering", url: "/admin/online-ordering", icon: ShoppingBag },
+      { title: "Inventory", url: "/admin/inventory", icon: Package },
+      { title: "Item Availability", url: "/admin/item-availability", icon: CheckCircle },
+      { title: "Manager Alerts", url: "/admin/manager-alerts", icon: Bell },
+      { title: "Accounting Export", url: "/admin/accounting-export", icon: FileText },
     ],
   },
   {
