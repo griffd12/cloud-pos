@@ -410,8 +410,25 @@ export interface IStorage {
   setDefaultLayoutForRvc(rvcId: string, layoutId: string): Promise<void>;
 
   // Admin Sales Reset (property-specific)
-  getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }>;
-  clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number; timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; tipAllocations: number; tipPoolRuns: number } }>;
+  getSalesDataSummary(propertyId: string): Promise<{ 
+    checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number;
+    fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
+    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
+    salesForecasts: number; laborForecasts: number; managerAlerts: number;
+    itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
+  }>;
+  clearSalesData(propertyId: string): Promise<{ deleted: { 
+    checks: number; checkItems: number; payments: number; discounts: number; rounds: number; 
+    kdsTicketItems: number; kdsTickets: number; auditLogs: number; 
+    timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; 
+    tipAllocations: number; tipPoolRuns: number;
+    fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
+    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
+    salesForecasts: number; laborForecasts: number; managerAlerts: number;
+    itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
+  } }>;
 
   // Device Registry (CAL)
   getDevices(filters?: { enterpriseId?: string; propertyId?: string; deviceType?: string; status?: string }): Promise<Device[]>;
@@ -2173,13 +2190,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Admin Sales Reset (property-specific)
-  async getSalesDataSummary(propertyId: string): Promise<{ checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number }> {
+  async getSalesDataSummary(propertyId: string): Promise<{ 
+    checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number;
+    fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
+    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
+    salesForecasts: number; laborForecasts: number; managerAlerts: number;
+    itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
+  }> {
     // Get all RVCs for this property
     const propertyRvcs = await db.select({ id: rvcs.id }).from(rvcs).where(eq(rvcs.propertyId, propertyId));
     const rvcIds = propertyRvcs.map(r => r.id);
 
+    const emptyResult = { 
+      checks: 0, checkItems: 0, payments: 0, rounds: 0, kdsTickets: 0, auditLogs: 0,
+      fiscalPeriods: 0, cashTransactions: 0, drawerAssignments: 0, safeCounts: 0,
+      giftCardTransactions: 0, loyaltyTransactions: 0, loyaltyRedemptions: 0,
+      onlineOrders: 0, inventoryTransactions: 0, inventoryStock: 0,
+      salesForecasts: 0, laborForecasts: 0, managerAlerts: 0,
+      itemAvailability: 0, prepItems: 0, offlineQueue: 0, accountingExports: 0,
+    };
+
     if (rvcIds.length === 0) {
-      return { checks: 0, checkItems: 0, payments: 0, rounds: 0, kdsTickets: 0, auditLogs: 0 };
+      return emptyResult;
     }
 
     // Count checks for this property's RVCs
@@ -2203,6 +2236,42 @@ export class DatabaseStorage implements IStorage {
     const [kdsCount] = await db.select({ count: sql<number>`count(*)` }).from(kdsTickets).where(inArray(kdsTickets.rvcId, rvcIds));
     const [auditCount] = await db.select({ count: sql<number>`count(*)` }).from(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
 
+    // Enterprise features - count by propertyId
+    const [fiscalCount] = await db.select({ count: sql<number>`count(*)` }).from(fiscalPeriods).where(eq(fiscalPeriods.propertyId, propertyId));
+    const [safeCount] = await db.select({ count: sql<number>`count(*)` }).from(safeCounts).where(eq(safeCounts.propertyId, propertyId));
+    const [onlineOrdersCount] = await db.select({ count: sql<number>`count(*)` }).from(onlineOrders).where(eq(onlineOrders.propertyId, propertyId));
+    const [invTransCount] = await db.select({ count: sql<number>`count(*)` }).from(inventoryTransactions).where(eq(inventoryTransactions.propertyId, propertyId));
+    const [invStockCount] = await db.select({ count: sql<number>`count(*)` }).from(inventoryStock).where(eq(inventoryStock.propertyId, propertyId));
+    const [salesForecastCount] = await db.select({ count: sql<number>`count(*)` }).from(salesForecasts).where(eq(salesForecasts.propertyId, propertyId));
+    const [laborForecastCount] = await db.select({ count: sql<number>`count(*)` }).from(laborForecasts).where(eq(laborForecasts.propertyId, propertyId));
+    const [alertsCount] = await db.select({ count: sql<number>`count(*)` }).from(managerAlerts).where(eq(managerAlerts.propertyId, propertyId));
+    const [itemAvailCount] = await db.select({ count: sql<number>`count(*)` }).from(itemAvailability).where(eq(itemAvailability.propertyId, propertyId));
+    const [prepCount] = await db.select({ count: sql<number>`count(*)` }).from(prepItems).where(eq(prepItems.propertyId, propertyId));
+    const [accountingCount] = await db.select({ count: sql<number>`count(*)` }).from(accountingExports).where(eq(accountingExports.propertyId, propertyId));
+
+    // Cash management - get drawers for this property first
+    const propertyDrawers = await db.select({ id: cashDrawers.id }).from(cashDrawers).where(eq(cashDrawers.propertyId, propertyId));
+    const drawerIds = propertyDrawers.map(d => d.id);
+    let cashTransCount = { count: 0 };
+    let drawerAssignCount = { count: 0 };
+    if (drawerIds.length > 0) {
+      [cashTransCount] = await db.select({ count: sql<number>`count(*)` }).from(cashTransactions).where(inArray(cashTransactions.drawerId, drawerIds));
+      [drawerAssignCount] = await db.select({ count: sql<number>`count(*)` }).from(drawerAssignments).where(inArray(drawerAssignments.drawerId, drawerIds));
+    }
+
+    // Gift card transactions by propertyId
+    const [giftCardTransCount] = await db.select({ count: sql<number>`count(*)` }).from(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
+
+    // Loyalty transactions by propertyId
+    const [loyaltyTransCount] = await db.select({ count: sql<number>`count(*)` }).from(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
+    const [loyaltyRedemptionCount] = await db.select({ count: sql<number>`count(*)` }).from(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
+
+    // Offline queue by rvcId
+    let offlineCount = { count: 0 };
+    if (rvcIds.length > 0) {
+      [offlineCount] = await db.select({ count: sql<number>`count(*)` }).from(offlineOrderQueue).where(inArray(offlineOrderQueue.rvcId, rvcIds));
+    }
+
     return {
       checks: Number(checksCount?.count || 0),
       checkItems: Number(itemsCount?.count || 0),
@@ -2210,16 +2279,55 @@ export class DatabaseStorage implements IStorage {
       rounds: Number(roundsCount?.count || 0),
       kdsTickets: Number(kdsCount?.count || 0),
       auditLogs: Number(auditCount?.count || 0),
+      fiscalPeriods: Number(fiscalCount?.count || 0),
+      cashTransactions: Number(cashTransCount?.count || 0),
+      drawerAssignments: Number(drawerAssignCount?.count || 0),
+      safeCounts: Number(safeCount?.count || 0),
+      giftCardTransactions: Number(giftCardTransCount?.count || 0),
+      loyaltyTransactions: Number(loyaltyTransCount?.count || 0),
+      loyaltyRedemptions: Number(loyaltyRedemptionCount?.count || 0),
+      onlineOrders: Number(onlineOrdersCount?.count || 0),
+      inventoryTransactions: Number(invTransCount?.count || 0),
+      inventoryStock: Number(invStockCount?.count || 0),
+      salesForecasts: Number(salesForecastCount?.count || 0),
+      laborForecasts: Number(laborForecastCount?.count || 0),
+      managerAlerts: Number(alertsCount?.count || 0),
+      itemAvailability: Number(itemAvailCount?.count || 0),
+      prepItems: Number(prepCount?.count || 0),
+      offlineQueue: Number(offlineCount?.count || 0),
+      accountingExports: Number(accountingCount?.count || 0),
     };
   }
 
-  async clearSalesData(propertyId: string): Promise<{ deleted: { checks: number; checkItems: number; payments: number; discounts: number; rounds: number; kdsTicketItems: number; kdsTickets: number; auditLogs: number; timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; tipAllocations: number; tipPoolRuns: number } }> {
+  async clearSalesData(propertyId: string): Promise<{ deleted: { 
+    checks: number; checkItems: number; payments: number; discounts: number; rounds: number; 
+    kdsTicketItems: number; kdsTickets: number; auditLogs: number; 
+    timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; 
+    tipAllocations: number; tipPoolRuns: number;
+    fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
+    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
+    salesForecasts: number; laborForecasts: number; managerAlerts: number;
+    itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
+  } }> {
     // Get all RVCs for this property
     const propertyRvcs = await db.select({ id: rvcs.id }).from(rvcs).where(eq(rvcs.propertyId, propertyId));
     const rvcIds = propertyRvcs.map(r => r.id);
 
+    const emptyResult = { 
+      checks: 0, checkItems: 0, payments: 0, discounts: 0, rounds: 0, 
+      kdsTicketItems: 0, kdsTickets: 0, auditLogs: 0, 
+      timePunches: 0, timecards: 0, breakSessions: 0, timecardExceptions: 0, shifts: 0, 
+      tipAllocations: 0, tipPoolRuns: 0,
+      fiscalPeriods: 0, cashTransactions: 0, drawerAssignments: 0, safeCounts: 0,
+      giftCardTransactions: 0, loyaltyTransactions: 0, loyaltyRedemptions: 0,
+      onlineOrders: 0, inventoryTransactions: 0, inventoryStock: 0,
+      salesForecasts: 0, laborForecasts: 0, managerAlerts: 0,
+      itemAvailability: 0, prepItems: 0, offlineQueue: 0, accountingExports: 0,
+    };
+
     if (rvcIds.length === 0) {
-      return { deleted: { checks: 0, checkItems: 0, payments: 0, discounts: 0, rounds: 0, kdsTicketItems: 0, kdsTickets: 0, auditLogs: 0, timePunches: 0, timecards: 0, breakSessions: 0, timecardExceptions: 0, shifts: 0, tipAllocations: 0, tipPoolRuns: 0 } };
+      return { deleted: emptyResult };
     }
 
     // Use transaction to ensure atomicity - either all tables are cleared or none
@@ -2260,6 +2368,10 @@ export class DatabaseStorage implements IStorage {
       }
       
       const allKdsTicketIds = Array.from(kdsTicketIdSet);
+
+      // Get cash drawer IDs for this property
+      const propertyDrawers = await tx.select({ id: cashDrawers.id }).from(cashDrawers).where(eq(cashDrawers.propertyId, propertyId));
+      const drawerIds = propertyDrawers.map(d => d.id);
 
       // STEP 2: Delete in FK-safe order
       let kdsItemsResult = { rowCount: 0 };
@@ -2345,6 +2457,54 @@ export class DatabaseStorage implements IStorage {
       // 3i. Delete shifts (schedules)
       const shiftsResult = await tx.delete(shifts).where(eq(shifts.propertyId, propertyId));
 
+      // STEP 4: Delete enterprise feature data for this property
+
+      // 4a. Fiscal periods
+      const fiscalResult = await tx.delete(fiscalPeriods).where(eq(fiscalPeriods.propertyId, propertyId));
+
+      // 4b. Cash management - delete transactions and assignments first, then safe counts
+      let cashTransResult = { rowCount: 0 };
+      let drawerAssignResult = { rowCount: 0 };
+      if (drawerIds.length > 0) {
+        cashTransResult = await tx.delete(cashTransactions).where(inArray(cashTransactions.drawerId, drawerIds));
+        drawerAssignResult = await tx.delete(drawerAssignments).where(inArray(drawerAssignments.drawerId, drawerIds));
+      }
+      const safeCountsResult = await tx.delete(safeCounts).where(eq(safeCounts.propertyId, propertyId));
+
+      // 4c. Gift card transactions (keep gift cards themselves as they are enterprise-wide assets)
+      const giftCardTransResult = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
+
+      // 4d. Loyalty transactions and redemptions (keep members as they are program-scoped)
+      const loyaltyTransResult = await tx.delete(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
+      const loyaltyRedemptionResult = await tx.delete(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
+
+      // 4e. Online orders
+      const onlineOrdersResult = await tx.delete(onlineOrders).where(eq(onlineOrders.propertyId, propertyId));
+
+      // 4f. Inventory transactions and stock
+      const invTransResult = await tx.delete(inventoryTransactions).where(eq(inventoryTransactions.propertyId, propertyId));
+      const invStockResult = await tx.delete(inventoryStock).where(eq(inventoryStock.propertyId, propertyId));
+
+      // 4g. Forecasts
+      const salesForecastResult = await tx.delete(salesForecasts).where(eq(salesForecasts.propertyId, propertyId));
+      const laborForecastResult = await tx.delete(laborForecasts).where(eq(laborForecasts.propertyId, propertyId));
+
+      // 4h. Manager alerts
+      const alertsResult = await tx.delete(managerAlerts).where(eq(managerAlerts.propertyId, propertyId));
+
+      // 4i. Item availability and prep items
+      const itemAvailResult = await tx.delete(itemAvailability).where(eq(itemAvailability.propertyId, propertyId));
+      const prepResult = await tx.delete(prepItems).where(eq(prepItems.propertyId, propertyId));
+
+      // 4j. Offline queue (by rvcId)
+      let offlineResult = { rowCount: 0 };
+      if (rvcIds.length > 0) {
+        offlineResult = await tx.delete(offlineOrderQueue).where(inArray(offlineOrderQueue.rvcId, rvcIds));
+      }
+
+      // 4k. Accounting exports
+      const accountingResult = await tx.delete(accountingExports).where(eq(accountingExports.propertyId, propertyId));
+
       return {
         deleted: {
           checks: checksResult.rowCount || 0,
@@ -2362,6 +2522,23 @@ export class DatabaseStorage implements IStorage {
           shifts: shiftsResult.rowCount || 0,
           tipAllocations: tipAllocationsResult.rowCount || 0,
           tipPoolRuns: tipPoolRunsResult.rowCount || 0,
+          fiscalPeriods: fiscalResult.rowCount || 0,
+          cashTransactions: cashTransResult.rowCount || 0,
+          drawerAssignments: drawerAssignResult.rowCount || 0,
+          safeCounts: safeCountsResult.rowCount || 0,
+          giftCardTransactions: giftCardTransResult.rowCount || 0,
+          loyaltyTransactions: loyaltyTransResult.rowCount || 0,
+          loyaltyRedemptions: loyaltyRedemptionResult.rowCount || 0,
+          onlineOrders: onlineOrdersResult.rowCount || 0,
+          inventoryTransactions: invTransResult.rowCount || 0,
+          inventoryStock: invStockResult.rowCount || 0,
+          salesForecasts: salesForecastResult.rowCount || 0,
+          laborForecasts: laborForecastResult.rowCount || 0,
+          managerAlerts: alertsResult.rowCount || 0,
+          itemAvailability: itemAvailResult.rowCount || 0,
+          prepItems: prepResult.rowCount || 0,
+          offlineQueue: offlineResult.rowCount || 0,
+          accountingExports: accountingResult.rowCount || 0,
         }
       };
     });

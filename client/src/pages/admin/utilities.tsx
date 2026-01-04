@@ -27,6 +27,23 @@ interface SalesDataSummary {
   rounds: number;
   kdsTickets: number;
   auditLogs: number;
+  fiscalPeriods: number;
+  cashTransactions: number;
+  drawerAssignments: number;
+  safeCounts: number;
+  giftCardTransactions: number;
+  loyaltyTransactions: number;
+  loyaltyRedemptions: number;
+  onlineOrders: number;
+  inventoryTransactions: number;
+  inventoryStock: number;
+  salesForecasts: number;
+  laborForecasts: number;
+  managerAlerts: number;
+  itemAvailability: number;
+  prepItems: number;
+  offlineQueue: number;
+  accountingExports: number;
 }
 
 interface BusinessDateInfo {
@@ -62,6 +79,23 @@ interface ClearResult {
     shifts: number;
     tipAllocations: number;
     tipPoolRuns: number;
+    fiscalPeriods: number;
+    cashTransactions: number;
+    drawerAssignments: number;
+    safeCounts: number;
+    giftCardTransactions: number;
+    loyaltyTransactions: number;
+    loyaltyRedemptions: number;
+    onlineOrders: number;
+    inventoryTransactions: number;
+    inventoryStock: number;
+    salesForecasts: number;
+    laborForecasts: number;
+    managerAlerts: number;
+    itemAvailability: number;
+    prepItems: number;
+    offlineQueue: number;
+    accountingExports: number;
   };
 }
 
@@ -170,7 +204,12 @@ export default function UtilitiesPage() {
   };
 
   const totalRecords = summary
-    ? summary.checks + summary.checkItems + summary.payments + summary.rounds + summary.kdsTickets + summary.auditLogs
+    ? summary.checks + summary.checkItems + summary.payments + summary.rounds + summary.kdsTickets + summary.auditLogs +
+      summary.fiscalPeriods + summary.cashTransactions + summary.drawerAssignments + summary.safeCounts +
+      summary.giftCardTransactions + summary.loyaltyTransactions + summary.loyaltyRedemptions +
+      summary.onlineOrders + summary.inventoryTransactions + summary.inventoryStock +
+      summary.salesForecasts + summary.laborForecasts + summary.managerAlerts +
+      summary.itemAvailability + summary.prepItems + summary.offlineQueue + summary.accountingExports
     : 0;
 
   const canSubmit = acknowledged && pin.length > 0 && confirmText === "RESET" && selectedPropertyId;
@@ -380,6 +419,77 @@ export default function UtilitiesPage() {
               <div>
                 <span className="text-muted-foreground">Tip Pool Runs:</span>{" "}
                 <span className="font-medium">{lastResult.deleted.tipPoolRuns}</span>
+              </div>
+              <div className="col-span-2 md:col-span-4 pt-2 border-t mt-2">
+                <span className="font-semibold text-sm">Enterprise Features</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Fiscal Periods:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.fiscalPeriods}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Cash Transactions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.cashTransactions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Drawer Assignments:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.drawerAssignments}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Safe Counts:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.safeCounts}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Gift Card Transactions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.giftCardTransactions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Loyalty Transactions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.loyaltyTransactions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Loyalty Redemptions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.loyaltyRedemptions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Online Orders:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.onlineOrders}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Inventory Transactions:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.inventoryTransactions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Inventory Stock:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.inventoryStock}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Sales Forecasts:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.salesForecasts}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Labor Forecasts:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.laborForecasts}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Manager Alerts:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.managerAlerts}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Item Availability:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.itemAvailability}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Prep Items:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.prepItems}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Offline Queue:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.offlineQueue}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Accounting Exports:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.accountingExports}</span>
               </div>
             </div>
           </CardContent>
