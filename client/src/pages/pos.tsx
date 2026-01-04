@@ -1447,6 +1447,54 @@ export default function PosPage() {
           }
           queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
         }}
+        onReorderRequested={async (items) => {
+          try {
+            // Create a new check if there isn't one open
+            let checkToUse = currentCheck;
+            if (!checkToUse) {
+              const newCheckRes = await apiRequest("POST", "/api/checks", {
+                rvcId: currentRvc?.id,
+                employeeId: currentEmployee?.id,
+                orderType: "dine_in",
+              });
+              const newCheck = await newCheckRes.json();
+              checkToUse = newCheck;
+              setCurrentCheck(newCheck);
+              setCheckItems([]);
+            }
+            
+            // Add each item from the previous order
+            for (const item of items) {
+              await apiRequest("POST", `/api/checks/${checkToUse?.id}/items`, {
+                menuItemId: item.menuItemId,
+                menuItemName: item.menuItemName,
+                unitPrice: item.unitPrice,
+                quantity: item.quantity,
+                modifiers: item.modifiers || [],
+              });
+            }
+            
+            // Refresh the check data
+            const refreshRes = await fetch(`/api/checks/${checkToUse?.id}`, { credentials: "include" });
+            if (refreshRes.ok) {
+              const data = await refreshRes.json();
+              setCurrentCheck(data.check);
+              setCheckItems(data.items);
+            }
+            
+            queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+            toast({
+              title: "Repeat Order Complete",
+              description: `${items.length} item(s) added to check`,
+            });
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: "Failed to repeat order",
+              variant: "destructive",
+            });
+          }
+        }}
       />
 
       <GiftCardModal

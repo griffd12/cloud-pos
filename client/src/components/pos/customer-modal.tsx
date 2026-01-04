@@ -36,9 +36,13 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Check, CheckItem, LoyaltyMember, LoyaltyReward, LoyaltyTransaction } from "@shared/schema";
 
+interface CheckWithItems extends Check {
+  items: CheckItem[];
+}
+
 interface CustomerDetailsResponse {
   customer: LoyaltyMember;
-  recentChecks: Check[];
+  recentChecks: CheckWithItems[];
   transactions: LoyaltyTransaction[];
   availableRewards: LoyaltyReward[];
 }
@@ -70,6 +74,7 @@ export function CustomerModal({
   const [showAddPoints, setShowAddPoints] = useState(false);
   const [pointsToAdd, setPointsToAdd] = useState("");
   const [pointsReason, setPointsReason] = useState("");
+  const [selectedHistoryCheck, setSelectedHistoryCheck] = useState<CheckWithItems | null>(null);
 
   const [enrollForm, setEnrollForm] = useState({
     firstName: "",
@@ -753,29 +758,87 @@ export function CustomerModal({
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : customerDetails?.recentChecks && customerDetails.recentChecks.length > 0 ? (
-              <ScrollArea className="h-[300px]">
-                <div className="space-y-2 pr-2">
-                  {customerDetails.recentChecks.map((check) => (
-                    <Card key={check.id} className="p-3" data-testid={`card-history-check-${check.id}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="font-medium">Check #{check.checkNumber}</span>
-                          <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                            <Clock className="w-3 h-3" />
-                            {check.openedAt ? new Date(check.openedAt).toLocaleDateString() : "N/A"}
+              <div className="flex flex-col h-[300px]">
+                <ScrollArea className="flex-1">
+                  <div className="space-y-2 pr-2">
+                    {customerDetails.recentChecks.map((check) => {
+                      const isSelected = selectedHistoryCheck?.id === check.id;
+                      const activeItems = check.items?.filter(item => item.itemStatus === "active" && !item.voided) || [];
+                      return (
+                        <Card
+                          key={check.id}
+                          className={`p-3 cursor-pointer transition-colors ${isSelected ? "ring-2 ring-primary bg-primary/5" : "hover-elevate"}`}
+                          onClick={() => setSelectedHistoryCheck(isSelected ? null : check)}
+                          data-testid={`card-history-check-${check.id}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium">Check #{check.checkNumber}</span>
+                              <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+                                <Clock className="w-3 h-3" />
+                                {check.openedAt ? new Date(check.openedAt).toLocaleDateString() : "N/A"}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-semibold">${check.total || "0.00"}</span>
+                              <Badge variant="secondary" className="ml-2 text-xs">
+                                {check.status}
+                              </Badge>
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-semibold">${check.total || "0.00"}</span>
-                          <Badge variant="secondary" className="ml-2 text-xs">
-                            {check.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </ScrollArea>
+                          {activeItems.length > 0 && (
+                            <div className="mt-2 pt-2 border-t">
+                              <div className="text-xs text-muted-foreground mb-1">{activeItems.length} item(s)</div>
+                              <div className="space-y-1">
+                                {activeItems.slice(0, isSelected ? activeItems.length : 3).map((item, idx) => (
+                                  <div key={item.id || idx} className="flex items-center justify-between text-sm">
+                                    <span className="truncate flex-1">
+                                      {(item.quantity || 1) > 1 && <span className="text-muted-foreground mr-1">{item.quantity}x</span>}
+                                      {item.menuItemName}
+                                    </span>
+                                    <span className="text-muted-foreground ml-2">
+                                      ${(parseFloat(item.unitPrice || "0") * (item.quantity || 1)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                ))}
+                                {!isSelected && activeItems.length > 3 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    +{activeItems.length - 3} more items
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+                {selectedHistoryCheck && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        if (onReorderRequested && selectedHistoryCheck.items) {
+                          const activeItems = selectedHistoryCheck.items.filter(
+                            item => item.itemStatus === "active" && !item.voided
+                          );
+                          onReorderRequested(activeItems);
+                          toast({
+                            title: "Repeat Order",
+                            description: `Adding ${activeItems.length} item(s) from previous order`,
+                          });
+                          onClose();
+                        }
+                      }}
+                      data-testid="button-repeat-order"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Repeat Order ({selectedHistoryCheck.items?.filter(i => i.itemStatus === "active" && !i.voided).length || 0} items)
+                    </Button>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <History className="w-12 h-12 mx-auto mb-3 opacity-50" />

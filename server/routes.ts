@@ -10430,6 +10430,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Get recent checks for this customer
       const recentChecks = await storage.getChecksByCustomer(member.id, 10);
       
+      // Get items for each recent check
+      const checksWithItems = await Promise.all(
+        recentChecks.map(async (check) => {
+          const items = await storage.getCheckItems(check.id);
+          return { ...check, items };
+        })
+      );
+      
       // Get loyalty transactions
       const transactions = await storage.getLoyaltyTransactionsByMember(member.id);
       
@@ -10442,7 +10450,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       res.json({
         customer: member,
-        recentChecks,
+        recentChecks: checksWithItems,
         transactions,
         availableRewards,
       });
