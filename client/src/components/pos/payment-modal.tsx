@@ -335,9 +335,9 @@ export function PaymentModal({
     return () => clearInterval(interval);
   }, [terminalSession, terminalPolling, cardTender, cardAmount, onPayment, resetCardEntry, toast]);
   
-  // Start terminal payment
+  // Start terminal payment (from manual selection)
   const startTerminalPayment = async (terminal: TerminalDevice) => {
-    if (!check) return;
+    if (!check || !cardTender) return;
     
     setSelectedTerminal(terminal);
     setIsProcessingCard(true);
@@ -346,8 +346,8 @@ export function PaymentModal({
       const res = await apiRequest("POST", "/api/terminal-sessions", {
         terminalDeviceId: terminal.id,
         checkId: check.id,
-        transactionType: isAuthOnly ? "auth" : "sale",
-        amount: cardAmount.toString(),
+        tenderId: cardTender.id,
+        amount: Math.round(cardAmount * 100), // Convert to cents
         employeeId,
         workstationId,
       });
@@ -358,8 +358,8 @@ export function PaymentModal({
       setTerminalPolling(true);
       
       toast({
-        title: "Waiting for Card",
-        description: `Present card on ${terminal.name}`,
+        title: "Present Card",
+        description: `Waiting for card on ${terminal.name}`,
       });
     } catch (error: any) {
       console.error("Failed to start terminal session:", error);
@@ -483,8 +483,60 @@ export function PaymentModal({
     const amount = parseFloat(cardPaymentAmount);
     if (amount > 0) {
       setCardAmount(amount);
-      setCardPaymentStep("method");
+      
+      // Auto-start terminal payment if there's an assigned terminal
+      // This eliminates the extra step of selecting a terminal
+      const terminal = assignedTerminal || (availableTerminals.length === 1 ? availableTerminals[0] : null);
+      if (terminal) {
+        // Directly start terminal payment
+        startTerminalPaymentDirect(terminal, amount);
+      } else {
+        // Show terminal selection if multiple terminals or none assigned
+        setCardPaymentStep("method");
+        setPaymentMethod("select");
+      }
+    }
+  };
+  
+  // Start terminal payment with specified amount (used for auto-start flow)
+  const startTerminalPaymentDirect = async (terminal: TerminalDevice, amount: number) => {
+    if (!check || !cardTender) return;
+    
+    setSelectedTerminal(terminal);
+    setCardAmount(amount);
+    setCardPaymentStep("method");
+    setPaymentMethod("terminal");
+    setIsProcessingCard(true);
+    
+    try {
+      const res = await apiRequest("POST", "/api/terminal-sessions", {
+        terminalDeviceId: terminal.id,
+        checkId: check.id,
+        tenderId: cardTender.id,
+        amount: Math.round(amount * 100), // Convert to cents
+        employeeId,
+        workstationId,
+      });
+      
+      const session = await res.json() as TerminalSession;
+      setTerminalSession(session);
+      setTerminalPolling(true);
+      
+      toast({
+        title: "Present Card",
+        description: `Waiting for card on ${terminal.name}`,
+      });
+    } catch (error: any) {
+      console.error("Failed to start terminal session:", error);
+      toast({
+        title: "Terminal Error",
+        description: error.message || "Failed to connect to terminal",
+        variant: "destructive",
+      });
+      setSelectedTerminal(null);
       setPaymentMethod("select");
+    } finally {
+      setIsProcessingCard(false);
     }
   };
 

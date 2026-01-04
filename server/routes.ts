@@ -8864,24 +8864,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? await storage.getPaymentProcessor(terminal.paymentProcessorId)
           : null;
 
+        const authCode = "SIM" + Math.floor(Math.random() * 100000).toString().padStart(6, "0");
+        const cardLast4 = "4242";
+        const cardBrand = "visa";
+
         let transaction = null;
         if (processor) {
           transaction = await storage.createPaymentTransaction({
             paymentProcessorId: processor.id,
             gatewayTransactionId: `SIM-${Date.now()}`,
-            authCode: "SIM" + Math.floor(Math.random() * 100000).toString().padStart(6, "0"),
-            cardBrand: "visa",
-            cardLast4: "4242",
+            authCode,
+            cardBrand,
+            cardLast4,
             entryMode: "contactless",
             authAmount: session.amount,
-            status: "authorized",
-            transactionType: "auth",
+            captureAmount: session.amount + (session.tipAmount || 0),
+            tipAmount: session.tipAmount || 0,
+            status: "captured",
+            transactionType: "sale",
             responseCode: "00",
             responseMessage: "Approved (Simulated)",
             workstationId: session.workstationId || undefined,
             employeeId: session.employeeId || undefined,
             terminalId: terminal?.terminalId || terminal?.id,
           });
+        }
+
+        // Create check payment if check was specified
+        let checkPayment = null;
+        if (session.checkId && session.tenderId) {
+          const tender = await storage.getTender(session.tenderId);
+          const amountDollars = (session.amount / 100).toFixed(2);
+          const tipDollars = ((session.tipAmount || 0) / 100).toFixed(2);
+          
+          checkPayment = await storage.createPayment({
+            checkId: session.checkId,
+            tenderId: session.tenderId,
+            tenderName: tender?.name || "Card",
+            amount: amountDollars,
+            tipAmount: tipDollars,
+            paymentStatus: "completed",
+            paymentTransactionId: transaction?.id || `TERM:${authCode}:${cardLast4}`,
+            employeeId: session.employeeId || undefined,
+          });
+
+          // Recalculate check totals and auto-close if fully paid
+          await recalculateCheckTotals(session.checkId);
+          const updatedCheck = await storage.getCheck(session.checkId);
+          if (updatedCheck) {
+            const totalPaid = parseFloat(updatedCheck.amountPaid || "0");
+            const checkTotal = parseFloat(updatedCheck.total || "0");
+            if (totalPaid >= checkTotal && checkTotal > 0) {
+              await storage.updateCheck(session.checkId, { status: "closed", closedAt: new Date() });
+            }
+          }
         }
 
         await storage.updateTerminalSession(session.id, {
@@ -8897,9 +8933,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           success: true,
           approved: true,
           transactionId: transaction?.id,
-          authCode: transaction?.authCode,
-          cardLast4: transaction?.cardLast4,
-          cardBrand: transaction?.cardBrand,
+          checkPaymentId: checkPayment?.id,
+          authCode,
+          cardLast4,
+          cardBrand,
         });
       } else {
         await storage.updateTerminalSession(session.id, {
