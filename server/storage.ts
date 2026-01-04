@@ -3914,6 +3914,10 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getLoyaltyTransactionsByMember(memberId: string): Promise<LoyaltyTransaction[]> {
+    return db.select().from(loyaltyTransactions).where(eq(loyaltyTransactions.memberId, memberId));
+  }
+
   async getLoyaltyRewards(programId: string): Promise<LoyaltyReward[]> {
     return db.select().from(loyaltyRewards).where(eq(loyaltyRewards.programId, programId));
   }

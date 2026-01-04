@@ -9576,8 +9576,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const member = await storage.getLoyaltyMember(req.params.id);
       if (!member) return res.status(404).json({ message: "Member not found" });
 
+      const oldLifetime = member.lifetimePoints || 0;
       const newPoints = (member.currentPoints || 0) + points;
-      const newLifetime = (member.lifetimePoints || 0) + points;
+      const newLifetime = oldLifetime + points;
 
       const updated = await storage.updateLoyaltyMember(req.params.id, {
         currentPoints: newPoints,
@@ -9600,7 +9601,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         reason,
       });
 
-      res.json(updated);
+      // Check for auto-awards after earning points
+      const autoAwardedRewards: string[] = [];
+      const rewards = await storage.getLoyaltyRewards(member.programId);
+      const memberTransactions = await (storage as any).getLoyaltyTransactionsByMember(member.id);
+      
+      for (const reward of rewards) {
+        if (!reward.active || !reward.autoAwardAtPoints) continue;
+        
+        // Check if member just crossed the threshold (wasn't over before, now is)
+        if (oldLifetime < reward.autoAwardAtPoints && newLifetime >= reward.autoAwardAtPoints) {
+          // Check if autoAwardOnce and already awarded
+          if (reward.autoAwardOnce) {
+            const alreadyAwarded = memberTransactions.some(
+              tx => tx.reason?.includes(`Auto-award: ${reward.name}`)
+            );
+            if (alreadyAwarded) continue;
+          }
+          
+          // Award the reward (add points value or create notification)
+          autoAwardedRewards.push(reward.name);
+          
+          // Log the auto-award as a transaction
+          await storage.createLoyaltyTransaction({
+            memberId: member.id,
+            propertyId,
+            transactionType: "earn",
+            points: 0, // The reward itself, not additional points
+            pointsBefore: newPoints,
+            pointsAfter: newPoints,
+            reason: `Auto-award: ${reward.name} (reached ${reward.autoAwardAtPoints} lifetime points)`,
+          });
+        }
+      }
+
+      res.json({ ...updated, autoAwardedRewards });
     } catch (error) {
       res.status(500).json({ message: "Failed to earn points" });
     }

@@ -154,7 +154,7 @@ export default function LoyaltyPage() {
       required: true,
       defaultValue: "points",
     },
-    { name: "pointsPerDollar", label: "Points per Dollar", type: "number", placeholder: "1", defaultValue: 1 },
+    { name: "pointsPerDollar", label: "Points per Dollar", type: "decimal", placeholder: "1", defaultValue: "1" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 
@@ -187,9 +187,11 @@ export default function LoyaltyPage() {
   const rewardFormFields: FormFieldConfig[] = [
     { name: "name", label: "Reward Name", type: "text", placeholder: "Free Appetizer", required: true },
     { name: "description", label: "Description", type: "textarea", placeholder: "Redeem for any appetizer" },
-    { name: "pointsCost", label: "Points Required", type: "number", placeholder: "100", required: true },
+    { name: "pointsCost", label: "Points to Redeem (manual)", type: "number", placeholder: "100", description: "Points required for manual redemption" },
+    { name: "autoAwardAtPoints", label: "Auto-Award at Points", type: "number", placeholder: "500", description: "Automatically award when member reaches this many lifetime points" },
+    { name: "autoAwardOnce", label: "Auto-Award Once Only", type: "switch", defaultValue: true, description: "Only auto-award once per member" },
     {
-      name: "type",
+      name: "rewardType",
       label: "Reward Type",
       type: "select",
       options: [
@@ -199,9 +201,10 @@ export default function LoyaltyPage() {
         { value: "experience", label: "Experience" },
       ],
       required: true,
-      defaultValue: "free_item",
+      defaultValue: "discount",
     },
-    { name: "discountValue", label: "Value ($)", type: "decimal", placeholder: "5.00" },
+    { name: "discountAmount", label: "Discount Amount ($)", type: "decimal", placeholder: "5.00" },
+    { name: "discountPercent", label: "Discount Percent (%)", type: "decimal", placeholder: "10" },
     {
       name: "programId",
       label: "Loyalty Program",

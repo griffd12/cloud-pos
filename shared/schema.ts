@@ -2178,6 +2178,8 @@ export const loyaltyRewards = pgTable("loyalty_rewards", {
   description: text("description"),
   rewardType: text("reward_type").notNull().default("discount"), // discount, free_item, points_multiplier
   pointsCost: integer("points_cost").default(0),
+  autoAwardAtPoints: integer("auto_award_at_points"), // If set, auto-award when member reaches this threshold
+  autoAwardOnce: boolean("auto_award_once").default(true), // Only auto-award once per member
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }),
   discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }),
   freeMenuItemId: varchar("free_menu_item_id").references(() => menuItems.id),
