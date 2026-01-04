@@ -127,65 +127,71 @@ function CheckoutForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="bg-primary text-primary-foreground rounded-lg p-4 text-center">
-        <p className="text-sm opacity-90 mb-1">Charging</p>
-        <p className="text-3xl font-bold tabular-nums" data-testid="text-stripe-amount">
-          ${amount.toFixed(2)}
-        </p>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="flex items-center gap-4">
+        <div className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-center shrink-0">
+          <p className="text-xs opacity-90">Charging</p>
+          <p className="text-2xl font-bold tabular-nums" data-testid="text-stripe-amount">
+            ${amount.toFixed(2)}
+          </p>
+        </div>
+
+        <div className="flex-1 flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={isProcessing}
+            data-testid="button-stripe-cancel"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            className="flex-1"
+            disabled={!stripe || !elements || isProcessing}
+            data-testid="button-stripe-pay"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-4 h-4 mr-2" />
+                Pay Now
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
-      <div className="bg-card border rounded-lg p-4">
+      <div className="bg-card border rounded-lg p-3">
         <PaymentElement
           options={{
-            layout: "tabs",
+            layout: {
+              type: "accordion",
+              defaultCollapsed: false,
+              radios: false,
+              spacedAccordionItems: false,
+            },
           }}
         />
       </div>
 
       {errorMessage && (
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-2">
-          <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-2 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
           <p className="text-sm text-destructive" data-testid="text-stripe-error">
             {errorMessage}
           </p>
         </div>
       )}
 
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          className="flex-1"
-          onClick={onCancel}
-          disabled={isProcessing}
-          data-testid="button-stripe-cancel"
-        >
-          <X className="w-4 h-4 mr-2" />
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          className="flex-1"
-          disabled={!stripe || !elements || isProcessing}
-          data-testid="button-stripe-pay"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            <>
-              <CreditCard className="w-4 h-4 mr-2" />
-              Pay ${amount.toFixed(2)}
-            </>
-          )}
-        </Button>
-      </div>
-
       <p className="text-xs text-muted-foreground text-center">
-        Secured by Stripe. Card data never touches our servers.
+        Secured by Stripe
       </p>
     </form>
   );
