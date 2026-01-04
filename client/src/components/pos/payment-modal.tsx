@@ -30,8 +30,8 @@ interface PaymentModalProps {
   employeeId?: string;
 }
 
-type PaymentMethod = "select" | "manual" | "terminal";
-type CardPaymentStep = "amount" | "method" | "entry" | "terminal";
+type PaymentMethod = "select" | "manual" | "terminal" | "external";
+type CardPaymentStep = "amount" | "method" | "entry" | "terminal" | "external";
 
 const TENDER_ICONS: Record<string, typeof Banknote> = {
   cash: Banknote,
@@ -87,6 +87,13 @@ export function PaymentModal({
   const [tipEntryPayment, setTipEntryPayment] = useState<CheckPayment | null>(null);
   const [tipAmount, setTipAmount] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
+  
+  // External terminal recording state
+  const [externalApprovalCode, setExternalApprovalCode] = useState("");
+  const [externalLast4, setExternalLast4] = useState("");
+  const [externalTipAmount, setExternalTipAmount] = useState("");
+  const [externalTotalCharged, setExternalTotalCharged] = useState("");
+  const [isRecordingExternal, setIsRecordingExternal] = useState(false);
   
   // Query authorized payments on this check (use distinct key to avoid cache collision with POS page)
   const { data: checkPayments = [], refetch: refetchPayments } = useQuery<CheckPayment[]>({
@@ -154,6 +161,12 @@ export function PaymentModal({
     setCardPaymentStep("amount");
     setCardPaymentAmount("");
     setIsAuthOnly(false);
+    // Reset external terminal fields
+    setExternalApprovalCode("");
+    setExternalLast4("");
+    setExternalTipAmount("");
+    setExternalTotalCharged("");
+    setIsRecordingExternal(false);
   }, []);
   
   // Handle capturing an authorized payment with tip
@@ -206,6 +219,67 @@ export function PaymentModal({
     setTipEntryPayment(payment);
     setTipAmount("");
     setShowTipEntry(true);
+  };
+  
+  // Record payment from external terminal (Elavon, etc.)
+  const recordExternalTerminalPayment = async () => {
+    if (!check || !cardTender) return;
+    
+    const totalCharged = parseFloat(externalTotalCharged);
+    const tipValue = parseFloat(externalTipAmount) || 0;
+    
+    if (!externalApprovalCode.trim()) {
+      toast({ title: "Approval code required", variant: "destructive" });
+      return;
+    }
+    if (!externalTotalCharged.trim() || isNaN(totalCharged) || totalCharged <= 0) {
+      toast({ title: "Valid total charged amount required", variant: "destructive" });
+      return;
+    }
+    if (isNaN(tipValue) || tipValue < 0) {
+      toast({ title: "Tip amount must be zero or positive", variant: "destructive" });
+      return;
+    }
+    
+    setIsRecordingExternal(true);
+    
+    try {
+      const response = await apiRequest("POST", "/api/pos/record-external-payment", {
+        checkId: check.id,
+        tenderId: cardTender.id,
+        totalCharged: totalCharged.toString(),
+        tipAmount: tipValue.toString(),
+        approvalCode: externalApprovalCode.trim(),
+        last4: externalLast4.trim() || null,
+        employeeId,
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        onPayment(cardTender.id, totalCharged, false, result.paymentId);
+        resetCardEntry();
+        toast({
+          title: "Payment Recorded",
+          description: `$${totalCharged.toFixed(2)} recorded${tipValue > 0 ? ` (includes $${tipValue.toFixed(2)} tip)` : ""}`,
+        });
+      } else {
+        toast({
+          title: "Failed to Record Payment",
+          description: result.message || "Could not record payment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error("External payment recording error:", error);
+      toast({
+        title: "Recording Failed",
+        description: error.message || "Unable to record payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRecordingExternal(false);
+    }
   };
   
   // Poll terminal session status
@@ -604,6 +678,169 @@ export function PaymentModal({
     );
   }
 
+  // Render external terminal recording screen
+  if (showCardEntry && cardTender && paymentMethod === "external") {
+    const totalCharged = parseFloat(externalTotalCharged) || 0;
+    const tipValue = parseFloat(externalTipAmount) || 0;
+    const baseAmount = totalCharged - tipValue;
+    
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+        <DialogContent className="max-w-md p-0 gap-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2" data-testid="text-external-terminal-title">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setPaymentMethod("select")}
+                disabled={isRecordingExternal}
+                data-testid="button-back-from-external"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <Smartphone className="w-5 h-5" />
+              <span>Record External Terminal Payment</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-4 space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm">
+              <p className="font-medium text-blue-800 dark:text-blue-200">
+                Customer paid on external terminal
+              </p>
+              <p className="text-blue-600 dark:text-blue-400 mt-1">
+                Enter the transaction details from the terminal receipt
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="externalApprovalCode">Approval Code *</Label>
+                <Input
+                  id="externalApprovalCode"
+                  type="text"
+                  placeholder="e.g. 123456"
+                  value={externalApprovalCode}
+                  onChange={(e) => setExternalApprovalCode(e.target.value.toUpperCase())}
+                  disabled={isRecordingExternal}
+                  className="uppercase tracking-wider"
+                  data-testid="input-external-approval-code"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="externalTotalCharged">Total Charged *</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id="externalTotalCharged"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0.00"
+                    value={externalTotalCharged}
+                    onChange={(e) => setExternalTotalCharged(e.target.value)}
+                    disabled={isRecordingExternal}
+                    className="pl-7 tabular-nums"
+                    data-testid="input-external-total-charged"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Full amount including any tip</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="externalTipAmount">Tip Amount (if any)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id="externalTipAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={externalTipAmount}
+                    onChange={(e) => setExternalTipAmount(e.target.value)}
+                    disabled={isRecordingExternal}
+                    className="pl-7 tabular-nums"
+                    data-testid="input-external-tip-amount"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="externalLast4">Last 4 Digits (optional)</Label>
+                <Input
+                  id="externalLast4"
+                  type="text"
+                  maxLength={4}
+                  placeholder="1234"
+                  value={externalLast4}
+                  onChange={(e) => setExternalLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  disabled={isRecordingExternal}
+                  className="tabular-nums tracking-widest"
+                  data-testid="input-external-last4"
+                />
+              </div>
+            </div>
+
+            {totalCharged > 0 && (
+              <div className="bg-muted rounded-lg p-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Base Amount:</span>
+                  <span className="tabular-nums">${baseAmount.toFixed(2)}</span>
+                </div>
+                {tipValue > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Tip:</span>
+                    <span className="tabular-nums">${tipValue.toFixed(2)}</span>
+                  </div>
+                )}
+                <Separator className="my-2" />
+                <div className="flex justify-between font-medium">
+                  <span>Total:</span>
+                  <span className="tabular-nums">${totalCharged.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setPaymentMethod("select")}
+                disabled={isRecordingExternal}
+                data-testid="button-cancel-external"
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={recordExternalTerminalPayment}
+                disabled={isRecordingExternal || !externalApprovalCode.trim() || totalCharged <= 0}
+                data-testid="button-record-external-payment"
+              >
+                {isRecordingExternal ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Recording...
+                  </>
+                ) : (
+                  <>
+                    <CheckIcon className="w-4 h-4 mr-2" />
+                    Record Payment
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   // Render amount entry screen (first step for card payments)
   if (showCardEntry && cardTender && cardPaymentStep === "amount") {
     const enteredAmount = parseFloat(cardPaymentAmount) || 0;
@@ -806,6 +1043,25 @@ export function PaymentModal({
                     <p>No terminals available</p>
                   </div>
                 )}
+                
+                <Separator />
+                
+                <Button
+                  variant="default"
+                  className="w-full h-14 justify-start gap-3"
+                  onClick={() => {
+                    setExternalTotalCharged(cardAmount.toFixed(2));
+                    setPaymentMethod("external");
+                  }}
+                  disabled={isProcessingCard}
+                  data-testid="button-external-terminal"
+                >
+                  <Smartphone className="w-5 h-5" />
+                  <div className="text-left">
+                    <p className="font-medium">External Terminal</p>
+                    <p className="text-xs opacity-80">Record payment from standalone terminal</p>
+                  </div>
+                </Button>
                 
                 <Separator />
                 

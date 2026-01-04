@@ -8492,6 +8492,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Record payment from external standalone terminal (Elavon, etc.)
+  // POS does NOT handle card data - just records the transaction result
+  app.post("/api/pos/record-external-payment", async (req, res) => {
+    try {
+      const { 
+        checkId, 
+        tenderId, 
+        totalCharged, 
+        tipAmount = "0", 
+        approvalCode, 
+        last4, 
+        employeeId 
+      } = req.body;
+
+      if (!checkId || !tenderId || !totalCharged || !approvalCode) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Check ID, tender ID, total charged, and approval code are required" 
+        });
+      }
+
+      const total = parseFloat(totalCharged);
+      const tip = parseFloat(tipAmount) || 0;
+      
+      if (isNaN(total) || total <= 0) {
+        return res.status(400).json({ success: false, message: "Total charged must be a valid positive number" });
+      }
+      if (isNaN(tip) || tip < 0) {
+        return res.status(400).json({ success: false, message: "Tip amount must be zero or positive" });
+      }
+
+      // Get the check
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ success: false, message: "Check not found" });
+      }
+
+      // Get the tender for name
+      const tender = await storage.getTender(tenderId);
+      const tenderName = tender?.name || "Card";
+
+      // Create the check payment record (no payment transaction needed for external terminal)
+      // The external terminal already processed the full payment - we're just recording it
+      // Note: We store approval code and last4 in paymentTransactionId field for reference
+      const externalRef = last4 ? `EXT:${approvalCode}:${last4}` : `EXT:${approvalCode}`;
+      const checkPayment = await storage.createPayment({
+        checkId,
+        tenderId,
+        tenderName,
+        amount: total.toString(),
+        tipAmount: tip.toString(),
+        paymentStatus: "completed",
+        paymentTransactionId: externalRef, // Store reference info here
+        employeeId: employeeId || null,
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(checkId);
+
+      // Check if check should be closed
+      const updatedCheck = await storage.getCheck(checkId);
+      if (updatedCheck) {
+        const allPayments = await storage.getPayments(checkId);
+        const checkTotal = parseFloat(updatedCheck.total || "0");
+        const paidAmount = allPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+
+        if (paidAmount >= checkTotal - 0.01) {
+          await storage.updateCheck(checkId, { status: "closed", closedAt: new Date() });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: "External terminal payment recorded",
+        paymentId: checkPayment.id,
+        totalCharged: total,
+        tipAmount: tip,
+        approvalCode,
+      });
+
+    } catch (error) {
+      console.error("Record external payment error:", error);
+      res.status(500).json({ success: false, message: "Failed to record external payment" });
+    }
+  });
+
   // ============================================================================
   // TERMINAL DEVICES - EMV Card Reader Management
   // ============================================================================
