@@ -2,8 +2,8 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Check, CheckItem, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign } from "lucide-react";
+import type { Check, CheckItem, CheckPayment, OrderType } from "@shared/schema";
+import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign, CircleDollarSign } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -27,6 +27,8 @@ interface CheckPanelProps {
   total?: number;
   paidAmount?: number;
   paymentsReady?: boolean;
+  authorizedPayments?: CheckPayment[];
+  onTipCapture?: (payment: CheckPayment) => void;
 }
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
@@ -267,6 +269,8 @@ export function CheckPanel({
   total: propTotal,
   paidAmount = 0,
   paymentsReady = true,
+  authorizedPayments = [],
+  onTipCapture,
 }: CheckPanelProps) {
   const formatPrice = (price: string | number | null) => {
     const numPrice = typeof price === "string" ? parseFloat(price) : (price || 0);
@@ -385,6 +389,40 @@ export function CheckPanel({
           </span>
         </div>
       </div>
+
+      {authorizedPayments.length > 0 && (
+        <div className="flex-shrink-0 px-3 py-2 border-t bg-amber-50 dark:bg-amber-950/30">
+          <div className="flex items-center gap-2 mb-2">
+            <CircleDollarSign className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              Pending Authorization{authorizedPayments.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {authorizedPayments.map((payment) => (
+              <div 
+                key={payment.id}
+                className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-card rounded-md border border-amber-200 dark:border-amber-800"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{formatPrice(payment.amount)}</span>
+                  <span className="text-xs text-muted-foreground">Awaiting tip</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700"
+                  onClick={() => onTipCapture?.(payment)}
+                  data-testid={`button-tip-capture-${payment.id}`}
+                >
+                  <CircleDollarSign className="w-3.5 h-3.5 mr-1" />
+                  Add Tip
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex-shrink-0 p-3 border-t bg-muted/30 space-y-2">
         <Button

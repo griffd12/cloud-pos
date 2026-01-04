@@ -23,7 +23,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
+import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3 } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CircleDollarSign } from "lucide-react";
 
 interface MenuItemWithModifiers extends MenuItem {
   hasRequiredModifiers?: boolean;
@@ -90,6 +101,10 @@ export default function PosPage() {
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [showPriceOverrideModal, setShowPriceOverrideModal] = useState(false);
+  const [showTipCaptureDialog, setShowTipCaptureDialog] = useState(false);
+  const [tipCapturePayment, setTipCapturePayment] = useState<CheckPayment | null>(null);
+  const [tipAmount, setTipAmount] = useState("");
+  const [isCapturingTip, setIsCapturingTip] = useState(false);
 
   const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
@@ -104,6 +119,61 @@ export default function PosPage() {
 
   const paidAmount = paymentInfo?.paidAmount || 0;
   const paymentsReady = !paymentsLoading && paymentInfo !== undefined;
+  
+  // Filter authorized payments awaiting tip/capture
+  const authorizedPayments = (paymentInfo?.payments || []).filter(
+    (p: CheckPayment) => p.paymentStatus === "authorized"
+  );
+  
+  // Handler for opening tip capture dialog
+  const handleTipCapture = (payment: CheckPayment) => {
+    setTipCapturePayment(payment);
+    setTipAmount("");
+    setShowTipCaptureDialog(true);
+  };
+  
+  // Handle capture with tip
+  const handleConfirmTipCapture = async () => {
+    if (!tipCapturePayment) return;
+    
+    setIsCapturingTip(true);
+    try {
+      const tipValue = parseFloat(tipAmount) || 0;
+      const res = await apiRequest("POST", "/api/pos/capture-with-tip", {
+        checkPaymentId: tipCapturePayment.id,
+        tipAmount: tipValue,
+        employeeId: currentEmployee?.id,
+      });
+      
+      const result = await res.json();
+      if (result.success) {
+        toast({
+          title: "Payment Captured",
+          description: `$${result.finalAmount.toFixed(2)} captured (includes $${tipValue.toFixed(2)} tip)`,
+        });
+        setShowTipCaptureDialog(false);
+        setTipCapturePayment(null);
+        setTipAmount("");
+        // Invalidate queries to update UI
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
+      } else {
+        toast({
+          title: "Capture Failed",
+          description: result.message || "Could not capture payment",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Capture Failed",
+        description: "An error occurred while capturing",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCapturingTip(false);
+    }
+  };
 
   const { data: slus = [], isLoading: slusLoading } = useQuery<Slu[]>({
     queryKey: ["/api/slus", currentRvc?.id],
@@ -1045,6 +1115,8 @@ export default function PosPage() {
             total={total}
             paidAmount={paidAmount}
             paymentsReady={paymentsReady}
+            authorizedPayments={authorizedPayments}
+            onTipCapture={handleTipCapture}
           />
         </div>
       </div>
@@ -1271,6 +1343,89 @@ export default function PosPage() {
         }}
         isOverriding={priceOverrideMutation.isPending}
       />
+
+      <Dialog open={showTipCaptureDialog} onOpenChange={setShowTipCaptureDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleDollarSign className="w-5 h-5 text-amber-600" />
+              Add Tip & Capture
+            </DialogTitle>
+            <DialogDescription>
+              Enter tip amount for this ${tipCapturePayment ? parseFloat(tipCapturePayment.amount).toFixed(2) : "0.00"} authorization
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="tip-amount">Tip Amount</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                <Input
+                  id="tip-amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={tipAmount}
+                  onChange={(e) => setTipAmount(e.target.value)}
+                  className="pl-7"
+                  data-testid="input-tip-amount"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[15, 18, 20, 25].map((pct) => {
+                const baseAmount = tipCapturePayment ? parseFloat(tipCapturePayment.amount) : 0;
+                const tipValue = (baseAmount * pct) / 100;
+                return (
+                  <Button
+                    key={pct}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTipAmount(tipValue.toFixed(2))}
+                    data-testid={`button-tip-${pct}`}
+                  >
+                    {pct}% (${tipValue.toFixed(2)})
+                  </Button>
+                );
+              })}
+            </div>
+            {tipAmount && tipCapturePayment && (
+              <div className="p-3 bg-muted rounded-md">
+                <div className="flex justify-between text-sm">
+                  <span>Authorization:</span>
+                  <span>${parseFloat(tipCapturePayment.amount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Tip:</span>
+                  <span>${(parseFloat(tipAmount) || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-semibold border-t mt-2 pt-2">
+                  <span>Total to Capture:</span>
+                  <span>${(parseFloat(tipCapturePayment.amount) + (parseFloat(tipAmount) || 0)).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowTipCaptureDialog(false)}
+              disabled={isCapturingTip}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmTipCapture}
+              disabled={isCapturingTip}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="button-confirm-tip-capture"
+            >
+              {isCapturingTip ? "Capturing..." : "Capture Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
