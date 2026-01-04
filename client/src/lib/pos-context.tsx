@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useCallback, type ReactNode, type Dispatch, type SetStateAction } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react";
 import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode } from "@shared/schema";
+
+const RVC_STORAGE_KEY = "pos_selected_rvc";
 
 interface SelectedModifier {
   id: string;
@@ -42,7 +44,18 @@ const PosContext = createContext<PosContextType | null>(null);
 
 export function PosProvider({ children }: { children: ReactNode }) {
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
-  const [currentRvc, setCurrentRvc] = useState<Rvc | null>(null);
+  const [currentRvc, setCurrentRvcState] = useState<Rvc | null>(() => {
+    // Load saved RVC from localStorage on initialization
+    try {
+      const saved = localStorage.getItem(RVC_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved) as Rvc;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null;
+  });
   const [currentCheck, setCurrentCheck] = useState<Check | null>(null);
   const [checkItems, setCheckItems] = useState<CheckItem[]>([]);
   const [selectedSlu, setSelectedSlu] = useState<Slu | null>(null);
@@ -54,10 +67,25 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [isSalariedBypass, setIsSalariedBypass] = useState<boolean>(false);
   const [currentJobCode, setCurrentJobCode] = useState<JobCode | null>(null);
 
+  // Persist RVC selection to localStorage when it changes
+  const setCurrentRvc = useCallback((rvc: Rvc | null) => {
+    setCurrentRvcState(rvc);
+    if (rvc) {
+      try {
+        localStorage.setItem(RVC_STORAGE_KEY, JSON.stringify(rvc));
+      } catch {
+        // Ignore storage errors
+      }
+    } else {
+      localStorage.removeItem(RVC_STORAGE_KEY);
+    }
+  }, []);
+
   const hasPrivilege = useCallback((code: string) => {
     return privileges.includes(code);
   }, [privileges]);
 
+  // Logout clears employee and transaction state but KEEPS RVC selection
   const logout = useCallback(() => {
     setCurrentEmployee(null);
     setCurrentCheck(null);
@@ -70,6 +98,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     setCurrentTimecard(null);
     setIsSalariedBypass(false);
     setCurrentJobCode(null);
+    // NOTE: We intentionally do NOT clear currentRvc - it persists until explicitly changed
   }, []);
 
   return (
