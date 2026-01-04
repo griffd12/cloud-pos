@@ -227,7 +227,10 @@ export function CustomerModal({
 
   const updateProfileMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PATCH", `/api/loyalty-members/${selectedCustomer?.id}`, editForm);
+      if (!selectedCustomer?.id) {
+        throw new Error("No customer selected");
+      }
+      const res = await apiRequest("PATCH", `/api/loyalty-members/${selectedCustomer.id}`, editForm);
       return res.json();
     },
     onSuccess: (data) => {
@@ -241,8 +244,13 @@ export function CustomerModal({
       // Update the selected customer with new data
       setSelectedCustomer(data);
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update profile", variant: "destructive" });
+    onError: (error: any) => {
+      console.error("Update profile error:", error);
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update profile", 
+        variant: "destructive" 
+      });
     },
   });
 
@@ -573,7 +581,14 @@ export function CustomerModal({
                       </div>
                     </div>
                     <Button
-                      onClick={() => updateProfileMutation.mutate()}
+                      type="button"
+                      onClick={() => {
+                        if (!selectedCustomer?.id) {
+                          toast({ title: "Error", description: "No customer selected", variant: "destructive" });
+                          return;
+                        }
+                        updateProfileMutation.mutate();
+                      }}
                       disabled={updateProfileMutation.isPending || (!editForm.firstName && !editForm.lastName)}
                       className="w-full"
                       data-testid="button-save-profile"
