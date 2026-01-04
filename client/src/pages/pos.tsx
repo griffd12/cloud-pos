@@ -398,13 +398,34 @@ export default function PosPage() {
       const result = await response.json();
       return { ...result, isCashOverTender: data.isCashOverTender, tenderedAmount: data.amount };
     },
-    onSuccess: (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number }) => {
+    onSuccess: async (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number }) => {
       console.log("Payment result:", result, "status:", result.status);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
       if (result.status === "closed") {
         console.log("Check is closed, clearing state");
+        
+        // Earn loyalty points if customer is attached
+        if (result.customerId) {
+          try {
+            const earnRes = await apiRequest("POST", "/api/pos/loyalty/earn", {
+              checkId: result.id,
+              customerId: result.customerId,
+              employeeId: currentEmployee?.id,
+            });
+            const earnData = await earnRes.json();
+            if (earnData.pointsEarned > 0) {
+              toast({
+                title: "Loyalty Points Earned",
+                description: `${earnData.pointsEarned} points added. New balance: ${earnData.newBalance}`,
+              });
+            }
+          } catch (error) {
+            console.error("Failed to earn loyalty points:", error);
+          }
+        }
+        
         if (result.isCashOverTender && result.tenderedAmount && total > 0) {
           const changeAmount = result.tenderedAmount - total;
           if (changeAmount > 0) {
