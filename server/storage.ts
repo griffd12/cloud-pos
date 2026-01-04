@@ -413,7 +413,7 @@ export interface IStorage {
   getSalesDataSummary(propertyId: string): Promise<{ 
     checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number;
     fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
-    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    giftCardTransactions: number; giftCards: number; loyaltyTransactions: number; loyaltyRedemptions: number; loyaltyMembers: number;
     onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
     salesForecasts: number; laborForecasts: number; managerAlerts: number;
     itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
@@ -424,7 +424,7 @@ export interface IStorage {
     timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; 
     tipAllocations: number; tipPoolRuns: number;
     fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
-    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    giftCardTransactions: number; giftCards: number; loyaltyTransactions: number; loyaltyRedemptions: number; loyaltyMembersReset: number;
     onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
     salesForecasts: number; laborForecasts: number; managerAlerts: number;
     itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
@@ -2193,7 +2193,7 @@ export class DatabaseStorage implements IStorage {
   async getSalesDataSummary(propertyId: string): Promise<{ 
     checks: number; checkItems: number; payments: number; rounds: number; kdsTickets: number; auditLogs: number;
     fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
-    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    giftCardTransactions: number; giftCards: number; loyaltyTransactions: number; loyaltyRedemptions: number; loyaltyMembers: number;
     onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
     salesForecasts: number; laborForecasts: number; managerAlerts: number;
     itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
@@ -2205,7 +2205,7 @@ export class DatabaseStorage implements IStorage {
     const emptyResult = { 
       checks: 0, checkItems: 0, payments: 0, rounds: 0, kdsTickets: 0, auditLogs: 0,
       fiscalPeriods: 0, cashTransactions: 0, drawerAssignments: 0, safeCounts: 0,
-      giftCardTransactions: 0, loyaltyTransactions: 0, loyaltyRedemptions: 0,
+      giftCardTransactions: 0, giftCards: 0, loyaltyTransactions: 0, loyaltyRedemptions: 0, loyaltyMembers: 0,
       onlineOrders: 0, inventoryTransactions: 0, inventoryStock: 0,
       salesForecasts: 0, laborForecasts: 0, managerAlerts: 0,
       itemAvailability: 0, prepItems: 0, offlineQueue: 0, accountingExports: 0,
@@ -2259,12 +2259,14 @@ export class DatabaseStorage implements IStorage {
       [drawerAssignCount] = await db.select({ count: sql<number>`count(*)` }).from(drawerAssignments).where(inArray(drawerAssignments.drawerId, drawerIds));
     }
 
-    // Gift card transactions by propertyId
+    // Gift card transactions and cards by propertyId
     const [giftCardTransCount] = await db.select({ count: sql<number>`count(*)` }).from(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
+    const [giftCardCount] = await db.select({ count: sql<number>`count(*)` }).from(giftCards).where(eq(giftCards.propertyId, propertyId));
 
-    // Loyalty transactions by propertyId
+    // Loyalty transactions by propertyId and count all members (will be reset)
     const [loyaltyTransCount] = await db.select({ count: sql<number>`count(*)` }).from(loyaltyTransactions).where(eq(loyaltyTransactions.propertyId, propertyId));
     const [loyaltyRedemptionCount] = await db.select({ count: sql<number>`count(*)` }).from(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
+    const [loyaltyMemberCount] = await db.select({ count: sql<number>`count(*)` }).from(loyaltyMembers);
 
     // Offline queue by rvcId
     let offlineCount = { count: 0 };
@@ -2284,8 +2286,10 @@ export class DatabaseStorage implements IStorage {
       drawerAssignments: Number(drawerAssignCount?.count || 0),
       safeCounts: Number(safeCount?.count || 0),
       giftCardTransactions: Number(giftCardTransCount?.count || 0),
+      giftCards: Number(giftCardCount?.count || 0),
       loyaltyTransactions: Number(loyaltyTransCount?.count || 0),
       loyaltyRedemptions: Number(loyaltyRedemptionCount?.count || 0),
+      loyaltyMembers: Number(loyaltyMemberCount?.count || 0),
       onlineOrders: Number(onlineOrdersCount?.count || 0),
       inventoryTransactions: Number(invTransCount?.count || 0),
       inventoryStock: Number(invStockCount?.count || 0),
@@ -2305,7 +2309,7 @@ export class DatabaseStorage implements IStorage {
     timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; 
     tipAllocations: number; tipPoolRuns: number;
     fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
-    giftCardTransactions: number; loyaltyTransactions: number; loyaltyRedemptions: number;
+    giftCardTransactions: number; giftCards: number; loyaltyTransactions: number; loyaltyRedemptions: number; loyaltyMembersReset: number;
     onlineOrders: number; inventoryTransactions: number; inventoryStock: number;
     salesForecasts: number; laborForecasts: number; managerAlerts: number;
     itemAvailability: number; prepItems: number; offlineQueue: number; accountingExports: number;
@@ -2318,7 +2322,7 @@ export class DatabaseStorage implements IStorage {
       checks: 0, checkItems: 0, payments: 0, discounts: 0, rounds: 0, 
       kdsTicketItems: 0, kdsTickets: 0, auditLogs: 0, 
       timePunches: 0, timecards: 0, breakSessions: 0, timecardExceptions: 0, shifts: 0, 
-      tipAllocations: 0, tipPoolRuns: 0,
+      tipAllocations: 0, tipPoolRuns: 0, giftCards: 0, loyaltyMembersReset: 0,
       fiscalPeriods: 0, cashTransactions: 0, drawerAssignments: 0, safeCounts: 0,
       giftCardTransactions: 0, loyaltyTransactions: 0, loyaltyRedemptions: 0,
       onlineOrders: 0, inventoryTransactions: 0, inventoryStock: 0,
@@ -2494,10 +2498,43 @@ export class DatabaseStorage implements IStorage {
       }
       const safeCountsResult = await tx.delete(safeCounts).where(eq(safeCounts.propertyId, propertyId));
 
-      // 4c. Gift card transactions (keep gift cards themselves as they are enterprise-wide assets)
+      // 4c. Gift cards and transactions for this property
+      // First get gift card IDs for this property before deleting transactions
+      const propertyGiftCards = await tx.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.propertyId, propertyId));
+      const giftCardIds = propertyGiftCards.map(g => g.id);
+      
+      // Delete gift card transactions first (references gift cards)
       const giftCardTransResult = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
+      
+      // Then delete the gift cards themselves
+      let giftCardsResult = { rowCount: 0 };
+      if (giftCardIds.length > 0) {
+        giftCardsResult = await tx.delete(giftCards).where(inArray(giftCards.id, giftCardIds));
+      }
 
-      // 4d. Loyalty transactions and redemptions already deleted in step 5b (before checks)
+      // 4d. Reset loyalty member points for members who had transactions at this property
+      // Get unique member IDs from the deleted loyalty transactions
+      const affectedMembers = await tx.select({ memberId: loyaltyTransactions.memberId })
+        .from(loyaltyTransactions)
+        .where(eq(loyaltyTransactions.propertyId, propertyId));
+      const memberIds = [...new Set(affectedMembers.map(m => m.memberId))];
+      
+      // Reset all loyalty members to zero (since we're clearing all transactional data)
+      let loyaltyMembersReset = { rowCount: 0 };
+      if (memberIds.length > 0) {
+        loyaltyMembersReset = await tx.update(loyaltyMembers)
+          .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
+          .where(inArray(loyaltyMembers.id, memberIds));
+      }
+      // Also reset all members in the enterprise's programs (full reset)
+      const enterprisePrograms = await tx.select({ id: loyaltyPrograms.id }).from(loyaltyPrograms);
+      const programIds = enterprisePrograms.map(p => p.id);
+      if (programIds.length > 0) {
+        const allMembersReset = await tx.update(loyaltyMembers)
+          .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
+          .where(inArray(loyaltyMembers.programId, programIds));
+        loyaltyMembersReset = { rowCount: (loyaltyMembersReset.rowCount || 0) + (allMembersReset.rowCount || 0) };
+      }
 
       // 4e. Online orders
       const onlineOrdersResult = await tx.delete(onlineOrders).where(eq(onlineOrders.propertyId, propertyId));
@@ -2548,8 +2585,10 @@ export class DatabaseStorage implements IStorage {
           drawerAssignments: drawerAssignResult.rowCount || 0,
           safeCounts: safeCountsResult.rowCount || 0,
           giftCardTransactions: giftCardTransResult.rowCount || 0,
+          giftCards: giftCardsResult.rowCount || 0,
           loyaltyTransactions: loyaltyTransResult.rowCount || 0,
           loyaltyRedemptions: loyaltyRedemptionResult.rowCount || 0,
+          loyaltyMembersReset: loyaltyMembersReset.rowCount || 0,
           onlineOrders: onlineOrdersResult.rowCount || 0,
           inventoryTransactions: invTransResult.rowCount || 0,
           inventoryStock: invStockResult.rowCount || 0,

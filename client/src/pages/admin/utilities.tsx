@@ -32,8 +32,10 @@ interface SalesDataSummary {
   drawerAssignments: number;
   safeCounts: number;
   giftCardTransactions: number;
+  giftCards: number;
   loyaltyTransactions: number;
   loyaltyRedemptions: number;
+  loyaltyMembers: number;
   onlineOrders: number;
   inventoryTransactions: number;
   inventoryStock: number;
@@ -84,8 +86,10 @@ interface ClearResult {
     drawerAssignments: number;
     safeCounts: number;
     giftCardTransactions: number;
+    giftCards: number;
     loyaltyTransactions: number;
     loyaltyRedemptions: number;
+    loyaltyMembersReset: number;
     onlineOrders: number;
     inventoryTransactions: number;
     inventoryStock: number;
@@ -206,7 +210,7 @@ export default function UtilitiesPage() {
   const totalRecords = summary
     ? summary.checks + summary.checkItems + summary.payments + summary.rounds + summary.kdsTickets + summary.auditLogs +
       summary.fiscalPeriods + summary.cashTransactions + summary.drawerAssignments + summary.safeCounts +
-      summary.giftCardTransactions + summary.loyaltyTransactions + summary.loyaltyRedemptions +
+      summary.giftCardTransactions + summary.giftCards + summary.loyaltyTransactions + summary.loyaltyRedemptions + summary.loyaltyMembers +
       summary.onlineOrders + summary.inventoryTransactions + summary.inventoryStock +
       summary.salesForecasts + summary.laborForecasts + summary.managerAlerts +
       summary.itemAvailability + summary.prepItems + summary.offlineQueue + summary.accountingExports
@@ -444,12 +448,20 @@ export default function UtilitiesPage() {
                 <span className="font-medium">{lastResult.deleted.giftCardTransactions}</span>
               </div>
               <div>
+                <span className="text-muted-foreground">Gift Cards Deleted:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.giftCards}</span>
+              </div>
+              <div>
                 <span className="text-muted-foreground">Loyalty Transactions:</span>{" "}
                 <span className="font-medium">{lastResult.deleted.loyaltyTransactions}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Loyalty Redemptions:</span>{" "}
                 <span className="font-medium">{lastResult.deleted.loyaltyRedemptions}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Loyalty Members Reset:</span>{" "}
+                <span className="font-medium">{lastResult.deleted.loyaltyMembersReset}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Online Orders:</span>{" "}
