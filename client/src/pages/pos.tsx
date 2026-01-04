@@ -19,12 +19,14 @@ import { AdvancedSplitCheckModal } from "@/components/pos/advanced-split-check-m
 import { MergeChecksModal } from "@/components/pos/merge-checks-modal";
 import { ReopenCheckModal } from "@/components/pos/reopen-check-modal";
 import { PriceOverrideModal } from "@/components/pos/price-override-modal";
+import { CustomerModal } from "@/components/pos/customer-modal";
+import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3 } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3, CreditCard, Star } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -101,6 +103,8 @@ export default function PosPage() {
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [showPriceOverrideModal, setShowPriceOverrideModal] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showGiftCardModal, setShowGiftCardModal] = useState(false);
   const [showTipCaptureDialog, setShowTipCaptureDialog] = useState(false);
   const [tipCapturePayment, setTipCapturePayment] = useState<CheckPayment | null>(null);
   const [tipAmount, setTipAmount] = useState("");
@@ -1080,6 +1084,30 @@ export default function PosPage() {
                       Functions
                     </Button>
                   </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowCustomerModal(true)}
+                      data-testid="button-customer"
+                    >
+                      <Star className="w-4 h-4 mr-2" />
+                      Loyalty
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => setShowGiftCardModal(true)}
+                      data-testid="button-gift-card"
+                    >
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Gift Card
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>
@@ -1342,6 +1370,36 @@ export default function PosPage() {
           priceOverrideMutation.mutate({ itemId, newPrice, reason, managerPin });
         }}
         isOverriding={priceOverrideMutation.isPending}
+      />
+
+      <CustomerModal
+        open={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        currentCheck={currentCheck}
+        currentCustomerId={currentCheck?.customerId || null}
+        employeeId={currentEmployee?.id}
+        onCustomerAttached={(customer) => {
+          toast({
+            title: "Customer Attached",
+            description: `${customer.firstName} ${customer.lastName} linked to check`,
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+        }}
+      />
+
+      <GiftCardModal
+        open={showGiftCardModal}
+        onClose={() => setShowGiftCardModal(false)}
+        checkId={currentCheck?.id}
+        propertyId={currentRvc?.propertyId}
+        employeeId={currentEmployee?.id}
+        onGiftCardRedeemed={(amount) => {
+          toast({
+            title: "Gift Card Applied",
+            description: `$${amount} redeemed from gift card`,
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+        }}
       />
 
       <Dialog open={showTipCaptureDialog} onOpenChange={setShowTipCaptureDialog}>
