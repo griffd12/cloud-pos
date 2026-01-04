@@ -296,6 +296,7 @@ export interface IStorage {
   createPayment(data: InsertCheckPayment): Promise<CheckPayment>;
   getPayments(checkId: string): Promise<CheckPayment[]>;
   getAllPayments(): Promise<CheckPayment[]>;
+  updateCheckPayment(id: string, data: Partial<CheckPayment>): Promise<CheckPayment | undefined>;
   getAllCheckItems(): Promise<CheckItem[]>;
 
   // Payment Processors
@@ -1544,6 +1545,11 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPayments(): Promise<CheckPayment[]> {
     return db.select().from(checkPayments);
+  }
+
+  async updateCheckPayment(id: string, data: Partial<CheckPayment>): Promise<CheckPayment | undefined> {
+    const [result] = await db.update(checkPayments).set(data).where(eq(checkPayments.id, id)).returning();
+    return result;
   }
 
   async getAllCheckItems(): Promise<CheckItem[]> {

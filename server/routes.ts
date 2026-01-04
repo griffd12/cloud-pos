@@ -2041,7 +2041,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks/:id/payments", async (req, res) => {
     try {
       const checkId = req.params.id;
-      const { tenderId, amount, employeeId } = req.body;
+      const { tenderId, amount, employeeId, paymentTransactionId } = req.body;
 
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
@@ -2059,6 +2059,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      // Check if this is an authorized (pre-auth) transaction
+      let paymentStatus = "completed";
+      if (paymentTransactionId) {
+        const transaction = await storage.getPaymentTransaction(paymentTransactionId);
+        if (transaction && transaction.status === "authorized") {
+          paymentStatus = "authorized";
+        }
+      }
+
       const payment = await storage.createPayment({
         checkId,
         tenderId,
@@ -2066,6 +2075,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         amount,
         employeeId,
         businessDate,
+        paymentTransactionId: paymentTransactionId || null,
+        paymentStatus,
       });
 
       const check = await storage.getCheck(checkId);
@@ -8204,7 +8215,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // This is the main endpoint the POS frontend calls when processing a credit/debit card
   app.post("/api/pos/process-card-payment", async (req, res) => {
     try {
-      const { checkId, tenderId, amount, cardData, employeeId, workstationId } = req.body;
+      const { checkId, tenderId, amount, cardData, employeeId, workstationId, authOnly } = req.body;
+      const isAuthOnly = authOnly === true; // Pre-auth mode for full-service
 
       if (!checkId || !tenderId || !amount) {
         return res.status(400).json({ success: false, message: "Check ID, tender ID, and amount required" });
@@ -8262,7 +8274,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           authCode: "DEMO",
           cardLast4: cleanCardNumber.slice(-4) || "0000",
           cardBrand: cleanCardNumber.startsWith("4") ? "visa" : cleanCardNumber.startsWith("5") ? "mastercard" : "card",
-          message: "Payment approved (demo mode)",
+          message: isAuthOnly ? "Pre-authorized (demo mode)" : "Payment approved (demo mode)",
+          status: isAuthOnly ? "authorized" : "captured",
           demoMode: true,
         });
       }
@@ -8293,7 +8306,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           authCode: "DEMO",
           cardLast4: cleanCardNumber.slice(-4) || "0000",
           cardBrand: cleanCardNumber.startsWith("4") ? "visa" : cleanCardNumber.startsWith("5") ? "mastercard" : "card",
-          message: `Payment approved (credentials not configured for ${processor.name})`,
+          message: isAuthOnly ? `Pre-authorized (credentials not configured for ${processor.name})` : `Payment approved (credentials not configured for ${processor.name})`,
+          status: isAuthOnly ? "authorized" : "captured",
           demoMode: true,
         });
       }
@@ -8308,6 +8322,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const isDeclineCard = cleanCardNumber.startsWith("4000000000000002");
         
         // Create a transaction record for test mode
+        const transactionStatus = isDeclineCard ? "declined" : (isAuthOnly ? "authorized" : "captured");
+        const transactionType = isAuthOnly ? "auth" : "sale";
         const transaction = await storage.createPaymentTransaction({
           paymentProcessorId: processor.id,
           gatewayTransactionId: `TEST-${Date.now()}`,
@@ -8316,12 +8332,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           cardLast4: cleanCardNumber.slice(-4) || "0000",
           entryMode: "manual",
           authAmount: Math.round(amount * 100),
-          status: isDeclineCard ? "declined" : "authorized",
-          transactionType: "auth",
+          captureAmount: isAuthOnly ? null : Math.round(amount * 100), // Only set if captured
+          status: transactionStatus,
+          transactionType: transactionType,
           responseCode: isDeclineCard ? "05" : "00",
-          responseMessage: isDeclineCard ? "Declined" : "Approved",
+          responseMessage: isDeclineCard ? "Declined" : (isAuthOnly ? "Pre-authorized" : "Approved"),
           employeeId,
           workstationId,
+          capturedAt: isAuthOnly ? null : new Date(), // Only set if captured
         });
 
         if (isDeclineCard) {
@@ -8342,7 +8360,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           authCode: transaction.authCode,
           cardLast4: transaction.cardLast4,
           cardBrand: transaction.cardBrand,
-          message: `Payment approved (${processor.gatewayType} test mode)`,
+          message: isAuthOnly ? `Pre-authorized (${processor.gatewayType} test mode)` : `Payment approved (${processor.gatewayType} test mode)`,
+          status: isAuthOnly ? "authorized" : "captured",
           testMode: true,
         });
       }
@@ -8388,6 +8407,88 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("POS card payment error:", error);
       res.status(500).json({ success: false, message: "Payment processing failed" });
+    }
+  });
+
+  // Capture an authorized payment with tip
+  // Used for full-service restaurant flow where tip is added after authorization
+  app.post("/api/pos/capture-with-tip", async (req, res) => {
+    try {
+      const { checkPaymentId, tipAmount = 0, employeeId } = req.body;
+
+      if (!checkPaymentId) {
+        return res.status(400).json({ success: false, message: "Check payment ID required" });
+      }
+
+      // Get the check payment
+      const payments = await storage.getAllPayments();
+      const payment = payments.find(p => p.id === checkPaymentId);
+      if (!payment) {
+        return res.status(404).json({ success: false, message: "Payment not found" });
+      }
+
+      if (payment.paymentStatus !== "authorized") {
+        return res.status(400).json({ success: false, message: "Payment is not in authorized state" });
+      }
+
+      // Get the linked payment transaction
+      let transaction = null;
+      if (payment.paymentTransactionId) {
+        transaction = await storage.getPaymentTransaction(payment.paymentTransactionId);
+      }
+
+      // Calculate final capture amount (original auth + tip)
+      const originalAmount = parseFloat(payment.amount || "0");
+      const tipValue = parseFloat(tipAmount) || 0;
+      const finalAmount = originalAmount + tipValue;
+
+      // For demo/test mode, just update the records
+      // In production, this would call the payment gateway's capture endpoint
+      if (transaction) {
+        // Update the transaction record
+        await storage.updatePaymentTransaction(transaction.id, {
+          status: "captured",
+          captureAmount: Math.round(finalAmount * 100),
+          tipAmount: Math.round(tipValue * 100),
+          capturedAt: new Date(),
+        });
+      }
+
+      // Update the check payment record
+      await storage.updateCheckPayment(checkPaymentId, {
+        amount: finalAmount.toString(),
+        tipAmount: tipValue.toString(),
+        paymentStatus: "completed",
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(payment.checkId);
+
+      // Check if check should be closed
+      const check = await storage.getCheck(payment.checkId);
+      if (check) {
+        const allPayments = await storage.getPayments(payment.checkId);
+        const total = parseFloat(check.total || "0");
+        const paidAmount = allPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+
+        if (paidAmount >= total - 0.01) {
+          // Close the check
+          await storage.updateCheck(payment.checkId, { status: "closed", closedAt: new Date() });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: "Payment captured with tip",
+        originalAmount,
+        tipAmount: tipValue,
+        finalAmount,
+        checkPaymentId,
+      });
+
+    } catch (error) {
+      console.error("Capture with tip error:", error);
+      res.status(500).json({ success: false, message: "Failed to capture payment" });
     }
   });
 

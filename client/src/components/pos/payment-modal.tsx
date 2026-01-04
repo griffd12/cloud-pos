@@ -12,8 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Tender, Check, TerminalDevice, TerminalSession } from "@shared/schema";
-import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor } from "lucide-react";
+import type { Tender, Check, TerminalDevice, TerminalSession, CheckPayment } from "@shared/schema";
+import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor, Clock, Receipt } from "lucide-react";
 
 interface PaymentModalProps {
   open: boolean;
@@ -31,6 +31,7 @@ interface PaymentModalProps {
 }
 
 type PaymentMethod = "select" | "manual" | "terminal";
+type CardPaymentStep = "amount" | "method" | "entry" | "terminal";
 
 const TENDER_ICONS: Record<string, typeof Banknote> = {
   cash: Banknote,
@@ -76,6 +77,37 @@ export function PaymentModal({
   const [terminalSession, setTerminalSession] = useState<TerminalSession | null>(null);
   const [terminalPolling, setTerminalPolling] = useState(false);
   
+  // Card payment flow state
+  const [cardPaymentStep, setCardPaymentStep] = useState<CardPaymentStep>("amount");
+  const [cardPaymentAmount, setCardPaymentAmount] = useState("");
+  const [isAuthOnly, setIsAuthOnly] = useState(false); // Pre-auth mode for full-service
+  
+  // Tip entry state for authorized payments
+  const [showTipEntry, setShowTipEntry] = useState(false);
+  const [tipEntryPayment, setTipEntryPayment] = useState<CheckPayment | null>(null);
+  const [tipAmount, setTipAmount] = useState("");
+  const [isCapturing, setIsCapturing] = useState(false);
+  
+  // Query authorized payments on this check (use distinct key to avoid cache collision with POS page)
+  const { data: checkPayments = [], refetch: refetchPayments } = useQuery<CheckPayment[]>({
+    queryKey: ["/api/checks", check?.id, "payments-modal"],
+    queryFn: async () => {
+      if (!check?.id) return [];
+      const res = await fetch(`/api/checks/${check.id}/payments`, {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.payments || [];
+    },
+    enabled: !!check?.id && open,
+  });
+  
+  // Filter to only authorized payments (awaiting tip/capture)
+  const authorizedPayments = checkPayments.filter(
+    (p) => p.paymentStatus === "authorized"
+  );
+  
   // Query terminal devices for property
   const { data: terminalDevices = [] } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices", { propertyId }],
@@ -119,7 +151,62 @@ export function PaymentModal({
     setSelectedTerminal(null);
     setTerminalSession(null);
     setTerminalPolling(false);
+    setCardPaymentStep("amount");
+    setCardPaymentAmount("");
+    setIsAuthOnly(false);
   }, []);
+  
+  // Handle capturing an authorized payment with tip
+  const handleCaptureWithTip = async () => {
+    if (!tipEntryPayment) return;
+    
+    setIsCapturing(true);
+    try {
+      const tipValue = parseFloat(tipAmount) || 0;
+      const res = await apiRequest("POST", "/api/pos/capture-with-tip", {
+        checkPaymentId: tipEntryPayment.id,
+        tipAmount: tipValue,
+        employeeId,
+      });
+      
+      const result = await res.json();
+      if (result.success) {
+        toast({
+          title: "Payment Captured",
+          description: `$${result.finalAmount.toFixed(2)} captured (includes $${tipValue.toFixed(2)} tip)`,
+        });
+        setShowTipEntry(false);
+        setTipEntryPayment(null);
+        setTipAmount("");
+        refetchPayments();
+        // Invalidate check and payments queries to update balance
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", check?.id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", check?.id, "payments"] });
+      } else {
+        toast({
+          title: "Capture Failed",
+          description: result.message || "Could not capture payment",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error("Capture error:", error);
+      toast({
+        title: "Capture Failed",
+        description: error.message || "Could not capture payment",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+  
+  // Open tip entry dialog for an authorized payment
+  const openTipEntry = (payment: CheckPayment) => {
+    setTipEntryPayment(payment);
+    setTipAmount("");
+    setShowTipEntry(true);
+  };
   
   // Poll terminal session status
   useEffect(() => {
@@ -185,7 +272,7 @@ export function PaymentModal({
       const res = await apiRequest("POST", "/api/terminal-sessions", {
         terminalDeviceId: terminal.id,
         checkId: check.id,
-        transactionType: "sale",
+        transactionType: isAuthOnly ? "auth" : "sale",
         amount: cardAmount.toString(),
         employeeId,
         workstationId,
@@ -289,7 +376,8 @@ export function PaymentModal({
     // Check if this is a credit/debit tender that needs card entry
     if (tender.type === "credit" || tender.type === "debit") {
       setCardTender(tender);
-      setCardAmount(remainingBalance);
+      setCardPaymentAmount(remainingBalance.toFixed(2));
+      setCardPaymentStep("amount");
       setShowCardEntry(true);
     } else {
       // For gift cards or other non-card tenders, proceed directly
@@ -303,7 +391,8 @@ export function PaymentModal({
       // Check if this is a credit/debit tender that needs card entry
       if (selectedTender.type === "credit" || selectedTender.type === "debit") {
         setCardTender(selectedTender);
-        setCardAmount(amount);
+        setCardPaymentAmount(amount.toFixed(2));
+        setCardPaymentStep("amount");
         setShowCardEntry(true);
         setSelectedTender(null);
         setTenderAmount("");
@@ -312,6 +401,16 @@ export function PaymentModal({
         setSelectedTender(null);
         setTenderAmount("");
       }
+    }
+  };
+  
+  // Proceed from amount step to method selection
+  const handleAmountConfirm = () => {
+    const amount = parseFloat(cardPaymentAmount);
+    if (amount > 0) {
+      setCardAmount(amount);
+      setCardPaymentStep("method");
+      setPaymentMethod("select");
     }
   };
 
@@ -369,6 +468,7 @@ export function PaymentModal({
         checkId: check.id,
         tenderId: cardTender.id,
         amount: cardAmount,
+        authOnly: isAuthOnly, // Pre-auth mode for full-service
         cardData: {
           cardNumber: cleanCardNumber,
           expMonth: parseInt(cardExpiry.slice(0, 2)),
@@ -386,9 +486,10 @@ export function PaymentModal({
         resetCardEntry();
         
         const modeLabel = result.demoMode ? " (Demo)" : result.testMode ? " (Test)" : "";
+        const authLabel = isAuthOnly ? " (Pre-Auth)" : "";
         toast({ 
-          title: "Card Approved", 
-          description: `$${cardAmount.toFixed(2)} charged to ${result.cardBrand || "card"} ending ${result.cardLast4}${modeLabel}` 
+          title: isAuthOnly ? "Card Pre-Authorized" : "Card Approved", 
+          description: `$${cardAmount.toFixed(2)} ${isAuthOnly ? "authorized on" : "charged to"} ${result.cardBrand || "card"} ending ${result.cardLast4}${modeLabel}${authLabel}` 
         });
       } else {
         // Payment declined
@@ -503,8 +604,127 @@ export function PaymentModal({
     );
   }
 
+  // Render amount entry screen (first step for card payments)
+  if (showCardEntry && cardTender && cardPaymentStep === "amount") {
+    const enteredAmount = parseFloat(cardPaymentAmount) || 0;
+    const isValidAmount = enteredAmount > 0 && enteredAmount <= remainingBalance;
+    
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+        <DialogContent className="max-w-md p-0 gap-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2" data-testid="text-amount-entry-title">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={resetCardEntry}
+                data-testid="button-back-from-amount"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <CreditCard className="w-5 h-5" />
+              <span>{cardTender.name} - Enter Amount</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-4 space-y-4">
+            <div className="bg-muted rounded-lg p-3 text-center">
+              <p className="text-sm text-muted-foreground mb-1">Check Balance</p>
+              <p className="text-2xl font-bold tabular-nums" data-testid="text-check-balance">
+                ${remainingBalance.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cardPaymentAmount">Payment Amount</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">$</span>
+                <Input
+                  id="cardPaymentAmount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={remainingBalance}
+                  value={cardPaymentAmount}
+                  onChange={(e) => setCardPaymentAmount(e.target.value)}
+                  className="pl-8 text-2xl h-14 tabular-nums text-center font-bold"
+                  placeholder="0.00"
+                  data-testid="input-card-payment-amount"
+                />
+              </div>
+              {enteredAmount > remainingBalance && (
+                <p className="text-sm text-destructive">
+                  Amount exceeds balance
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="secondary"
+                className="h-12"
+                onClick={() => setCardPaymentAmount(remainingBalance.toFixed(2))}
+                data-testid="button-full-amount"
+              >
+                Full Amount (${remainingBalance.toFixed(2)})
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-12"
+                onClick={() => setCardPaymentAmount((remainingBalance / 2).toFixed(2))}
+                data-testid="button-half-amount"
+              >
+                Half (${(remainingBalance / 2).toFixed(2)})
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              <div>
+                <p className="font-medium">Pre-Authorization Only</p>
+                <p className="text-sm text-muted-foreground">
+                  For table service - add tip later
+                </p>
+              </div>
+              <Button
+                variant={isAuthOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsAuthOnly(!isAuthOnly)}
+                data-testid="button-toggle-auth-only"
+              >
+                {isAuthOnly ? "On" : "Off"}
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={resetCardEntry}
+                data-testid="button-cancel-amount"
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={handleAmountConfirm}
+                disabled={!isValidAmount}
+                data-testid="button-continue-to-card"
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   // Render card entry screen with payment method selection
-  if (showCardEntry && cardTender) {
+  if (showCardEntry && cardTender && (cardPaymentStep === "method" || cardPaymentStep === "entry")) {
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
         <DialogContent className="max-w-md p-0 gap-0">
@@ -513,7 +733,7 @@ export function PaymentModal({
               <Button 
                 variant="ghost" 
                 size="icon" 
-                onClick={paymentMethod === "manual" ? () => setPaymentMethod("select") : resetCardEntry}
+                onClick={paymentMethod === "manual" ? () => setPaymentMethod("select") : () => setCardPaymentStep("amount")}
                 disabled={isProcessingCard}
                 data-testid="button-back-to-payment"
               >
@@ -521,6 +741,11 @@ export function PaymentModal({
               </Button>
               <CreditCard className="w-5 h-5" />
               <span>{cardTender.name} Payment</span>
+              {isAuthOnly && (
+                <span className="text-xs bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded">
+                  Pre-Auth
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -776,6 +1001,42 @@ export function PaymentModal({
             </p>
           </div>
 
+          {authorizedPayments.length > 0 && (
+            <div className="mb-4 space-y-2">
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                Pending Authorizations
+              </p>
+              {authorizedPayments.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="flex items-center justify-between gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg"
+                  data-testid={`pending-auth-${payment.id}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-medium tabular-nums">
+                        ${parseFloat(payment.amount || "0").toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {payment.tenderName} - Awaiting tip
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => openTipEntry(payment)}
+                    data-testid={`button-add-tip-${payment.id}`}
+                  >
+                    <Receipt className="w-4 h-4 mr-1" />
+                    Add Tip
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">
               <p className="text-sm font-medium text-muted-foreground">Cash</p>
@@ -928,6 +1189,109 @@ export function PaymentModal({
         </div>
         )}
       </DialogContent>
+
+      {/* Tip Entry Dialog */}
+      <Dialog open={showTipEntry} onOpenChange={(isOpen) => !isOpen && setShowTipEntry(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5" />
+              Add Tip & Capture
+            </DialogTitle>
+          </DialogHeader>
+          
+          {tipEntryPayment && (
+            <div className="space-y-4">
+              <div className="bg-muted rounded-lg p-3 text-center">
+                <p className="text-sm text-muted-foreground mb-1">Authorization Amount</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-auth-amount">
+                  ${parseFloat(tipEntryPayment.amount || "0").toFixed(2)}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="tipAmount">Tip Amount</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">$</span>
+                  <Input
+                    id="tipAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={tipAmount}
+                    onChange={(e) => setTipAmount(e.target.value)}
+                    className="pl-8 text-2xl h-14 tabular-nums text-center font-bold"
+                    placeholder="0.00"
+                    data-testid="input-tip-amount"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-2">
+                {[15, 18, 20, 25].map((percent) => {
+                  const authAmount = parseFloat(tipEntryPayment.amount || "0");
+                  const tipValue = (authAmount * percent / 100);
+                  return (
+                    <Button
+                      key={percent}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setTipAmount(tipValue.toFixed(2))}
+                      data-testid={`button-tip-${percent}`}
+                    >
+                      {percent}%
+                    </Button>
+                  );
+                })}
+              </div>
+              
+              <Separator />
+              
+              <div className="bg-muted/50 rounded-lg p-3 text-center">
+                <p className="text-sm text-muted-foreground mb-1">Total Capture</p>
+                <p className="text-xl font-bold tabular-nums" data-testid="text-total-capture">
+                  ${(parseFloat(tipEntryPayment.amount || "0") + (parseFloat(tipAmount) || 0)).toFixed(2)}
+                </p>
+              </div>
+              
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowTipEntry(false);
+                    setTipEntryPayment(null);
+                    setTipAmount("");
+                  }}
+                  disabled={isCapturing}
+                  data-testid="button-cancel-tip"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleCaptureWithTip}
+                  disabled={isCapturing}
+                  data-testid="button-capture-with-tip"
+                >
+                  {isCapturing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Capturing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon className="w-4 h-4 mr-2" />
+                      Capture
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

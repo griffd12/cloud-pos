@@ -723,6 +723,9 @@ export const checkPayments = pgTable("check_payments", {
   paidAt: timestamp("paid_at").defaultNow(),
   employeeId: varchar("employee_id").references(() => employees.id),
   businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this payment was applied
+  paymentTransactionId: varchar("payment_transaction_id"), // Link to gateway transaction for card payments (no FK to avoid circular ref)
+  paymentStatus: text("payment_status").default("completed"), // 'authorized' (pre-auth), 'completed' (captured/finalized)
+  tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }), // Tip added to pre-auth
 });
 
 // Check Discounts Applied
