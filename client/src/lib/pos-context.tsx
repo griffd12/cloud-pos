@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react";
-import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode } from "@shared/schema";
+import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode, Workstation } from "@shared/schema";
 
 const RVC_STORAGE_KEY = "pos_selected_rvc";
+const WORKSTATION_STORAGE_KEY = "pos_workstation_id";
 
 interface SelectedModifier {
   id: string;
@@ -22,6 +23,8 @@ interface PosContextType {
   currentTimecard: Timecard | null;
   isSalariedBypass: boolean;
   currentJobCode: JobCode | null;
+  workstationId: string | null;
+  currentWorkstation: Workstation | null;
   
   setCurrentEmployee: (employee: Employee | null) => void;
   setCurrentRvc: (rvc: Rvc | null) => void;
@@ -35,12 +38,31 @@ interface PosContextType {
   setCurrentTimecard: (timecard: Timecard | null) => void;
   setIsSalariedBypass: (value: boolean) => void;
   setCurrentJobCode: (jobCode: JobCode | null) => void;
+  setWorkstationId: (id: string | null) => void;
+  setCurrentWorkstation: (workstation: Workstation | null) => void;
   
   hasPrivilege: (code: string) => boolean;
   logout: () => void;
 }
 
 const PosContext = createContext<PosContextType | null>(null);
+
+// Helper to get workstation ID from URL param or localStorage
+function getInitialWorkstationId(): string | null {
+  // First check URL param (for testing multiple workstations)
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlWorkstation = urlParams.get('workstation');
+    if (urlWorkstation) {
+      // Save URL param to localStorage for persistence
+      localStorage.setItem(WORKSTATION_STORAGE_KEY, urlWorkstation);
+      return urlWorkstation;
+    }
+    // Fall back to localStorage
+    return localStorage.getItem(WORKSTATION_STORAGE_KEY);
+  }
+  return null;
+}
 
 export function PosProvider({ children }: { children: ReactNode }) {
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
@@ -66,6 +88,18 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [currentTimecard, setCurrentTimecard] = useState<Timecard | null>(null);
   const [isSalariedBypass, setIsSalariedBypass] = useState<boolean>(false);
   const [currentJobCode, setCurrentJobCode] = useState<JobCode | null>(null);
+  const [workstationId, setWorkstationIdState] = useState<string | null>(getInitialWorkstationId);
+  const [currentWorkstation, setCurrentWorkstation] = useState<Workstation | null>(null);
+
+  // Persist workstation ID to localStorage when it changes
+  const setWorkstationId = useCallback((id: string | null) => {
+    setWorkstationIdState(id);
+    if (id) {
+      localStorage.setItem(WORKSTATION_STORAGE_KEY, id);
+    } else {
+      localStorage.removeItem(WORKSTATION_STORAGE_KEY);
+    }
+  }, []);
 
   // Persist RVC selection to localStorage when it changes
   const setCurrentRvc = useCallback((rvc: Rvc | null) => {
@@ -116,6 +150,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
         currentTimecard,
         isSalariedBypass,
         currentJobCode,
+        workstationId,
+        currentWorkstation,
         setCurrentEmployee,
         setCurrentRvc,
         setCurrentCheck,
@@ -128,6 +164,8 @@ export function PosProvider({ children }: { children: ReactNode }) {
         setCurrentTimecard,
         setIsSalariedBypass,
         setCurrentJobCode,
+        setWorkstationId,
+        setCurrentWorkstation,
         hasPrivilege,
         logout,
       }}

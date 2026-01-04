@@ -1515,6 +1515,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
+  // Get workstation context with property and allowed RVCs
+  app.get("/api/workstations/:id/context", async (req, res) => {
+    const workstation = await storage.getWorkstation(req.params.id);
+    if (!workstation) return res.status(404).json({ message: "Workstation not found" });
+    
+    const property = await storage.getProperty(workstation.propertyId);
+    if (!property) return res.status(404).json({ message: "Property not found" });
+    
+    // Get only RVCs from this workstation's property
+    const rvcs = await storage.getRvcs(workstation.propertyId);
+    
+    res.json({
+      workstation,
+      property,
+      rvcs,
+    });
+  });
+
   app.post("/api/workstations", async (req, res) => {
     try {
       const validated = insertWorkstationSchema.parse(req.body);
