@@ -421,6 +421,9 @@ export default function PosPage() {
                 description: `${earnData.pointsEarned} points added. New balance: ${earnData.newBalance}`,
               });
             }
+            // Invalidate customer queries so profile shows updated points
+            queryClient.invalidateQueries({ queryKey: ["/api/pos/customers", result.customerId] });
+            queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", result.customerId] });
           } catch (error) {
             console.error("Failed to earn loyalty points:", error);
           }
