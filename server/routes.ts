@@ -9570,6 +9570,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.patch("/api/loyalty-members/:id", async (req, res) => {
+    try {
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Member not found" });
+      
+      const { firstName, lastName, phone, email, birthDate, notes } = req.body;
+      const updated = await storage.updateLoyaltyMember(req.params.id, {
+        firstName,
+        lastName,
+        phone,
+        email,
+        birthDate,
+        notes,
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update loyalty member" });
+    }
+  });
+
   app.post("/api/loyalty-members/:id/earn", async (req, res) => {
     try {
       const { points, checkId, checkTotal, propertyId, employeeId, reason } = req.body;

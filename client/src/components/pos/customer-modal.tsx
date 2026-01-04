@@ -29,6 +29,7 @@ import {
   Award,
   Phone,
   Mail,
+  Pencil,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +72,14 @@ export function CustomerModal({
   const [pointsReason, setPointsReason] = useState("");
 
   const [enrollForm, setEnrollForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+  });
+
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
     firstName: "",
     lastName: "",
     phone: "",
@@ -213,6 +222,27 @@ export function CustomerModal({
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to reorder", variant: "destructive" });
+    },
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/loyalty-members/${selectedCustomer?.id}`, editForm);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Profile Updated",
+        description: `${data.firstName} ${data.lastName}'s profile has been updated`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos/customers", selectedCustomer?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members"] });
+      setShowEditProfile(false);
+      // Update the selected customer with new data
+      setSelectedCustomer(data);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update profile", variant: "destructive" });
     },
   });
 
@@ -489,7 +519,74 @@ export function CustomerModal({
 
                 <Separator />
 
-                {showAddPoints ? (
+                {showEditProfile ? (
+                  <div className="p-3 bg-muted rounded-md space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">Edit Profile</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowEditProfile(false)}
+                        data-testid="button-cancel-edit-profile"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>First Name</Label>
+                        <Input
+                          value={editForm.firstName}
+                          onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                          placeholder="First name"
+                          data-testid="input-edit-first-name"
+                        />
+                      </div>
+                      <div>
+                        <Label>Last Name</Label>
+                        <Input
+                          value={editForm.lastName}
+                          onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                          placeholder="Last name"
+                          data-testid="input-edit-last-name"
+                        />
+                      </div>
+                      <div>
+                        <Label>Phone</Label>
+                        <Input
+                          type="tel"
+                          value={editForm.phone}
+                          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                          placeholder="Phone number"
+                          data-testid="input-edit-phone"
+                        />
+                      </div>
+                      <div>
+                        <Label>Email</Label>
+                        <Input
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          placeholder="Email address"
+                          data-testid="input-edit-email"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => updateProfileMutation.mutate()}
+                      disabled={updateProfileMutation.isPending || (!editForm.firstName && !editForm.lastName)}
+                      className="w-full"
+                      data-testid="button-save-profile"
+                    >
+                      {updateProfileMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <User className="w-4 h-4 mr-2" />
+                      )}
+                      Save Profile
+                    </Button>
+                  </div>
+                ) : showAddPoints ? (
                   <div className="p-3 bg-muted rounded-md space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="font-medium">Add Points</h4>
@@ -575,6 +672,22 @@ export function CustomerModal({
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       Add Points
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditForm({
+                          firstName: customerDetails.customer.firstName || "",
+                          lastName: customerDetails.customer.lastName || "",
+                          phone: customerDetails.customer.phone || "",
+                          email: customerDetails.customer.email || "",
+                        });
+                        setShowEditProfile(true);
+                      }}
+                      data-testid="button-show-edit-profile"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit Profile
                     </Button>
                     {customerDetails.recentChecks.length > 0 && currentCheck && (
                       <Button
