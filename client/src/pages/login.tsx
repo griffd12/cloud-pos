@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
 import { apiRequest } from "@/lib/queryClient";
-import type { Employee, Rvc, Property, Timecard, JobCode } from "@shared/schema";
+import type { Employee, Rvc, Property, Timecard, JobCode, Workstation } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -22,9 +22,15 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle } from "lucide-react";
+import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle, Monitor } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
+interface WorkstationContext {
+  workstation: Workstation;
+  property: Property;
+  rvcs: Rvc[];
+}
 
 interface LoginResponse {
   employee: Employee;
@@ -55,6 +61,9 @@ export default function LoginPage() {
     setCurrentJobCode,
     currentEmployee,
     currentRvc,
+    workstationId,
+    setWorkstationId,
+    setCurrentWorkstation,
   } = usePosContext();
 
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
@@ -69,14 +78,35 @@ export default function LoginPage() {
   const [employeeJobs, setEmployeeJobs] = useState<JobCode[]>([]);
   const [clockStep, setClockStep] = useState<"pin" | "job_select" | "status" | "clock_out_type">("pin");
 
-  const { data: rvcs = [], isLoading: rvcsLoading } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs"],
+  // Fetch workstation context (includes property and allowed RVCs) if workstation is set
+  const { data: wsContext, isLoading: wsContextLoading, error: wsContextError } = useQuery<WorkstationContext>({
+    queryKey: ["/api/workstations", workstationId, "context"],
+    enabled: !!workstationId,
   });
 
-  const { data: selectedProperty } = useQuery<Property>({
-    queryKey: ["/api/rvcs", selectedRvcId, "property"],
-    enabled: !!selectedRvcId,
+  // Fallback to all RVCs only if no workstation is configured (for admin/testing)
+  const { data: allRvcs = [], isLoading: allRvcsLoading } = useQuery<Rvc[]>({
+    queryKey: ["/api/rvcs"],
+    enabled: !workstationId,
   });
+
+  // Fetch all workstations for selection when no workstation is set
+  const { data: allWorkstations = [], isLoading: workstationsLoading } = useQuery<Workstation[]>({
+    queryKey: ["/api/workstations"],
+    enabled: !workstationId,
+  });
+
+  // Use workstation-scoped RVCs if available, otherwise fall back to all RVCs
+  const rvcs = wsContext?.rvcs ?? allRvcs;
+  const rvcsLoading = workstationId ? wsContextLoading : allRvcsLoading;
+  const selectedProperty = wsContext?.property;
+
+  // Update workstation in context when loaded
+  useEffect(() => {
+    if (wsContext?.workstation) {
+      setCurrentWorkstation(wsContext.workstation);
+    }
+  }, [wsContext, setCurrentWorkstation]);
 
   const loginMutation = useMutation({
     mutationFn: async (pinCode: string) => {
@@ -336,9 +366,103 @@ export default function LoginPage() {
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
   const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
 
+  // Show workstation selection if no workstation is configured
+  if (!workstationId) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="absolute top-4 right-4 z-10">
+          <ThemeToggle />
+        </div>
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-2">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-2">
+              <Monitor className="w-8 h-8 text-primary" />
+            </div>
+            <CardTitle className="text-xl font-semibold">Select Workstation</CardTitle>
+            <CardDescription>
+              Choose the POS terminal for this device. This determines which location's registers and settings to use.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {workstationsLoading ? (
+              <div className="text-center text-muted-foreground py-4">Loading workstations...</div>
+            ) : allWorkstations.length === 0 ? (
+              <div className="text-center text-muted-foreground py-4">
+                No workstations configured. Please set up workstations in the Admin panel first.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {allWorkstations.map((ws) => (
+                  <Button
+                    key={ws.id}
+                    variant="outline"
+                    className="w-full justify-start gap-3 h-auto py-3"
+                    onClick={() => setWorkstationId(ws.id)}
+                    data-testid={`button-workstation-${ws.id}`}
+                  >
+                    <Monitor className="w-5 h-5 text-muted-foreground" />
+                    <div className="text-left">
+                      <div className="font-medium">{ws.name}</div>
+                      <div className="text-xs text-muted-foreground">{ws.deviceType}</div>
+                    </div>
+                  </Button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground text-center pt-2">
+              Tip: You can also set the workstation via URL parameter: ?workstation=ID
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show error if workstation context failed to load
+  if (wsContextError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="absolute top-4 right-4 z-10">
+          <ThemeToggle />
+        </div>
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-2">
+            <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mb-2">
+              <XCircle className="w-8 h-8 text-destructive" />
+            </div>
+            <CardTitle className="text-xl font-semibold">Workstation Not Found</CardTitle>
+            <CardDescription>
+              The selected workstation "{workstationId}" could not be found or loaded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setWorkstationId(null)}
+              data-testid="button-clear-workstation"
+            >
+              Select Different Workstation
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="absolute top-4 right-4 z-10">
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setWorkstationId(null)}
+          data-testid="button-change-workstation"
+          title="Change Workstation"
+        >
+          <Monitor className="w-4 h-4 mr-1" />
+          {wsContext?.workstation?.name || "Change"}
+        </Button>
         <ThemeToggle />
       </div>
 
