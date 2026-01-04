@@ -56,6 +56,8 @@ export default function TimecardsPage() {
   const [editingTimecard, setEditingTimecard] = useState<Timecard | null>(null);
   const [editForm, setEditForm] = useState({ clockIn: "", clockOut: "", reason: "" });
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+  const [editingPunch, setEditingPunch] = useState<TimePunch | null>(null);
+  const [punchEditForm, setPunchEditForm] = useState({ date: "", time: "", reason: "" });
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -118,6 +120,25 @@ export default function TimecardsPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Exception resolved." });
       queryClient.invalidateQueries({ queryKey: ["/api/timecard-exceptions"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updatePunchMutation = useMutation({
+    mutationFn: async (data: { id: string; actualTimestamp: string; editedById: string; editReason: string }) => {
+      return apiRequest("PATCH", `/api/time-punches/${data.id}`, {
+        actualTimestamp: data.actualTimestamp,
+        editedById: data.editedById,
+        editReason: data.editReason,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Time punch updated successfully." });
+      setEditingPunch(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/time-punches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timecards"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -437,6 +458,23 @@ export default function TimecardsPage() {
                                             <div className="flex items-center gap-2">
                                               <Clock className="w-3 h-3 text-muted-foreground" />
                                               <span className="font-medium">{formatTime(pair.clockIn.actualTimestamp)}</span>
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-6 w-6"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setEditingPunch(pair.clockIn);
+                                                  setPunchEditForm({
+                                                    date: format(new Date(pair.clockIn.actualTimestamp), "yyyy-MM-dd"),
+                                                    time: format(new Date(pair.clockIn.actualTimestamp), "HH:mm"),
+                                                    reason: "",
+                                                  });
+                                                }}
+                                                data-testid={`button-edit-punch-${pair.clockIn.id}`}
+                                              >
+                                                <Edit2 className="w-3 h-3" />
+                                              </Button>
                                             </div>
                                             <ArrowRight className="w-4 h-4 text-muted-foreground" />
                                             <div className="flex items-center gap-2">
@@ -446,6 +484,25 @@ export default function TimecardsPage() {
                                                   <Badge variant="secondary">Still Working</Badge>
                                                 )}
                                               </span>
+                                              {pair.clockOut && (
+                                                <Button
+                                                  size="icon"
+                                                  variant="ghost"
+                                                  className="h-6 w-6"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingPunch(pair.clockOut);
+                                                    setPunchEditForm({
+                                                      date: format(new Date(pair.clockOut!.actualTimestamp), "yyyy-MM-dd"),
+                                                      time: format(new Date(pair.clockOut!.actualTimestamp), "HH:mm"),
+                                                      reason: "",
+                                                    });
+                                                  }}
+                                                  data-testid={`button-edit-punch-${pair.clockOut.id}`}
+                                                >
+                                                  <Edit2 className="w-3 h-3" />
+                                                </Button>
+                                              )}
                                             </div>
                                             {pair.clockOut && (
                                               <Badge variant="outline">
@@ -545,6 +602,83 @@ export default function TimecardsPage() {
               }}
               disabled={updateTimecardMutation.isPending}
               data-testid="button-save-timecard"
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingPunch} onOpenChange={() => setEditingPunch(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Edit Time Punch
+            </DialogTitle>
+          </DialogHeader>
+          {editingPunch && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-md">
+                <div className="text-sm text-muted-foreground mb-1">Punch Type</div>
+                <div className="font-medium">
+                  {editingPunch.punchType === "clock_in" ? "Clock In" : "Clock Out"}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Date</label>
+                  <Input
+                    type="date"
+                    value={punchEditForm.date}
+                    onChange={(e) => setPunchEditForm({ ...punchEditForm, date: e.target.value })}
+                    data-testid="input-punch-date"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Time</label>
+                  <Input
+                    type="time"
+                    value={punchEditForm.time}
+                    onChange={(e) => setPunchEditForm({ ...punchEditForm, time: e.target.value })}
+                    data-testid="input-punch-time"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Edit Reason (Required)</label>
+                <Textarea
+                  value={punchEditForm.reason}
+                  onChange={(e) => setPunchEditForm({ ...punchEditForm, reason: e.target.value })}
+                  placeholder="Explain why this punch is being edited..."
+                  data-testid="input-punch-edit-reason"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingPunch(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!punchEditForm.reason.trim()) {
+                  toast({ title: "Error", description: "Edit reason is required", variant: "destructive" });
+                  return;
+                }
+                if (!punchEditForm.date || !punchEditForm.time) {
+                  toast({ title: "Error", description: "Date and time are required", variant: "destructive" });
+                  return;
+                }
+                updatePunchMutation.mutate({
+                  id: editingPunch!.id,
+                  actualTimestamp: `${punchEditForm.date}T${punchEditForm.time}:00`,
+                  editedById: "current-manager",
+                  editReason: punchEditForm.reason,
+                });
+              }}
+              disabled={updatePunchMutation.isPending}
+              data-testid="button-save-punch"
             >
               Save Changes
             </Button>
