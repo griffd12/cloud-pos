@@ -84,8 +84,15 @@ const menuGroups = [
       { title: "Tenders", url: "/admin/tenders", icon: CreditCard },
       { title: "Payment Processors", url: "/admin/payment-processors", icon: Wallet },
       { title: "Service Charges", url: "/admin/service-charges", icon: DollarSign },
+      { title: "Gift Cards", url: "/admin/gift-cards", icon: CreditCard },
       { title: "Major Groups", url: "/admin/major-groups", icon: LayoutGrid },
       { title: "Family Groups", url: "/admin/family-groups", icon: LayoutGrid },
+    ],
+  },
+  {
+    label: "Customer",
+    items: [
+      { title: "Loyalty Program", url: "/admin/loyalty", icon: Coins },
     ],
   },
   {

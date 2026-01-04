@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Tender, Check, TerminalDevice, TerminalSession, CheckPayment } from "@shared/schema";
-import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor, Clock, Receipt } from "lucide-react";
+import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor, Clock, Receipt, Star, ChevronDown, ChevronUp, User } from "lucide-react";
 import { StripeCardForm } from "./stripe-card-form";
 
 interface PaymentModalProps {
@@ -96,6 +96,26 @@ export function PaymentModal({
   const [externalTotalCharged, setExternalTotalCharged] = useState("");
   const [isRecordingExternal, setIsRecordingExternal] = useState(false);
   
+  // Gift card payment state
+  const [showGiftCardEntry, setShowGiftCardEntry] = useState(false);
+  const [giftCardTender, setGiftCardTender] = useState<Tender | null>(null);
+  const [giftCardNumber, setGiftCardNumber] = useState("");
+  const [giftCardPin, setGiftCardPin] = useState("");
+  const [giftCardLookup, setGiftCardLookup] = useState<any | null>(null);
+  const [giftCardAmount, setGiftCardAmount] = useState("");
+  const [isLookingUpGiftCard, setIsLookingUpGiftCard] = useState(false);
+  const [isProcessingGiftCard, setIsProcessingGiftCard] = useState(false);
+  
+  // Loyalty member state
+  const [loyaltyPhone, setLoyaltyPhone] = useState("");
+  const [loyaltyMember, setLoyaltyMember] = useState<any | null>(null);
+  const [loyaltyProgram, setLoyaltyProgram] = useState<any | null>(null);
+  const [isLookingUpLoyalty, setIsLookingUpLoyalty] = useState(false);
+  const [isApplyingLoyalty, setIsApplyingLoyalty] = useState(false);
+  const [pointsToRedeem, setPointsToRedeem] = useState("");
+  const [showLoyaltySection, setShowLoyaltySection] = useState(false);
+  const [loyaltyPointsEarned, setLoyaltyPointsEarned] = useState(false); // Prevent duplicate earning
+  
   // Query authorized payments on this check (use distinct key to avoid cache collision with POS page)
   const { data: checkPayments = [], refetch: refetchPayments } = useQuery<CheckPayment[]>({
     queryKey: ["/api/checks", check?.id, "payments-modal"],
@@ -169,6 +189,356 @@ export function PaymentModal({
     setExternalTotalCharged("");
     setIsRecordingExternal(false);
   }, []);
+  
+  const resetGiftCardEntry = useCallback(() => {
+    setShowGiftCardEntry(false);
+    setGiftCardTender(null);
+    setGiftCardNumber("");
+    setGiftCardPin("");
+    setGiftCardLookup(null);
+    setGiftCardAmount("");
+    setIsLookingUpGiftCard(false);
+    setIsProcessingGiftCard(false);
+  }, []);
+  
+  // Lookup gift card balance
+  const lookupGiftCard = async () => {
+    if (!giftCardNumber.trim()) {
+      toast({ title: "Enter gift card number", variant: "destructive" });
+      return;
+    }
+    
+    setIsLookingUpGiftCard(true);
+    setGiftCardLookup(null);
+    
+    try {
+      // Include PIN in lookup for validation if provided
+      const lookupUrl = giftCardPin.trim() 
+        ? `/api/gift-cards/lookup/${encodeURIComponent(giftCardNumber.trim())}?pin=${encodeURIComponent(giftCardPin.trim())}`
+        : `/api/gift-cards/lookup/${encodeURIComponent(giftCardNumber.trim())}`;
+      const res = await fetch(lookupUrl, {
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        toast({ 
+          title: "Card Not Found", 
+          description: error.message || "Gift card not found or inactive",
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      const card = await res.json();
+      
+      if (card.status !== "active") {
+        toast({ 
+          title: "Card Not Active", 
+          description: `This gift card is ${card.status}`,
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      const balance = parseFloat(card.currentBalance);
+      if (balance <= 0) {
+        toast({ 
+          title: "Zero Balance", 
+          description: "This gift card has no remaining balance",
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      setGiftCardLookup(card);
+      // Pre-fill amount as the lesser of balance or remaining check balance
+      const suggestedAmount = Math.min(balance, remainingBalance);
+      setGiftCardAmount(suggestedAmount.toFixed(2));
+      
+    } catch (error: any) {
+      console.error("Gift card lookup error:", error);
+      toast({ 
+        title: "Lookup Failed", 
+        description: error.message || "Unable to lookup gift card",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsLookingUpGiftCard(false);
+    }
+  };
+  
+  // Process gift card redemption
+  const processGiftCardPayment = async () => {
+    if (!check || !giftCardTender || !giftCardLookup) return;
+    
+    const amount = parseFloat(giftCardAmount);
+    const balance = parseFloat(giftCardLookup.currentBalance);
+    
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: "Enter a valid amount", variant: "destructive" });
+      return;
+    }
+    
+    if (amount > balance) {
+      toast({ 
+        title: "Insufficient Balance", 
+        description: `Card balance is $${balance.toFixed(2)}`,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    if (amount > remainingBalance) {
+      toast({ 
+        title: "Amount Exceeds Balance", 
+        description: `Check remaining balance is $${remainingBalance.toFixed(2)}`,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    setIsProcessingGiftCard(true);
+    
+    try {
+      // Redeem the gift card
+      const res = await apiRequest("POST", `/api/gift-cards/${giftCardLookup.id}/redeem`, {
+        amount: amount.toString(),
+        checkId: check.id,
+        referenceNumber: `CHK-${check.id}`,
+        pin: giftCardPin || undefined,
+      });
+      
+      const result = await res.json();
+      
+      if (!res.ok || !result.success) {
+        toast({ 
+          title: "Redemption Failed", 
+          description: result.message || "Unable to redeem gift card",
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      // Record the payment on the check
+      onPayment(giftCardTender.id, result.redeemedAmount || amount, false);
+      resetGiftCardEntry();
+      
+      const remainingCardBalance = parseFloat(result.giftCard?.currentBalance || "0");
+      toast({
+        title: "Gift Card Applied",
+        description: `$${(result.redeemedAmount || amount).toFixed(2)} redeemed. Remaining card balance: $${remainingCardBalance.toFixed(2)}`,
+      });
+      
+    } catch (error: any) {
+      console.error("Gift card redemption error:", error);
+      toast({ 
+        title: "Redemption Failed", 
+        description: error.message || "Unable to process gift card",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsProcessingGiftCard(false);
+    }
+  };
+  
+  // Reset loyalty state
+  const resetLoyalty = useCallback(() => {
+    setLoyaltyPhone("");
+    setLoyaltyMember(null);
+    setLoyaltyProgram(null);
+    setPointsToRedeem("");
+    setIsLookingUpLoyalty(false);
+    setIsApplyingLoyalty(false);
+    setLoyaltyPointsEarned(false);
+  }, []);
+  
+  // Lookup loyalty member by phone
+  const lookupLoyaltyMember = async () => {
+    if (!loyaltyPhone.trim()) {
+      toast({ title: "Enter phone number", variant: "destructive" });
+      return;
+    }
+    
+    setIsLookingUpLoyalty(true);
+    
+    try {
+      // First get active loyalty programs for this property
+      const programsRes = await fetch(`/api/loyalty-programs?active=true`, {
+        credentials: "include",
+      });
+      
+      if (!programsRes.ok) {
+        toast({ title: "No loyalty program available", variant: "destructive" });
+        return;
+      }
+      
+      const programs = await programsRes.json();
+      const activeProgram = programs.find((p: any) => p.active);
+      
+      if (!activeProgram) {
+        toast({ title: "No active loyalty program", variant: "destructive" });
+        return;
+      }
+      
+      setLoyaltyProgram(activeProgram);
+      
+      // Now look up the member by phone
+      const membersRes = await fetch(`/api/loyalty-members?programId=${activeProgram.id}&phone=${encodeURIComponent(loyaltyPhone.trim())}`, {
+        credentials: "include",
+      });
+      
+      if (!membersRes.ok) {
+        toast({ title: "Member lookup failed", variant: "destructive" });
+        return;
+      }
+      
+      const members = await membersRes.json();
+      const member = members.find((m: any) => m.phone === loyaltyPhone.trim());
+      
+      if (!member) {
+        toast({ 
+          title: "Member Not Found", 
+          description: "No loyalty account found with this phone number",
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      setLoyaltyMember(member);
+      toast({
+        title: "Member Found",
+        description: `${member.firstName || ""} ${member.lastName || ""} - ${parseFloat(member.currentPoints || "0").toFixed(0)} points`,
+      });
+      
+    } catch (error: any) {
+      console.error("Loyalty lookup error:", error);
+      toast({ 
+        title: "Lookup Failed", 
+        description: error.message || "Unable to lookup loyalty member",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsLookingUpLoyalty(false);
+    }
+  };
+  
+  // Earn points for the current check
+  const earnLoyaltyPoints = async () => {
+    if (!check || !loyaltyMember || !loyaltyProgram) return;
+    
+    // Prevent duplicate earning
+    if (loyaltyPointsEarned) {
+      toast({ 
+        title: "Points Already Earned", 
+        description: "Points have already been earned for this transaction",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    setIsApplyingLoyalty(true);
+    
+    try {
+      const res = await apiRequest("POST", `/api/loyalty-members/${loyaltyMember.id}/earn`, {
+        amount: remainingBalance.toString(),
+        checkId: check.id,
+        referenceNumber: `CHK-${check.id}`,
+      });
+      
+      const result = await res.json();
+      
+      if (!res.ok) {
+        toast({ 
+          title: "Failed to Earn Points", 
+          description: result.message || "Could not add loyalty points",
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      // Mark as earned and update member with new balance
+      setLoyaltyPointsEarned(true);
+      setLoyaltyMember({ ...loyaltyMember, currentPoints: result.member.currentPoints });
+      
+      toast({
+        title: "Points Earned",
+        description: `+${result.pointsEarned.toFixed(0)} points added. New balance: ${parseFloat(result.member.currentPoints).toFixed(0)} points`,
+      });
+      
+    } catch (error: any) {
+      console.error("Earn points error:", error);
+      toast({ 
+        title: "Failed to Earn Points", 
+        description: error.message || "Unable to add loyalty points",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsApplyingLoyalty(false);
+    }
+  };
+  
+  // Redeem points
+  const redeemLoyaltyPoints = async () => {
+    if (!check || !loyaltyMember || !loyaltyProgram) return;
+    
+    const points = parseFloat(pointsToRedeem);
+    const currentPoints = parseFloat(loyaltyMember.currentPoints || "0");
+    
+    if (isNaN(points) || points <= 0) {
+      toast({ title: "Enter valid points amount", variant: "destructive" });
+      return;
+    }
+    
+    if (points > currentPoints) {
+      toast({ 
+        title: "Insufficient Points", 
+        description: `Only ${currentPoints.toFixed(0)} points available`,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    setIsApplyingLoyalty(true);
+    
+    try {
+      const res = await apiRequest("POST", `/api/loyalty-members/${loyaltyMember.id}/redeem`, {
+        points: points.toString(),
+        checkId: check.id,
+        referenceNumber: `CHK-${check.id}`,
+      });
+      
+      const result = await res.json();
+      
+      if (!res.ok) {
+        toast({ 
+          title: "Redemption Failed", 
+          description: result.message || "Could not redeem points",
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      // Update member with new balance
+      setLoyaltyMember({ ...loyaltyMember, currentPoints: result.member.currentPoints });
+      setPointsToRedeem("");
+      
+      toast({
+        title: "Points Redeemed",
+        description: `${points.toFixed(0)} points redeemed. Remaining: ${parseFloat(result.member.currentPoints).toFixed(0)} points`,
+      });
+      
+    } catch (error: any) {
+      console.error("Redeem points error:", error);
+      toast({ 
+        title: "Redemption Failed", 
+        description: error.message || "Unable to redeem points",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsApplyingLoyalty(false);
+    }
+  };
   
   // Handle capturing an authorized payment with tip
   const handleCaptureWithTip = async () => {
@@ -414,6 +784,9 @@ export function PaymentModal({
     setSelectedTender(null);
     setTenderAmount("");
     resetCardEntry();
+    resetGiftCardEntry();
+    resetLoyalty();
+    setShowLoyaltySection(false);
     onClose();
   };
 
@@ -443,6 +816,9 @@ export function PaymentModal({
     setSelectedTender(null);
     setTenderAmount("");
     resetCardEntry();
+    resetGiftCardEntry();
+    resetLoyalty();
+    setShowLoyaltySection(false);
     if (onReadyForNextOrder) {
       onReadyForNextOrder();
     }
@@ -455,8 +831,12 @@ export function PaymentModal({
       setCardPaymentAmount(remainingBalance.toFixed(2));
       setCardPaymentStep("amount");
       setShowCardEntry(true);
+    } else if (tender.type === "gift") {
+      // Gift card tender - show gift card entry
+      setGiftCardTender(tender);
+      setShowGiftCardEntry(true);
     } else {
-      // For gift cards or other non-card tenders, proceed directly
+      // For other non-card tenders, proceed directly
       onPayment(tender.id, remainingBalance);
     }
   };
@@ -470,6 +850,12 @@ export function PaymentModal({
         setCardPaymentAmount(amount.toFixed(2));
         setCardPaymentStep("amount");
         setShowCardEntry(true);
+        setSelectedTender(null);
+        setTenderAmount("");
+      } else if (selectedTender.type === "gift") {
+        // Gift card tender - show gift card entry
+        setGiftCardTender(selectedTender);
+        setShowGiftCardEntry(true);
         setSelectedTender(null);
         setTenderAmount("");
       } else {
@@ -895,6 +1281,208 @@ export function PaymentModal({
     );
   }
 
+  // Render gift card entry screen
+  if (showGiftCardEntry && giftCardTender) {
+    const giftAmount = parseFloat(giftCardAmount) || 0;
+    const giftBalance = giftCardLookup ? parseFloat(giftCardLookup.currentBalance) : 0;
+    const isValidGiftAmount = giftCardLookup && giftAmount > 0 && giftAmount <= giftBalance && giftAmount <= remainingBalance;
+    
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+        <DialogContent className="max-w-md p-0 gap-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2" data-testid="text-gift-card-title">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={resetGiftCardEntry}
+                data-testid="button-back-from-gift-card"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <Gift className="w-5 h-5" />
+              <span>Gift Card Payment</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-4 space-y-4">
+            <div className="bg-muted rounded-lg p-3 text-center">
+              <p className="text-sm text-muted-foreground mb-1">Check Balance</p>
+              <p className="text-2xl font-bold tabular-nums" data-testid="text-gift-check-balance">
+                ${remainingBalance.toFixed(2)}
+              </p>
+            </div>
+
+            {!giftCardLookup ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="giftCardNumber">Gift Card Number</Label>
+                  <Input
+                    id="giftCardNumber"
+                    type="text"
+                    value={giftCardNumber}
+                    onChange={(e) => setGiftCardNumber(e.target.value)}
+                    className="text-lg h-12 font-mono tracking-wider"
+                    placeholder="Enter card number"
+                    disabled={isLookingUpGiftCard}
+                    data-testid="input-gift-card-number"
+                    onKeyDown={(e) => e.key === "Enter" && lookupGiftCard()}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="giftCardPin">PIN (if required)</Label>
+                  <Input
+                    id="giftCardPin"
+                    type="password"
+                    value={giftCardPin}
+                    onChange={(e) => setGiftCardPin(e.target.value)}
+                    className="text-lg h-12"
+                    placeholder="Optional"
+                    disabled={isLookingUpGiftCard}
+                    data-testid="input-gift-card-pin"
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={resetGiftCardEntry}
+                    disabled={isLookingUpGiftCard}
+                    data-testid="button-cancel-gift-card"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={lookupGiftCard}
+                    disabled={isLookingUpGiftCard || !giftCardNumber.trim()}
+                    data-testid="button-lookup-gift-card"
+                  >
+                    {isLookingUpGiftCard ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Looking up...
+                      </>
+                    ) : (
+                      "Look Up Card"
+                    )}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Card Number</span>
+                    <span className="font-mono" data-testid="text-gift-card-masked">
+                      ****{giftCardLookup.cardNumber?.slice(-4) || "****"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Available Balance</span>
+                    <span className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-gift-card-balance">
+                      ${giftBalance.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="giftCardAmount">Amount to Apply</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">$</span>
+                    <Input
+                      id="giftCardAmount"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={Math.min(giftBalance, remainingBalance)}
+                      value={giftCardAmount}
+                      onChange={(e) => setGiftCardAmount(e.target.value)}
+                      className="pl-8 text-2xl h-14 tabular-nums text-center font-bold"
+                      placeholder="0.00"
+                      disabled={isProcessingGiftCard}
+                      data-testid="input-gift-card-amount"
+                    />
+                  </div>
+                  {giftAmount > giftBalance && (
+                    <p className="text-sm text-destructive">
+                      Amount exceeds card balance
+                    </p>
+                  )}
+                  {giftAmount > remainingBalance && (
+                    <p className="text-sm text-destructive">
+                      Amount exceeds check balance
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="secondary"
+                    className="h-10"
+                    onClick={() => setGiftCardAmount(Math.min(giftBalance, remainingBalance).toFixed(2))}
+                    disabled={isProcessingGiftCard}
+                    data-testid="button-gift-max-amount"
+                  >
+                    Max (${Math.min(giftBalance, remainingBalance).toFixed(2)})
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="h-10"
+                    onClick={() => {
+                      setGiftCardLookup(null);
+                      setGiftCardAmount("");
+                    }}
+                    disabled={isProcessingGiftCard}
+                    data-testid="button-different-gift-card"
+                  >
+                    Different Card
+                  </Button>
+                </div>
+
+                <Separator />
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={resetGiftCardEntry}
+                    disabled={isProcessingGiftCard}
+                    data-testid="button-cancel-gift-redemption"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={processGiftCardPayment}
+                    disabled={isProcessingGiftCard || !isValidGiftAmount}
+                    data-testid="button-apply-gift-card"
+                  >
+                    {isProcessingGiftCard ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Gift className="w-4 h-4 mr-2" />
+                        Apply ${giftAmount.toFixed(2)}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   // Render amount entry screen (first step for card payments)
   if (showCardEntry && cardTender && cardPaymentStep === "amount") {
     const enteredAmount = parseFloat(cardPaymentAmount) || 0;
@@ -1298,6 +1886,136 @@ export function PaymentModal({
               ))}
             </div>
           )}
+
+          <div className="mb-4">
+            <Button
+              variant="ghost"
+              className="w-full justify-between h-10"
+              onClick={() => setShowLoyaltySection(!showLoyaltySection)}
+              data-testid="button-toggle-loyalty"
+            >
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm font-medium">
+                  {loyaltyMember 
+                    ? `${loyaltyMember.firstName || ""} ${loyaltyMember.lastName || ""} - ${parseFloat(loyaltyMember.currentPoints || "0").toFixed(0)} pts`
+                    : "Loyalty Program"
+                  }
+                </span>
+              </div>
+              {showLoyaltySection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
+            
+            {showLoyaltySection && (
+              <div className="mt-2 p-3 border rounded-lg space-y-3">
+                {!loyaltyMember ? (
+                  <>
+                    <div className="flex gap-2">
+                      <Input
+                        type="tel"
+                        value={loyaltyPhone}
+                        onChange={(e) => setLoyaltyPhone(e.target.value)}
+                        placeholder="Phone number"
+                        className="flex-1"
+                        disabled={isLookingUpLoyalty}
+                        data-testid="input-loyalty-phone"
+                        onKeyDown={(e) => e.key === "Enter" && lookupLoyaltyMember()}
+                      />
+                      <Button
+                        onClick={lookupLoyaltyMember}
+                        disabled={isLookingUpLoyalty || !loyaltyPhone.trim()}
+                        data-testid="button-lookup-loyalty"
+                      >
+                        {isLookingUpLoyalty ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          "Look Up"
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Enter phone to look up loyalty account
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <User className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                        <div>
+                          <p className="font-medium text-sm">
+                            {loyaltyMember.firstName} {loyaltyMember.lastName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {loyaltyMember.phone}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-yellow-600 dark:text-yellow-400">
+                          {parseFloat(loyaltyMember.currentPoints || "0").toFixed(0)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">points</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant={loyaltyPointsEarned ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={earnLoyaltyPoints}
+                        disabled={isApplyingLoyalty || loyaltyPointsEarned}
+                        data-testid="button-earn-points"
+                      >
+                        {isApplyingLoyalty ? (
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        ) : loyaltyPointsEarned ? (
+                          <CheckIcon className="w-4 h-4 mr-1 text-green-600" />
+                        ) : (
+                          <Star className="w-4 h-4 mr-1" />
+                        )}
+                        {loyaltyPointsEarned ? "Earned" : "Earn Points"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={resetLoyalty}
+                        disabled={isApplyingLoyalty}
+                        data-testid="button-clear-loyalty"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Clear
+                      </Button>
+                    </div>
+                    
+                    {parseFloat(loyaltyMember.currentPoints || "0") > 0 && (
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          value={pointsToRedeem}
+                          onChange={(e) => setPointsToRedeem(e.target.value)}
+                          placeholder="Points to redeem"
+                          className="flex-1"
+                          min="1"
+                          max={parseFloat(loyaltyMember.currentPoints || "0")}
+                          disabled={isApplyingLoyalty}
+                          data-testid="input-redeem-points"
+                        />
+                        <Button
+                          variant="secondary"
+                          onClick={redeemLoyaltyPoints}
+                          disabled={isApplyingLoyalty || !pointsToRedeem || parseFloat(pointsToRedeem) <= 0}
+                          data-testid="button-redeem-points"
+                        >
+                          Redeem
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">

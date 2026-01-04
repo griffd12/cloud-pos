@@ -54,6 +54,8 @@ import OvertimeRulesPage from "./overtime-rules";
 import PaymentProcessorsPage from "./payment-processors";
 import TerminalDevicesPage from "./terminal-devices";
 import OnboardingPage from "./onboarding";
+import GiftCardsPage from "./gift-cards";
+import LoyaltyPage from "./loyalty";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -285,6 +287,8 @@ export default function AdminLayout() {
               <Route path="/admin/jobs" component={JobsPage} />
               <Route path="/admin/overtime-rules" component={OvertimeRulesPage} />
               <Route path="/admin/onboarding" component={OnboardingPage} />
+              <Route path="/admin/gift-cards" component={GiftCardsPage} />
+              <Route path="/admin/loyalty" component={LoyaltyPage} />
             </Switch>
           </main>
         </div>

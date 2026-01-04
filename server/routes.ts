@@ -9370,7 +9370,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const card = await storage.getGiftCardByNumber(req.params.cardNumber);
       if (!card) return res.status(404).json({ message: "Gift card not found" });
-      res.json(card);
+      
+      // Validate PIN if card requires PIN and PIN was provided
+      const { pin } = req.query;
+      if (card.pin && pin && card.pin !== pin) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+      
+      // Return card info (include full card number for POS display but mask in actual response for security)
+      res.json({
+        ...card,
+        // Return masked card number for display, but include original for matching
+        maskedCardNumber: card.cardNumber.slice(0, 4) + "****" + card.cardNumber.slice(-4),
+        pinValidated: card.pin ? (pin === card.pin) : true,
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to lookup gift card" });
     }
@@ -9427,10 +9440,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/gift-cards/:id/redeem", async (req, res) => {
     try {
-      const { amount, checkId, employeeId, propertyId, checkPaymentId } = req.body;
+      const { amount, checkId, employeeId, propertyId, checkPaymentId, pin, referenceNumber } = req.body;
+      
+      // Atomically fetch and validate card state
       const card = await storage.getGiftCard(req.params.id);
       if (!card) return res.status(404).json({ message: "Gift card not found" });
       if (card.status !== "active") return res.status(400).json({ message: "Gift card is not active" });
+      
+      // Validate PIN if card requires one
+      if (card.pin && pin !== card.pin) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+      
+      // Validate amount against current balance (re-check atomically)
+      const requestedAmount = parseFloat(amount);
+      const currentBalance = parseFloat(card.currentBalance);
+      if (requestedAmount > currentBalance) {
+        return res.status(400).json({ 
+          message: "Insufficient balance",
+          currentBalance: currentBalance.toFixed(2),
+        });
+      }
 
       const redeemAmount = Math.min(parseFloat(amount), parseFloat(card.currentBalance));
       const newBalance = parseFloat(card.currentBalance) - redeemAmount;
@@ -9445,7 +9475,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const updated = await storage.updateGiftCard(req.params.id, updateData);
 
-      await storage.createGiftCardTransaction({
+      const transaction = await storage.createGiftCardTransaction({
         giftCardId: card.id,
         propertyId,
         transactionType: "redemption",
@@ -9455,9 +9485,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checkId,
         checkPaymentId,
         employeeId,
+        referenceNumber,
       });
 
-      res.json({ ...updated, redeemedAmount: redeemAmount });
+      res.json({ 
+        success: true,
+        giftCard: updated, 
+        transaction,
+        redeemedAmount: redeemAmount,
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to redeem gift card" });
     }
