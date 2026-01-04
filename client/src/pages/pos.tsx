@@ -1352,7 +1352,7 @@ export default function PosPage() {
               Add Tip & Capture
             </DialogTitle>
             <DialogDescription>
-              Enter tip amount for this ${tipCapturePayment ? parseFloat(tipCapturePayment.amount).toFixed(2) : "0.00"} authorization
+              {`Enter tip amount for this $${tipCapturePayment ? parseFloat(tipCapturePayment.amount).toFixed(2) : "0.00"} authorization`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1412,6 +1412,7 @@ export default function PosPage() {
               variant="outline"
               onClick={() => setShowTipCaptureDialog(false)}
               disabled={isCapturingTip}
+              data-testid="button-cancel-tip-capture"
             >
               Cancel
             </Button>
