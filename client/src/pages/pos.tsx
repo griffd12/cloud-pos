@@ -1102,6 +1102,8 @@ export default function PosPage() {
         isLoading={paymentMutation.isPending}
         changeDue={cashChangeDue}
         onReadyForNextOrder={handleReadyForNextOrder}
+        propertyId={currentRvc?.propertyId}
+        employeeId={currentEmployee?.id}
       />
 
       <OpenChecksModal

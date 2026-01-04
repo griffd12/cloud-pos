@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import type { Tender, Check } from "@shared/schema";
-import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Tender, Check, TerminalDevice, TerminalSession } from "@shared/schema";
+import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor } from "lucide-react";
 
 interface PaymentModalProps {
   open: boolean;
@@ -24,7 +25,12 @@ interface PaymentModalProps {
   isLoading?: boolean;
   changeDue?: number | null;
   onReadyForNextOrder?: () => void;
+  propertyId?: string;
+  workstationId?: string;
+  employeeId?: string;
 }
+
+type PaymentMethod = "select" | "manual" | "terminal";
 
 const TENDER_ICONS: Record<string, typeof Banknote> = {
   cash: Banknote,
@@ -45,6 +51,9 @@ export function PaymentModal({
   isLoading = false,
   changeDue = null,
   onReadyForNextOrder,
+  propertyId,
+  workstationId,
+  employeeId,
 }: PaymentModalProps) {
   const { toast } = useToast();
   const [customAmount, setCustomAmount] = useState("");
@@ -60,13 +69,44 @@ export function PaymentModal({
   const [cardCvv, setCardCvv] = useState("");
   const [cardName, setCardName] = useState("");
   const [isProcessingCard, setIsProcessingCard] = useState(false);
+  
+  // Terminal device state
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("select");
+  const [selectedTerminal, setSelectedTerminal] = useState<TerminalDevice | null>(null);
+  const [terminalSession, setTerminalSession] = useState<TerminalSession | null>(null);
+  const [terminalPolling, setTerminalPolling] = useState(false);
+  
+  // Query terminal devices for property
+  const { data: terminalDevices = [] } = useQuery<TerminalDevice[]>({
+    queryKey: ["/api/terminal-devices", { propertyId }],
+    queryFn: async () => {
+      if (!propertyId) return [];
+      const res = await fetch(`/api/terminal-devices?propertyId=${propertyId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!propertyId && showCardEntry,
+  });
+  
+  // Filter to online terminals, preferring workstation-assigned
+  const availableTerminals = terminalDevices.filter(
+    (t) => t.active && t.status === "online"
+  );
+  const assignedTerminal = availableTerminals.find(
+    (t) => t.workstationId === workstationId
+  );
+  const floatingTerminals = availableTerminals.filter(
+    (t) => !t.workstationId || t.workstationId !== workstationId
+  );
 
   const cashTender = tenders.find((t) => t.type === "cash");
   const nonCashTenders = tenders.filter((t) => t.type !== "cash");
   
   const showChangeDueScreen = changeDue !== null && changeDue > 0;
 
-  const resetCardEntry = () => {
+  const resetCardEntry = useCallback(() => {
     setShowCardEntry(false);
     setCardTender(null);
     setCardAmount(0);
@@ -75,6 +115,135 @@ export function PaymentModal({
     setCardCvv("");
     setCardName("");
     setIsProcessingCard(false);
+    setPaymentMethod("select");
+    setSelectedTerminal(null);
+    setTerminalSession(null);
+    setTerminalPolling(false);
+  }, []);
+  
+  // Poll terminal session status
+  useEffect(() => {
+    if (!terminalSession || !terminalPolling) return;
+    
+    const pollSession = async () => {
+      try {
+        const res = await fetch(`/api/terminal-sessions/${terminalSession.id}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const session = await res.json() as TerminalSession;
+        
+        if (session.status === "approved") {
+          setTerminalPolling(false);
+          if (cardTender) {
+            onPayment(cardTender.id, cardAmount, false, session.paymentTransactionId || undefined);
+          }
+          resetCardEntry();
+          toast({
+            title: "Payment Approved",
+            description: `$${cardAmount.toFixed(2)} charged via terminal`,
+          });
+        } else if (session.status === "declined") {
+          setTerminalPolling(false);
+          toast({
+            title: "Payment Declined",
+            description: "Card was declined. Try another card.",
+            variant: "destructive",
+          });
+          setPaymentMethod("select");
+          setTerminalSession(null);
+        } else if (session.status === "cancelled" || session.status === "timeout" || session.status === "error") {
+          setTerminalPolling(false);
+          toast({
+            title: "Payment Cancelled",
+            description: session.statusMessage || "Payment was cancelled",
+            variant: "destructive",
+          });
+          setPaymentMethod("select");
+          setTerminalSession(null);
+        } else {
+          // Still processing
+          setTerminalSession(session);
+        }
+      } catch (error) {
+        console.error("Error polling terminal session:", error);
+      }
+    };
+    
+    const interval = setInterval(pollSession, 1500);
+    return () => clearInterval(interval);
+  }, [terminalSession, terminalPolling, cardTender, cardAmount, onPayment, resetCardEntry, toast]);
+  
+  // Start terminal payment
+  const startTerminalPayment = async (terminal: TerminalDevice) => {
+    if (!check) return;
+    
+    setSelectedTerminal(terminal);
+    setIsProcessingCard(true);
+    
+    try {
+      const res = await apiRequest("POST", "/api/terminal-sessions", {
+        terminalDeviceId: terminal.id,
+        checkId: check.id,
+        transactionType: "sale",
+        amount: cardAmount.toString(),
+        employeeId,
+        workstationId,
+      });
+      
+      const session = await res.json() as TerminalSession;
+      setTerminalSession(session);
+      setPaymentMethod("terminal");
+      setTerminalPolling(true);
+      
+      toast({
+        title: "Waiting for Card",
+        description: `Present card on ${terminal.name}`,
+      });
+    } catch (error: any) {
+      console.error("Failed to start terminal session:", error);
+      toast({
+        title: "Terminal Error",
+        description: error.message || "Failed to connect to terminal",
+        variant: "destructive",
+      });
+      setSelectedTerminal(null);
+    } finally {
+      setIsProcessingCard(false);
+    }
+  };
+  
+  // Cancel terminal session
+  const cancelTerminalSession = async () => {
+    if (!terminalSession) return;
+    
+    try {
+      await apiRequest("POST", `/api/terminal-sessions/${terminalSession.id}/cancel`, {
+        reason: "Cancelled by cashier",
+      });
+      
+      setTerminalPolling(false);
+      setTerminalSession(null);
+      setPaymentMethod("select");
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      
+      toast({ title: "Payment Cancelled" });
+    } catch (error) {
+      console.error("Failed to cancel terminal session:", error);
+    }
+  };
+  
+  // Simulate terminal approval (for demo/testing)
+  const simulateTerminalApproval = async (action: "approve" | "decline") => {
+    if (!terminalSession) return;
+    
+    try {
+      await apiRequest("POST", `/api/terminal-sessions/${terminalSession.id}/simulate-callback`, {
+        action,
+      });
+    } catch (error) {
+      console.error("Failed to simulate terminal callback:", error);
+    }
   };
 
   const handleClose = () => {
@@ -246,7 +415,95 @@ export function PaymentModal({
   const changeFromCustom = customAmountNum - remainingBalance;
   const tenderAmountNum = parseFloat(tenderAmount) || 0;
 
-  // Render card entry screen
+  // Get status label for terminal session
+  const getTerminalStatusLabel = () => {
+    if (!terminalSession) return "Initializing...";
+    switch (terminalSession.status) {
+      case "pending": return "Connecting to terminal...";
+      case "processing": return "Processing...";
+      case "awaiting_card": return "Present card or tap to pay";
+      case "card_inserted": return "Reading card...";
+      case "pin_entry": return "Enter PIN on terminal";
+      default: return terminalSession.statusMessage || "Processing...";
+    }
+  };
+
+  // Render terminal waiting screen
+  if (showCardEntry && cardTender && paymentMethod === "terminal" && terminalSession) {
+    return (
+      <Dialog open={open} onOpenChange={() => {}}>
+        <DialogContent className="max-w-md p-0 gap-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2" data-testid="text-terminal-title">
+              <Smartphone className="w-5 h-5" />
+              <span>Terminal Payment</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-4 space-y-4">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 text-center">
+              <p className="text-sm opacity-90 mb-1">Charging</p>
+              <p className="text-3xl font-bold tabular-nums" data-testid="text-terminal-charge-amount">
+                ${cardAmount.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="bg-muted rounded-lg p-6 text-center space-y-4">
+              <div className="flex justify-center">
+                <Loader2 className="w-12 h-12 animate-spin text-primary" />
+              </div>
+              <div>
+                <p className="text-lg font-medium" data-testid="text-terminal-status">
+                  {getTerminalStatusLabel()}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {selectedTerminal?.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground text-center">
+              <p>Demo Mode: Click buttons below to simulate</p>
+              <div className="flex gap-2 mt-2 justify-center">
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => simulateTerminalApproval("approve")}
+                  data-testid="button-simulate-approve"
+                >
+                  <CheckIcon className="w-4 h-4 mr-1" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => simulateTerminalApproval("decline")}
+                  data-testid="button-simulate-decline"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Decline
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={cancelTerminalSession}
+              data-testid="button-cancel-terminal"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Render card entry screen with payment method selection
   if (showCardEntry && cardTender) {
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -256,7 +513,7 @@ export function PaymentModal({
               <Button 
                 variant="ghost" 
                 size="icon" 
-                onClick={resetCardEntry}
+                onClick={paymentMethod === "manual" ? () => setPaymentMethod("select") : resetCardEntry}
                 disabled={isProcessingCard}
                 data-testid="button-back-to-payment"
               >
@@ -275,107 +532,179 @@ export function PaymentModal({
               </p>
             </div>
 
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="cardNumber">Card Number</Label>
-                <Input
-                  id="cardNumber"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="4242 4242 4242 4242"
-                  value={cardNumber}
-                  onChange={handleCardNumberChange}
-                  disabled={isProcessingCard}
-                  className="text-lg tabular-nums tracking-wider"
-                  data-testid="input-card-number"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cardExpiry">Expiry</Label>
-                  <Input
-                    id="cardExpiry"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="MM/YY"
-                    value={cardExpiry}
-                    onChange={handleExpiryChange}
+            {paymentMethod === "select" && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">Choose payment method</p>
+                
+                {assignedTerminal && (
+                  <Button
+                    variant="outline"
+                    className="w-full h-14 justify-start gap-3"
+                    onClick={() => startTerminalPayment(assignedTerminal)}
                     disabled={isProcessingCard}
-                    className="tabular-nums"
-                    data-testid="input-card-expiry"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cardCvv">CVV</Label>
-                  <Input
-                    id="cardCvv"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="123"
-                    value={cardCvv}
-                    onChange={handleCvvChange}
-                    disabled={isProcessingCard}
-                    className="tabular-nums"
-                    data-testid="input-card-cvv"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="cardName">Name on Card (optional)</Label>
-                <Input
-                  id="cardName"
-                  type="text"
-                  placeholder="JOHN DOE"
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value.toUpperCase())}
-                  disabled={isProcessingCard}
-                  className="uppercase"
-                  data-testid="input-card-name"
-                />
-              </div>
-            </div>
-
-            <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-              <p className="font-medium mb-1">Test Cards</p>
-              <p>Approve: 4242 4242 4242 4242</p>
-              <p>Decline: 4000 0000 0000 0002</p>
-              <p className="text-xs mt-2 opacity-75">Uses property's configured processor (or demo mode if none)</p>
-            </div>
-
-            <Separator />
-
-            <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={resetCardEntry}
-                disabled={isProcessingCard}
-                data-testid="button-cancel-card"
-              >
-                <X className="w-4 h-4 mr-2" />
-                Cancel
-              </Button>
-              <Button 
-                className="flex-1"
-                onClick={processCardPayment}
-                disabled={isProcessingCard || cardNumber.replace(/\s/g, "").length < 15}
-                data-testid="button-process-card"
-              >
-                {isProcessingCard ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CheckIcon className="w-4 h-4 mr-2" />
-                    Charge ${cardAmount.toFixed(2)}
-                  </>
+                    data-testid="button-assigned-terminal"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wifi className="w-5 h-5 text-green-500" />
+                      <Smartphone className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">{assignedTerminal.name}</p>
+                      <p className="text-xs text-muted-foreground">Assigned terminal</p>
+                    </div>
+                  </Button>
                 )}
-              </Button>
-            </div>
+                
+                {floatingTerminals.map((terminal) => (
+                  <Button
+                    key={terminal.id}
+                    variant="outline"
+                    className="w-full h-14 justify-start gap-3"
+                    onClick={() => startTerminalPayment(terminal)}
+                    disabled={isProcessingCard}
+                    data-testid={`button-terminal-${terminal.id}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wifi className="w-5 h-5 text-green-500" />
+                      <Smartphone className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">{terminal.name}</p>
+                      <p className="text-xs text-muted-foreground">Available terminal</p>
+                    </div>
+                  </Button>
+                ))}
+                
+                {availableTerminals.length === 0 && (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    <WifiOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No terminals available</p>
+                  </div>
+                )}
+                
+                <Separator />
+                
+                <Button
+                  variant="secondary"
+                  className="w-full h-12 justify-start gap-3"
+                  onClick={() => setPaymentMethod("manual")}
+                  disabled={isProcessingCard}
+                  data-testid="button-manual-entry"
+                >
+                  <Monitor className="w-5 h-5" />
+                  <div className="text-left">
+                    <p className="font-medium">Manual Card Entry</p>
+                    <p className="text-xs text-muted-foreground">Type card details</p>
+                  </div>
+                </Button>
+              </div>
+            )}
+
+            {paymentMethod === "manual" && (
+              <>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cardNumber">Card Number</Label>
+                    <Input
+                      id="cardNumber"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="4242 4242 4242 4242"
+                      value={cardNumber}
+                      onChange={handleCardNumberChange}
+                      disabled={isProcessingCard}
+                      className="text-lg tabular-nums tracking-wider"
+                      data-testid="input-card-number"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cardExpiry">Expiry</Label>
+                      <Input
+                        id="cardExpiry"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="MM/YY"
+                        value={cardExpiry}
+                        onChange={handleExpiryChange}
+                        disabled={isProcessingCard}
+                        className="tabular-nums"
+                        data-testid="input-card-expiry"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cardCvv">CVV</Label>
+                      <Input
+                        id="cardCvv"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="123"
+                        value={cardCvv}
+                        onChange={handleCvvChange}
+                        disabled={isProcessingCard}
+                        className="tabular-nums"
+                        data-testid="input-card-cvv"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cardName">Name on Card (optional)</Label>
+                    <Input
+                      id="cardName"
+                      type="text"
+                      placeholder="JOHN DOE"
+                      value={cardName}
+                      onChange={(e) => setCardName(e.target.value.toUpperCase())}
+                      disabled={isProcessingCard}
+                      className="uppercase"
+                      data-testid="input-card-name"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
+                  <p className="font-medium mb-1">Test Cards</p>
+                  <p>Approve: 4242 4242 4242 4242</p>
+                  <p>Decline: 4000 0000 0000 0002</p>
+                  <p className="text-xs mt-2 opacity-75">Uses property's configured processor (or demo mode if none)</p>
+                </div>
+
+                <Separator />
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setPaymentMethod("select")}
+                    disabled={isProcessingCard}
+                    data-testid="button-cancel-card"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={processCardPayment}
+                    disabled={isProcessingCard || cardNumber.replace(/\s/g, "").length < 15}
+                    data-testid="button-process-card"
+                  >
+                    {isProcessingCard ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckIcon className="w-4 h-4 mr-2" />
+                        Charge ${cardAmount.toFixed(2)}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
