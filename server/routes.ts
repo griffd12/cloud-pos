@@ -3112,8 +3112,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Accept either employeeId (POS mode) or deviceId (dedicated KDS mode)
       const { employeeId, deviceId } = req.body;
 
-      // For audit purposes, use employeeId if provided, otherwise use deviceId as identifier
-      const bumpedBy = employeeId || (deviceId ? `device:${deviceId}` : undefined);
+      // For dedicated KDS devices, pass undefined (null in DB) since deviceId can't go in employee FK field
+      // Employee ID is used when bumped from POS mode with logged-in employee
+      const bumpedBy = employeeId || undefined;
       const updated = await storage.bumpKdsTicket(ticketId, bumpedBy);
 
       broadcastKdsUpdate();
@@ -3139,8 +3140,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tickets = await storage.getKdsTickets(filters);
       const activeTickets = tickets.filter((t: any) => t.status === "active");
       
-      // For audit purposes, use employeeId if provided, otherwise use deviceId as identifier
-      const bumpedBy = employeeId || (deviceId ? `device:${deviceId}` : undefined);
+      // For dedicated KDS devices, pass undefined (null in DB) since deviceId can't go in employee FK field
+      // Employee ID is used when bumped from POS mode with logged-in employee
+      const bumpedBy = employeeId || undefined;
       
       let bumped = 0;
       for (const ticket of activeTickets) {
