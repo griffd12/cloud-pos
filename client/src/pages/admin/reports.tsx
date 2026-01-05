@@ -8,10 +8,12 @@ const DEVICE_TOKEN_KEY = "pos_device_token";
 
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
-  const emcToken = localStorage.getItem(EMC_SESSION_KEY);
+  // EMC uses sessionStorage for security (clears on browser close)
+  const emcToken = sessionStorage.getItem(EMC_SESSION_KEY);
   if (emcToken) {
     headers["X-EMC-Session"] = emcToken;
   }
+  // Device token uses localStorage for persistence across sessions
   const deviceToken = localStorage.getItem(DEVICE_TOKEN_KEY);
   if (deviceToken) {
     headers["X-Device-Token"] = deviceToken;

@@ -44,7 +44,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
           return true;
         }
       }
-      localStorage.removeItem(EMC_SESSION_KEY);
+      sessionStorage.removeItem(EMC_SESSION_KEY);
       return false;
     } catch {
       return false;
@@ -52,7 +52,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem(EMC_SESSION_KEY);
+    const storedToken = sessionStorage.getItem(EMC_SESSION_KEY);
     if (storedToken) {
       validateSession(storedToken).finally(() => setIsLoading(false));
     } else {
@@ -73,7 +73,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem(EMC_SESSION_KEY, data.sessionToken);
+    sessionStorage.setItem(EMC_SESSION_KEY, data.sessionToken);
     setSessionToken(data.sessionToken);
     setUser(data.user);
   };
@@ -89,7 +89,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
       } catch {
       }
     }
-    localStorage.removeItem(EMC_SESSION_KEY);
+    sessionStorage.removeItem(EMC_SESSION_KEY);
     setSessionToken(null);
     setUser(null);
   };
@@ -107,7 +107,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
-    localStorage.setItem(EMC_SESSION_KEY, data.sessionToken);
+    sessionStorage.setItem(EMC_SESSION_KEY, data.sessionToken);
     setSessionToken(data.sessionToken);
     setUser(data.user);
   };

@@ -6,13 +6,13 @@ const DEVICE_TOKEN_KEY = "pos_device_token";
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   
-  // Check for EMC session token (for EMC admin access)
-  const emcToken = localStorage.getItem(EMC_SESSION_KEY);
+  // Check for EMC session token (for EMC admin access) - uses sessionStorage for security
+  const emcToken = sessionStorage.getItem(EMC_SESSION_KEY);
   if (emcToken) {
     headers["X-EMC-Session"] = emcToken;
   }
   
-  // Check for device token (for enrolled POS/KDS devices)
+  // Check for device token (for enrolled POS/KDS devices) - uses localStorage for persistence
   const deviceToken = localStorage.getItem(DEVICE_TOKEN_KEY);
   if (deviceToken) {
     headers["X-Device-Token"] = deviceToken;
