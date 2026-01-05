@@ -530,7 +530,7 @@ export interface IStorage {
   getTimePunch(id: string): Promise<TimePunch | undefined>;
   getLastPunch(employeeId: string): Promise<TimePunch | undefined>;
   createTimePunch(data: InsertTimePunch): Promise<TimePunch>;
-  updateTimePunch(id: string, data: Partial<InsertTimePunch>, editedById?: string, editReason?: string): Promise<TimePunch | undefined>;
+  updateTimePunch(id: string, data: Partial<InsertTimePunch>, editedById?: string, editReason?: string, editedByEmcUserId?: string, editedByDisplayName?: string): Promise<TimePunch | undefined>;
   voidTimePunch(id: string, voidedById: string, voidReason: string): Promise<TimePunch | undefined>;
 
   // Break Sessions
@@ -3261,21 +3261,33 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateTimePunch(id: string, data: Partial<InsertTimePunch>, editedById?: string, editReason?: string): Promise<TimePunch | undefined> {
+  async updateTimePunch(
+    id: string, 
+    data: Partial<InsertTimePunch>, 
+    editedById?: string, 
+    editReason?: string,
+    editedByEmcUserId?: string,
+    editedByDisplayName?: string
+  ): Promise<TimePunch | undefined> {
     const existing = await this.getTimePunch(id);
     if (!existing) return undefined;
 
     const updateData: any = { ...data };
-    if (editedById) {
+    // Record edit if we have any editor identifier
+    if (editedById || editedByEmcUserId) {
       updateData.isEdited = true;
-      updateData.editedById = editedById;
       updateData.editedAt = new Date();
       updateData.editReason = editReason;
+      // Only set editedById if it's an employee ID (FK to employees table)
+      // For EMC user edits, leave editedById null but record in audit trail
+      if (editedById) {
+        updateData.editedById = editedById;
+      }
       if (!existing.originalTimestamp) {
         updateData.originalTimestamp = existing.actualTimestamp;
       }
       
-      // Create audit record
+      // Create audit record with support for both employee and EMC user
       await this.createTimecardEdit({
         propertyId: existing.propertyId,
         targetType: "time_punch",
@@ -3285,7 +3297,9 @@ export class DatabaseStorage implements IStorage {
         afterValue: { ...existing, ...updateData },
         reasonCode: editReason || "manual_edit",
         notes: editReason,
-        editedById,
+        editedById: editedById || null,
+        editedByEmcUserId: editedByEmcUserId || null,
+        editedByDisplayName: editedByDisplayName || null,
       });
     }
 

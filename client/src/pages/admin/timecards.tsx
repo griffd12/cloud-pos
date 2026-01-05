@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ interface PunchPair {
 
 export default function TimecardsPage() {
   const { toast } = useToast();
+  const { user: emcUser } = useEmc();
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [editingTimecard, setEditingTimecard] = useState<Timecard | null>(null);
@@ -94,10 +96,13 @@ export default function TimecardsPage() {
 
   const updateTimecardMutation = useMutation({
     mutationFn: async (data: { id: string; clockInTime?: string; clockOutTime?: string; reason: string }) => {
+      const emcDisplayName = emcUser ? `${emcUser.firstName} ${emcUser.lastName}` : "System";
       return apiRequest("PATCH", `/api/timecards/${data.id}`, {
         clockInTime: data.clockInTime,
         clockOutTime: data.clockOutTime,
         editReason: data.reason,
+        editedByEmcUserId: emcUser?.id,
+        editedByDisplayName: emcDisplayName,
       });
     },
     onSuccess: () => {
@@ -112,8 +117,10 @@ export default function TimecardsPage() {
 
   const resolveExceptionMutation = useMutation({
     mutationFn: async (data: { id: string; notes: string }) => {
+      const emcDisplayName = emcUser ? `${emcUser.firstName} ${emcUser.lastName}` : "System";
       return apiRequest("POST", `/api/timecard-exceptions/${data.id}/resolve`, {
-        resolvedById: "current-manager",
+        resolvedByEmcUserId: emcUser?.id,
+        resolvedByDisplayName: emcDisplayName,
         resolutionNotes: data.notes,
       });
     },
@@ -127,10 +134,12 @@ export default function TimecardsPage() {
   });
 
   const updatePunchMutation = useMutation({
-    mutationFn: async (data: { id: string; actualTimestamp: string; editedById: string; editReason: string }) => {
+    mutationFn: async (data: { id: string; actualTimestamp: string; editReason: string }) => {
+      const emcDisplayName = emcUser ? `${emcUser.firstName} ${emcUser.lastName}` : "System";
       return apiRequest("PATCH", `/api/time-punches/${data.id}`, {
         actualTimestamp: data.actualTimestamp,
-        editedById: data.editedById,
+        editedByEmcUserId: emcUser?.id,
+        editedByDisplayName: emcDisplayName,
         editReason: data.editReason,
       });
     },
@@ -673,7 +682,6 @@ export default function TimecardsPage() {
                 updatePunchMutation.mutate({
                   id: editingPunch!.id,
                   actualTimestamp: `${punchEditForm.date}T${punchEditForm.time}:00`,
-                  editedById: "current-manager",
                   editReason: punchEditForm.reason,
                 });
               }}

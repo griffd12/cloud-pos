@@ -6547,20 +6547,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Edit time punch (manager only)
+  // Edit time punch (manager or EMC user)
   app.patch("/api/time-punches/:id", async (req, res) => {
     try {
-      const { actualTimestamp, editedById, editReason } = req.body;
+      const { actualTimestamp, editedById, editedByEmcUserId, editedByDisplayName, editReason } = req.body;
       
-      if (!editedById || !editReason) {
+      // Require either employee ID or EMC user ID
+      if ((!editedById && !editedByEmcUserId) || !editReason) {
         return res.status(400).json({ message: "Editor ID and reason are required" });
       }
 
       const punch = await storage.updateTimePunch(
         req.params.id,
         { actualTimestamp: actualTimestamp ? new Date(actualTimestamp) : undefined },
-        editedById,
-        editReason
+        editedById || undefined,
+        editReason,
+        editedByEmcUserId || undefined,
+        editedByDisplayName || undefined
       );
 
       if (!punch) {
@@ -6850,13 +6853,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const timecard = await storage.updateTimecard(id, updateData);
       
-      // Log the edit for audit trail
-      if (editedById && editReason) {
+      // Log the edit for audit trail (supports both employee and EMC user edits)
+      const { editedByEmcUserId, editedByDisplayName } = req.body;
+      // Only create audit record if we have a reason AND at least one editor identifier
+      if (editReason && (editedById || editedByEmcUserId)) {
         await storage.createTimecardEdit({
           propertyId: existing.propertyId,
           targetType: "timecard",
           targetId: id,
-          editedById: editedById,
+          editedById: editedById || null,
+          editedByEmcUserId: editedByEmcUserId || null,
+          editedByDisplayName: editedByDisplayName || null,
           editType: "hours_adjustment",
           beforeValue: { totalHours: existing.totalHours || "0" },
           afterValue: { totalHours: totalHours.toFixed(2) },
