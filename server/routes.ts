@@ -588,6 +588,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // DEVICE TOKEN MIDDLEWARE - Protects POS/KDS routes from unenrolled browsers
+  // Routes exempt from device token validation:
+  // - /api/emc/* (EMC uses session-based auth)
+  // - /api/registered-devices/enroll (device enrollment process)
+  // - /api/registered-devices/validate (token validation)
+  // ============================================================================
+  const deviceTokenExemptRoutes = [
+    /^\/api\/emc\/.*/,
+    /^\/api\/registered-devices\/enroll$/,
+    /^\/api\/registered-devices\/validate$/,
+  ];
+
+  app.use("/api", async (req, res, next) => {
+    // Check if route is exempt from device token validation
+    const isExempt = deviceTokenExemptRoutes.some(pattern => pattern.test(req.path));
+    if (isExempt) {
+      return next();
+    }
+
+    // Get device token from header
+    const deviceToken = req.headers["x-device-token"] as string;
+    if (!deviceToken) {
+      // For now, allow requests without token to support gradual rollout
+      // In production, this should return 401 for all non-EMC routes
+      return next();
+    }
+
+    // Validate device token
+    const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+    const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
+    
+    if (!device || device.status !== "enrolled") {
+      return res.status(401).json({ 
+        message: "Invalid or revoked device token",
+        code: "DEVICE_TOKEN_INVALID"
+      });
+    }
+
+    // Attach device info to request for downstream use
+    (req as any).enrolledDevice = device;
+    next();
+  });
+
+  // ============================================================================
   // AUTH ROUTES
   // ============================================================================
 
@@ -9606,13 +9650,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         isActive: true,
       });
 
-      // Create session
+      // Create session - hash token before storage for security
       const sessionToken = crypto.randomBytes(32).toString("hex");
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
       await storage.createEmcSession({
         userId: user.id,
-        sessionToken,
+        sessionToken: sessionTokenHash, // Store hashed token
         expiresAt,
         ipAddress: req.ip || null,
         userAgent: req.get("user-agent") || null,
@@ -9625,7 +9670,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           displayName: user.displayName,
           role: user.role,
         },
-        sessionToken,
+        sessionToken, // Return unhashed token to client
         expiresAt,
       });
     } catch (error) {
@@ -9669,13 +9714,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lastLoginAt: new Date(),
       });
 
-      // Create session
+      // Create session - hash token before storage for security
       const sessionToken = crypto.randomBytes(32).toString("hex");
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
       await storage.createEmcSession({
         userId: user.id,
-        sessionToken,
+        sessionToken: sessionTokenHash, // Store hashed token
         expiresAt,
         ipAddress: req.ip || null,
         userAgent: req.get("user-agent") || null,
@@ -9690,7 +9736,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           enterpriseId: user.enterpriseId,
           propertyId: user.propertyId,
         },
-        sessionToken,
+        sessionToken, // Return unhashed token to client
         expiresAt,
       });
     } catch (error) {
@@ -9708,7 +9754,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(401).json({ valid: false, message: "No session token provided" });
       }
 
-      const session = await storage.getEmcSessionByToken(sessionToken);
+      // Hash the token before lookup
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
       if (!session) {
         return res.status(401).json({ valid: false, message: "Invalid or expired session" });
       }
@@ -9744,7 +9792,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { sessionToken } = req.body;
 
       if (sessionToken) {
-        const session = await storage.getEmcSessionByToken(sessionToken);
+        // Hash the token before lookup
+        const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+        const session = await storage.getEmcSessionByToken(sessionTokenHash);
         if (session) {
           await storage.deleteEmcSession(session.id);
         }
@@ -9766,7 +9816,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const sessionToken = authHeader.slice(7);
-      const session = await storage.getEmcSessionByToken(sessionToken);
+      // Hash the token before lookup
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
       if (!session) {
         return res.status(401).json({ message: "Invalid or expired session" });
       }
