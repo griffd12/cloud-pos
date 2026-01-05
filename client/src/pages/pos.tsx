@@ -140,24 +140,22 @@ export default function PosPage() {
   const [tipCapturePayment, setTipCapturePayment] = useState<CheckPayment | null>(null);
   const [tipAmount, setTipAmount] = useState("");
   const [isCapturingTip, setIsCapturingTip] = useState(false);
-  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
-
   // Health check query to verify API connection when RVC is already set
-  useQuery({
+  const healthQuery = useQuery({
     queryKey: ["/api/health"],
     queryFn: async () => {
       const res = await fetch("/api/health", { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) {
-        setApiConnected(false);
-        throw new Error("API health check failed");
-      }
-      setApiConnected(true);
+      if (!res.ok) throw new Error("API health check failed");
       return res.json();
     },
     enabled: !!currentRvc,
     refetchInterval: 30000, // Check every 30 seconds
     retry: 2,
+    staleTime: 25000, // Consider data fresh for 25 seconds
   });
+  
+  // Derive connection status from query state
+  const apiConnected = healthQuery.isSuccess ? true : healthQuery.isError ? false : null;
 
   const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
