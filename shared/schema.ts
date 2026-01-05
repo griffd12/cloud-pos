@@ -1580,13 +1580,18 @@ export const timecardEdits = pgTable("timecard_edits", {
   afterValue: jsonb("after_value"),
   reasonCode: text("reason_code"),
   notes: text("notes"),
-  editedById: varchar("edited_by_id").notNull().references(() => employees.id),
+  // Either employee or EMC user made the edit (one must be set)
+  editedById: varchar("edited_by_id").references(() => employees.id),
+  editedByEmcUserId: varchar("edited_by_emc_user_id").references(() => emcUsers.id),
+  // For audit display purposes (immutable name at time of edit)
+  editedByDisplayName: text("edited_by_display_name"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const timecardEditsRelations = relations(timecardEdits, ({ one }) => ({
   property: one(properties, { fields: [timecardEdits.propertyId], references: [properties.id] }),
   editedBy: one(employees, { fields: [timecardEdits.editedById], references: [employees.id] }),
+  editedByEmcUser: one(emcUsers, { fields: [timecardEdits.editedByEmcUserId], references: [emcUsers.id] }),
 }));
 
 // ============================================================================
