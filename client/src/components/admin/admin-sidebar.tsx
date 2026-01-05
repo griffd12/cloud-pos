@@ -52,9 +52,10 @@ import {
 
 interface AdminSidebarProps {
   onLogout: () => void;
+  basePath?: string;
 }
 
-const menuGroups = [
+const menuGroupsTemplate = [
   {
     label: "Hierarchy",
     items: [
@@ -152,20 +153,28 @@ const menuGroups = [
   },
 ];
 
-export function AdminSidebar({ onLogout }: AdminSidebarProps) {
+export function AdminSidebar({ onLogout, basePath = "/admin" }: AdminSidebarProps) {
   const [location] = useLocation();
+
+  const menuGroups = menuGroupsTemplate.map(group => ({
+    ...group,
+    items: group.items.map(item => ({
+      ...item,
+      url: item.url.replace("/admin", basePath)
+    }))
+  }));
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/admin">
+        <Link href={basePath}>
           <div className="flex items-center gap-2 cursor-pointer">
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
               <ChefHat className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
               <h2 className="font-semibold text-sm">Cloud POS</h2>
-              <p className="text-xs text-muted-foreground">Administration</p>
+              <p className="text-xs text-muted-foreground">{basePath === "/emc" ? "Enterprise Management" : "Administration"}</p>
             </div>
           </div>
         </Link>

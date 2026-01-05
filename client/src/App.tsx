@@ -15,7 +15,7 @@ import KdsPage from "@/pages/kds";
 import DeviceSetupPage from "@/pages/device-setup";
 import EmcLoginPage from "@/pages/emc/login";
 import EmcSetupPage from "@/pages/emc/setup";
-import EmcDashboard from "@/pages/emc/dashboard";
+import EmcAdminLayout from "@/pages/emc/admin-layout";
 
 function GlobalWebSocket() {
   usePosWebSocket();
@@ -61,15 +61,8 @@ function Router() {
         <Switch>
           <Route path="/emc/login" component={EmcLoginPage} />
           <Route path="/emc/setup" component={EmcSetupPage} />
-          <Route path="/emc/dashboard" component={EmcDashboard} />
-          <Route path="/emc/devices" component={EmcDashboard} />
-          <Route path="/emc/enterprises" component={EmcDashboard} />
-          <Route path="/emc/properties" component={EmcDashboard} />
-          <Route path="/emc/revenue-centers" component={EmcDashboard} />
-          <Route path="/emc/users" component={EmcDashboard} />
-          <Route path="/emc/roles" component={EmcDashboard} />
-          <Route path="/emc/settings" component={EmcDashboard} />
-          <Route path="/emc" component={EmcLoginPage} />
+          <Route path="/emc/:rest*" component={EmcAdminLayout} />
+          <Route path="/emc" component={EmcAdminLayout} />
         </Switch>
       </EmcProvider>
     );
