@@ -105,10 +105,15 @@ export default function ServiceChargesPage() {
   });
 
   const handleSubmit = (data: InsertServiceCharge) => {
+    // Convert value to string for decimal field
+    const formattedData = {
+      ...data,
+      value: String(data.value),
+    };
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, ...formattedData });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(formattedData);
     }
   };
 
