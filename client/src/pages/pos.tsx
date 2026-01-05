@@ -21,11 +21,12 @@ import { ReopenCheckModal } from "@/components/pos/reopen-check-modal";
 import { PriceOverrideModal } from "@/components/pos/price-override-modal";
 import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
+import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
+import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +141,8 @@ export default function PosPage() {
   const [tipCapturePayment, setTipCapturePayment] = useState<CheckPayment | null>(null);
   const [tipAmount, setTipAmount] = useState("");
   const [isCapturingTip, setIsCapturingTip] = useState(false);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
   // Health check query to verify API connection when RVC is already set
   const healthQuery = useQuery({
     queryKey: ["/api/health"],
@@ -288,6 +291,10 @@ export default function PosPage() {
     queryKey: ["/api/tax-groups"],
   });
 
+  const { data: discounts = [] } = useQuery<Discount[]>({
+    queryKey: ["/api/discounts"],
+  });
+
   const { data: allMenuItems = [] } = useQuery<MenuItem[]>({
     queryKey: ["/api/menu-items", "all"],
     queryFn: async () => {
@@ -430,6 +437,52 @@ export default function PosPage() {
       } else {
         toast({ title: "Failed to void item", variant: "destructive" });
       }
+    },
+  });
+
+  const applyDiscountMutation = useMutation({
+    mutationFn: async (data: { 
+      discountId: string; 
+      managerPin?: string;
+    }) => {
+      if (!discountItem) throw new Error("No item selected");
+      const response = await apiRequest("POST", `/api/check-items/${discountItem.id}/discount`, {
+        discountId: data.discountId,
+        employeeId: currentEmployee?.id,
+        managerPin: data.managerPin,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { item: CheckItem; check: Check }) => {
+      setCheckItems(checkItems.map((item) => (item.id === data.item.id ? data.item : item)));
+      setShowDiscountModal(false);
+      setDiscountItem(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      toast({ title: "Discount applied" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to apply discount", 
+        description: error.message || "Invalid manager PIN or insufficient privileges",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const removeDiscountMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const response = await apiRequest("DELETE", `/api/check-items/${itemId}/discount`, {
+        employeeId: currentEmployee?.id,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { item: CheckItem; check: Check }) => {
+      setCheckItems(checkItems.map((item) => (item.id === data.item.id ? data.item : item)));
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      toast({ title: "Discount removed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to remove discount", variant: "destructive" });
     },
   });
 
@@ -894,7 +947,8 @@ export default function PosPage() {
 
   const calculateTotals = () => {
     const activeItems = checkItems.filter((item) => !item.voided);
-    let displaySubtotal = 0;  // What customer sees as subtotal (item prices sum)
+    let displaySubtotal = 0;  // Pre-discount subtotal (what items would cost without discounts)
+    let discountTotalCalc = 0;  // Total of all discounts
     let addOnTax = 0;
 
     activeItems.forEach((item) => {
@@ -904,6 +958,11 @@ export default function PosPage() {
         0
       );
       const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
+      const itemDiscount = parseFloat(item.discountAmount || "0");
+      const taxableAmount = itemTotal - itemDiscount;
+
+      // Track discounts
+      discountTotalCalc += itemDiscount;
 
       // Find the menu item and its tax group
       const menuItem = allMenuItems.find((mi) => mi.id === item.menuItemId);
@@ -916,14 +975,15 @@ export default function PosPage() {
         if (taxGroup.taxMode === "inclusive") {
           // For inclusive, item price already contains tax
           // Customer sees the full price, no separate tax line
-          displaySubtotal += itemTotal;
+          displaySubtotal += taxableAmount;
         } else {
           // For add-on, add the item total and calculate tax separately
-          displaySubtotal += itemTotal;
-          addOnTax += itemTotal * rate;
+          // Tax is calculated on the discounted amount
+          displaySubtotal += taxableAmount;
+          addOnTax += taxableAmount * rate;
         }
       } else {
-        displaySubtotal += itemTotal;
+        displaySubtotal += taxableAmount;
       }
     });
 
@@ -931,11 +991,12 @@ export default function PosPage() {
     const roundedSubtotal = Math.round(displaySubtotal * 100) / 100;
     const roundedTax = Math.round(addOnTax * 100) / 100;
     const roundedTotal = Math.round((displaySubtotal + addOnTax) * 100) / 100;
+    const roundedDiscountTotal = Math.round(discountTotalCalc * 100) / 100;
     
-    return { subtotal: roundedSubtotal, tax: roundedTax, total: roundedTotal };
+    return { subtotal: roundedSubtotal, tax: roundedTax, total: roundedTotal, discountTotal: roundedDiscountTotal };
   };
 
-  const { subtotal, tax, total } = calculateTotals();
+  const { subtotal, tax, total, discountTotal } = calculateTotals();
 
 
   if (!currentEmployee || !currentRvc) {
@@ -1317,13 +1378,19 @@ export default function PosPage() {
               setSelectedItemId(item.id);
               setShowPriceOverrideModal(true);
             }}
+            onDiscountItem={(item) => {
+              setDiscountItem(item);
+              setShowDiscountModal(true);
+            }}
             canSend={hasPrivilege("send_to_kitchen")}
             canVoid={hasPrivilege("void_unsent") || hasPrivilege("void_sent")}
             canPriceOverride={hasPrivilege("modify_price")}
+            canDiscount={hasPrivilege("apply_discount")}
             isSending={sendCheckMutation.isPending}
             subtotal={subtotal}
             tax={tax}
             total={total}
+            discountTotal={discountTotal}
             paidAmount={paidAmount}
             paymentsReady={paymentsReady}
             authorizedPayments={authorizedPayments}
@@ -1555,6 +1622,23 @@ export default function PosPage() {
           priceOverrideMutation.mutate({ itemId, newPrice, reason, managerPin });
         }}
         isOverriding={priceOverrideMutation.isPending}
+      />
+
+      <DiscountPickerModal
+        open={showDiscountModal}
+        onClose={() => {
+          setShowDiscountModal(false);
+          setDiscountItem(null);
+        }}
+        item={discountItem}
+        discounts={discounts}
+        onApplyDiscount={(discountId, managerPin) => {
+          applyDiscountMutation.mutate({ discountId, managerPin });
+        }}
+        onRemoveDiscount={(itemId) => {
+          removeDiscountMutation.mutate(itemId);
+        }}
+        isApplying={applyDiscountMutation.isPending || removeDiscountMutation.isPending}
       />
 
       <CustomerModal

@@ -55,6 +55,7 @@ import {
   type Round, type InsertRound,
   type CheckItem, type InsertCheckItem,
   type CheckPayment, type InsertCheckPayment,
+  type CheckDiscount, type InsertCheckDiscount,
   type AuditLog, type InsertAuditLog,
   type KdsTicket, type InsertKdsTicket, type KdsTicketItem,
   type PosLayout, type InsertPosLayout,
@@ -327,6 +328,12 @@ export interface IStorage {
   createCheckItem(data: InsertCheckItem): Promise<CheckItem>;
   updateCheckItem(id: string, data: Partial<CheckItem>): Promise<CheckItem | undefined>;
   deleteCheckItem(id: string): Promise<boolean>;
+
+  // Check Discounts (applied to checks)
+  getCheckDiscounts(checkId: string): Promise<CheckDiscount[]>;
+  getCheckDiscount(id: string): Promise<CheckDiscount | undefined>;
+  createCheckDiscount(data: InsertCheckDiscount): Promise<CheckDiscount>;
+  deleteCheckDiscount(id: string): Promise<boolean>;
 
   // Rounds
   createRound(data: InsertRound): Promise<Round>;
@@ -1641,6 +1648,26 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCheckItem(id: string): Promise<boolean> {
     const result = await db.delete(checkItems).where(eq(checkItems.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Check Discounts (applied to checks)
+  async getCheckDiscounts(checkId: string): Promise<CheckDiscount[]> {
+    return await db.select().from(checkDiscounts).where(eq(checkDiscounts.checkId, checkId));
+  }
+
+  async getCheckDiscount(id: string): Promise<CheckDiscount | undefined> {
+    const [result] = await db.select().from(checkDiscounts).where(eq(checkDiscounts.id, id));
+    return result;
+  }
+
+  async createCheckDiscount(data: InsertCheckDiscount): Promise<CheckDiscount> {
+    const [result] = await db.insert(checkDiscounts).values(data).returning();
+    return result;
+  }
+
+  async deleteCheckDiscount(id: string): Promise<boolean> {
+    const result = await db.delete(checkDiscounts).where(eq(checkDiscounts.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 

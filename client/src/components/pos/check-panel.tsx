@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Check, CheckItem, CheckPayment, OrderType } from "@shared/schema";
-import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign, CircleDollarSign, User, X } from "lucide-react";
+import { Trash2, Send, CreditCard, Check as CheckIcon, Clock, DollarSign, CircleDollarSign, User, X, Percent } from "lucide-react";
 
 interface CheckPanelProps {
   check: Check | null;
@@ -18,13 +18,16 @@ interface CheckPanelProps {
   onNewCheck: () => void;
   onChangeOrderType: () => void;
   onPriceOverride?: (item: CheckItem) => void;
+  onDiscountItem?: (item: CheckItem) => void;
   canSend: boolean;
   canVoid: boolean;
   canPriceOverride?: boolean;
+  canDiscount?: boolean;
   isSending?: boolean;
   subtotal?: number;
   tax?: number;
   total?: number;
+  discountTotal?: number;
   paidAmount?: number;
   paymentsReady?: boolean;
   authorizedPayments?: CheckPayment[];
@@ -46,9 +49,11 @@ interface SwipeableItemProps {
   itemTotal: number;
   canVoid: boolean;
   canPriceOverride?: boolean;
+  canDiscount?: boolean;
   onSelect: () => void;
   onVoid: () => void;
   onPriceOverride?: () => void;
+  onDiscount?: () => void;
   onEditModifiers?: () => void;
   formatPrice: (price: string | number | null) => string;
 }
@@ -59,9 +64,11 @@ function SwipeableItem({
   itemTotal,
   canVoid,
   canPriceOverride,
+  canDiscount,
   onSelect,
   onVoid,
   onPriceOverride,
+  onDiscount,
   onEditModifiers,
   formatPrice,
 }: SwipeableItemProps) {
@@ -217,6 +224,19 @@ function SwipeableItem({
             isRevealed ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
+          {canDiscount && onDiscount && !item.discountId && (
+            <button
+              className="w-12 bg-purple-500 hover:bg-purple-600 text-white flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsRevealed(false);
+                onDiscount();
+              }}
+              data-testid={`button-discount-swipe-${item.id}`}
+            >
+              <Percent className="w-5 h-5" />
+            </button>
+          )}
           {canPriceOverride && onPriceOverride && (
             <button
               className="w-12 bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center"
@@ -245,6 +265,18 @@ function SwipeableItem({
           )}
         </div>
       </div>
+      {/* Discount indicator */}
+      {item.discountId && item.discountAmount && (
+        <div className="px-2.5 pb-2 flex items-center justify-between text-xs">
+          <span className="text-purple-500 font-medium flex items-center gap-1">
+            <Percent className="w-3 h-3" />
+            {item.discountName || "Discount"}
+          </span>
+          <span className="text-destructive font-medium">
+            -{formatPrice(item.discountAmount)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -262,13 +294,16 @@ export function CheckPanel({
   onNewCheck,
   onChangeOrderType,
   onPriceOverride,
+  onDiscountItem,
   canSend,
   canVoid,
   canPriceOverride = false,
+  canDiscount = false,
   isSending,
   subtotal: propSubtotal,
   tax: propTax,
   total: propTotal,
+  discountTotal: propDiscountTotal,
   paidAmount = 0,
   paymentsReady = true,
   authorizedPayments = [],
@@ -287,6 +322,7 @@ export function CheckPanel({
   
   const subtotal = propSubtotal ?? 0;
   const tax = propTax ?? 0;
+  const discountTotal = propDiscountTotal ?? 0;
   const total = propTotal ?? (subtotal + tax);
   const balanceDue = Math.max(0, total - paidAmount);
 
@@ -378,9 +414,11 @@ export function CheckPanel({
                   itemTotal={itemTotal}
                   canVoid={canVoid}
                   canPriceOverride={canPriceOverride}
+                  canDiscount={canDiscount}
                   onSelect={() => onSelectItem?.(isSelected ? null : item)}
                   onVoid={() => onVoidItem(item)}
                   onPriceOverride={onPriceOverride ? () => onPriceOverride(item) : undefined}
+                  onDiscount={onDiscountItem ? () => onDiscountItem(item) : undefined}
                   onEditModifiers={onEditModifiers ? () => onEditModifiers(item) : undefined}
                   formatPrice={formatPrice}
                 />
@@ -394,8 +432,17 @@ export function CheckPanel({
         <div className="px-4 py-3 space-y-1">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="tabular-nums font-medium">{formatPrice(subtotal)}</span>
+            <span className="tabular-nums font-medium">{formatPrice(subtotal + discountTotal)}</span>
           </div>
+          {discountTotal > 0 && (
+            <div className="flex justify-between text-sm text-purple-600 dark:text-purple-400">
+              <span className="flex items-center gap-1">
+                <Percent className="w-3 h-3" />
+                Discounts
+              </span>
+              <span className="tabular-nums">-{formatPrice(discountTotal)}</span>
+            </div>
+          )}
           {tax > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Tax</span>

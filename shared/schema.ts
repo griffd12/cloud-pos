@@ -818,6 +818,12 @@ export const checkItems = pgTable("check_items", {
   taxRateAtSale: decimal("tax_rate_at_sale", { precision: 10, scale: 6 }), // Tax rate at ring-in (e.g., 0.0725 for 7.25%)
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }), // Calculated add-on tax for this item (locked at ring-in)
   taxableAmount: decimal("taxable_amount", { precision: 10, scale: 2 }), // Item total (base for add-on tax calculation)
+  // Item-level discount fields
+  discountId: varchar("discount_id").references(() => discounts.id), // Applied discount
+  discountName: text("discount_name"), // Discount name at time of application
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }), // Calculated discount amount
+  discountAppliedBy: varchar("discount_applied_by").references(() => employees.id), // Who applied the discount
+  discountApprovedBy: varchar("discount_approved_by").references(() => employees.id), // Manager who approved (if required)
 });
 
 // Check Payments
@@ -1016,6 +1022,7 @@ export const insertCheckSchema = createInsertSchema(checks).omit({ id: true });
 export const insertRoundSchema = createInsertSchema(rounds).omit({ id: true });
 export const insertCheckItemSchema = createInsertSchema(checkItems).omit({ id: true });
 export const insertCheckPaymentSchema = createInsertSchema(checkPayments).omit({ id: true });
+export const insertCheckDiscountSchema = createInsertSchema(checkDiscounts).omit({ id: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true });
 export const insertKdsTicketSchema = createInsertSchema(kdsTickets).omit({ id: true });
 export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true });
@@ -1100,6 +1107,8 @@ export type CheckItem = typeof checkItems.$inferSelect;
 export type InsertCheckItem = z.infer<typeof insertCheckItemSchema>;
 export type CheckPayment = typeof checkPayments.$inferSelect;
 export type InsertCheckPayment = z.infer<typeof insertCheckPaymentSchema>;
+export type CheckDiscount = typeof checkDiscounts.$inferSelect;
+export type InsertCheckDiscount = z.infer<typeof insertCheckDiscountSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type KdsTicket = typeof kdsTickets.$inferSelect;

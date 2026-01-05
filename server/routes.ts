@@ -296,16 +296,31 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
   const items = await storage.getCheckItems(checkId);
   const activeItems = items.filter((i) => !i.voided);
   
-  let displaySubtotal = 0;
+  let grossSubtotal = 0; // Before discounts
+  let itemDiscountTotal = 0; // Item-level discounts
   let addOnTax = 0;
 
   for (const item of activeItems) {
+    // Get item discount if any
+    const itemDiscount = parseFloat(item.discountAmount || "0");
+    itemDiscountTotal += itemDiscount;
+    
     // Use stored taxableAmount if available (new items have this)
     // Fall back to calculation for legacy items (before tax snapshot was implemented)
     if (item.taxableAmount) {
       // New items with tax snapshot - use stored values
-      displaySubtotal += parseFloat(item.taxableAmount);
-      addOnTax += parseFloat(item.taxAmount || "0");
+      // Taxable amount is the base before discount
+      const taxableBase = parseFloat(item.taxableAmount);
+      grossSubtotal += taxableBase;
+      
+      // Recalculate tax based on discounted amount if discount applied
+      if (itemDiscount > 0 && item.taxRateAtSale) {
+        const taxRate = parseFloat(item.taxRateAtSale);
+        const discountedBase = taxableBase - itemDiscount;
+        addOnTax += discountedBase * taxRate;
+      } else {
+        addOnTax += parseFloat(item.taxAmount || "0");
+      }
     } else {
       // Legacy fallback: calculate from current settings (old items before this fix)
       // This maintains backwards compatibility for existing checks
@@ -315,7 +330,7 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
         0
       );
       const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
-      displaySubtotal += itemTotal;
+      grossSubtotal += itemTotal;
       
       // For legacy items, we must look up current tax settings (unavoidable)
       const menuItems = await storage.getMenuItems();
@@ -326,19 +341,41 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
       const taxMode = taxGroup?.taxMode || "add_on";
       
       if (taxMode === "add_on") {
-        addOnTax += itemTotal * taxRate;
+        // Apply discount before calculating tax
+        const discountedBase = itemTotal - itemDiscount;
+        addOnTax += discountedBase * taxRate;
       }
     }
   }
 
+  // Get check-level discounts from checkDiscounts table
+  const checkDiscountRecords = await storage.getCheckDiscounts(checkId);
+  const checkLevelDiscountTotal = checkDiscountRecords.reduce(
+    (sum, d) => sum + parseFloat(d.amount || "0"), 0
+  );
+
+  // Calculate totals
+  // Net subtotal = gross - item discounts - check discounts (applied pre-tax for check discounts)
+  const netSubtotal = grossSubtotal - itemDiscountTotal - checkLevelDiscountTotal;
+  
+  // If check-level discounts exist, we need to recalculate tax on the reduced amount
+  // For simplicity, we apply check discounts proportionally and adjust tax
+  if (checkLevelDiscountTotal > 0 && grossSubtotal > 0) {
+    const discountRatio = checkLevelDiscountTotal / grossSubtotal;
+    addOnTax = addOnTax * (1 - discountRatio);
+  }
+  
+  const totalDiscounts = itemDiscountTotal + checkLevelDiscountTotal;
+
   // Round to 2 decimal places for financial accuracy
-  const subtotal = Math.round(displaySubtotal * 100) / 100;
+  const subtotal = Math.round(netSubtotal * 100) / 100;
   const tax = Math.round(addOnTax * 100) / 100;
-  const total = Math.round((displaySubtotal + addOnTax) * 100) / 100;
+  const total = Math.round((netSubtotal + addOnTax) * 100) / 100;
 
   await storage.updateCheck(checkId, {
     subtotal: subtotal.toFixed(2),
     taxTotal: tax.toFixed(2),
+    discountTotal: totalDiscounts.toFixed(2),
     total: total.toFixed(2),
   });
 }
@@ -1939,6 +1976,256 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/discounts/:id", async (req, res) => {
     await storage.deleteDiscount(req.params.id);
     res.status(204).send();
+  });
+
+  // ============================================================================
+  // POS DISCOUNT APPLICATION ROUTES
+  // ============================================================================
+
+  // Apply item-level discount
+  app.post("/api/check-items/:id/discount", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const { discountId, employeeId, managerPin } = req.body;
+
+      const item = await storage.getCheckItem(itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Check item not found" });
+      }
+
+      const check = await storage.getCheck(item.checkId);
+      if (!check || check.status !== "open") {
+        return res.status(400).json({ message: "Cannot discount on a closed check" });
+      }
+
+      const discount = await storage.getDiscount(discountId);
+      if (!discount || !discount.active) {
+        return res.status(404).json({ message: "Discount not found or inactive" });
+      }
+
+      // Validate manager approval if required
+      let approvedByEmployeeId: string | null = null;
+      if (discount.requiresManagerApproval) {
+        if (!managerPin) {
+          return res.status(400).json({ message: "Manager approval required" });
+        }
+        // Find employee by PIN and verify they have manager privilege
+        const employees = await storage.getEmployees();
+        const manager = employees.find(e => e.pin === managerPin);
+        if (!manager) {
+          return res.status(401).json({ message: "Invalid manager PIN" });
+        }
+        // Check if they have the apply_discount privilege
+        const role = await storage.getRole(manager.roleId);
+        if (!role || !role.privileges.includes("apply_discount")) {
+          return res.status(403).json({ message: "Employee does not have discount approval privilege" });
+        }
+        approvedByEmployeeId = manager.id;
+      }
+
+      // Calculate discount amount based on item total
+      const unitPrice = parseFloat(item.unitPrice || "0");
+      const modifierTotal = (item.modifiers || []).reduce(
+        (sum: number, m: any) => sum + parseFloat(m.priceDelta || "0"), 0
+      );
+      const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
+      
+      let discountAmount: number;
+      if (discount.type === "percent") {
+        discountAmount = itemTotal * (parseFloat(discount.value) / 100);
+      } else {
+        discountAmount = parseFloat(discount.value);
+      }
+      // Cap discount at item total
+      discountAmount = Math.min(discountAmount, itemTotal);
+      discountAmount = Math.round(discountAmount * 100) / 100;
+
+      // Apply discount to item
+      await storage.updateCheckItem(itemId, {
+        discountId,
+        discountName: discount.name,
+        discountAmount: discountAmount.toFixed(2),
+        discountAppliedBy: employeeId,
+        discountApprovedBy: approvedByEmployeeId,
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(item.checkId);
+
+      // Create audit log
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "apply_item_discount",
+        targetType: "check_item",
+        targetId: itemId,
+        details: { discountId, discountName: discount.name, discountAmount, checkId: item.checkId, approvedBy: approvedByEmployeeId },
+      });
+
+      const updatedItem = await storage.getCheckItem(itemId);
+      const updatedCheck = await storage.getCheck(item.checkId);
+      res.json({ item: updatedItem, check: updatedCheck });
+    } catch (error) {
+      console.error("Apply item discount error:", error);
+      res.status(500).json({ message: "Failed to apply discount" });
+    }
+  });
+
+  // Remove item-level discount
+  app.delete("/api/check-items/:id/discount", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const { employeeId } = req.body;
+
+      const item = await storage.getCheckItem(itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Check item not found" });
+      }
+
+      const check = await storage.getCheck(item.checkId);
+      if (!check || check.status !== "open") {
+        return res.status(400).json({ message: "Cannot modify discount on a closed check" });
+      }
+
+      // Remove discount
+      await storage.updateCheckItem(itemId, {
+        discountId: null,
+        discountName: null,
+        discountAmount: null,
+        discountAppliedBy: null,
+        discountApprovedBy: null,
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(item.checkId);
+
+      // Create audit log
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "remove_item_discount",
+        targetType: "check_item",
+        targetId: itemId,
+        details: { checkId: item.checkId },
+      });
+
+      const updatedItem = await storage.getCheckItem(itemId);
+      const updatedCheck = await storage.getCheck(item.checkId);
+      res.json({ item: updatedItem, check: updatedCheck });
+    } catch (error) {
+      console.error("Remove item discount error:", error);
+      res.status(500).json({ message: "Failed to remove discount" });
+    }
+  });
+
+  // Apply check-level discount
+  app.post("/api/checks/:id/discount", async (req, res) => {
+    try {
+      const checkId = req.params.id;
+      const { discountId, employeeId, approvedByEmployeeId } = req.body;
+
+      const check = await storage.getCheck(checkId);
+      if (!check || check.status !== "open") {
+        return res.status(400).json({ message: "Check not found or already closed" });
+      }
+
+      const discount = await storage.getDiscount(discountId);
+      if (!discount || !discount.active) {
+        return res.status(404).json({ message: "Discount not found or inactive" });
+      }
+
+      // Calculate discount based on current subtotal (before this discount)
+      const currentSubtotal = parseFloat(check.subtotal || "0") + parseFloat(check.discountTotal || "0");
+      
+      let discountAmount: number;
+      if (discount.type === "percent") {
+        discountAmount = currentSubtotal * (parseFloat(discount.value) / 100);
+      } else {
+        discountAmount = parseFloat(discount.value);
+      }
+      // Cap discount at subtotal
+      discountAmount = Math.min(discountAmount, currentSubtotal);
+      discountAmount = Math.round(discountAmount * 100) / 100;
+
+      // Create check discount record
+      const checkDiscount = await storage.createCheckDiscount({
+        checkId,
+        discountId,
+        discountName: discount.name,
+        amount: discountAmount.toFixed(2),
+        employeeId,
+        managerApprovalId: approvedByEmployeeId || null,
+      });
+
+      // Recalculate check totals
+      await recalculateCheckTotals(checkId);
+
+      // Create audit log
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "apply_check_discount",
+        targetType: "check",
+        targetId: checkId,
+        details: { discountId, discountName: discount.name, discountAmount },
+      });
+
+      const updatedCheck = await storage.getCheck(checkId);
+      res.json({ check: updatedCheck, checkDiscount });
+    } catch (error) {
+      console.error("Apply check discount error:", error);
+      res.status(500).json({ message: "Failed to apply discount" });
+    }
+  });
+
+  // Get check discounts
+  app.get("/api/checks/:id/discounts", async (req, res) => {
+    try {
+      const checkId = req.params.id;
+      const discounts = await storage.getCheckDiscounts(checkId);
+      res.json(discounts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get check discounts" });
+    }
+  });
+
+  // Remove check-level discount
+  app.delete("/api/check-discounts/:id", async (req, res) => {
+    try {
+      const discountId = req.params.id;
+      const { employeeId } = req.body;
+
+      const checkDiscount = await storage.getCheckDiscount(discountId);
+      if (!checkDiscount) {
+        return res.status(404).json({ message: "Check discount not found" });
+      }
+
+      const check = await storage.getCheck(checkDiscount.checkId);
+      if (!check || check.status !== "open") {
+        return res.status(400).json({ message: "Cannot modify discount on a closed check" });
+      }
+
+      // Delete the discount
+      await storage.deleteCheckDiscount(discountId);
+
+      // Recalculate check totals
+      await recalculateCheckTotals(checkDiscount.checkId);
+
+      // Create audit log
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "remove_check_discount",
+        targetType: "check",
+        targetId: checkDiscount.checkId,
+        details: { discountId },
+      });
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Remove check discount error:", error);
+      res.status(500).json({ message: "Failed to remove discount" });
+    }
   });
 
   // ============================================================================
