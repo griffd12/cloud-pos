@@ -4773,8 +4773,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }, 0);
         }
         
+        // Calculate gross extended price
+        const grossExtended = (basePrice + modifierUpcharge) * qty;
+        
+        // Subtract item-level discount to get net revenue
+        const discountAmount = parseFloat(item.discountAmount || "0");
+        const netExtended = grossExtended - discountAmount;
+        
         categoryTotals[categoryId].quantity += qty;
-        categoryTotals[categoryId].sales += (basePrice + modifierUpcharge) * qty;
+        categoryTotals[categoryId].sales += netExtended;
       }
       
       const result = Object.entries(categoryTotals)
@@ -4849,8 +4856,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }, 0);
         }
         
+        // Calculate gross extended price
+        const grossExtended = (basePrice + modifierUpcharge) * qty;
+        
+        // Subtract item-level discount to get net revenue
+        const discountAmount = parseFloat(item.discountAmount || "0");
+        const netExtended = grossExtended - discountAmount;
+        
         itemTotals[id].quantity += qty;
-        itemTotals[id].sales += (basePrice + modifierUpcharge) * qty;
+        itemTotals[id].sales += netExtended;
       }
       
       const result = Object.entries(itemTotals)
