@@ -271,6 +271,16 @@ export function PaymentModal({
   const processGiftCardPayment = async () => {
     if (!check || !giftCardTender || !giftCardLookup) return;
     
+    // Validate required identifiers
+    if (!propertyId || !employeeId) {
+      toast({ 
+        title: "Session Error", 
+        description: "Missing property or employee context. Please sign in again.",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     const amount = parseFloat(giftCardAmount);
     const balance = parseFloat(giftCardLookup.currentBalance);
     
