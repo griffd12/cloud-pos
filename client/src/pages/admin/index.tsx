@@ -53,6 +53,7 @@ import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
 import PaymentProcessorsPage from "./payment-processors";
 import TerminalDevicesPage from "./terminal-devices";
+import RegisteredDevicesPage from "./registered-devices";
 import OnboardingPage from "./onboarding";
 import GiftCardsPage from "./gift-cards";
 import LoyaltyPage from "./loyalty";
@@ -279,6 +280,7 @@ export default function AdminLayout() {
               <Route path="/admin/order-devices" component={OrderDevicesPage} />
               <Route path="/admin/workstations" component={WorkstationsPage} />
               <Route path="/admin/terminal-devices" component={TerminalDevicesPage} />
+              <Route path="/admin/registered-devices" component={RegisteredDevicesPage} />
               <Route path="/admin/printers" component={PrintersPage} />
               <Route path="/admin/kds-devices" component={KdsDevicesPage} />
               <Route path="/admin/pos-layouts" component={PosLayoutsPage} />

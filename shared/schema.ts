@@ -634,6 +634,57 @@ export const terminalSessionsRelations = relations(terminalSessions, ({ one }) =
   paymentTransaction: one(paymentTransactions, { fields: [terminalSessions.paymentTransactionId], references: [paymentTransactions.id] }),
 }));
 
+// ============================================================================
+// REGISTERED DEVICES - Security enrollment for POS/KDS access
+// ============================================================================
+
+// Device types for registration
+export const REGISTERED_DEVICE_TYPES = ["pos_workstation", "kds_display"] as const;
+export const REGISTERED_DEVICE_STATUSES = ["pending", "enrolled", "disabled", "revoked"] as const;
+
+// Registered Devices - Physical devices authorized to access POS/KDS
+export const registeredDevices = pgTable("registered_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  // What this device is linked to
+  deviceType: text("device_type").notNull(), // 'pos_workstation' or 'kds_display'
+  workstationId: varchar("workstation_id").references(() => workstations.id), // For POS workstation type
+  kdsDeviceId: varchar("kds_device_id").references(() => kdsDevices.id), // For KDS display type
+  // Device identification
+  name: text("name").notNull(), // Friendly name for this registration (e.g., "Front Counter PC")
+  // Enrollment
+  enrollmentCode: text("enrollment_code"), // One-time code for device enrollment (cleared after use)
+  enrollmentCodeExpiresAt: timestamp("enrollment_code_expires_at"),
+  deviceToken: text("device_token"), // Secure token issued after enrollment (stored in browser)
+  deviceTokenHash: text("device_token_hash"), // Hash of the device token for server-side validation
+  status: text("status").notNull().default("pending"), // pending, enrolled, disabled, revoked
+  enrolledAt: timestamp("enrolled_at"),
+  lastAccessAt: timestamp("last_access_at"),
+  // Optional hardware metadata (manually entered or auto-detected where possible)
+  osInfo: text("os_info"), // e.g., "Windows 11", "Chrome OS"
+  browserInfo: text("browser_info"), // e.g., "Chrome 120"
+  screenResolution: text("screen_resolution"), // e.g., "1920x1080"
+  serialNumber: text("serial_number"), // Manually entered by admin
+  assetTag: text("asset_tag"), // Internal tracking number
+  macAddress: text("mac_address"), // Manually entered
+  ipAddress: text("ip_address"), // Last known IP (informational only)
+  notes: text("notes"), // Admin notes
+  // Audit
+  createdAt: timestamp("created_at").defaultNow(),
+  createdByEmployeeId: varchar("created_by_employee_id").references(() => employees.id),
+  disabledAt: timestamp("disabled_at"),
+  disabledByEmployeeId: varchar("disabled_by_employee_id").references(() => employees.id),
+  disabledReason: text("disabled_reason"),
+});
+
+export const registeredDevicesRelations = relations(registeredDevices, ({ one }) => ({
+  property: one(properties, { fields: [registeredDevices.propertyId], references: [properties.id] }),
+  workstation: one(workstations, { fields: [registeredDevices.workstationId], references: [workstations.id] }),
+  kdsDevice: one(kdsDevices, { fields: [registeredDevices.kdsDeviceId], references: [kdsDevices.id] }),
+  createdByEmployee: one(employees, { fields: [registeredDevices.createdByEmployeeId], references: [employees.id] }),
+  disabledByEmployee: one(employees, { fields: [registeredDevices.disabledByEmployeeId], references: [employees.id] }),
+}));
+
 export const discounts = pgTable("discounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
@@ -909,6 +960,7 @@ export const insertTerminalSessionSchema = createInsertSchema(terminalSessions).
   amount: z.coerce.number(),
   tipAmount: z.coerce.number().optional(),
 });
+export const insertRegisteredDeviceSchema = createInsertSchema(registeredDevices).omit({ id: true, createdAt: true });
 export const insertTenderSchema = createInsertSchema(tenders).omit({ id: true });
 export const insertDiscountSchema = createInsertSchema(discounts).omit({ id: true });
 export const insertServiceChargeSchema = createInsertSchema(serviceCharges).omit({ id: true });
@@ -980,6 +1032,8 @@ export type TerminalDevice = typeof terminalDevices.$inferSelect;
 export type InsertTerminalDevice = z.infer<typeof insertTerminalDeviceSchema>;
 export type TerminalSession = typeof terminalSessions.$inferSelect;
 export type InsertTerminalSession = z.infer<typeof insertTerminalSessionSchema>;
+export type RegisteredDevice = typeof registeredDevices.$inferSelect;
+export type InsertRegisteredDevice = z.infer<typeof insertRegisteredDeviceSchema>;
 export type Tender = typeof tenders.$inferSelect;
 export type InsertTender = z.infer<typeof insertTenderSchema>;
 export type Discount = typeof discounts.$inferSelect;

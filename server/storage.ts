@@ -92,6 +92,8 @@ import {
   type PaymentTransaction, type InsertPaymentTransaction,
   type TerminalDevice, type InsertTerminalDevice,
   type TerminalSession, type InsertTerminalSession,
+  type RegisteredDevice, type InsertRegisteredDevice,
+  registeredDevices,
   // Phase 1-3 new types
   type OfflineOrderQueue, type InsertOfflineOrderQueue,
   type FiscalPeriod, type InsertFiscalPeriod,
@@ -363,6 +365,15 @@ export interface IStorage {
   getActiveTerminalSession(terminalDeviceId: string): Promise<TerminalSession | undefined>;
   createTerminalSession(data: InsertTerminalSession): Promise<TerminalSession>;
   updateTerminalSession(id: string, data: Partial<TerminalSession>): Promise<TerminalSession | undefined>;
+
+  // Registered Devices (POS/KDS access control)
+  getRegisteredDevices(propertyId?: string): Promise<RegisteredDevice[]>;
+  getRegisteredDevice(id: string): Promise<RegisteredDevice | undefined>;
+  getRegisteredDeviceByToken(deviceTokenHash: string): Promise<RegisteredDevice | undefined>;
+  getRegisteredDeviceByEnrollmentCode(enrollmentCode: string): Promise<RegisteredDevice | undefined>;
+  createRegisteredDevice(data: InsertRegisteredDevice): Promise<RegisteredDevice>;
+  updateRegisteredDevice(id: string, data: Partial<RegisteredDevice>): Promise<RegisteredDevice | undefined>;
+  deleteRegisteredDevice(id: string): Promise<boolean>;
 
   // Audit Logs
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
@@ -1777,6 +1788,52 @@ export class DatabaseStorage implements IStorage {
   async updateTerminalSession(id: string, data: Partial<TerminalSession>): Promise<TerminalSession | undefined> {
     const [result] = await db.update(terminalSessions).set(data).where(eq(terminalSessions.id, id)).returning();
     return result;
+  }
+
+  // Registered Devices (POS/KDS access control)
+  async getRegisteredDevices(propertyId?: string): Promise<RegisteredDevice[]> {
+    if (propertyId) {
+      return db.select().from(registeredDevices).where(eq(registeredDevices.propertyId, propertyId));
+    }
+    return db.select().from(registeredDevices);
+  }
+
+  async getRegisteredDevice(id: string): Promise<RegisteredDevice | undefined> {
+    const [result] = await db.select().from(registeredDevices).where(eq(registeredDevices.id, id));
+    return result;
+  }
+
+  async getRegisteredDeviceByToken(deviceTokenHash: string): Promise<RegisteredDevice | undefined> {
+    const [result] = await db.select().from(registeredDevices)
+      .where(and(
+        eq(registeredDevices.deviceTokenHash, deviceTokenHash),
+        eq(registeredDevices.status, "enrolled")
+      ));
+    return result;
+  }
+
+  async getRegisteredDeviceByEnrollmentCode(enrollmentCode: string): Promise<RegisteredDevice | undefined> {
+    const [result] = await db.select().from(registeredDevices)
+      .where(and(
+        eq(registeredDevices.enrollmentCode, enrollmentCode),
+        eq(registeredDevices.status, "pending")
+      ));
+    return result;
+  }
+
+  async createRegisteredDevice(data: InsertRegisteredDevice): Promise<RegisteredDevice> {
+    const [result] = await db.insert(registeredDevices).values(data).returning();
+    return result;
+  }
+
+  async updateRegisteredDevice(id: string, data: Partial<RegisteredDevice>): Promise<RegisteredDevice | undefined> {
+    const [result] = await db.update(registeredDevices).set(data).where(eq(registeredDevices.id, id)).returning();
+    return result;
+  }
+
+  async deleteRegisteredDevice(id: string): Promise<boolean> {
+    const result = await db.delete(registeredDevices).where(eq(registeredDevices.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Audit Logs

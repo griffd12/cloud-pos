@@ -1,196 +1,209 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useDeviceContext } from "@/lib/device-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Monitor, ChefHat, ArrowRight, Settings } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Shield, Monitor, Tv, Loader2, CheckCircle, AlertCircle, ArrowLeft, Key } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
-interface Property {
-  id: string;
-  name: string;
+interface EnrollmentResponse {
+  success: boolean;
+  deviceToken: string;
+  device: {
+    id: string;
+    name: string;
+    deviceType: string;
+    propertyId: string;
+    workstationId?: string | null;
+    kdsDeviceId?: string | null;
+    status: string;
+  };
 }
 
-interface Workstation {
-  id: string;
-  name: string;
-  propertyId: string;
-}
-
-interface KdsDevice {
-  id: string;
-  name: string;
-  stationType: string;
-  propertyId: string;
+function getDeviceInfo() {
+  return {
+    osInfo: navigator.platform || "Unknown",
+    browserInfo: navigator.userAgent,
+    screenResolution: `${window.screen.width}x${window.screen.height}`,
+    ipAddress: null,
+  };
 }
 
 export default function DeviceSetupPage() {
   const [, navigate] = useLocation();
-  const { configureAsPos, configureAsKds } = useDeviceContext();
+  const { enrollDevice, isConfigured, deviceType, deviceName, isValidating, validationError, clearDeviceConfig } = useDeviceContext();
   
-  const [step, setStep] = useState<"choose" | "pos-setup" | "kds-setup">("choose");
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [enrollmentCode, setEnrollmentCode] = useState("");
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
+  const [enrollmentSuccess, setEnrollmentSuccess] = useState<EnrollmentResponse | null>(null);
 
-  const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+  const enrollMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const response = await apiRequest("POST", "/api/registered-devices/enroll", {
+        enrollmentCode: code.trim(),
+        deviceInfo: getDeviceInfo(),
+      });
+      return response.json() as Promise<EnrollmentResponse>;
+    },
+    onSuccess: (data) => {
+      if (data.success && data.deviceToken && data.device) {
+        enrollDevice(data.deviceToken, data.device);
+        setEnrollmentSuccess(data);
+        setEnrollmentError(null);
+      } else {
+        setEnrollmentError("Enrollment failed. Please try again.");
+      }
+    },
+    onError: (error: Error) => {
+      setEnrollmentError(error.message || "Invalid or expired enrollment code");
+    },
   });
 
-  const { data: workstations = [] } = useQuery<Workstation[]>({
-    queryKey: ["/api/workstations"],
-    enabled: step === "pos-setup",
-  });
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (enrollmentCode.length !== 6) {
+      setEnrollmentError("Please enter a 6-digit enrollment code");
+      return;
+    }
+    setEnrollmentError(null);
+    enrollMutation.mutate(enrollmentCode);
+  };
 
-  const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
-    queryKey: ["/api/kds-devices"],
-    enabled: step === "kds-setup",
-  });
-
-  const filteredWorkstations = selectedPropertyId
-    ? workstations.filter(w => w.propertyId === selectedPropertyId)
-    : workstations;
-
-  const filteredKdsDevices = selectedPropertyId
-    ? kdsDevices.filter(d => d.propertyId === selectedPropertyId)
-    : kdsDevices;
-
-  const handlePosSetup = () => {
-    const workstation = workstations.find(w => w.id === selectedDeviceId);
-    if (workstation) {
-      configureAsPos(workstation.id, workstation.name);
-      navigate("/login");
+  const handleContinue = () => {
+    if (enrollmentSuccess?.device) {
+      const deviceType = enrollmentSuccess.device.deviceType;
+      if (deviceType === "kds_display") {
+        navigate("/kds");
+      } else {
+        navigate("/login");
+      }
     }
   };
 
-  const handleKdsSetup = () => {
-    const device = kdsDevices.find(d => d.id === selectedDeviceId);
-    if (device) {
-      configureAsKds(device.id, device.name);
-      navigate("/kds");
-    }
-  };
-
-  if (step === "choose") {
+  if (enrollmentSuccess) {
+    const isKds = enrollmentSuccess.device.deviceType === "kds_display";
+    
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl space-y-6">
-          <div className="text-center space-y-2">
-            <Settings className="w-12 h-12 mx-auto text-muted-foreground" />
-            <h1 className="text-2xl font-bold" data-testid="text-device-setup-title">Device Setup</h1>
-            <p className="text-muted-foreground">
-              Configure this device for your restaurant
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center mb-4">
+              <CheckCircle className="w-10 h-10 text-green-600" />
+            </div>
+            <CardTitle>Device Enrolled Successfully</CardTitle>
+            <CardDescription>
+              This device is now registered and ready to use
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-muted rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                {isKds ? (
+                  <Tv className="w-5 h-5 text-orange-500" />
+                ) : (
+                  <Monitor className="w-5 h-5 text-primary" />
+                )}
+                <span className="font-medium">{enrollmentSuccess.device.name}</span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Type: {isKds ? "Kitchen Display (KDS)" : "POS Workstation"}
+              </div>
+            </div>
+
+            <Button 
+              className="w-full" 
+              onClick={handleContinue}
+              data-testid="button-continue"
+            >
+              Continue to {isKds ? "Kitchen Display" : "Login"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isValidating) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="w-10 h-10 mx-auto animate-spin text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">Validating device...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (validationError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <AlertCircle className="w-10 h-10 text-destructive" />
+            </div>
+            <CardTitle>Device Access Revoked</CardTitle>
+            <CardDescription>
+              {validationError}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground text-center">
+              This device is no longer authorized to access the system. Please contact your administrator.
             </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card 
-              className="cursor-pointer hover-elevate"
-              onClick={() => setStep("pos-setup")}
-              data-testid="card-choose-pos"
+            <Button 
+              className="w-full" 
+              variant="outline"
+              onClick={clearDeviceConfig}
+              data-testid="button-re-enroll"
             >
-              <CardHeader className="text-center pb-2">
-                <Monitor className="w-16 h-16 mx-auto text-primary mb-2" />
-                <CardTitle>POS Workstation</CardTitle>
-                <CardDescription>
-                  Front-of-house terminal for taking orders and processing payments
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <Button className="w-full" variant="outline">
-                  Set Up as POS
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className="cursor-pointer hover-elevate"
-              onClick={() => setStep("kds-setup")}
-              data-testid="card-choose-kds"
-            >
-              <CardHeader className="text-center pb-2">
-                <ChefHat className="w-16 h-16 mx-auto text-orange-500 mb-2" />
-                <CardTitle>Kitchen Display</CardTitle>
-                <CardDescription>
-                  Kitchen or bar display for viewing and managing orders
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <Button className="w-full" variant="outline">
-                  Set Up as KDS
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              <Key className="w-4 h-4 mr-2" />
+              Re-enroll Device
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  if (step === "pos-setup") {
+  if (isConfigured && deviceType) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Monitor className="w-6 h-6 text-primary" />
-              <CardTitle>POS Workstation Setup</CardTitle>
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+              <Shield className="w-10 h-10 text-primary" />
             </div>
+            <CardTitle>Device Already Configured</CardTitle>
             <CardDescription>
-              Select which workstation this device will operate as
+              This device is already enrolled as a {deviceType === "kds" ? "Kitchen Display" : "POS Workstation"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {properties.length > 1 && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Property</label>
-                <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-                  <SelectTrigger data-testid="select-property">
-                    <SelectValue placeholder="Select property..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {properties.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="bg-muted rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                {deviceType === "kds" ? (
+                  <Tv className="w-5 h-5 text-orange-500" />
+                ) : (
+                  <Monitor className="w-5 h-5 text-primary" />
+                )}
+                <span className="font-medium">{deviceName || "Unknown Device"}</span>
               </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Workstation</label>
-              <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-                <SelectTrigger data-testid="select-workstation">
-                  <SelectValue placeholder="Select workstation..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredWorkstations.map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
-            <div className="flex gap-2 pt-4">
+            <div className="flex gap-2">
               <Button 
-                variant="outline" 
-                onClick={() => {
-                  setStep("choose");
-                  setSelectedDeviceId("");
-                }}
-                data-testid="button-back"
-              >
-                Back
-              </Button>
-              <Button 
+                variant="outline"
                 className="flex-1"
-                disabled={!selectedDeviceId}
-                onClick={handlePosSetup}
-                data-testid="button-confirm-pos"
+                onClick={() => navigate(deviceType === "kds" ? "/kds" : "/login")}
+                data-testid="button-continue-existing"
               >
-                Confirm Setup
+                Continue
               </Button>
             </div>
           </CardContent>
@@ -199,77 +212,84 @@ export default function DeviceSetupPage() {
     );
   }
 
-  if (step === "kds-setup") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <ChefHat className="w-6 h-6 text-orange-500" />
-              <CardTitle>Kitchen Display Setup</CardTitle>
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <Key className="w-10 h-10 text-primary" />
+          </div>
+          <CardTitle data-testid="text-device-setup-title">Device Enrollment</CardTitle>
+          <CardDescription>
+            Enter the 6-digit enrollment code from your administrator
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="code">Enrollment Code</Label>
+              <Input
+                id="code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="000000"
+                value={enrollmentCode}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+                  setEnrollmentCode(value);
+                  setEnrollmentError(null);
+                }}
+                className="text-center text-2xl font-mono tracking-widest"
+                autoComplete="off"
+                autoFocus
+                data-testid="input-enrollment-code"
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                Get this code from Admin &gt; Devices &gt; Registered Devices
+              </p>
             </div>
-            <CardDescription>
-              Select which KDS station this display will show
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {properties.length > 1 && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Property</label>
-                <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-                  <SelectTrigger data-testid="select-property-kds">
-                    <SelectValue placeholder="Select property..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {properties.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+            {enrollmentError && (
+              <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span data-testid="text-error">{enrollmentError}</span>
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">KDS Station</label>
-              <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-                <SelectTrigger data-testid="select-kds-device">
-                  <SelectValue placeholder="Select KDS station..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredKdsDevices.map(d => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name} ({d.stationType})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={enrollmentCode.length !== 6 || enrollMutation.isPending}
+              data-testid="button-enroll"
+            >
+              {enrollMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Enrolling...
+                </>
+              ) : (
+                <>
+                  <Shield className="w-4 h-4 mr-2" />
+                  Enroll Device
+                </>
+              )}
+            </Button>
+          </form>
 
-            <div className="flex gap-2 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setStep("choose");
-                  setSelectedDeviceId("");
-                }}
-                data-testid="button-back-kds"
-              >
-                Back
-              </Button>
-              <Button 
-                className="flex-1"
-                disabled={!selectedDeviceId}
-                onClick={handleKdsSetup}
-                data-testid="button-confirm-kds"
-              >
-                Confirm Setup
-              </Button>
+          <div className="mt-6 pt-6 border-t">
+            <div className="text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Need an enrollment code?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Contact your manager or administrator. They can generate a code from the Admin &gt; Registered Devices page.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return null;
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

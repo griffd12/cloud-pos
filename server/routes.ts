@@ -9286,6 +9286,278 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // REGISTERED DEVICES - POS/KDS device enrollment and access control
+  // ============================================================================
+
+  // Get all registered devices (admin view)
+  app.get("/api/registered-devices", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const devices = await storage.getRegisteredDevices(propertyId as string);
+      res.json(devices);
+    } catch (error) {
+      console.error("Get registered devices error:", error);
+      res.status(500).json({ message: "Failed to get registered devices" });
+    }
+  });
+
+  // Get single registered device
+  app.get("/api/registered-devices/:id", async (req, res) => {
+    try {
+      const device = await storage.getRegisteredDevice(req.params.id);
+      if (!device) {
+        return res.status(404).json({ message: "Registered device not found" });
+      }
+      res.json(device);
+    } catch (error) {
+      console.error("Get registered device error:", error);
+      res.status(500).json({ message: "Failed to get registered device" });
+    }
+  });
+
+  // Create a new registered device (admin creates device entry with enrollment code)
+  app.post("/api/registered-devices", async (req, res) => {
+    try {
+      const { propertyId, deviceType, workstationId, kdsDeviceId, name, serialNumber, assetTag, macAddress, notes, createdByEmployeeId } = req.body;
+
+      if (!propertyId || !deviceType || !name) {
+        return res.status(400).json({ message: "Property ID, device type, and name are required" });
+      }
+
+      // Validate device type
+      if (!["pos_workstation", "kds_display"].includes(deviceType)) {
+        return res.status(400).json({ message: "Device type must be 'pos_workstation' or 'kds_display'" });
+      }
+
+      // Validate that either workstationId or kdsDeviceId is provided based on type
+      if (deviceType === "pos_workstation" && !workstationId) {
+        return res.status(400).json({ message: "Workstation ID is required for POS workstation type" });
+      }
+      if (deviceType === "kds_display" && !kdsDeviceId) {
+        return res.status(400).json({ message: "KDS Device ID is required for KDS display type" });
+      }
+
+      // Generate a 6-digit enrollment code
+      const enrollmentCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Code expires in 24 hours
+      const enrollmentCodeExpiresAt = new Date();
+      enrollmentCodeExpiresAt.setHours(enrollmentCodeExpiresAt.getHours() + 24);
+
+      const device = await storage.createRegisteredDevice({
+        propertyId,
+        deviceType,
+        workstationId: deviceType === "pos_workstation" ? workstationId : null,
+        kdsDeviceId: deviceType === "kds_display" ? kdsDeviceId : null,
+        name,
+        enrollmentCode,
+        enrollmentCodeExpiresAt,
+        status: "pending",
+        serialNumber: serialNumber || null,
+        assetTag: assetTag || null,
+        macAddress: macAddress || null,
+        notes: notes || null,
+        createdByEmployeeId: createdByEmployeeId || null,
+      });
+
+      res.status(201).json(device);
+    } catch (error) {
+      console.error("Create registered device error:", error);
+      res.status(500).json({ message: "Failed to create registered device" });
+    }
+  });
+
+  // Generate a new enrollment code for an existing device
+  app.post("/api/registered-devices/:id/generate-code", async (req, res) => {
+    try {
+      const device = await storage.getRegisteredDevice(req.params.id);
+      if (!device) {
+        return res.status(404).json({ message: "Registered device not found" });
+      }
+
+      // Generate a new 6-digit enrollment code
+      const enrollmentCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Code expires in 24 hours
+      const enrollmentCodeExpiresAt = new Date();
+      enrollmentCodeExpiresAt.setHours(enrollmentCodeExpiresAt.getHours() + 24);
+
+      const updated = await storage.updateRegisteredDevice(req.params.id, {
+        enrollmentCode,
+        enrollmentCodeExpiresAt,
+        status: "pending",
+        deviceToken: null,
+        deviceTokenHash: null,
+        enrolledAt: null,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Generate enrollment code error:", error);
+      res.status(500).json({ message: "Failed to generate enrollment code" });
+    }
+  });
+
+  // Enroll a device using enrollment code (called from device-setup page)
+  app.post("/api/registered-devices/enroll", async (req, res) => {
+    try {
+      const { enrollmentCode, deviceInfo } = req.body;
+
+      if (!enrollmentCode) {
+        return res.status(400).json({ message: "Enrollment code is required" });
+      }
+
+      // Find device by enrollment code
+      const device = await storage.getRegisteredDeviceByEnrollmentCode(enrollmentCode);
+      if (!device) {
+        return res.status(404).json({ message: "Invalid or expired enrollment code" });
+      }
+
+      // Check if code is expired
+      if (device.enrollmentCodeExpiresAt && new Date() > new Date(device.enrollmentCodeExpiresAt)) {
+        return res.status(400).json({ message: "Enrollment code has expired" });
+      }
+
+      // Generate a secure device token (UUID format for simplicity)
+      const crypto = await import("crypto");
+      const deviceToken = crypto.randomUUID() + "-" + crypto.randomBytes(16).toString("hex");
+      const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+
+      // Update device with enrollment info
+      const updated = await storage.updateRegisteredDevice(device.id, {
+        status: "enrolled",
+        deviceToken: null, // We don't store the actual token, only the hash
+        deviceTokenHash,
+        enrollmentCode: null, // Clear the enrollment code after use
+        enrollmentCodeExpiresAt: null,
+        enrolledAt: new Date(),
+        lastAccessAt: new Date(),
+        // Store device info if provided
+        osInfo: deviceInfo?.osInfo || null,
+        browserInfo: deviceInfo?.browserInfo || null,
+        screenResolution: deviceInfo?.screenResolution || null,
+        ipAddress: deviceInfo?.ipAddress || null,
+      });
+
+      // Return the device token and device info (client stores this securely)
+      res.json({
+        success: true,
+        deviceToken,
+        device: {
+          id: updated?.id,
+          name: updated?.name,
+          deviceType: updated?.deviceType,
+          propertyId: updated?.propertyId,
+          workstationId: updated?.workstationId,
+          kdsDeviceId: updated?.kdsDeviceId,
+          status: updated?.status,
+        },
+      });
+    } catch (error) {
+      console.error("Device enrollment error:", error);
+      res.status(500).json({ message: "Failed to enroll device" });
+    }
+  });
+
+  // Validate device token (called on app load to verify device is still authorized)
+  app.post("/api/registered-devices/validate", async (req, res) => {
+    try {
+      const { deviceToken } = req.body;
+
+      if (!deviceToken) {
+        return res.status(400).json({ message: "Device token is required", valid: false });
+      }
+
+      // Hash the token to find the device
+      const crypto = await import("crypto");
+      const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+
+      const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
+      if (!device) {
+        return res.status(401).json({ message: "Invalid or revoked device token", valid: false });
+      }
+
+      // Check if device is still enrolled
+      if (device.status !== "enrolled") {
+        return res.status(401).json({ message: `Device is ${device.status}`, valid: false });
+      }
+
+      // Update last access time
+      await storage.updateRegisteredDevice(device.id, {
+        lastAccessAt: new Date(),
+      });
+
+      res.json({
+        valid: true,
+        device: {
+          id: device.id,
+          name: device.name,
+          deviceType: device.deviceType,
+          propertyId: device.propertyId,
+          workstationId: device.workstationId,
+          kdsDeviceId: device.kdsDeviceId,
+          status: device.status,
+        },
+      });
+    } catch (error) {
+      console.error("Device validation error:", error);
+      res.status(500).json({ message: "Failed to validate device", valid: false });
+    }
+  });
+
+  // Update registered device (admin can update metadata)
+  app.patch("/api/registered-devices/:id", async (req, res) => {
+    try {
+      const device = await storage.getRegisteredDevice(req.params.id);
+      if (!device) {
+        return res.status(404).json({ message: "Registered device not found" });
+      }
+
+      const { name, serialNumber, assetTag, macAddress, notes, status, disabledByEmployeeId, disabledReason } = req.body;
+
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (serialNumber !== undefined) updateData.serialNumber = serialNumber;
+      if (assetTag !== undefined) updateData.assetTag = assetTag;
+      if (macAddress !== undefined) updateData.macAddress = macAddress;
+      if (notes !== undefined) updateData.notes = notes;
+
+      // Handle status changes
+      if (status && status !== device.status) {
+        updateData.status = status;
+        if (status === "disabled" || status === "revoked") {
+          updateData.disabledAt = new Date();
+          updateData.disabledByEmployeeId = disabledByEmployeeId || null;
+          updateData.disabledReason = disabledReason || null;
+          // Clear token to revoke access
+          updateData.deviceToken = null;
+          updateData.deviceTokenHash = null;
+        }
+      }
+
+      const updated = await storage.updateRegisteredDevice(req.params.id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update registered device error:", error);
+      res.status(500).json({ message: "Failed to update registered device" });
+    }
+  });
+
+  // Delete registered device
+  app.delete("/api/registered-devices/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteRegisteredDevice(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Registered device not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete registered device error:", error);
+      res.status(500).json({ message: "Failed to delete registered device" });
+    }
+  });
+
+  // ============================================================================
   // STRIPE MANUAL CARD ENTRY - PaymentIntent API for secure card processing
   // ============================================================================
 
