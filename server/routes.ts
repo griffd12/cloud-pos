@@ -5496,16 +5496,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }, 0);
         }
         
-        const totalPrice = (price + modifierUpcharge) * qty;
+        // Gross = full price before discounts
+        const grossPrice = (price + modifierUpcharge) * qty;
+        
+        // Net = gross minus item-level discount
+        const discountAmount = parseFloat(ci.discountAmount || "0");
+        const netPrice = grossPrice - discountAmount;
         
         itemSales[ci.menuItemId].quantity += qty;
-        itemSales[ci.menuItemId].grossSales += totalPrice;
-        itemSales[ci.menuItemId].netSales += totalPrice;
+        itemSales[ci.menuItemId].grossSales += grossPrice;
+        itemSales[ci.menuItemId].netSales += netPrice;
       }
       
-      // Calculate averages
+      // Calculate averages (using net sales for accurate avg price after discounts)
       Object.values(itemSales).forEach(item => {
-        item.avgPrice = item.quantity > 0 ? item.grossSales / item.quantity : 0;
+        item.avgPrice = item.quantity > 0 ? item.netSales / item.quantity : 0;
       });
       
       const result = Object.entries(itemSales)
