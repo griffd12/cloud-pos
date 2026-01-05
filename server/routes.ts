@@ -9643,11 +9643,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Hash password with bcrypt (10 salt rounds)
       const passwordHash = await bcrypt.hash(password, 10);
 
+      // Parse displayName into firstName and lastName
+      const nameParts = (displayName || email.split("@")[0]).split(" ");
+      const firstName = nameParts[0] || "Admin";
+      const lastName = nameParts.slice(1).join(" ") || "User";
+
       const user = await storage.createEmcUser({
         email: email.toLowerCase(),
         passwordHash,
-        displayName: displayName || email.split("@")[0],
-        role: "enterprise_admin", // First user gets highest level access
+        firstName,
+        lastName,
+        accessLevel: "enterprise_admin", // First user gets highest level access
         enterpriseId: enterpriseId || null,
         propertyId: null,
         isActive: true,
@@ -9670,8 +9676,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         user: {
           id: user.id,
           email: user.email,
-          displayName: user.displayName,
-          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          displayName: `${user.firstName} ${user.lastName}`,
+          accessLevel: user.accessLevel,
         },
         sessionToken, // Return unhashed token to client
         expiresAt,
@@ -9734,8 +9742,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         user: {
           id: user.id,
           email: user.email,
-          displayName: user.displayName,
-          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          displayName: `${user.firstName} ${user.lastName}`,
+          accessLevel: user.accessLevel,
           enterpriseId: user.enterpriseId,
           propertyId: user.propertyId,
         },
@@ -9774,8 +9784,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         user: {
           id: user.id,
           email: user.email,
-          displayName: user.displayName,
-          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          displayName: `${user.firstName} ${user.lastName}`,
+          accessLevel: user.accessLevel,
           enterpriseId: user.enterpriseId,
           propertyId: user.propertyId,
         },
@@ -9834,8 +9846,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({
         id: user.id,
         email: user.email,
-        displayName: user.displayName,
-        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        displayName: `${user.firstName} ${user.lastName}`,
+        accessLevel: user.accessLevel,
         enterpriseId: user.enterpriseId,
         propertyId: user.propertyId,
       });
