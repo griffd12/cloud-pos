@@ -225,6 +225,7 @@ export default function PosLayoutsPage() {
   const [layoutMode, setLayoutMode] = useState<"slu_tabs" | "custom_grid">("slu_tabs");
   const [gridRows, setGridRows] = useState(4);
   const [gridCols, setGridCols] = useState(6);
+  const [fontSize, setFontSize] = useState<"small" | "medium" | "large" | "xlarge">("medium");
   const [isDefault, setIsDefault] = useState(false);
   const [selectedRvcId, setSelectedRvcId] = useState<string>(""); // Legacy single RVC
   const [selectedRvcAssignments, setSelectedRvcAssignments] = useState<{ propertyId: string; rvcId: string; isDefault: boolean }[]>([]);
@@ -379,6 +380,7 @@ export default function PosLayoutsPage() {
     setLayoutMode("slu_tabs");
     setGridRows(4);
     setGridCols(6);
+    setFontSize("medium");
     setIsDefault(false);
     setSelectedRvcId("");
     setSelectedRvcAssignments([]);
@@ -393,6 +395,7 @@ export default function PosLayoutsPage() {
       setLayoutMode(layout.mode as "slu_tabs" | "custom_grid");
       setGridRows(layout.gridRows || 4);
       setGridCols(layout.gridCols || 6);
+      setFontSize((layout.fontSize as "small" | "medium" | "large" | "xlarge") || "medium");
       setIsDefault(layout.isDefault || false);
       setSelectedRvcId(layout.rvcId || "");
       // Load existing RVC assignments
@@ -422,6 +425,7 @@ export default function PosLayoutsPage() {
       mode: layoutMode,
       gridRows,
       gridCols,
+      fontSize,
       isDefault,
       rvcId: selectedRvcId || null,
       active: true,
@@ -821,6 +825,20 @@ export default function PosLayoutsPage() {
                 </div>
               </div>
             )}
+            <div className="space-y-2">
+              <Label>Button Font Size</Label>
+              <Select value={fontSize} onValueChange={(v) => setFontSize(v as any)}>
+                <SelectTrigger data-testid="select-font-size">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="small">Small</SelectItem>
+                  <SelectItem value="medium">Medium (Default)</SelectItem>
+                  <SelectItem value="large">Large</SelectItem>
+                  <SelectItem value="xlarge">Extra Large</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-2">
               <Switch
                 checked={isDefault}

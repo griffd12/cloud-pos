@@ -11955,6 +11955,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { cardNumber, initialBalance, propertyId, employeeId, checkId } = req.body;
 
+      // Validate initialBalance is a valid number
+      const parsedBalance = parseFloat(initialBalance);
+      if (isNaN(parsedBalance) || parsedBalance <= 0) {
+        return res.status(400).json({ message: "Invalid initial balance amount" });
+      }
+      const balanceStr = parsedBalance.toFixed(2);
+
       // Check if card already exists
       const existing = await storage.getGiftCardByNumber(cardNumber);
       if (existing) {
@@ -11965,8 +11972,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const giftCard = await storage.createGiftCard({
         cardNumber,
         propertyId,
-        initialBalance,
-        currentBalance: initialBalance,
+        initialBalance: balanceStr,
+        currentBalance: balanceStr,
         status: "active",
         activatedAt: new Date(),
         activatedById: employeeId,
@@ -11976,18 +11983,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.createGiftCardTransaction({
         giftCardId: giftCard.id,
         transactionType: "activate",
-        amount: initialBalance,
+        amount: balanceStr,
         balanceBefore: "0",
-        balanceAfter: initialBalance,
+        balanceAfter: balanceStr,
         propertyId,
         checkId,
         employeeId,
         notes: "Initial activation",
       });
 
+      // Add gift card sale as a check item if there's an active check
+      let checkItem = null;
+      if (checkId) {
+        const check = await storage.getCheck(checkId);
+        if (check) {
+          // Get the current round number for this check
+          const existingItems = await storage.getCheckItems(checkId);
+          const maxRound = Math.max(0, ...existingItems.map(i => i.roundNumber || 1));
+          
+          // Create a check item for the gift card sale
+          checkItem = await storage.createCheckItem({
+            checkId,
+            menuItemId: null, // No menu item - this is a special gift card sale
+            menuItemName: `Gift Card ${cardNumber.slice(-4)}`,
+            quantity: 1,
+            unitPrice: balanceStr,
+            totalPrice: balanceStr,
+            sent: true, // Mark as sent immediately
+            voided: false,
+            roundNumber: maxRound + 1,
+            modifiers: [],
+            specialInstructions: `Gift Card Activation: ${cardNumber}`,
+          });
+
+          // Recalculate check totals from all non-voided items
+          const allItems = await storage.getCheckItems(checkId);
+          const itemsSubtotal = allItems
+            .filter(item => !item.voided)
+            .reduce((sum, item) => sum + parseFloat(item.totalPrice || "0"), 0);
+          
+          // Gift cards are typically not taxed, so total = subtotal for GC items
+          // Keep existing tax calculation for other items
+          const currentTax = parseFloat(check.tax || "0");
+          const newSubtotal = itemsSubtotal.toFixed(2);
+          const newTotal = (itemsSubtotal + currentTax).toFixed(2);
+          
+          await storage.updateCheck(checkId, {
+            subtotal: newSubtotal,
+            total: newTotal,
+          });
+        }
+      }
+
       res.status(201).json({
         success: true,
         giftCard,
+        checkItem,
         message: `Gift card activated with $${initialBalance} balance`,
       });
     } catch (error: any) {

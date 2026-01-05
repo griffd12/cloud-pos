@@ -1147,6 +1147,7 @@ export const posLayouts = pgTable("pos_layouts", {
   mode: text("mode").notNull().default("slu_tabs"), // 'slu_tabs' or 'custom_grid'
   gridRows: integer("grid_rows").default(4),
   gridCols: integer("grid_cols").default(6),
+  fontSize: text("font_size").default("medium"), // 'small', 'medium', 'large', 'xlarge'
   isDefault: boolean("is_default").default(false),
   active: boolean("active").default(true),
 });

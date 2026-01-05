@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Delete, LogIn } from "lucide-react";
@@ -20,9 +20,22 @@ export function PinLogin({
 }: PinLoginProps) {
   const [pin, setPin] = useState("");
 
+  // Clear PIN when there's an error (login failed)
+  useEffect(() => {
+    if (error) {
+      setPin("");
+    }
+  }, [error]);
+
   const handleDigit = (digit: string) => {
-    if (pin.length < 6) {
-      setPin(prev => prev + digit);
+    // Block input if already at 4 digits (auto-submitting) or loading
+    if (pin.length >= 4 || isLoading) return;
+    
+    const newPin = pin + digit;
+    setPin(newPin);
+    // Auto-submit when 4 digits are entered
+    if (newPin.length === 4) {
+      onLogin(newPin);
     }
   };
 

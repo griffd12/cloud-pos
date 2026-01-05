@@ -1031,10 +1031,24 @@ export default function PosPage() {
                   {layoutCells.map((cell) => {
                     const menuItem = allMenuItems.find(m => m.id === cell.menuItemId);
                     if (!menuItem) return null;
+                    // Font size classes based on layout setting
+                    const fontSizeClasses = {
+                      small: "text-xs",
+                      medium: "text-sm",
+                      large: "text-base",
+                      xlarge: "text-lg",
+                    };
+                    const priceFontSizeClasses = {
+                      small: "text-[10px]",
+                      medium: "text-xs",
+                      large: "text-sm",
+                      xlarge: "text-base",
+                    };
+                    const layoutFontSize = (activeLayout?.fontSize as keyof typeof fontSizeClasses) || "medium";
                     return (
                       <Button
                         key={cell.id}
-                        className="h-full w-full flex flex-col items-center justify-center text-sm font-medium"
+                        className={`h-full w-full flex flex-col items-center justify-center font-medium ${fontSizeClasses[layoutFontSize]}`}
                         style={{
                           backgroundColor: cell.backgroundColor || "#3B82F6",
                           color: cell.textColor || "#FFFFFF",
@@ -1047,7 +1061,7 @@ export default function PosPage() {
                         <span className="truncate max-w-full">
                           {cell.displayLabel || menuItem.shortName || menuItem.name}
                         </span>
-                        <span className="text-xs opacity-70">
+                        <span className={`${priceFontSizeClasses[layoutFontSize]} opacity-70`}>
                           ${parseFloat(menuItem.price || "0").toFixed(2)}
                         </span>
                       </Button>

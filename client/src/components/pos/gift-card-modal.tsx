@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface GiftCardModalProps {
   open: boolean;
@@ -77,9 +77,8 @@ export function GiftCardModal({
     if (!cardNumber) return;
     setIsCheckingBalance(true);
     try {
-      const res = await fetch(`/api/pos/gift-cards/balance/${encodeURIComponent(cardNumber)}`, {
-        credentials: "include",
-      });
+      // Use apiRequest to include device token header
+      const res = await apiRequest("GET", `/api/pos/gift-cards/balance/${encodeURIComponent(cardNumber)}`);
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.message || "Card not found");
@@ -117,6 +116,11 @@ export function GiftCardModal({
       });
       setCardNumber("");
       setAmount("");
+      // Refresh check items and check data to show the gift card sale
+      if (checkId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", checkId, "items"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", checkId] });
+      }
     },
     onError: (error: any) => {
       toast({
