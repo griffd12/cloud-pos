@@ -93,7 +93,9 @@ import {
   type TerminalDevice, type InsertTerminalDevice,
   type TerminalSession, type InsertTerminalSession,
   type RegisteredDevice, type InsertRegisteredDevice,
-  registeredDevices,
+  type EmcUser, type InsertEmcUser,
+  type EmcSession, type InsertEmcSession,
+  registeredDevices, emcUsers, emcSessions,
   // Phase 1-3 new types
   type OfflineOrderQueue, type InsertOfflineOrderQueue,
   type FiscalPeriod, type InsertFiscalPeriod,
@@ -374,6 +376,22 @@ export interface IStorage {
   createRegisteredDevice(data: InsertRegisteredDevice): Promise<RegisteredDevice>;
   updateRegisteredDevice(id: string, data: Partial<RegisteredDevice>): Promise<RegisteredDevice | undefined>;
   deleteRegisteredDevice(id: string): Promise<boolean>;
+
+  // EMC Users (Enterprise Management Console)
+  getEmcUsers(enterpriseId?: string, propertyId?: string): Promise<EmcUser[]>;
+  getEmcUser(id: string): Promise<EmcUser | undefined>;
+  getEmcUserByEmail(email: string): Promise<EmcUser | undefined>;
+  createEmcUser(data: InsertEmcUser): Promise<EmcUser>;
+  updateEmcUser(id: string, data: Partial<EmcUser>): Promise<EmcUser | undefined>;
+  deleteEmcUser(id: string): Promise<boolean>;
+  getEmcUserCount(): Promise<number>;
+
+  // EMC Sessions
+  getEmcSession(id: string): Promise<EmcSession | undefined>;
+  getEmcSessionByToken(sessionToken: string): Promise<EmcSession | undefined>;
+  createEmcSession(data: InsertEmcSession): Promise<EmcSession>;
+  deleteEmcSession(id: string): Promise<boolean>;
+  deleteExpiredEmcSessions(): Promise<number>;
 
   // Audit Logs
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
@@ -1834,6 +1852,86 @@ export class DatabaseStorage implements IStorage {
   async deleteRegisteredDevice(id: string): Promise<boolean> {
     const result = await db.delete(registeredDevices).where(eq(registeredDevices.id, id));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  // EMC Users (Enterprise Management Console)
+  async getEmcUsers(enterpriseId?: string, propertyId?: string): Promise<EmcUser[]> {
+    if (propertyId) {
+      return db.select().from(emcUsers).where(eq(emcUsers.propertyId, propertyId));
+    }
+    if (enterpriseId) {
+      return db.select().from(emcUsers).where(eq(emcUsers.enterpriseId, enterpriseId));
+    }
+    return db.select().from(emcUsers);
+  }
+
+  async getEmcUser(id: string): Promise<EmcUser | undefined> {
+    const [result] = await db.select().from(emcUsers).where(eq(emcUsers.id, id));
+    return result;
+  }
+
+  async getEmcUserByEmail(email: string): Promise<EmcUser | undefined> {
+    const [result] = await db.select().from(emcUsers).where(eq(emcUsers.email, email.toLowerCase()));
+    return result;
+  }
+
+  async createEmcUser(data: InsertEmcUser): Promise<EmcUser> {
+    const [result] = await db.insert(emcUsers).values({
+      ...data,
+      email: data.email.toLowerCase(),
+    }).returning();
+    return result;
+  }
+
+  async updateEmcUser(id: string, data: Partial<EmcUser>): Promise<EmcUser | undefined> {
+    const updateData = { ...data, updatedAt: new Date() };
+    if (data.email) {
+      updateData.email = data.email.toLowerCase();
+    }
+    const [result] = await db.update(emcUsers).set(updateData).where(eq(emcUsers.id, id)).returning();
+    return result;
+  }
+
+  async deleteEmcUser(id: string): Promise<boolean> {
+    // First delete any sessions for this user
+    await db.delete(emcSessions).where(eq(emcSessions.userId, id));
+    const result = await db.delete(emcUsers).where(eq(emcUsers.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getEmcUserCount(): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)::int` }).from(emcUsers);
+    return result?.count ?? 0;
+  }
+
+  // EMC Sessions
+  async getEmcSession(id: string): Promise<EmcSession | undefined> {
+    const [result] = await db.select().from(emcSessions).where(eq(emcSessions.id, id));
+    return result;
+  }
+
+  async getEmcSessionByToken(sessionToken: string): Promise<EmcSession | undefined> {
+    const [result] = await db.select().from(emcSessions)
+      .where(and(
+        eq(emcSessions.sessionToken, sessionToken),
+        gte(emcSessions.expiresAt, new Date())
+      ));
+    return result;
+  }
+
+  async createEmcSession(data: InsertEmcSession): Promise<EmcSession> {
+    const [result] = await db.insert(emcSessions).values(data).returning();
+    return result;
+  }
+
+  async deleteEmcSession(id: string): Promise<boolean> {
+    const result = await db.delete(emcSessions).where(eq(emcSessions.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteExpiredEmcSessions(): Promise<number> {
+    const result = await db.delete(emcSessions).where(lte(emcSessions.expiresAt, new Date()));
+    return result.rowCount ?? 0;
   }
 
   // Audit Logs

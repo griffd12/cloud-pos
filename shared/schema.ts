@@ -685,6 +685,52 @@ export const registeredDevicesRelations = relations(registeredDevices, ({ one })
   disabledByEmployee: one(employees, { fields: [registeredDevices.disabledByEmployeeId], references: [employees.id] }),
 }));
 
+// ============================================================================
+// EMC (ENTERPRISE MANAGEMENT CONSOLE) USERS
+// ============================================================================
+// Separate from employees - these are admin users who access the system from any browser
+// using email/password authentication (not PIN-based like POS employees)
+
+export const emcUsers = pgTable("emc_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  // Access level
+  accessLevel: text("access_level").notNull().default("property_admin"), // super_admin, enterprise_admin, property_admin
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id), // null for super_admin
+  propertyId: varchar("property_id").references(() => properties.id), // null for enterprise_admin and above
+  // Status
+  active: boolean("active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  failedLoginAttempts: integer("failed_login_attempts").default(0),
+  lockedUntil: timestamp("locked_until"),
+  // Audit
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const emcUsersRelations = relations(emcUsers, ({ one }) => ({
+  enterprise: one(enterprises, { fields: [emcUsers.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [emcUsers.propertyId], references: [properties.id] }),
+}));
+
+// EMC Sessions for server-side session management
+export const emcSessions = pgTable("emc_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => emcUsers.id),
+  sessionToken: text("session_token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const emcSessionsRelations = relations(emcSessions, ({ one }) => ({
+  user: one(emcUsers, { fields: [emcSessions.userId], references: [emcUsers.id] }),
+}));
+
 export const discounts = pgTable("discounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
@@ -961,6 +1007,8 @@ export const insertTerminalSessionSchema = createInsertSchema(terminalSessions).
   tipAmount: z.coerce.number().optional(),
 });
 export const insertRegisteredDeviceSchema = createInsertSchema(registeredDevices).omit({ id: true, createdAt: true });
+export const insertEmcUserSchema = createInsertSchema(emcUsers).omit({ id: true, createdAt: true, updatedAt: true, failedLoginAttempts: true, lockedUntil: true, lastLoginAt: true });
+export const insertEmcSessionSchema = createInsertSchema(emcSessions).omit({ id: true, createdAt: true });
 export const insertTenderSchema = createInsertSchema(tenders).omit({ id: true });
 export const insertDiscountSchema = createInsertSchema(discounts).omit({ id: true });
 export const insertServiceChargeSchema = createInsertSchema(serviceCharges).omit({ id: true });
@@ -1034,6 +1082,10 @@ export type TerminalSession = typeof terminalSessions.$inferSelect;
 export type InsertTerminalSession = z.infer<typeof insertTerminalSessionSchema>;
 export type RegisteredDevice = typeof registeredDevices.$inferSelect;
 export type InsertRegisteredDevice = z.infer<typeof insertRegisteredDeviceSchema>;
+export type EmcUser = typeof emcUsers.$inferSelect;
+export type InsertEmcUser = z.infer<typeof insertEmcUserSchema>;
+export type EmcSession = typeof emcSessions.$inferSelect;
+export type InsertEmcSession = z.infer<typeof insertEmcSessionSchema>;
 export type Tender = typeof tenders.$inferSelect;
 export type InsertTender = z.infer<typeof insertTenderSchema>;
 export type Discount = typeof discounts.$inferSelect;
