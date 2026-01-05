@@ -451,28 +451,30 @@ export function CheckPanel({
         </div>
       )}
 
-      <div className="flex-shrink-0 p-3 border-t bg-muted/30 space-y-2">
-        <Button
-          variant={unsentItems.length > 0 ? "default" : "secondary"}
-          size="lg"
-          className="w-full min-h-14 text-base font-semibold"
-          onClick={onSend}
-          disabled={isSending}
-          data-testid="button-send-order"
-        >
-          <Send className="w-5 h-5 mr-2" />
-          {unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
-        </Button>
-        <Button
-          size="lg"
-          className="w-full min-h-14 text-base font-semibold bg-green-600 hover:bg-green-700 text-white"
-          onClick={onPay}
-          disabled={!paymentsReady}
-          data-testid="button-pay"
-        >
-          <CreditCard className="w-5 h-5 mr-2" />
-          {paidAmount > 0 ? `Pay Balance ${formatPrice(balanceDue)}` : `Pay ${formatPrice(total)}`}
-        </Button>
+      <div className="flex-shrink-0 p-3 border-t bg-muted/30">
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant={unsentItems.length > 0 ? "default" : "secondary"}
+            size="lg"
+            className="aspect-square min-h-20 text-base font-semibold flex flex-col items-center justify-center gap-1"
+            onClick={onSend}
+            disabled={isSending}
+            data-testid="button-send-order"
+          >
+            <Send className="w-6 h-6" />
+            <span>{unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}</span>
+          </Button>
+          <Button
+            size="lg"
+            className="aspect-square min-h-20 text-base font-semibold bg-green-600 hover:bg-green-700 text-white flex flex-col items-center justify-center gap-1"
+            onClick={onPay}
+            disabled={!paymentsReady}
+            data-testid="button-pay"
+          >
+            <CreditCard className="w-6 h-6" />
+            <span>{paidAmount > 0 ? `Pay ${formatPrice(balanceDue)}` : `Pay ${formatPrice(total)}`}</span>
+          </Button>
+        </div>
       </div>
     </div>
   );

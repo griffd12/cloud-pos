@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3, CreditCard, Star, Wifi, WifiOff } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -379,6 +379,32 @@ export default function PosPage() {
     },
     onError: () => {
       toast({ title: "Failed to send order", variant: "destructive" });
+    },
+  });
+
+  // Cancel transaction - voids all unsent items without sending to KDS, then signs out
+  const cancelTransactionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/cancel-transaction", {
+        employeeId: currentEmployee?.id,
+        reason: "Transaction cancelled by cashier",
+      });
+      return response.json();
+    },
+    onSuccess: (data: { success: boolean; voidedCount: number; remainingActiveItems: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+      // Clear check state and sign out
+      setCurrentCheck(null);
+      setCheckItems([]);
+      if (data.voidedCount > 0) {
+        toast({ title: `Transaction cancelled - ${data.voidedCount} item(s) voided` });
+      }
+      logout();
+    },
+    onError: () => {
+      toast({ title: "Failed to cancel transaction", variant: "destructive" });
     },
   });
 
@@ -1074,16 +1100,15 @@ export default function PosPage() {
                       size="lg"
                       className="w-full h-full font-semibold"
                       onClick={() => {
-                        if (currentCheck && checkItems.length > 0) {
-                          setCurrentCheck(null);
-                          setCheckItems([]);
+                        if (currentCheck) {
+                          cancelTransactionMutation.mutate();
                         }
                       }}
-                      disabled={!currentCheck || checkItems.filter(i => !i.voided).length === 0}
-                      data-testid="button-clear-check-grid"
+                      disabled={!currentCheck || cancelTransactionMutation.isPending}
+                      data-testid="button-cancel-transaction-grid"
                     >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Clear
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
                     </Button>
                   </div>
                   <div className="h-14 flex-1 min-w-[100px]">
@@ -1205,16 +1230,15 @@ export default function PosPage() {
                       size="lg"
                       className="w-full h-full font-semibold"
                       onClick={() => {
-                        if (currentCheck && checkItems.length > 0) {
-                          setCurrentCheck(null);
-                          setCheckItems([]);
+                        if (currentCheck) {
+                          cancelTransactionMutation.mutate();
                         }
                       }}
-                      disabled={!currentCheck || checkItems.filter(i => !i.voided).length === 0}
-                      data-testid="button-clear-check"
+                      disabled={!currentCheck || cancelTransactionMutation.isPending}
+                      data-testid="button-cancel-transaction"
                     >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Clear
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
                     </Button>
                   </div>
                   <div className="h-14 flex-1 min-w-[100px]">

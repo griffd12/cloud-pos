@@ -2178,6 +2178,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Cancel transaction - void all unsent items without sending to KDS
+  // This allows abandoning current round items while keeping previously sent items
+  app.post("/api/checks/:id/cancel-transaction", async (req, res) => {
+    try {
+      const checkId = req.params.id;
+      const { employeeId, reason } = req.body;
+
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+
+      // Get all items on the check
+      const items = await storage.getCheckItems(checkId);
+      const unsentItems = items.filter((item) => !item.sent && !item.voided);
+      
+      // Also cancel any preview KDS tickets (dynamic mode tickets that haven't been finalized)
+      const allTickets = await storage.getKdsTickets();
+      const previewTicket = allTickets.find(t => t.checkId === checkId && t.isPreview);
+      if (previewTicket) {
+        // Remove all ticket items from the preview ticket first
+        const ticketItems = await storage.getKdsTicketItems(previewTicket.id);
+        for (const ticketItem of ticketItems) {
+          await storage.removeKdsTicketItem(previewTicket.id, ticketItem.checkItemId);
+        }
+        // Mark the preview ticket as bumped so it disappears from KDS queries
+        await storage.updateKdsTicket(previewTicket.id, { status: "bumped" });
+        broadcastKdsUpdate(check.rvcId);
+      }
+
+      // Void all unsent items with "transaction_cancelled" reason
+      const voidedItems: any[] = [];
+      for (const item of unsentItems) {
+        const voidedItem = await storage.updateCheckItem(item.id, {
+          voided: true,
+          voidReason: reason || "Transaction cancelled",
+          voidedAt: new Date(),
+        });
+        voidedItems.push(voidedItem);
+        
+        await storage.createAuditLog({
+          rvcId: check.rvcId,
+          employeeId,
+          action: "cancel_transaction_void",
+          targetType: "check_item",
+          targetId: item.id,
+          details: { 
+            menuItemName: item.menuItemName, 
+            reason: reason || "Transaction cancelled",
+            checkNumber: check.checkNumber,
+          },
+        });
+      }
+
+      // Recalculate check totals after voiding items
+      if (voidedItems.length > 0) {
+        await recalculateCheckTotals(checkId);
+      }
+
+      // If ALL items on the check are now voided (including previously sent ones), 
+      // check if the check should be considered empty
+      const remainingActiveItems = items.filter(i => !i.voided && i.id !== undefined)
+        .filter(i => !voidedItems.some(v => v.id === i.id));
+      
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "cancel_transaction",
+        targetType: "check",
+        targetId: checkId,
+        details: { 
+          checkNumber: check.checkNumber,
+          voidedItemCount: voidedItems.length,
+          remainingActiveItemCount: remainingActiveItems.length,
+          reason: reason || "Transaction cancelled",
+        },
+      });
+
+      res.json({ 
+        success: true, 
+        voidedCount: voidedItems.length,
+        remainingActiveItems: remainingActiveItems.length,
+      });
+    } catch (error) {
+      console.error("Cancel transaction error:", error);
+      res.status(400).json({ message: "Failed to cancel transaction" });
+    }
+  });
+
   // Update check item modifiers (only for unsent items or pending items in dynamic mode)
   app.patch("/api/check-items/:id/modifiers", async (req, res) => {
     try {
