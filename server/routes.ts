@@ -2,6 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import Stripe from "stripe";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { resolveBusinessDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
@@ -9554,6 +9556,237 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Delete registered device error:", error);
       res.status(500).json({ message: "Failed to delete registered device" });
+    }
+  });
+
+  // ============================================================================
+  // EMC (Enterprise Management Console) - Email/Password Authentication
+  // Accessible from any browser worldwide for system configuration
+  // ============================================================================
+
+  // Check if first-time setup is required (no EMC users exist)
+  app.get("/api/emc/setup-required", async (req, res) => {
+    try {
+      const userCount = await storage.getEmcUserCount();
+      res.json({ setupRequired: userCount === 0 });
+    } catch (error) {
+      console.error("EMC setup check error:", error);
+      res.status(500).json({ message: "Failed to check EMC setup status" });
+    }
+  });
+
+  // First-time setup - create initial admin user
+  app.post("/api/emc/setup", async (req, res) => {
+    try {
+      const userCount = await storage.getEmcUserCount();
+      if (userCount > 0) {
+        return res.status(400).json({ message: "Setup has already been completed" });
+      }
+
+      const { email, password, displayName, enterpriseId } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+
+      // Hash password with bcrypt (10 salt rounds)
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const user = await storage.createEmcUser({
+        email: email.toLowerCase(),
+        passwordHash,
+        displayName: displayName || email.split("@")[0],
+        role: "enterprise_admin", // First user gets highest level access
+        enterpriseId: enterpriseId || null,
+        propertyId: null,
+        isActive: true,
+      });
+
+      // Create session
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      await storage.createEmcSession({
+        userId: user.id,
+        sessionToken,
+        expiresAt,
+        ipAddress: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+        },
+        sessionToken,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("EMC setup error:", error);
+      res.status(500).json({ message: "Failed to complete setup" });
+    }
+  });
+
+  // EMC Login - email/password authentication
+  app.post("/api/emc/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      const user = await storage.getEmcUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      if (!user.isActive) {
+        return res.status(401).json({ message: "Account is disabled" });
+      }
+
+      // Verify password using bcrypt
+      const passwordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordValid) {
+        // Update failed login count
+        await storage.updateEmcUser(user.id, {
+          failedLoginAttempts: (user.failedLoginAttempts || 0) + 1,
+          lastFailedLogin: new Date(),
+        });
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // Successful login - reset failed attempts
+      await storage.updateEmcUser(user.id, {
+        failedLoginAttempts: 0,
+        lastLoginAt: new Date(),
+      });
+
+      // Create session
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      await storage.createEmcSession({
+        userId: user.id,
+        sessionToken,
+        expiresAt,
+        ipAddress: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+          enterpriseId: user.enterpriseId,
+          propertyId: user.propertyId,
+        },
+        sessionToken,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("EMC login error:", error);
+      res.status(500).json({ message: "Failed to login" });
+    }
+  });
+
+  // EMC Session validation - check if session is still valid
+  app.post("/api/emc/validate-session", async (req, res) => {
+    try {
+      const { sessionToken } = req.body;
+
+      if (!sessionToken) {
+        return res.status(401).json({ valid: false, message: "No session token provided" });
+      }
+
+      const session = await storage.getEmcSessionByToken(sessionToken);
+      if (!session) {
+        return res.status(401).json({ valid: false, message: "Invalid or expired session" });
+      }
+
+      const user = await storage.getEmcUser(session.userId);
+      if (!user || !user.isActive) {
+        return res.status(401).json({ valid: false, message: "User account is disabled" });
+      }
+
+      res.json({
+        valid: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+          enterpriseId: user.enterpriseId,
+          propertyId: user.propertyId,
+        },
+        session: {
+          expiresAt: session.expiresAt,
+        },
+      });
+    } catch (error) {
+      console.error("EMC session validation error:", error);
+      res.status(500).json({ valid: false, message: "Failed to validate session" });
+    }
+  });
+
+  // EMC Logout - invalidate session
+  app.post("/api/emc/logout", async (req, res) => {
+    try {
+      const { sessionToken } = req.body;
+
+      if (sessionToken) {
+        const session = await storage.getEmcSessionByToken(sessionToken);
+        if (session) {
+          await storage.deleteEmcSession(session.id);
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("EMC logout error:", error);
+      res.status(500).json({ message: "Failed to logout" });
+    }
+  });
+
+  // Get current EMC user info
+  app.get("/api/emc/me", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "No session token provided" });
+      }
+
+      const sessionToken = authHeader.slice(7);
+      const session = await storage.getEmcSessionByToken(sessionToken);
+      if (!session) {
+        return res.status(401).json({ message: "Invalid or expired session" });
+      }
+
+      const user = await storage.getEmcUser(session.userId);
+      if (!user || !user.isActive) {
+        return res.status(401).json({ message: "User account is disabled" });
+      }
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        enterpriseId: user.enterpriseId,
+        propertyId: user.propertyId,
+      });
+    } catch (error) {
+      console.error("EMC get user error:", error);
+      res.status(500).json({ message: "Failed to get user info" });
     }
   });
 

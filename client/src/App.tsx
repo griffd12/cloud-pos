@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PosProvider } from "@/lib/pos-context";
 import { DeviceProvider, useDeviceContext } from "@/lib/device-context";
+import { EmcProvider } from "@/lib/emc-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -13,6 +14,8 @@ import PosPage from "@/pages/pos";
 import KdsPage from "@/pages/kds";
 import DeviceSetupPage from "@/pages/device-setup";
 import AdminLayout from "@/pages/admin/index";
+import EmcLoginPage from "@/pages/emc/login";
+import EmcSetupPage from "@/pages/emc/setup";
 
 function GlobalWebSocket() {
   usePosWebSocket();
@@ -50,6 +53,19 @@ function DeviceGuardedRoute({
 function Router() {
   const { deviceType, isConfigured } = useDeviceContext();
   const [location] = useLocation();
+  
+  // EMC routes bypass device enrollment completely - accessible from any browser
+  if (location.startsWith("/emc")) {
+    return (
+      <EmcProvider>
+        <Switch>
+          <Route path="/emc/login" component={EmcLoginPage} />
+          <Route path="/emc/setup" component={EmcSetupPage} />
+          <Route path="/emc" component={EmcLoginPage} />
+        </Switch>
+      </EmcProvider>
+    );
+  }
   
   // Handle unconfigured devices - redirect to setup except if already there
   if (!isConfigured && location !== "/setup") {
