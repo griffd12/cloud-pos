@@ -1768,6 +1768,7 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
+                      { key: 'subtotal', header: 'Subtotal', format: commonFormatters.currency },
                       { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
@@ -1783,6 +1784,7 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
+                      { key: 'subtotal', header: 'Subtotal', format: commonFormatters.currency },
                       { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
@@ -1798,6 +1800,7 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
+                      { key: 'subtotal', header: 'Subtotal', format: commonFormatters.currency },
                       { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
@@ -1818,6 +1821,7 @@ export default function ReportsPage() {
                     <TableHead>Check #</TableHead>
                     <TableHead>Employee</TableHead>
                     <TableHead>RVC</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
                     <TableHead className="text-right">Tax</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
@@ -1836,6 +1840,7 @@ export default function ReportsPage() {
                       <TableCell className="font-medium">{check.checkNumber}</TableCell>
                       <TableCell>{check.employeeName}</TableCell>
                       <TableCell>{check.rvcName}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(check.subtotal)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(check.tax)}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(check.total)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(check.totalPaid)}</TableCell>
@@ -1845,7 +1850,7 @@ export default function ReportsPage() {
                   ))}
                   {(!closedChecksData?.checks || closedChecksData.checks.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">
                         No closed checks in selected period
                       </TableCell>
                     </TableRow>
