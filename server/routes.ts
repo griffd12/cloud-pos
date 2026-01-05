@@ -590,14 +590,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
   // DEVICE TOKEN MIDDLEWARE - Protects POS/KDS routes from unenrolled browsers
   // Routes exempt from device token validation:
-  // - /api/emc/* (EMC uses session-based auth)
-  // - /api/registered-devices/enroll (device enrollment process)
-  // - /api/registered-devices/validate (token validation)
+  // - /emc/* (EMC uses session-based auth)
+  // - /registered-devices/enroll (device enrollment process)
+  // - /registered-devices/validate (token validation)
+  // Note: req.path inside app.use('/api') omits the /api prefix
   // ============================================================================
   const deviceTokenExemptRoutes = [
-    /^\/api\/emc\/.*/,
-    /^\/api\/registered-devices\/enroll$/,
-    /^\/api\/registered-devices\/validate$/,
+    /^\/emc(\/.*)?$/,                      // EMC routes (session-based auth)
+    /^\/registered-devices\/enroll$/,       // Device enrollment
+    /^\/registered-devices\/validate$/,     // Token validation
   ];
 
   app.use("/api", async (req, res, next) => {
@@ -610,9 +611,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Get device token from header
     const deviceToken = req.headers["x-device-token"] as string;
     if (!deviceToken) {
-      // For now, allow requests without token to support gradual rollout
-      // In production, this should return 401 for all non-EMC routes
-      return next();
+      // Block requests without device token for POS/KDS routes
+      return res.status(401).json({ 
+        message: "Device not enrolled. Please complete device enrollment.",
+        code: "DEVICE_TOKEN_REQUIRED"
+      });
     }
 
     // Validate device token
@@ -621,7 +624,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     if (!device || device.status !== "enrolled") {
       return res.status(401).json({ 
-        message: "Invalid or revoked device token",
+        message: "Invalid or revoked device token. Please re-enroll this device.",
         code: "DEVICE_TOKEN_INVALID"
       });
     }
