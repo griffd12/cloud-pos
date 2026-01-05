@@ -2147,6 +2147,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
 
+      // DUPLICATE PREVENTION: If paymentTransactionId looks like a check payment ID (from Stripe record-payment),
+      // check if this payment already exists to avoid creating duplicates
+      if (paymentTransactionId) {
+        const existingPayments = await storage.getPayments(checkId);
+        const alreadyExists = existingPayments.find(p => p.id === paymentTransactionId);
+        if (alreadyExists) {
+          // Payment already recorded (likely from /api/stripe/record-payment), skip creation
+          const check = await storage.getCheck(checkId);
+          const paidAmount = existingPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+          console.log("Payment already exists, skipping duplicate creation for:", paymentTransactionId);
+          broadcastPaymentUpdate(checkId);
+          return res.json({ ...check, paidAmount, payment: alreadyExists });
+        }
+      }
+
       // Get property for business date calculation
       const checkForBiz = await storage.getCheck(checkId);
       let businessDate: string | undefined;

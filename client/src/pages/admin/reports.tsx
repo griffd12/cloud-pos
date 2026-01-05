@@ -15,8 +15,10 @@ import { Separator } from "@/components/ui/separator";
 import { 
   DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, 
   Banknote, Smartphone, Package, Layers, ChevronDown, ChevronRight, BarChart3,
-  FileText, UserCheck, Timer, GitCompare, X
+  FileText, UserCheck, Timer, GitCompare, X, Download
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { exportData, commonFormatters } from "@/lib/export-utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { type Property, type Rvc, type CheckItem } from "@shared/schema";
 
@@ -1191,8 +1193,63 @@ export default function ReportsPage() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <CardTitle className="text-base">Recent Transactions</CardTitle>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-export-transactions">
+                      <Download className="h-4 w-4 mr-1" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem 
+                      onClick={() => exportData('csv', tenderData?.transactions || [], [
+                        { key: 'checkNumber', header: 'Check #' },
+                        { key: 'tenderName', header: 'Tender' },
+                        { key: 'tenderType', header: 'Type' },
+                        { key: 'amount', header: 'Amount', format: commonFormatters.currency },
+                        { key: 'tipAmount', header: 'Tip', format: commonFormatters.currency },
+                        { key: 'employeeName', header: 'Employee' },
+                        { key: 'rvcName', header: 'RVC' },
+                        { key: 'paidAt', header: 'Time', format: commonFormatters.dateTime },
+                      ], `tender-transactions-${new Date().toISOString().split('T')[0]}`, 'Tender Transactions')}
+                      data-testid="menu-export-csv"
+                    >
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => exportData('excel', tenderData?.transactions || [], [
+                        { key: 'checkNumber', header: 'Check #' },
+                        { key: 'tenderName', header: 'Tender' },
+                        { key: 'tenderType', header: 'Type' },
+                        { key: 'amount', header: 'Amount', format: commonFormatters.currency },
+                        { key: 'tipAmount', header: 'Tip', format: commonFormatters.currency },
+                        { key: 'employeeName', header: 'Employee' },
+                        { key: 'rvcName', header: 'RVC' },
+                        { key: 'paidAt', header: 'Time', format: commonFormatters.dateTime },
+                      ], `tender-transactions-${new Date().toISOString().split('T')[0]}`, 'Tender Transactions')}
+                      data-testid="menu-export-excel"
+                    >
+                      Export as Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => exportData('pdf', tenderData?.transactions || [], [
+                        { key: 'checkNumber', header: 'Check #' },
+                        { key: 'tenderName', header: 'Tender' },
+                        { key: 'tenderType', header: 'Type' },
+                        { key: 'amount', header: 'Amount', format: commonFormatters.currency },
+                        { key: 'tipAmount', header: 'Tip', format: commonFormatters.currency },
+                        { key: 'employeeName', header: 'Employee' },
+                        { key: 'rvcName', header: 'RVC' },
+                        { key: 'paidAt', header: 'Time', format: commonFormatters.dateTime },
+                      ], `tender-transactions-${new Date().toISOString().split('T')[0]}`, 'Tender Transactions Report')}
+                      data-testid="menu-export-pdf"
+                    >
+                      Export as PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1281,8 +1338,51 @@ export default function ReportsPage() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-base">Item Sales Detail</CardTitle>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="button-export-items">
+                    <Download className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('csv', menuItemData?.items || [], [
+                      { key: 'name', header: 'Item' },
+                      { key: 'category', header: 'Category' },
+                      { key: 'quantity', header: 'Quantity' },
+                      { key: 'avgPrice', header: 'Avg Price', format: commonFormatters.currency },
+                      { key: 'netSales', header: 'Net Sales', format: commonFormatters.currency },
+                    ], `item-sales-${new Date().toISOString().split('T')[0]}`, 'Item Sales')}
+                  >
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('excel', menuItemData?.items || [], [
+                      { key: 'name', header: 'Item' },
+                      { key: 'category', header: 'Category' },
+                      { key: 'quantity', header: 'Quantity' },
+                      { key: 'avgPrice', header: 'Avg Price', format: commonFormatters.currency },
+                      { key: 'netSales', header: 'Net Sales', format: commonFormatters.currency },
+                    ], `item-sales-${new Date().toISOString().split('T')[0]}`, 'Item Sales')}
+                  >
+                    Export as Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('pdf', menuItemData?.items || [], [
+                      { key: 'name', header: 'Item' },
+                      { key: 'category', header: 'Category' },
+                      { key: 'quantity', header: 'Quantity' },
+                      { key: 'avgPrice', header: 'Avg Price', format: commonFormatters.currency },
+                      { key: 'netSales', header: 'Net Sales', format: commonFormatters.currency },
+                    ], `item-sales-${new Date().toISOString().split('T')[0]}`, 'Item Sales Report')}
+                  >
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1438,8 +1538,62 @@ export default function ReportsPage() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-base">Open Checks</CardTitle>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="button-export-open-checks">
+                    <Download className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('csv', openChecksData?.checks || [], [
+                      { key: 'checkNumber', header: 'Check #' },
+                      { key: 'employeeName', header: 'Employee' },
+                      { key: 'rvcName', header: 'RVC' },
+                      { key: 'tableNumber', header: 'Table' },
+                      { key: 'itemCount', header: 'Items' },
+                      { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'durationMinutes', header: 'Duration (min)' },
+                      { key: 'openedAt', header: 'Opened', format: commonFormatters.dateTime },
+                      { key: 'businessDate', header: 'Business Date' },
+                    ], `open-checks-${new Date().toISOString().split('T')[0]}`, 'Open Checks')}
+                  >
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('excel', openChecksData?.checks || [], [
+                      { key: 'checkNumber', header: 'Check #' },
+                      { key: 'employeeName', header: 'Employee' },
+                      { key: 'rvcName', header: 'RVC' },
+                      { key: 'tableNumber', header: 'Table' },
+                      { key: 'itemCount', header: 'Items' },
+                      { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'durationMinutes', header: 'Duration (min)' },
+                      { key: 'openedAt', header: 'Opened', format: commonFormatters.dateTime },
+                      { key: 'businessDate', header: 'Business Date' },
+                    ], `open-checks-${new Date().toISOString().split('T')[0]}`, 'Open Checks')}
+                  >
+                    Export as Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('pdf', openChecksData?.checks || [], [
+                      { key: 'checkNumber', header: 'Check #' },
+                      { key: 'employeeName', header: 'Employee' },
+                      { key: 'rvcName', header: 'RVC' },
+                      { key: 'tableNumber', header: 'Table' },
+                      { key: 'itemCount', header: 'Items' },
+                      { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'durationMinutes', header: 'Duration (min)' },
+                      { key: 'openedAt', header: 'Opened', format: commonFormatters.dateTime },
+                    ], `open-checks-${new Date().toISOString().split('T')[0]}`, 'Open Checks Report')}
+                  >
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1536,8 +1690,62 @@ export default function ReportsPage() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-base">Closed Checks</CardTitle>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="button-export-closed-checks">
+                    <Download className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('csv', closedChecksData?.checks || [], [
+                      { key: 'checkNumber', header: 'Check #' },
+                      { key: 'employeeName', header: 'Employee' },
+                      { key: 'rvcName', header: 'RVC' },
+                      { key: 'taxTotal', header: 'Tax', format: commonFormatters.currency },
+                      { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'paidAmount', header: 'Paid', format: commonFormatters.currency },
+                      { key: 'durationMinutes', header: 'Duration (min)' },
+                      { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
+                      { key: 'businessDate', header: 'Business Date' },
+                    ], `closed-checks-${new Date().toISOString().split('T')[0]}`, 'Closed Checks')}
+                  >
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('excel', closedChecksData?.checks || [], [
+                      { key: 'checkNumber', header: 'Check #' },
+                      { key: 'employeeName', header: 'Employee' },
+                      { key: 'rvcName', header: 'RVC' },
+                      { key: 'taxTotal', header: 'Tax', format: commonFormatters.currency },
+                      { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'paidAmount', header: 'Paid', format: commonFormatters.currency },
+                      { key: 'durationMinutes', header: 'Duration (min)' },
+                      { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
+                      { key: 'businessDate', header: 'Business Date' },
+                    ], `closed-checks-${new Date().toISOString().split('T')[0]}`, 'Closed Checks')}
+                  >
+                    Export as Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => exportData('pdf', closedChecksData?.checks || [], [
+                      { key: 'checkNumber', header: 'Check #' },
+                      { key: 'employeeName', header: 'Employee' },
+                      { key: 'rvcName', header: 'RVC' },
+                      { key: 'taxTotal', header: 'Tax', format: commonFormatters.currency },
+                      { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'paidAmount', header: 'Paid', format: commonFormatters.currency },
+                      { key: 'durationMinutes', header: 'Duration (min)' },
+                      { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
+                    ], `closed-checks-${new Date().toISOString().split('T')[0]}`, 'Closed Checks Report')}
+                  >
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CardHeader>
             <CardContent>
               <Table>
