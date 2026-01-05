@@ -52,7 +52,7 @@ export default function EmcLoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/admin");
+      navigate("/emc/dashboard");
     }
   }, [isAuthenticated, navigate]);
 
@@ -64,7 +64,7 @@ export default function EmcLoginPage() {
         title: "Login successful",
         description: "Welcome to the Enterprise Management Console",
       });
-      navigate("/admin");
+      navigate("/emc/dashboard");
     } catch (error) {
       toast({
         variant: "destructive",
