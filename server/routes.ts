@@ -5625,22 +5625,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }, 0);
         }
         
-        const sales = (price + modifierUpcharge) * qty;
+        // Calculate gross extended price
+        const grossSales = (price + modifierUpcharge) * qty;
+        
+        // Subtract item-level discount to get net revenue
+        const discountAmount = parseFloat(ci.discountAmount || "0");
+        const netSales = grossSales - discountAmount;
         
         categoryData[sluId].totalQuantity += qty;
-        categoryData[sluId].totalSales += sales;
+        categoryData[sluId].totalSales += netSales;
         
         // Add to items list
         const existingItem = categoryData[sluId].items.find(i => i.id === ci.menuItemId);
         if (existingItem) {
           existingItem.quantity += qty;
-          existingItem.sales += sales;
+          existingItem.sales += netSales;
         } else {
           categoryData[sluId].items.push({
             id: ci.menuItemId,
             name: menuItem.name,
             quantity: qty,
-            sales: sales,
+            sales: netSales,
           });
         }
       }
