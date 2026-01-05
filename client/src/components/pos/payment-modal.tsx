@@ -300,11 +300,13 @@ export function PaymentModal({
     setIsProcessingGiftCard(true);
     
     try {
-      // Redeem the gift card
-      const res = await apiRequest("POST", `/api/gift-cards/${giftCardLookup.id}/redeem`, {
+      // Redeem the gift card using POS endpoint with card number
+      const res = await apiRequest("POST", "/api/pos/gift-cards/redeem", {
+        cardNumber: giftCardLookup.cardNumber,
         amount: amount.toString(),
+        propertyId,
+        employeeId,
         checkId: check.id,
-        referenceNumber: `CHK-${check.id}`,
         pin: giftCardPin || undefined,
       });
       
@@ -320,13 +322,13 @@ export function PaymentModal({
       }
       
       // Record the payment on the check
-      onPayment(giftCardTender.id, result.redeemedAmount || amount, false);
+      onPayment(giftCardTender.id, result.amountRedeemed ? parseFloat(result.amountRedeemed) : amount, false);
       resetGiftCardEntry();
       
-      const remainingCardBalance = parseFloat(result.giftCard?.currentBalance || "0");
+      const remainingCardBalance = parseFloat(result.remainingBalance || "0");
       toast({
         title: "Gift Card Applied",
-        description: `$${(result.redeemedAmount || amount).toFixed(2)} redeemed. Remaining card balance: $${remainingCardBalance.toFixed(2)}`,
+        description: `$${amount.toFixed(2)} redeemed. Remaining card balance: $${remainingCardBalance.toFixed(2)}`,
       });
       
     } catch (error: any) {
