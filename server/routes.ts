@@ -6716,9 +6716,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Calculate real-time hours for open shifts (clocked in but not out)
       const now = new Date();
       const enhancedTimecards = timecards.map(tc => {
-        // Debug logging
-        console.log(`Timecard ${tc.id}: clockInTime=${tc.clockInTime}, clockOutTime=${tc.clockOutTime}, status=${tc.status}`);
-        
         // If shift is still open (has clock in but no clock out), calculate running totals
         if (tc.clockInTime && !tc.clockOutTime) {
           const clockIn = new Date(tc.clockInTime);
