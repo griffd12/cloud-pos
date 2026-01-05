@@ -7,13 +7,6 @@ import type { Employee, Rvc, Property, Timecard, JobCode, Workstation } from "@s
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -107,6 +100,17 @@ export default function LoginPage() {
       setCurrentWorkstation(wsContext.workstation);
     }
   }, [wsContext, setCurrentWorkstation]);
+  
+  // Auto-select RVC from workstation configuration (device-locked, no manual selection)
+  useEffect(() => {
+    if (wsContext?.workstation?.rvcId) {
+      // Use the workstation's assigned RVC - no user selection allowed
+      setSelectedRvcId(wsContext.workstation.rvcId);
+    } else if (rvcs.length === 1) {
+      // If only one RVC available, auto-select it
+      setSelectedRvcId(rvcs[0].id);
+    }
+  }, [wsContext, rvcs]);
 
   const loginMutation = useMutation({
     mutationFn: async (pinCode: string) => {
@@ -340,18 +344,6 @@ export default function LoginPage() {
     setClockStep("pin");
   };
 
-  // Initialize selectedRvcId from saved currentRvc or default to first RVC
-  useEffect(() => {
-    if (rvcs.length > 0 && !selectedRvcId) {
-      // If there's a saved RVC from previous session, use that
-      if (currentRvc && rvcs.find(r => r.id === currentRvc.id)) {
-        setSelectedRvcId(currentRvc.id);
-      } else {
-        // Otherwise default to first RVC
-        setSelectedRvcId(rvcs[0].id);
-      }
-    }
-  }, [rvcs, selectedRvcId, currentRvc]);
 
   useEffect(() => {
     if (currentEmployee && currentRvc) {
@@ -509,32 +501,42 @@ export default function LoginPage() {
               )}
             </div>
 
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-medium flex items-center gap-2">
-                  <Building2 className="w-4 h-4" />
-                  Select Location
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select
-                  value={selectedRvcId}
-                  onValueChange={setSelectedRvcId}
-                  disabled={rvcsLoading}
-                >
-                  <SelectTrigger data-testid="select-rvc-login">
-                    <SelectValue placeholder="Select Revenue Center..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rvcs.map((rvc) => (
-                      <SelectItem key={rvc.id} value={rvc.id}>
-                        {rvc.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
+            {/* Show location info (read-only, device-locked) */}
+            {selectedRvc && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Location
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-medium" data-testid="text-rvc-name">{selectedRvc.name}</div>
+                      <div className="text-xs text-muted-foreground">Device locked to this location</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Show error if no RVC is configured for this workstation */}
+            {!selectedRvcId && !rvcsLoading && workstationId && (
+              <Card className="border-destructive">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-medium flex items-center gap-2 text-destructive">
+                    <XCircle className="w-4 h-4" />
+                    Configuration Error
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    This workstation does not have an RVC assigned. Please configure the workstation in the EMC Admin panel.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {selectedRvcId && (
               <>
