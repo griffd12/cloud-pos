@@ -1558,7 +1558,6 @@ export default function ReportsPage() {
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'openedAt', header: 'Opened', format: commonFormatters.dateTime },
-                      { key: 'businessDate', header: 'Business Date' },
                     ], `open-checks-${new Date().toISOString().split('T')[0]}`, 'Open Checks')}
                   >
                     Export as CSV
@@ -1573,7 +1572,6 @@ export default function ReportsPage() {
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'openedAt', header: 'Opened', format: commonFormatters.dateTime },
-                      { key: 'businessDate', header: 'Business Date' },
                     ], `open-checks-${new Date().toISOString().split('T')[0]}`, 'Open Checks')}
                   >
                     Export as Excel
@@ -1705,9 +1703,9 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
-                      { key: 'taxTotal', header: 'Tax', format: commonFormatters.currency },
+                      { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
-                      { key: 'paidAmount', header: 'Paid', format: commonFormatters.currency },
+                      { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
                       { key: 'businessDate', header: 'Business Date' },
@@ -1720,9 +1718,9 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
-                      { key: 'taxTotal', header: 'Tax', format: commonFormatters.currency },
+                      { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
-                      { key: 'paidAmount', header: 'Paid', format: commonFormatters.currency },
+                      { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
                       { key: 'businessDate', header: 'Business Date' },
@@ -1735,11 +1733,12 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
-                      { key: 'taxTotal', header: 'Tax', format: commonFormatters.currency },
+                      { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
-                      { key: 'paidAmount', header: 'Paid', format: commonFormatters.currency },
+                      { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
+                      { key: 'businessDate', header: 'Business Date' },
                     ], `closed-checks-${new Date().toISOString().split('T')[0]}`, 'Closed Checks Report')}
                   >
                     Export as PDF
