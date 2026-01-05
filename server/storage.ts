@@ -318,6 +318,7 @@ export interface IStorage {
   getOpenChecks(rvcId: string): Promise<Check[]>;
   createCheck(data: InsertCheck): Promise<Check>;
   updateCheck(id: string, data: Partial<Check>): Promise<Check | undefined>;
+  deleteCheck(id: string): Promise<boolean>;
   getNextCheckNumber(rvcId: string): Promise<number>;
 
   // Check Items
@@ -325,6 +326,7 @@ export interface IStorage {
   getCheckItem(id: string): Promise<CheckItem | undefined>;
   createCheckItem(data: InsertCheckItem): Promise<CheckItem>;
   updateCheckItem(id: string, data: Partial<CheckItem>): Promise<CheckItem | undefined>;
+  deleteCheckItem(id: string): Promise<boolean>;
 
   // Rounds
   createRound(data: InsertRound): Promise<Round>;
@@ -1605,6 +1607,11 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async deleteCheck(id: string): Promise<boolean> {
+    const result = await db.delete(checks).where(eq(checks.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async getNextCheckNumber(rvcId: string): Promise<number> {
     const result = await db.select({ maxNum: sql<number>`COALESCE(MAX(${checks.checkNumber}), 0)` })
       .from(checks)
@@ -1630,6 +1637,11 @@ export class DatabaseStorage implements IStorage {
   async updateCheckItem(id: string, data: Partial<CheckItem>): Promise<CheckItem | undefined> {
     const [result] = await db.update(checkItems).set(data).where(eq(checkItems.id, id)).returning();
     return result;
+  }
+
+  async deleteCheckItem(id: string): Promise<boolean> {
+    const result = await db.delete(checkItems).where(eq(checkItems.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Rounds
@@ -1949,7 +1961,8 @@ export class DatabaseStorage implements IStorage {
 
   // KDS Tickets
   async getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string; propertyId?: string }): Promise<any[]> {
-    const conditions = [sql`${kdsTickets.status} != 'bumped'`];
+    // Filter out bumped AND voided tickets - voided means cancelled/auto-bumped
+    const conditions = [sql`${kdsTickets.status} NOT IN ('bumped', 'voided')`];
     
     if (filters?.rvcId) {
       conditions.push(eq(kdsTickets.rvcId, filters.rvcId));

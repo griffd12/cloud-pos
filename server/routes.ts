@@ -2179,7 +2179,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Cancel transaction - void all unsent items without sending to KDS
-  // This allows abandoning current round items while keeping previously sent items
+  // Scenario 1: New check with only unsent items -> Close the check as voided (zero balance)
+  // Scenario 2: Existing check with previous rounds + new items -> void only new items, keep previous rounds
   app.post("/api/checks/:id/cancel-transaction", async (req, res) => {
     try {
       const checkId = req.params.id;
@@ -2190,22 +2191,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Check not found" });
       }
 
-      // Get all items on the check
-      const items = await storage.getCheckItems(checkId);
-      const unsentItems = items.filter((item) => !item.sent && !item.voided);
+      // Get all items on the check BEFORE voiding
+      const itemsBeforeVoid = await storage.getCheckItems(checkId);
+      const unsentItems = itemsBeforeVoid.filter((item) => !item.sent && !item.voided);
+      const previouslySentItems = itemsBeforeVoid.filter((item) => item.sent && !item.voided);
       
-      // Also cancel any preview KDS tickets (dynamic mode tickets that haven't been finalized)
+      // Cancel any KDS tickets associated with unsent items (preview tickets)
+      // Mark them as "voided" so KDS will auto-bump (filter them out)
       const allTickets = await storage.getKdsTickets();
-      const previewTicket = allTickets.find(t => t.checkId === checkId && t.isPreview);
-      if (previewTicket) {
-        // Remove all ticket items from the preview ticket first
-        const ticketItems = await storage.getKdsTicketItems(previewTicket.id);
-        for (const ticketItem of ticketItems) {
-          await storage.removeKdsTicketItem(previewTicket.id, ticketItem.checkItemId);
+      const checkTickets = allTickets.filter((t: any) => t.checkId === checkId);
+      for (const ticket of checkTickets) {
+        // If this is a preview ticket or contains only unsent items, mark as voided
+        if ((ticket as any).isPreview) {
+          const ticketItems = await storage.getKdsTicketItems(ticket.id);
+          for (const ticketItem of ticketItems) {
+            await storage.removeKdsTicketItem(ticket.id, ticketItem.checkItemId);
+          }
+          await storage.updateKdsTicket(ticket.id, { status: "voided" });
         }
-        // Mark the preview ticket as bumped so it disappears from KDS queries
-        await storage.updateKdsTicket(previewTicket.id, { status: "bumped" });
-        broadcastKdsUpdate(check.rvcId);
       }
 
       // Void all unsent items with "transaction_cancelled" reason
@@ -2232,34 +2235,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      // Recalculate check totals after voiding items
+      // Always recalculate check totals after voiding items
       if (voidedItems.length > 0) {
         await recalculateCheckTotals(checkId);
       }
 
-      // If ALL items on the check are now voided (including previously sent ones), 
-      // check if the check should be considered empty
-      const remainingActiveItems = items.filter(i => !i.voided && i.id !== undefined)
-        .filter(i => !voidedItems.some(v => v.id === i.id));
+      // Determine what to do with the check based on whether there are previous rounds
+      let checkClosed = false;
       
-      await storage.createAuditLog({
-        rvcId: check.rvcId,
-        employeeId,
-        action: "cancel_transaction",
-        targetType: "check",
-        targetId: checkId,
-        details: { 
-          checkNumber: check.checkNumber,
-          voidedItemCount: voidedItems.length,
-          remainingActiveItemCount: remainingActiveItems.length,
-          reason: reason || "Transaction cancelled",
-        },
-      });
+      if (previouslySentItems.length === 0) {
+        // Scenario 1: No previous rounds, close the check as voided
+        // Don't delete - mark as closed for auditability
+        await storage.updateCheck(checkId, { 
+          status: "closed",
+          closedAt: new Date(),
+        });
+        checkClosed = true;
+        
+        await storage.createAuditLog({
+          rvcId: check.rvcId,
+          employeeId,
+          action: "cancel_transaction_close",
+          targetType: "check",
+          targetId: checkId,
+          details: { 
+            checkNumber: check.checkNumber,
+            reason: reason || "Transaction cancelled - check closed",
+          },
+        });
+      } else {
+        // Scenario 2: Previous rounds exist, keep check open with recalculated totals
+        await storage.createAuditLog({
+          rvcId: check.rvcId,
+          employeeId,
+          action: "cancel_transaction",
+          targetType: "check",
+          targetId: checkId,
+          details: { 
+            checkNumber: check.checkNumber,
+            voidedItemCount: voidedItems.length,
+            remainingActiveItemCount: previouslySentItems.length,
+            reason: reason || "Transaction cancelled - current round voided",
+          },
+        });
+      }
+
+      // Always broadcast KDS update so cancelled tickets disappear
+      broadcastKdsUpdate(check.rvcId);
+
+      // Get the updated check to return to the client
+      const updatedCheck = await storage.getCheck(checkId);
+      const updatedItems = await storage.getCheckItems(checkId);
 
       res.json({ 
         success: true, 
         voidedCount: voidedItems.length,
-        remainingActiveItems: remainingActiveItems.length,
+        remainingActiveItems: previouslySentItems.length,
+        checkClosed,
+        check: updatedCheck,
+        items: updatedItems,
       });
     } catch (error) {
       console.error("Cancel transaction error:", error);
