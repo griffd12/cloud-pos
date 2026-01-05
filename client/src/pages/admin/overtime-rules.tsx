@@ -268,6 +268,12 @@ export default function OvertimeRulesPage() {
                     <p className="text-sm text-muted-foreground">OT Multiplier</p>
                     <p className="text-lg font-medium">{activeRule.overtimeMultiplier}x</p>
                   </div>
+                  {activeRule.enableDailyDoubleTime && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Double OT Multiplier</p>
+                      <p className="text-lg font-medium">{activeRule.doubleTimeMultiplier}x</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -285,6 +291,7 @@ export default function OvertimeRulesPage() {
                     <TableHead>Daily OT</TableHead>
                     <TableHead>Daily Double</TableHead>
                     <TableHead>Weekly OT</TableHead>
+                    <TableHead>Multipliers</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -308,6 +315,14 @@ export default function OvertimeRulesPage() {
                       </TableCell>
                       <TableCell>
                         {rule.enableWeeklyOvertime ? `After ${rule.weeklyOvertimeThreshold}h` : "Disabled"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <span>{rule.overtimeMultiplier}x</span>
+                          {rule.enableDailyDoubleTime && (
+                            <span className="text-muted-foreground"> / {rule.doubleTimeMultiplier}x</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={rule.active ? "default" : "secondary"}>
