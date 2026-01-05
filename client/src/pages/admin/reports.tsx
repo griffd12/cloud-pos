@@ -2,6 +2,26 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const EMC_SESSION_KEY = "emc_session_token";
+const DEVICE_TOKEN_KEY = "pos_device_token";
+
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const emcToken = localStorage.getItem(EMC_SESSION_KEY);
+  if (emcToken) {
+    headers["X-EMC-Session"] = emcToken;
+  }
+  const deviceToken = localStorage.getItem(DEVICE_TOKEN_KEY);
+  if (deviceToken) {
+    headers["X-Device-Token"] = deviceToken;
+  }
+  return headers;
+}
+
+async function authFetch(url: string): Promise<Response> {
+  return fetch(url, { headers: getAuthHeaders() });
+}
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -511,7 +531,7 @@ export default function ReportsPage() {
   const { data: salesSummary, isLoading: summaryLoading } = useQuery<SalesSummary>({
     queryKey: ["/api/reports/sales-summary", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/sales-summary"));
+      const res = await authFetch(buildUrl("/api/reports/sales-summary"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -520,7 +540,7 @@ export default function ReportsPage() {
   const { data: categorySales = [] } = useQuery<CategorySale[]>({
     queryKey: ["/api/reports/sales-by-category", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/sales-by-category"));
+      const res = await authFetch(buildUrl("/api/reports/sales-by-category"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -529,7 +549,7 @@ export default function ReportsPage() {
   const { data: topItems = [] } = useQuery<TopItem[]>({
     queryKey: ["/api/reports/top-items", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/top-items"));
+      const res = await authFetch(buildUrl("/api/reports/top-items"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -538,7 +558,7 @@ export default function ReportsPage() {
   const { data: tenderMix = [] } = useQuery<TenderMix[]>({
     queryKey: ["/api/reports/tender-mix", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/tender-mix"));
+      const res = await authFetch(buildUrl("/api/reports/tender-mix"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -547,7 +567,7 @@ export default function ReportsPage() {
   const { data: hourlySales = [] } = useQuery<HourlySale[]>({
     queryKey: ["/api/reports/hourly-sales", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/hourly-sales"));
+      const res = await authFetch(buildUrl("/api/reports/hourly-sales"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -556,7 +576,7 @@ export default function ReportsPage() {
   const { data: tenderData } = useQuery<TenderDetailData>({
     queryKey: ["/api/reports/tender-detail", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/tender-detail"));
+      const res = await authFetch(buildUrl("/api/reports/tender-detail"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -565,7 +585,7 @@ export default function ReportsPage() {
   const { data: menuItemData } = useQuery<MenuItemSalesData>({
     queryKey: ["/api/reports/menu-item-sales", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/menu-item-sales"));
+      const res = await authFetch(buildUrl("/api/reports/menu-item-sales"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -574,7 +594,7 @@ export default function ReportsPage() {
   const { data: categoryData } = useQuery<CategorySalesData>({
     queryKey: ["/api/reports/category-sales", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/category-sales"));
+      const res = await authFetch(buildUrl("/api/reports/category-sales"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -583,7 +603,7 @@ export default function ReportsPage() {
   const { data: openChecksData, isLoading: openChecksLoading } = useQuery<OpenChecksData>({
     queryKey: ["/api/reports/open-checks", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/open-checks"));
+      const res = await authFetch(buildUrl("/api/reports/open-checks"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -592,7 +612,7 @@ export default function ReportsPage() {
   const { data: closedChecksData, isLoading: closedChecksLoading } = useQuery<ClosedChecksData>({
     queryKey: ["/api/reports/closed-checks", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/closed-checks"));
+      const res = await authFetch(buildUrl("/api/reports/closed-checks"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -601,7 +621,7 @@ export default function ReportsPage() {
   const { data: employeeBalanceData, isLoading: employeeBalanceLoading } = useQuery<EmployeeBalanceData>({
     queryKey: ["/api/reports/employee-balance", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/employee-balance"));
+      const res = await authFetch(buildUrl("/api/reports/employee-balance"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -610,7 +630,7 @@ export default function ReportsPage() {
   const { data: kdsKpiData, isLoading: kdsKpiLoading } = useQuery<KdsKpiData>({
     queryKey: ["/api/reports/kds-kpi", dateParams, selectedPropertyId, selectedRvcId],
     queryFn: async () => {
-      const res = await fetch(buildUrl("/api/reports/kds-kpi"));
+      const res = await authFetch(buildUrl("/api/reports/kds-kpi"));
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -625,7 +645,7 @@ export default function ReportsPage() {
       params.set("comparisonType", comparisonType);
       if (selectedPropertyId !== "all") params.set("propertyId", selectedPropertyId);
       if (selectedRvcId !== "all") params.set("rvcId", selectedRvcId);
-      const res = await fetch(`/api/reports/sales-comparison?${params.toString()}`);
+      const res = await authFetch(`/api/reports/sales-comparison?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -635,7 +655,7 @@ export default function ReportsPage() {
     queryKey: ["/api/checks", selectedCheckId],
     queryFn: async () => {
       if (!selectedCheckId) throw new Error("No check selected");
-      const res = await fetch(`/api/checks/${selectedCheckId}`);
+      const res = await authFetch(`/api/checks/${selectedCheckId}`);
       if (!res.ok) throw new Error("Failed to fetch check details");
       return res.json();
     },
@@ -649,11 +669,11 @@ export default function ReportsPage() {
         // For "all" properties, we need to get the first property
         const props = properties || [];
         if (props.length === 0) throw new Error("No properties available");
-        const res = await fetch(`/api/reports/clocked-in-status?propertyId=${props[0].id}`);
+        const res = await authFetch(`/api/reports/clocked-in-status?propertyId=${props[0].id}`);
         if (!res.ok) throw new Error("Failed to fetch");
         return res.json();
       }
-      const res = await fetch(`/api/reports/clocked-in-status?propertyId=${selectedPropertyId}`);
+      const res = await authFetch(`/api/reports/clocked-in-status?propertyId=${selectedPropertyId}`);
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
