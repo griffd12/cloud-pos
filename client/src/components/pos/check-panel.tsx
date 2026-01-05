@@ -455,22 +455,22 @@ export function CheckPanel({
         <Button
           variant={unsentItems.length > 0 ? "default" : "secondary"}
           size="lg"
-          className="w-full"
+          className="w-full min-h-14 text-base font-semibold"
           onClick={onSend}
           disabled={isSending}
           data-testid="button-send-order"
         >
-          <Send className="w-4 h-4 mr-2" />
+          <Send className="w-5 h-5 mr-2" />
           {unsentItems.length > 0 ? `Send (${unsentItems.length})` : "Exit"}
         </Button>
         <Button
           size="lg"
-          className="w-full bg-green-600 hover:bg-green-700 text-white"
+          className="w-full min-h-14 text-base font-semibold bg-green-600 hover:bg-green-700 text-white"
           onClick={onPay}
           disabled={!paymentsReady}
           data-testid="button-pay"
         >
-          <CreditCard className="w-4 h-4 mr-2" />
+          <CreditCard className="w-5 h-5 mr-2" />
           {paidAmount > 0 ? `Pay Balance ${formatPrice(balanceDue)}` : `Pay ${formatPrice(total)}`}
         </Button>
       </div>
