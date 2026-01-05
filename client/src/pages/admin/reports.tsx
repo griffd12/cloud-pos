@@ -37,7 +37,7 @@ interface SalesSummary {
   // Detailed breakdowns
   baseItemSales: number;
   modifierTotal: number;
-  // New fields for proper accounting
+  // Payments and accounting
   totalPayments: number;
   totalTips: number;
   paymentCount: number;
@@ -47,8 +47,17 @@ interface SalesSummary {
   // Check movement totals
   carriedOverTotal: number;
   startedTotal: number;
-  closedTotal: number;
   outstandingTotal: number;
+  // Reconciliation breakdown - closed checks
+  closedSubtotal: number;
+  closedTax: number;
+  closedTotal: number;
+  // Reconciliation breakdown - open checks (today's business date only)
+  openSubtotal: number;
+  openTax: number;
+  openTotal: number;
+  // Today's open checks count (for reconciliation)
+  todaysOpenCount: number;
 }
 
 interface CategorySale {
@@ -927,7 +936,7 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Sales Breakdown (by item ring-in date)</CardTitle>
+              <CardTitle className="text-sm">Sales Breakdown</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
@@ -962,10 +971,97 @@ export default function ReportsPage() {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Total Collected</p>
+                  <p className="text-muted-foreground">Total with Tax</p>
                   <p className="font-semibold text-lg" data-testid="text-total-with-tax">
                     {formatCurrency(salesSummary?.totalWithTax || 0)}
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">Reconciliation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+                <div className="space-y-3">
+                  <p className="font-medium text-muted-foreground">Closed Checks</p>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span data-testid="text-closed-subtotal">{formatCurrency(salesSummary?.closedSubtotal || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tax</span>
+                      <span data-testid="text-closed-tax">{formatCurrency(salesSummary?.closedTax || 0)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-medium">
+                      <span>Total</span>
+                      <span data-testid="text-closed-total-recon">{formatCurrency(salesSummary?.closedTotal || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="font-medium text-muted-foreground">Open Checks</p>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span data-testid="text-open-subtotal">{formatCurrency(salesSummary?.openSubtotal || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tax</span>
+                      <span data-testid="text-open-tax">{formatCurrency(salesSummary?.openTax || 0)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-medium">
+                      <span>Total</span>
+                      <span data-testid="text-open-total-recon">{formatCurrency(salesSummary?.openTotal || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="font-medium text-muted-foreground">Payments Received</p>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Count</span>
+                      <span data-testid="text-payment-count-recon">{salesSummary?.paymentCount || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tips</span>
+                      <span data-testid="text-tips-recon">{formatCurrency(salesSummary?.totalTips || 0)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-medium">
+                      <span>Total</span>
+                      <span data-testid="text-payments-total-recon">{formatCurrency(salesSummary?.totalPayments || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="font-medium text-muted-foreground">Variance</p>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Expected</span>
+                      <span data-testid="text-expected-payments">{formatCurrency(salesSummary?.closedTotal || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Received</span>
+                      <span data-testid="text-received-payments">{formatCurrency(salesSummary?.totalPayments || 0)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-medium">
+                      <span>Difference</span>
+                      <span 
+                        className={((salesSummary?.closedTotal || 0) - (salesSummary?.totalPayments || 0)) !== 0 ? "text-destructive" : ""}
+                        data-testid="text-variance"
+                      >
+                        {formatCurrency((salesSummary?.closedTotal || 0) - (salesSummary?.totalPayments || 0))}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>

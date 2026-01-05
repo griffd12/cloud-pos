@@ -3779,22 +3779,72 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Outstanding checks = all currently open checks in scope
-      // This includes both today's open checks AND any carried over from previous days
+      // Outstanding checks = ALL currently open checks in scope (includes carried over)
+      // This represents the total liability - all unpaid checks
       const checksOutstanding = checksInScope.filter(c => c.status === "open");
       
-      // SALES - Based on item businessDate (operating day when items were rung in)
-      // If businessDate param provided, filter by businessDate field
-      // Otherwise fall back to timestamp filtering for legacy compatibility
+      // Today's open checks = open checks from THIS business date only (for reconciliation)
+      // These are checks started today that haven't been closed yet
+      const todaysOpenChecks = checksInScope.filter(c => {
+        if (c.status !== "open") return false;
+        if (useBusinessDate) {
+          return c.businessDate === businessDate;
+        }
+        return true;
+      });
+      
+      // SALES CALCULATION - Based on CHECK subtotals/totals for proper reconciliation
+      // This ensures Net Sales + Tax = Total, and Payments + Outstanding = Total
+      // 
+      // For the selected business date:
+      // - Closed checks: use check.subtotal, check.taxTotal, check.total
+      // - Open checks: use check.subtotal, check.taxTotal, check.total
+      
+      // Sum closed check values (raw cents for tax to avoid rounding errors)
+      let closedSubtotalCents = 0;
+      let closedTaxCents = 0;
+      let closedTotalCents = 0;
+      for (const c of checksClosed) {
+        closedSubtotalCents += Math.round(parseFloat(c.subtotal || "0") * 100);
+        closedTaxCents += Math.round(parseFloat(c.taxTotal || "0") * 100);
+        closedTotalCents += Math.round(parseFloat(c.total || "0") * 100);
+      }
+      
+      // Sum today's open check values (for reconciliation - only checks from this business date)
+      let openSubtotalCents = 0;
+      let openTaxCents = 0;
+      let openTotalCents = 0;
+      for (const c of todaysOpenChecks) {
+        openSubtotalCents += Math.round(parseFloat(c.subtotal || "0") * 100);
+        openTaxCents += Math.round(parseFloat(c.taxTotal || "0") * 100);
+        openTotalCents += Math.round(parseFloat(c.total || "0") * 100);
+      }
+      
+      // Sum ALL outstanding checks (includes carried over - for total liability)
+      let allOutstandingCents = 0;
+      for (const c of checksOutstanding) {
+        allOutstandingCents += Math.round(parseFloat(c.total || "0") * 100);
+      }
+      
+      // Calculate totals (all checks = closed + open for this business date)
+      const grossSalesCents = closedSubtotalCents + openSubtotalCents;
+      const taxTotalCents = closedTaxCents + openTaxCents;
+      const totalWithTaxCents = closedTotalCents + openTotalCents;
+      
+      // Convert back to dollars
+      const grossSales = grossSalesCents / 100;
+      const taxTotal = taxTotalCents / 100;
+      const netSales = grossSales; // Discounts would need separate tracking
+      const totalWithTax = totalWithTaxCents / 100;
+      
+      // For item-level breakdown (still useful for reporting)
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
-        // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        // Filter by business date or timestamp
         if (useBusinessDate) {
           return ci.businessDate === businessDate;
         } else {
@@ -3804,7 +3854,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Calculate item sales from items rung in during the period
       const baseItemSales = itemsInPeriod.reduce((sum, ci) => 
         sum + parseFloat(ci.unitPrice || "0") * (ci.quantity || 1), 0
       );
@@ -3818,36 +3867,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }, 0);
       
       const itemSales = baseItemSales + modifierTotal;
-      
-      // For tax calculation, we need to look at items' tax status
-      // Get tax groups for proper tax calculation
-      const menuItems = await storage.getMenuItems();
-      const taxGroups = await storage.getTaxGroups();
-      
-      let calculatedTax = 0;
-      for (const ci of itemsInPeriod) {
-        const menuItem = menuItems.find(m => m.id === ci.menuItemId);
-        if (menuItem?.taxGroupId) {
-          const taxGroup = taxGroups.find(t => t.id === menuItem.taxGroupId);
-          if (taxGroup && taxGroup.taxMode !== "inclusive") {
-            const itemTotal = (parseFloat(ci.unitPrice || "0") * (ci.quantity || 1));
-            // Add modifier prices
-            let modTotal = 0;
-            if (ci.modifiers && Array.isArray(ci.modifiers)) {
-              modTotal = (ci.modifiers as any[]).reduce((sum, mod) => 
-                sum + parseFloat(mod.priceDelta || "0"), 0
-              ) * (ci.quantity || 1);
-            }
-            calculatedTax += (itemTotal + modTotal) * parseFloat(taxGroup.rate || "0");
-          }
-        }
-      }
-      
-      const grossSales = itemSales;
       const serviceChargeTotal = 0; // Service charges would need separate tracking
-      const taxTotal = Math.round(calculatedTax * 100) / 100;
-      const netSales = grossSales; // Discounts would need separate item-level tracking
-      const totalWithTax = grossSales + taxTotal;
       
       // PAYMENTS - Based on businessDate (operating day when payment was applied)
       // Important: p.amount is the TENDERED amount (what customer handed over).
@@ -3892,43 +3912,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Tips would need to be tracked separately if the system supports them
       const totalTips = 0;
       
-      // Calculate totals for each check movement category
+      // Calculate totals for check movement (carried over and started use check.total)
       const carriedOverTotal = checksCarriedOver.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
       const startedTotal = checksStarted.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
-      const closedTotal = checksClosed.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
-      const outstandingTotal = checksOutstanding.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
       
       // Use closed check count for averages (only paid checks)
       const avgCheck = checksClosed.length > 0 ? totalPayments / checksClosed.length : 0;
       
+      // Closed check totals for reconciliation (already calculated from cents above)
+      const closedSubtotal = closedSubtotalCents / 100;
+      const closedTax = closedTaxCents / 100;
+      const closedTotal = closedTotalCents / 100;
+      
+      // Open check totals for reconciliation
+      const openSubtotal = openSubtotalCents / 100;
+      const openTax = openTaxCents / 100;
+      const openTotal = openTotalCents / 100;
+      
       res.json({
-        // Sales (based on item ring-in date)
-        grossSales: Math.round(grossSales * 100) / 100,
+        // Sales (based on check business date - includes both open and closed)
+        grossSales,          // All check subtotals (closed + open)
+        netSales,            // Same as grossSales (discounts would reduce this)
+        taxTotal,            // All check taxes (closed + open)
+        totalWithTax,        // All check totals (closed + open)
+        
+        // Item-level breakdown (for detailed reporting)
         itemSales: Math.round(itemSales * 100) / 100,
         baseItemSales: Math.round(baseItemSales * 100) / 100,
         modifierTotal: Math.round(modifierTotal * 100) / 100,
         serviceChargeTotal,
         otherCharges: 0,
         discountTotal: 0, // Would need item-level discount tracking
-        netSales: Math.round(netSales * 100) / 100,
-        taxTotal,
-        totalWithTax: Math.round(totalWithTax * 100) / 100,
         
-        // Payments (based on payment date)
+        // Closed check breakdown (for reconciliation: Payments should equal closedTotal)
+        closedSubtotal,      // Sum of closed check subtotals
+        closedTax,           // Sum of closed check taxes
+        closedTotal,         // Sum of closed check totals (subtotal + tax)
+        
+        // Open check breakdown (outstanding = openTotal)
+        openSubtotal,        // Sum of open check subtotals
+        openTax,             // Sum of open check taxes  
+        openTotal,           // Sum of open check totals (subtotal + tax) - THIS IS OUTSTANDING
+        
+        // Payments (based on payment date - should equal closedTotal)
         totalPayments: Math.round(totalPayments * 100) / 100,
         totalTips: Math.round(totalTips * 100) / 100,
         paymentCount: paymentsInPeriod.length,
         
-        // Check Movement (counts and totals)
+        // Check Movement (counts)
         checksStarted: checksStarted.length,
         checksClosed: checksClosed.length,
         checksCarriedOver: checksCarriedOver.length,
         checksOutstanding: checksOutstanding.length,
         openCheckCount: checksOutstanding.length, // backwards compatibility
+        
+        // Check Movement (totals)
         carriedOverTotal: Math.round(carriedOverTotal * 100) / 100,
         startedTotal: Math.round(startedTotal * 100) / 100,
-        closedTotal: Math.round(closedTotal * 100) / 100,
-        outstandingTotal: Math.round(outstandingTotal * 100) / 100,
+        outstandingTotal: allOutstandingCents / 100, // ALL open checks (today's + carried over)
+        
+        // Today's open checks count (for reconciliation breakdown)
+        todaysOpenCount: todaysOpenChecks.length,
         
         // Averages
         avgCheck: Math.round(avgCheck * 100) / 100,
