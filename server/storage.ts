@@ -378,7 +378,7 @@ export interface IStorage {
   getKdsTicketItems(kdsTicketId: string): Promise<KdsTicketItem[]>;
   removeKdsTicketItem(kdsTicketId: string, checkItemId: string): Promise<void>;
   voidKdsTicketItem(checkItemId: string): Promise<void>;
-  bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined>;
+  bumpKdsTicket(id: string, bumpedBy?: string): Promise<KdsTicket | undefined>;
   recallKdsTicket(id: string, scope?: 'expo' | 'all'): Promise<KdsTicket | undefined>;
   getBumpedKdsTickets(filters: { rvcId?: string; stationType?: string; limit?: number }): Promise<any[]>;
   markKdsItemReady(ticketItemId: string): Promise<void>;
@@ -1957,11 +1957,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(kdsTicketItems.checkItemId, checkItemId));
   }
 
-  async bumpKdsTicket(id: string, employeeId: string): Promise<KdsTicket | undefined> {
+  async bumpKdsTicket(id: string, bumpedBy?: string): Promise<KdsTicket | undefined> {
     const [result] = await db.update(kdsTickets).set({
       status: "bumped",
       bumpedAt: new Date(),
-      bumpedByEmployeeId: employeeId,
+      bumpedByEmployeeId: bumpedBy || null,
     }).where(eq(kdsTickets.id, id)).returning();
     
     if (result) {
