@@ -108,6 +108,48 @@ function broadcastMenuUpdate() {
   broadcastPosEvent({ type: "menu_update" });
 }
 
+// Helper to calculate tax snapshot for a check item at ring-in time
+// This captures the tax settings so they are IMMUTABLE and not retroactively changed
+interface TaxSnapshot {
+  taxGroupIdAtSale: string | null;
+  taxModeAtSale: string;
+  taxRateAtSale: string;
+  taxAmount: string;
+  taxableAmount: string;
+}
+
+async function calculateTaxSnapshot(
+  menuItemId: string,
+  unitPrice: number,
+  modifiers: { priceDelta: string }[],
+  quantity: number
+): Promise<TaxSnapshot> {
+  const menuItem = await storage.getMenuItem(menuItemId);
+  const taxGroups = await storage.getTaxGroups();
+  const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
+  
+  const taxGroupIdAtSale = taxGroup?.id || null;
+  const taxModeAtSale = taxGroup?.taxMode || "add_on";
+  const taxRateAtSale = parseFloat(taxGroup?.rate || "0");
+  
+  const modifierTotal = (modifiers || []).reduce(
+    (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
+    0
+  );
+  const taxableAmount = (unitPrice + modifierTotal) * quantity;
+  
+  // Calculate tax amount (only for add_on mode - inclusive mode has no additional tax)
+  const taxAmount = taxModeAtSale === "add_on" ? taxableAmount * taxRateAtSale : 0;
+  
+  return {
+    taxGroupIdAtSale,
+    taxModeAtSale,
+    taxRateAtSale: taxRateAtSale.toFixed(6),
+    taxAmount: taxAmount.toFixed(2),
+    taxableAmount: taxableAmount.toFixed(2),
+  };
+}
+
 function broadcastEmployeeUpdate() {
   broadcastPosEvent({ type: "employee_update" });
 }
@@ -243,36 +285,47 @@ async function sendItemsToKds(
 
 // Helper to recalculate and persist check totals from items
 // Called after every item add/update/void to maintain data integrity
+// IMPORTANT: Uses STORED tax amounts from ring-in time, NOT current menu item settings
+// This ensures tax is immutable and not retroactively recalculated if menu item tax settings change
 async function recalculateCheckTotals(checkId: string): Promise<void> {
   const check = await storage.getCheck(checkId);
   if (!check) return;
 
   const items = await storage.getCheckItems(checkId);
-  const taxGroups = await storage.getTaxGroups();
-  const menuItems = await storage.getMenuItems();
-
   const activeItems = items.filter((i) => !i.voided);
+  
   let displaySubtotal = 0;
   let addOnTax = 0;
 
   for (const item of activeItems) {
-    const unitPrice = parseFloat(item.unitPrice || "0");
-    const modifierTotal = (item.modifiers || []).reduce(
-      (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
-      0
-    );
-    const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
-
-    const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
-    const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
-    const taxRate = parseFloat(taxGroup?.rate || "0");
-    const taxMode = taxGroup?.taxMode || "add_on";
-
-    if (taxMode === "inclusive") {
-      displaySubtotal += itemTotal;
+    // Use stored taxableAmount if available (new items have this)
+    // Fall back to calculation for legacy items (before tax snapshot was implemented)
+    if (item.taxableAmount) {
+      // New items with tax snapshot - use stored values
+      displaySubtotal += parseFloat(item.taxableAmount);
+      addOnTax += parseFloat(item.taxAmount || "0");
     } else {
+      // Legacy fallback: calculate from current settings (old items before this fix)
+      // This maintains backwards compatibility for existing checks
+      const unitPrice = parseFloat(item.unitPrice || "0");
+      const modifierTotal = (item.modifiers || []).reduce(
+        (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
+        0
+      );
+      const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
       displaySubtotal += itemTotal;
-      addOnTax += itemTotal * taxRate;
+      
+      // For legacy items, we must look up current tax settings (unavoidable)
+      const menuItems = await storage.getMenuItems();
+      const taxGroups = await storage.getTaxGroups();
+      const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
+      const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
+      const taxRate = parseFloat(taxGroup?.rate || "0");
+      const taxMode = taxGroup?.taxMode || "add_on";
+      
+      if (taxMode === "add_on") {
+        addOnTax += itemTotal * taxRate;
+      }
     }
   }
 
@@ -1948,17 +2001,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      // Capture tax settings at ring-in time (IMMUTABLE - prevents retroactive tax changes)
+      const itemQuantity = quantity || 1;
+      const taxSnapshot = await calculateTaxSnapshot(
+        menuItemId,
+        parseFloat(unitPrice || "0"),
+        modifiers || [],
+        itemQuantity
+      );
+      
       const item = await storage.createCheckItem({
         checkId,
         menuItemId,
         menuItemName,
         unitPrice,
         modifiers: modifiers || [],
-        quantity: quantity || 1,
+        quantity: itemQuantity,
         itemStatus: itemStatus || "active", // 'pending' for items awaiting modifiers
         sent: false,
         voided: false,
         businessDate,
+        // Tax snapshot - locked at ring-in time
+        ...taxSnapshot,
       });
 
       // Check for dynamic order mode - add to preview ticket if RVC has dynamicOrderMode enabled
@@ -2047,8 +2111,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Cannot modify sent items" });
       }
 
+      // Recalculate tax snapshot when modifiers change (modifiers affect taxable amount)
+      // IMPORTANT: Use the ORIGINAL tax settings from ring-in, just recalculate the amounts
+      const unitPrice = parseFloat(item.unitPrice || "0");
+      const qty = item.quantity || 1;
+      const modifierTotal = (modifiers || []).reduce(
+        (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
+        0
+      );
+      const taxableAmount = (unitPrice + modifierTotal) * qty;
+      
+      // Use original tax settings if available, otherwise calculate fresh
+      let taxAmount: number;
+      let taxUpdateData: any = {};
+      
+      if (item.taxRateAtSale) {
+        // Use ORIGINAL tax settings from ring-in time
+        const taxRate = parseFloat(item.taxRateAtSale);
+        taxAmount = item.taxModeAtSale === "add_on" ? taxableAmount * taxRate : 0;
+        taxUpdateData = {
+          taxAmount: taxAmount.toFixed(2),
+          taxableAmount: taxableAmount.toFixed(2),
+        };
+      } else {
+        // Legacy item - calculate fresh snapshot
+        const taxSnapshot = await calculateTaxSnapshot(item.menuItemId, unitPrice, modifiers || [], qty);
+        taxUpdateData = taxSnapshot;
+      }
+      
       // Update modifiers and optionally itemStatus (for finalizing pending items)
-      const updateData: { modifiers: any; itemStatus?: string } = { modifiers };
+      const updateData: any = { modifiers, ...taxUpdateData };
       if (itemStatus) {
         updateData.itemStatus = itemStatus;
       }
@@ -2391,6 +2483,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
           }
 
+          // Calculate tax snapshot for the shared portion
+          // Important: The shared item should use the ORIGINAL tax settings, not recalculate
+          // If original item has tax snapshot, inherit it; otherwise calculate new
+          let taxSnapshot: TaxSnapshot | null = null;
+          if (item.taxableAmount) {
+            // Inherit tax settings from original item, but recalculate amounts for new price/qty
+            const taxRate = parseFloat(item.taxRateAtSale || "0");
+            const newTaxableAmount = (sharedPrice + ((item.modifiers || []).reduce(
+              (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0
+            ))) * sharedQty;
+            const newTaxAmount = item.taxModeAtSale === "add_on" ? newTaxableAmount * taxRate : 0;
+            
+            taxSnapshot = {
+              taxGroupIdAtSale: item.taxGroupIdAtSale,
+              taxModeAtSale: item.taxModeAtSale || "add_on",
+              taxRateAtSale: item.taxRateAtSale || "0",
+              taxAmount: newTaxAmount.toFixed(2),
+              taxableAmount: newTaxableAmount.toFixed(2),
+            };
+          } else {
+            // Legacy item without tax snapshot - calculate fresh
+            taxSnapshot = await calculateTaxSnapshot(
+              item.menuItemId,
+              sharedPrice,
+              item.modifiers || [],
+              sharedQty
+            );
+          }
+
           const newItem = await storage.createCheckItem({
             checkId: targetCheck.id,
             menuItemId: item.menuItemId,
@@ -2403,6 +2524,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             roundId: item.roundId, // Keep original round reference
             voided: false,
             businessDate,
+            // Tax snapshot - inherited from original or calculated fresh
+            ...taxSnapshot,
           });
 
           results.push({
@@ -10075,16 +10198,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         notes: `Online Order: ${order.externalOrderId}`,
       });
 
-      // Add items from online order
+      // Add items from online order with tax snapshots
       const items = order.items as any[];
       for (const item of items) {
+        const qty = item.quantity || 1;
+        const taxSnapshot = await calculateTaxSnapshot(
+          item.menuItemId,
+          parseFloat(item.price || "0"),
+          item.modifiers || [],
+          qty
+        );
+        
         await storage.createCheckItem({
           checkId: check.id,
           menuItemId: item.menuItemId,
           menuItemName: item.name,
           unitPrice: item.price,
-          quantity: item.quantity || 1,
+          quantity: qty,
           modifiers: item.modifiers || [],
+          ...taxSnapshot,
         });
       }
 
@@ -10517,15 +10649,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           notes: orderData.notes,
         });
 
-        // Add items
+        // Add items with tax snapshots
         for (const item of orderData.items || []) {
+          const qty = item.quantity || 1;
+          const taxSnapshot = await calculateTaxSnapshot(
+            item.menuItemId,
+            parseFloat(item.unitPrice || "0"),
+            item.modifiers || [],
+            qty
+          );
+          
           await storage.createCheckItem({
             checkId: check.id,
             menuItemId: item.menuItemId,
             menuItemName: item.menuItemName,
             unitPrice: item.unitPrice,
-            quantity: item.quantity,
+            quantity: qty,
             modifiers: item.modifiers,
+            ...taxSnapshot,
           });
         }
 
@@ -10724,16 +10865,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const items = await storage.getCheckItems(lastCheck.id);
       const validItems = items.filter(i => !i.voided);
 
-      // Add items to current check
+      // Add items to current check with tax snapshots
+      // For reorders, we calculate fresh tax based on CURRENT menu item settings
+      // (not the old order's settings, since prices/tax may have changed)
       for (const item of validItems) {
+        const qty = item.quantity || 1;
+        const taxSnapshot = await calculateTaxSnapshot(
+          item.menuItemId,
+          parseFloat(item.unitPrice || "0"),
+          item.modifiers || [],
+          qty
+        );
+        
         await storage.createCheckItem({
           checkId,
           menuItemId: item.menuItemId,
           menuItemName: item.menuItemName,
           unitPrice: item.unitPrice,
-          quantity: item.quantity || 1,
+          quantity: qty,
           modifiers: item.modifiers,
           itemStatus: "active",
+          ...taxSnapshot,
         });
       }
 

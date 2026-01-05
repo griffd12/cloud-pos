@@ -714,6 +714,13 @@ export const checkItems = pgTable("check_items", {
   voidedAt: timestamp("voided_at"),
   addedAt: timestamp("added_at").defaultNow(),
   businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this item was rung in
+  // Tax snapshot at ring-in time - IMMUTABLE once set
+  // These values capture tax settings at the moment item was rung, preventing retroactive tax changes
+  taxGroupIdAtSale: varchar("tax_group_id_at_sale"), // Tax group ID at ring-in time
+  taxModeAtSale: text("tax_mode_at_sale"), // 'inclusive' or 'add_on' at ring-in time
+  taxRateAtSale: decimal("tax_rate_at_sale", { precision: 10, scale: 6 }), // Tax rate at ring-in (e.g., 0.0725 for 7.25%)
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }), // Calculated add-on tax for this item (locked at ring-in)
+  taxableAmount: decimal("taxable_amount", { precision: 10, scale: 2 }), // Item total (base for add-on tax calculation)
 });
 
 // Check Payments
