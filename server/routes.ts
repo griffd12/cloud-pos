@@ -9656,7 +9656,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         accessLevel: "enterprise_admin", // First user gets highest level access
         enterpriseId: enterpriseId || null,
         propertyId: null,
-        isActive: true,
+        active: true,
       });
 
       // Create session - hash token before storage for security
@@ -9704,7 +9704,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      if (!user.isActive) {
+      if (!user.active) {
         return res.status(401).json({ message: "Account is disabled" });
       }
 
@@ -9775,7 +9775,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const user = await storage.getEmcUser(session.userId);
-      if (!user || !user.isActive) {
+      if (!user || !user.active) {
         return res.status(401).json({ valid: false, message: "User account is disabled" });
       }
 
@@ -9839,7 +9839,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const user = await storage.getEmcUser(session.userId);
-      if (!user || !user.isActive) {
+      if (!user || !user.active) {
         return res.status(401).json({ message: "User account is disabled" });
       }
 
