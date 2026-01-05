@@ -2486,13 +2486,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // Calculate tax snapshot for the shared portion
           // Important: The shared item should use the ORIGINAL tax settings, not recalculate
           // If original item has tax snapshot, inherit it; otherwise calculate new
+          // CRITICAL: Scale modifiers by share ratio too (modifiers are split proportionally)
           let taxSnapshot: TaxSnapshot | null = null;
           if (item.taxableAmount) {
             // Inherit tax settings from original item, but recalculate amounts for new price/qty
+            // The original taxableAmount was for original qty and full price - scale by shareRatio
+            const originalTaxable = parseFloat(item.taxableAmount);
+            const newTaxableAmount = originalTaxable * shareRatio;
+            
             const taxRate = parseFloat(item.taxRateAtSale || "0");
-            const newTaxableAmount = (sharedPrice + ((item.modifiers || []).reduce(
-              (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0
-            ))) * sharedQty;
             const newTaxAmount = item.taxModeAtSale === "add_on" ? newTaxableAmount * taxRate : 0;
             
             taxSnapshot = {
@@ -2502,12 +2504,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               taxAmount: newTaxAmount.toFixed(2),
               taxableAmount: newTaxableAmount.toFixed(2),
             };
+            
+            // Also update the ORIGINAL item's tax snapshot proportionally
+            const originalRemainingTaxable = originalTaxable * (1 - shareRatio);
+            const originalRemainingTax = item.taxModeAtSale === "add_on" ? originalRemainingTaxable * taxRate : 0;
+            await storage.updateCheckItem(op.itemId, {
+              taxAmount: originalRemainingTax.toFixed(2),
+              taxableAmount: originalRemainingTaxable.toFixed(2),
+            });
           } else {
             // Legacy item without tax snapshot - calculate fresh
+            // Scale modifiers by share ratio for consistency
+            const scaledModifiers = (item.modifiers || []).map((mod: any) => ({
+              ...mod,
+              priceDelta: (parseFloat(mod.priceDelta || "0") * shareRatio).toFixed(2),
+            }));
             taxSnapshot = await calculateTaxSnapshot(
               item.menuItemId,
               sharedPrice,
-              item.modifiers || [],
+              scaledModifiers,
               sharedQty
             );
           }
