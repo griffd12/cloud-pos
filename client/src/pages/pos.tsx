@@ -23,10 +23,10 @@ import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3, CreditCard, Star } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, RotateCcw, List, Grid3X3, CreditCard, Star, Wifi, WifiOff } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -87,8 +87,12 @@ export default function PosPage() {
   const { data: wsContext } = useQuery<{ workstation: any; rvcs: any[]; property: any }>({
     queryKey: ["/api/workstations", workstationId, "context"],
     queryFn: async () => {
-      const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch workstation context");
+      const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) {
+        setApiConnected(false);
+        throw new Error("Failed to fetch workstation context");
+      }
+      setApiConnected(true);
       return res.json();
     },
     enabled: !!workstationId && !currentRvc,
@@ -136,12 +140,13 @@ export default function PosPage() {
   const [tipCapturePayment, setTipCapturePayment] = useState<CheckPayment | null>(null);
   const [tipAmount, setTipAmount] = useState("");
   const [isCapturingTip, setIsCapturingTip] = useState(false);
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
 
   const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
     queryFn: async () => {
       if (!currentCheck?.id) return { payments: [], paidAmount: 0 };
-      const res = await fetch(`/api/checks/${currentCheck.id}/payments`, { credentials: "include" });
+      const res = await fetch(`/api/checks/${currentCheck.id}/payments`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch payments");
       return res.json();
     },
@@ -161,7 +166,7 @@ export default function PosPage() {
     queryKey: ["/api/loyalty-members", currentCheck?.customerId],
     queryFn: async () => {
       if (!currentCheck?.customerId) return null;
-      const res = await fetch(`/api/loyalty-members/${currentCheck.customerId}`, { credentials: "include" });
+      const res = await fetch(`/api/loyalty-members/${currentCheck.customerId}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) return null;
       return res.json();
     },
@@ -246,8 +251,12 @@ export default function PosPage() {
   const { data: menuItems = [], isLoading: itemsLoading } = useQuery<MenuItemWithModifiers[]>({
     queryKey: ["/api/menu-items", { sluId: selectedSlu?.id }],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch menu items");
+      const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) {
+        setApiConnected(false);
+        throw new Error("Failed to fetch menu items");
+      }
+      setApiConnected(true);
       return res.json();
     },
     enabled: !!selectedSlu,
@@ -267,7 +276,7 @@ export default function PosPage() {
   const { data: allMenuItems = [] } = useQuery<MenuItem[]>({
     queryKey: ["/api/menu-items", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/menu-items", { credentials: "include" });
+      const res = await fetch("/api/menu-items", { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
@@ -276,7 +285,7 @@ export default function PosPage() {
   const { data: activeLayout } = useQuery<PosLayout | null>({
     queryKey: ["/api/pos-layouts/default", currentRvc?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/pos-layouts/default/${currentRvc?.id}`, { credentials: "include" });
+      const res = await fetch(`/api/pos-layouts/default/${currentRvc?.id}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) return null;
       return res.json();
     },
@@ -287,7 +296,7 @@ export default function PosPage() {
     queryKey: ["/api/pos-layouts", activeLayout?.id, "cells"],
     queryFn: async () => {
       if (!activeLayout?.id) return [];
-      const res = await fetch(`/api/pos-layouts/${activeLayout.id}/cells`, { credentials: "include" });
+      const res = await fetch(`/api/pos-layouts/${activeLayout.id}/cells`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) return [];
       return res.json();
     },
@@ -494,7 +503,7 @@ export default function PosPage() {
       setShowReopenModal(false);
       toast({ title: "Check Reopened", description: `Check #${reopenedCheck.checkNumber} is now open` });
       try {
-        const res = await fetch(`/api/checks/${reopenedCheck.id}`, { credentials: "include" });
+        const res = await fetch(`/api/checks/${reopenedCheck.id}`, { credentials: "include", headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setCurrentCheck(data.check);
@@ -598,7 +607,7 @@ export default function PosPage() {
       toast({ title: "Price Updated", description: "Item price has been overridden" });
       if (currentCheck) {
         try {
-          const res = await fetch(`/api/checks/${currentCheck.id}`, { credentials: "include" });
+          const res = await fetch(`/api/checks/${currentCheck.id}`, { credentials: "include", headers: getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
             setCurrentCheck(data.check);
@@ -616,7 +625,7 @@ export default function PosPage() {
 
   const handlePickupCheck = async (checkId: string) => {
     try {
-      const res = await fetch(`/api/checks/${checkId}`, { credentials: "include" });
+      const res = await fetch(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to load check");
       const data = await res.json();
       setCurrentCheck(data.check);
@@ -645,7 +654,7 @@ export default function PosPage() {
     try {
       const res = await fetch("/api/auth/manager-approval", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         credentials: "include",
         body: JSON.stringify({
           pin: managerPin,
@@ -694,7 +703,7 @@ export default function PosPage() {
 
     // Fetch modifier groups for this specific item
     try {
-      const res = await fetch(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include" });
+      const res = await fetch(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
       const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
       
       // Check if any groups have modifiers AND are required (or have at least minSelect > 0)
@@ -799,7 +808,7 @@ export default function PosPage() {
     setEditingItem(item);
     try {
       // Fetch the link records for this menu item
-      const linksRes = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include" });
+      const linksRes = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include", headers: getAuthHeaders() });
       if (!linksRes.ok) {
         toast({ title: "Failed to load modifiers", variant: "destructive" });
         setEditingItem(null);
@@ -808,7 +817,7 @@ export default function PosPage() {
       const links = await linksRes.json();
       
       // Fetch all modifier groups with their modifiers
-      const groupsRes = await fetch("/api/modifier-groups", { credentials: "include" });
+      const groupsRes = await fetch("/api/modifier-groups", { credentials: "include", headers: getAuthHeaders() });
       if (!groupsRes.ok) {
         toast({ title: "Failed to load modifier groups", variant: "destructive" });
         setEditingItem(null);
@@ -923,6 +932,20 @@ export default function PosPage() {
               </span>
             </div>
           </div>
+          <Separator orientation="vertical" className="h-8" />
+          <Badge 
+            variant={apiConnected === true ? "default" : apiConnected === false ? "destructive" : "secondary"}
+            className="text-xs"
+            data-testid="status-api-connection"
+          >
+            {apiConnected === true ? (
+              <><Wifi className="w-3 h-3 mr-1" /> API</>
+            ) : apiConnected === false ? (
+              <><WifiOff className="w-3 h-3 mr-1" /> API</>
+            ) : (
+              "Connecting..."
+            )}
+          </Badge>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {hasPrivilege("admin_access") && (
@@ -1526,7 +1549,7 @@ export default function PosPage() {
             }
             
             // Refresh the check data
-            const refreshRes = await fetch(`/api/checks/${checkToUse?.id}`, { credentials: "include" });
+            const refreshRes = await fetch(`/api/checks/${checkToUse?.id}`, { credentials: "include", headers: getAuthHeaders() });
             if (refreshRes.ok) {
               const data = await refreshRes.json();
               setCurrentCheck(data.check);

@@ -3,7 +3,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 const EMC_SESSION_KEY = "emc_session_token";
 const DEVICE_TOKEN_KEY = "pos_device_token";
 
-function getAuthHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   
   // Check for EMC session token (for EMC admin access) - uses sessionStorage for security

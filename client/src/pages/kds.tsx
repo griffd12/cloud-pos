@@ -4,11 +4,12 @@ import { KdsDisplay } from "@/components/kds/kds-display";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
-import { ArrowLeft, Settings } from "lucide-react";
+import { ArrowLeft, Settings, Wifi, WifiOff } from "lucide-react";
 import { Link, Redirect, useLocation } from "wouter";
+import { Badge } from "@/components/ui/badge";
 
 interface KdsItem {
   id: string;
@@ -140,10 +141,20 @@ export default function KdsPage() {
   }
   if (selectedStation !== "all") queryParams.set("stationType", selectedStation);
 
-  const { data: tickets = [], isLoading, refetch } = useQuery<Ticket[]>({
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
+
+  const { data: tickets = [], isLoading, refetch, isError: ticketsError } = useQuery<Ticket[]>({
     queryKey: ["/api/kds-tickets", isDedicatedKds ? propertyId : currentRvc?.id, selectedStation],
     queryFn: async () => {
-      const res = await fetch(`/api/kds-tickets?${queryParams.toString()}`, { credentials: "include" });
+      const res = await fetch(`/api/kds-tickets?${queryParams.toString()}`, { 
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        setApiConnected(false);
+        throw new Error("Failed to fetch tickets");
+      }
+      setApiConnected(true);
       return res.json();
     },
     enabled: isDedicatedKds ? !!propertyId : !!currentRvc,
@@ -319,10 +330,25 @@ export default function KdsPage() {
           <h1 className="text-lg font-semibold">
             {isDedicatedKds && deviceName ? deviceName : "Kitchen Display"}
           </h1>
-          <div
-            className={`w-2 h-2 rounded-full ${wsConnected ? "bg-green-500" : "bg-red-500"}`}
-            title={wsConnected ? "Connected" : "Disconnected"}
-          />
+          <div className="flex items-center gap-2">
+            <Badge 
+              variant={apiConnected === true ? "default" : apiConnected === false ? "destructive" : "secondary"}
+              className="text-xs"
+              data-testid="status-api-connection"
+            >
+              {apiConnected === true ? (
+                <><Wifi className="w-3 h-3 mr-1" /> API</>
+              ) : apiConnected === false ? (
+                <><WifiOff className="w-3 h-3 mr-1" /> API</>
+              ) : (
+                "Connecting..."
+              )}
+            </Badge>
+            <div
+              className={`w-2 h-2 rounded-full ${wsConnected ? "bg-green-500" : "bg-red-500"}`}
+              title={wsConnected ? "WebSocket Connected" : "WebSocket Disconnected"}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button 

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 
 interface KdsItem {
   id: string;
@@ -151,7 +151,10 @@ export function KdsDisplay({
       if (rvcId) params.append("rvcId", rvcId);
       if (selectedStation !== "all") params.append("stationType", selectedStation);
       params.append("limit", "100");
-      const response = await fetch(`/api/kds-tickets/bumped?${params}`);
+      const response = await fetch(`/api/kds-tickets/bumped?${params}`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) throw new Error("Failed to fetch bumped tickets");
       return response.json();
     },
@@ -164,7 +167,10 @@ export function KdsDisplay({
     queryKey: ["/api/item-availability", propertyId],
     queryFn: async () => {
       if (!propertyId) return [];
-      const response = await fetch(`/api/item-availability?propertyId=${propertyId}`);
+      const response = await fetch(`/api/item-availability?propertyId=${propertyId}`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
       if (!response.ok) return [];
       return response.json();
     },
