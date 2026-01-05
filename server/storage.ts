@@ -1793,11 +1793,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   // KDS Tickets
-  async getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]> {
+  async getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string; propertyId?: string }): Promise<any[]> {
     const conditions = [sql`${kdsTickets.status} != 'bumped'`];
     
     if (filters?.rvcId) {
       conditions.push(eq(kdsTickets.rvcId, filters.rvcId));
+    }
+    if (filters?.propertyId) {
+      // Filter by property - get all RVCs for this property and filter tickets by those RVCs
+      const propertyRvcs = await db.select({ id: rvcs.id }).from(rvcs).where(eq(rvcs.propertyId, filters.propertyId));
+      const rvcIds = propertyRvcs.map(r => r.id);
+      if (rvcIds.length > 0) {
+        conditions.push(inArray(kdsTickets.rvcId, rvcIds));
+      } else {
+        // No RVCs for this property, return empty
+        return [];
+      }
     }
     if (filters?.kdsDeviceId) {
       conditions.push(eq(kdsTickets.kdsDeviceId, filters.kdsDeviceId));

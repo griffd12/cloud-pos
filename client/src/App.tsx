@@ -51,17 +51,25 @@ function Router() {
   const { deviceType, isConfigured } = useDeviceContext();
   const [location] = useLocation();
   
+  // Handle unconfigured devices - redirect to setup except if already there
   if (!isConfigured && location !== "/setup") {
     return <Redirect to="/setup" />;
   }
   
-  if (isConfigured && deviceType === "kds" && location !== "/kds" && location !== "/setup") {
-    return <Redirect to="/kds" />;
+  // Handle KDS devices - they can only access /kds and /setup
+  // Don't redirect if already on an allowed path
+  if (isConfigured && deviceType === "kds") {
+    if (location !== "/kds" && location !== "/setup") {
+      return <Redirect to="/kds" />;
+    }
   }
 
   return (
     <Switch>
       <Route path="/setup" component={DeviceSetupPage} />
+      <Route path="/kds">
+        {() => <DeviceGuardedRoute component={KdsPage} allowedTypes={["pos", "kds"]} />}
+      </Route>
       <Route path="/">
         {() => <DeviceGuardedRoute component={LoginPage} allowedTypes={["pos"]} />}
       </Route>
@@ -70,9 +78,6 @@ function Router() {
       </Route>
       <Route path="/pos">
         {() => <DeviceGuardedRoute component={PosPage} allowedTypes={["pos"]} />}
-      </Route>
-      <Route path="/kds">
-        {() => <DeviceGuardedRoute component={KdsPage} allowedTypes={["pos", "kds"]} />}
       </Route>
       <Route path="/admin">
         {() => <DeviceGuardedRoute component={AdminLayout} allowedTypes={["pos"]} />}

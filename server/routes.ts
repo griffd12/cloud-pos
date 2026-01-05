@@ -3088,6 +3088,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       rvcId: req.query.rvcId as string | undefined,
       kdsDeviceId: req.query.kdsDeviceId as string | undefined,
       stationType: req.query.stationType as string | undefined,
+      propertyId: req.query.propertyId as string | undefined,
     };
     const data = await storage.getKdsTickets(filters);
     res.json(data);
@@ -3108,9 +3109,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/kds-tickets/:id/bump", async (req, res) => {
     try {
       const ticketId = req.params.id;
-      const { employeeId } = req.body;
+      // Accept either employeeId (POS mode) or deviceId (dedicated KDS mode)
+      const { employeeId, deviceId } = req.body;
 
-      const updated = await storage.bumpKdsTicket(ticketId, employeeId);
+      // For audit purposes, use employeeId if provided, otherwise use deviceId as identifier
+      const bumpedBy = employeeId || (deviceId ? `device:${deviceId}` : undefined);
+      const updated = await storage.bumpKdsTicket(ticketId, bumpedBy);
 
       broadcastKdsUpdate();
       res.json(updated);
@@ -3120,17 +3124,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Bump all tickets for a station/RVC
+  // Bump all tickets for a station/RVC/property
   app.post("/api/kds-tickets/bump-all", async (req, res) => {
     try {
-      const { employeeId, rvcId, stationType } = req.body;
+      // Accept either rvcId (POS mode) or propertyId (dedicated KDS mode)
+      const { employeeId, deviceId, rvcId, propertyId, stationType } = req.body;
 
-      const tickets = await storage.getKdsTickets({ rvcId, stationType });
+      // Build filter based on what's provided
+      const filters: { rvcId?: string; propertyId?: string; stationType?: string } = {};
+      if (rvcId) filters.rvcId = rvcId;
+      if (propertyId) filters.propertyId = propertyId;
+      if (stationType) filters.stationType = stationType;
+
+      const tickets = await storage.getKdsTickets(filters);
       const activeTickets = tickets.filter((t: any) => t.status === "active");
+      
+      // For audit purposes, use employeeId if provided, otherwise use deviceId as identifier
+      const bumpedBy = employeeId || (deviceId ? `device:${deviceId}` : undefined);
       
       let bumped = 0;
       for (const ticket of activeTickets) {
-        await storage.bumpKdsTicket(ticket.id, employeeId);
+        await storage.bumpKdsTicket(ticket.id, bumpedBy);
         bumped++;
       }
 
@@ -3145,7 +3159,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/kds-tickets/:id/recall", async (req, res) => {
     try {
       const ticketId = req.params.id;
-      const { scope } = req.body; // 'expo' or 'all' - determines which stations to recall to
+      // Accept either employeeId (POS mode) or deviceId (dedicated KDS mode)
+      // scope determines which stations to recall to: 'expo' or 'all'
+      const { scope, deviceId } = req.body;
 
       const updated = await storage.recallKdsTicket(ticketId, scope);
 

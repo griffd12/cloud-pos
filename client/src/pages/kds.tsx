@@ -61,10 +61,24 @@ export default function KdsPage() {
   const isDedicatedKds = deviceType === "kds" && isConfigured;
 
   // For dedicated KDS, fetch the configured device info to get propertyId
-  const { data: configuredKdsDevice } = useQuery<KdsDevice>({
+  const { data: configuredKdsDevice, isLoading: isLoadingDevice, isError: deviceError } = useQuery<KdsDevice>({
     queryKey: ["/api/kds-devices", linkedDeviceId],
     enabled: isDedicatedKds && !!linkedDeviceId,
+    retry: 2,
   });
+
+  // Handle case where configured device was deleted or not found
+  useEffect(() => {
+    if (isDedicatedKds && linkedDeviceId && deviceError) {
+      toast({ 
+        title: "Device not found", 
+        description: "The configured KDS device no longer exists. Please reconfigure.",
+        variant: "destructive" 
+      });
+      clearDeviceConfig();
+      navigate("/setup");
+    }
+  }, [isDedicatedKds, linkedDeviceId, deviceError, clearDeviceConfig, navigate, toast]);
 
   // Use property from configured device for dedicated KDS, otherwise from current RVC
   const propertyId = isDedicatedKds 
@@ -154,9 +168,12 @@ export default function KdsPage() {
 
     socket.onopen = () => {
       setWsConnected(true);
-      // Subscribe to KDS channel - use rvcId if available, otherwise just channel
-      const subscribeMsg: any = { type: "subscribe", channel: "kds" };
-      if (currentRvc?.id) {
+      // Subscribe to KDS channel - use rvcId for POS mode, propertyId for dedicated KDS
+      const subscribeMsg: Record<string, any> = { type: "subscribe", channel: "kds" };
+      if (isDedicatedKds && propertyId) {
+        subscribeMsg.propertyId = propertyId;
+        if (linkedDeviceId) subscribeMsg.deviceId = linkedDeviceId;
+      } else if (currentRvc?.id) {
         subscribeMsg.rvcId = currentRvc.id;
       }
       socket.send(JSON.stringify(subscribeMsg));
@@ -184,13 +201,18 @@ export default function KdsPage() {
     return () => {
       socket.close();
     };
-  }, [currentRvc, propertyId, isDedicatedKds, refetch]);
+  }, [currentRvc, propertyId, isDedicatedKds, linkedDeviceId, refetch]);
 
   const bumpMutation = useMutation({
     mutationFn: async (ticketId: string) => {
-      const response = await apiRequest("POST", "/api/kds-tickets/" + ticketId + "/bump", {
-        employeeId: currentEmployee?.id,
-      });
+      // For dedicated KDS, use device identity; for POS mode, use employee
+      const payload: Record<string, any> = {};
+      if (isDedicatedKds) {
+        payload.deviceId = linkedDeviceId;
+      } else {
+        payload.employeeId = currentEmployee?.id;
+      }
+      const response = await apiRequest("POST", "/api/kds-tickets/" + ticketId + "/bump", payload);
       return response.json();
     },
     onSuccess: () => {
@@ -203,7 +225,12 @@ export default function KdsPage() {
 
   const recallMutation = useMutation({
     mutationFn: async (ticketId: string) => {
-      const response = await apiRequest("POST", "/api/kds-tickets/" + ticketId + "/recall", {});
+      // For dedicated KDS, include device identity
+      const payload: Record<string, any> = {};
+      if (isDedicatedKds) {
+        payload.deviceId = linkedDeviceId;
+      }
+      const response = await apiRequest("POST", "/api/kds-tickets/" + ticketId + "/recall", payload);
       return response.json();
     },
     onSuccess: () => {
@@ -216,11 +243,18 @@ export default function KdsPage() {
 
   const bumpAllMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/kds-tickets/bump-all", {
-        employeeId: currentEmployee?.id,
-        rvcId: currentRvc?.id,
+      // Use propertyId/deviceId for dedicated KDS devices, rvcId/employeeId for POS mode
+      const payload: Record<string, any> = {
         stationType: selectedStation !== "all" ? selectedStation : undefined,
-      });
+      };
+      if (isDedicatedKds) {
+        payload.propertyId = propertyId;
+        payload.deviceId = linkedDeviceId;
+      } else {
+        payload.employeeId = currentEmployee?.id;
+        payload.rvcId = currentRvc?.id;
+      }
+      const response = await apiRequest("POST", "/api/kds-tickets/bump-all", payload);
       return response.json();
     },
     onSuccess: (data: { bumped: number }) => {
@@ -256,6 +290,18 @@ export default function KdsPage() {
   // For dedicated KDS devices, skip the employee/RVC check if we have a property from the device
   if (!isDedicatedKds && (!currentEmployee || !currentRvc)) {
     return <Redirect to="/" />;
+  }
+
+  // Show loading state while fetching device info for dedicated KDS
+  if (isDedicatedKds && isLoadingDevice) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading device configuration...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
