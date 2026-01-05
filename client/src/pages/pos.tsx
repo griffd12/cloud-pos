@@ -142,6 +142,23 @@ export default function PosPage() {
   const [isCapturingTip, setIsCapturingTip] = useState(false);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
 
+  // Health check query to verify API connection when RVC is already set
+  useQuery({
+    queryKey: ["/api/health"],
+    queryFn: async () => {
+      const res = await fetch("/api/health", { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) {
+        setApiConnected(false);
+        throw new Error("API health check failed");
+      }
+      setApiConnected(true);
+      return res.json();
+    },
+    enabled: !!currentRvc,
+    refetchInterval: 30000, // Check every 30 seconds
+    retry: 2,
+  });
+
   const { data: paymentInfo, isLoading: paymentsLoading } = useQuery<{ payments: any[]; paidAmount: number }>({
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
     queryFn: async () => {

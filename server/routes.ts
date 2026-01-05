@@ -600,6 +600,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/emc(\/.*)?$/,                      // EMC routes (session-based auth)
     /^\/registered-devices\/enroll$/,       // Device enrollment
     /^\/registered-devices\/validate$/,     // Token validation
+    /^\/health$/,                           // Health check endpoint
   ];
 
   app.use("/api", async (req, res, next) => {
@@ -699,6 +700,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
     }
+  });
+
+  // ============================================================================
+  // HEALTH CHECK
+  // ============================================================================
+
+  app.get("/api/health", (req, res) => {
+    // Simple health check - no auth or database query needed
+    // This endpoint just confirms the API server is responsive
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString()
+    });
   });
 
   // ============================================================================
