@@ -1,15 +1,17 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PosProvider } from "@/lib/pos-context";
+import { DeviceProvider, useDeviceContext } from "@/lib/device-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import PosPage from "@/pages/pos";
 import KdsPage from "@/pages/kds";
+import DeviceSetupPage from "@/pages/device-setup";
 import AdminLayout from "@/pages/admin/index";
 
 function GlobalWebSocket() {
@@ -17,15 +19,67 @@ function GlobalWebSocket() {
   return null;
 }
 
+function DeviceGuardedRoute({ 
+  component: Component, 
+  allowedTypes,
+  ...rest 
+}: { 
+  component: React.ComponentType; 
+  allowedTypes: ("pos" | "kds" | "unconfigured")[];
+}) {
+  const { deviceType, isConfigured } = useDeviceContext();
+  
+  if (!isConfigured) {
+    if (allowedTypes.includes("unconfigured")) {
+      return <Component />;
+    }
+    return <Redirect to="/setup" />;
+  }
+  
+  if (deviceType && allowedTypes.includes(deviceType)) {
+    return <Component />;
+  }
+  
+  if (deviceType === "kds") {
+    return <Redirect to="/kds" />;
+  }
+  
+  return <Redirect to="/login" />;
+}
+
 function Router() {
+  const { deviceType, isConfigured } = useDeviceContext();
+  const [location] = useLocation();
+  
+  if (!isConfigured && location !== "/setup") {
+    return <Redirect to="/setup" />;
+  }
+  
+  if (isConfigured && deviceType === "kds" && location !== "/kds" && location !== "/setup") {
+    return <Redirect to="/kds" />;
+  }
+
   return (
     <Switch>
-      <Route path="/" component={LoginPage} />
-      <Route path="/login" component={LoginPage} />
-      <Route path="/pos" component={PosPage} />
-      <Route path="/kds" component={KdsPage} />
-      <Route path="/admin" component={AdminLayout} />
-      <Route path="/admin/:rest*" component={AdminLayout} />
+      <Route path="/setup" component={DeviceSetupPage} />
+      <Route path="/">
+        {() => <DeviceGuardedRoute component={LoginPage} allowedTypes={["pos"]} />}
+      </Route>
+      <Route path="/login">
+        {() => <DeviceGuardedRoute component={LoginPage} allowedTypes={["pos"]} />}
+      </Route>
+      <Route path="/pos">
+        {() => <DeviceGuardedRoute component={PosPage} allowedTypes={["pos"]} />}
+      </Route>
+      <Route path="/kds">
+        {() => <DeviceGuardedRoute component={KdsPage} allowedTypes={["pos", "kds"]} />}
+      </Route>
+      <Route path="/admin">
+        {() => <DeviceGuardedRoute component={AdminLayout} allowedTypes={["pos"]} />}
+      </Route>
+      <Route path="/admin/:rest*">
+        {() => <DeviceGuardedRoute component={AdminLayout} allowedTypes={["pos"]} />}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -36,11 +90,13 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="pos-ui-theme">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <PosProvider>
-            <GlobalWebSocket />
-            <Router />
-            <Toaster />
-          </PosProvider>
+          <DeviceProvider>
+            <PosProvider>
+              <GlobalWebSocket />
+              <Router />
+              <Toaster />
+            </PosProvider>
+          </DeviceProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

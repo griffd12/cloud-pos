@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import { ArrowLeft } from "lucide-react";
-import { Link, Redirect } from "wouter";
+import { useDeviceContext } from "@/lib/device-context";
+import { ArrowLeft, Settings } from "lucide-react";
+import { Link, Redirect, useLocation } from "wouter";
 
 interface KdsItem {
   id: string;
@@ -50,10 +51,25 @@ interface KdsDevice {
 export default function KdsPage() {
   const { toast } = useToast();
   const { currentEmployee, currentRvc } = usePosContext();
+  const { deviceType, linkedDeviceId, deviceName, clearDeviceConfig, isConfigured } = useDeviceContext();
+  const [, navigate] = useLocation();
   const [wsConnected, setWsConnected] = useState(false);
   const [selectedStation, setSelectedStation] = useState("all");
+  const [initialized, setInitialized] = useState(false);
 
-  const propertyId = currentRvc?.propertyId;
+  // Check if this is a dedicated KDS device
+  const isDedicatedKds = deviceType === "kds" && isConfigured;
+
+  // For dedicated KDS, fetch the configured device info to get propertyId
+  const { data: configuredKdsDevice } = useQuery<KdsDevice>({
+    queryKey: ["/api/kds-devices", linkedDeviceId],
+    enabled: isDedicatedKds && !!linkedDeviceId,
+  });
+
+  // Use property from configured device for dedicated KDS, otherwise from current RVC
+  const propertyId = isDedicatedKds 
+    ? configuredKdsDevice?.propertyId 
+    : currentRvc?.propertyId;
 
   const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
     queryKey: ["/api/kds-devices/active", propertyId],
@@ -67,9 +83,25 @@ export default function KdsPage() {
     return acc;
   }, [] as string[]);
 
+  // Auto-select the configured KDS device if in dedicated mode
+  useEffect(() => {
+    if (isDedicatedKds && linkedDeviceId && kdsDevices.length > 0 && !initialized) {
+      const configuredDevice = kdsDevices.find(d => d.id === linkedDeviceId);
+      if (configuredDevice) {
+        setSelectedStation(configuredDevice.stationType);
+        setInitialized(true);
+      }
+    }
+  }, [isDedicatedKds, linkedDeviceId, kdsDevices, initialized]);
+
   const selectedDevice = selectedStation !== "all" 
     ? kdsDevices.find((d) => d.stationType === selectedStation)
     : kdsDevices[0];
+
+  const handleChangeDevice = () => {
+    clearDeviceConfig();
+    navigate("/setup");
+  };
 
   const deviceSettings = selectedDevice ? {
     newOrderSound: selectedDevice.newOrderSound,
@@ -85,17 +117,22 @@ export default function KdsPage() {
     colorAlert3Color: selectedDevice.colorAlert3Color,
   } : undefined;
 
+  // Build query params - for dedicated KDS, use propertyId; for POS mode, use rvcId
   const queryParams = new URLSearchParams();
-  if (currentRvc?.id) queryParams.set("rvcId", currentRvc.id);
+  if (isDedicatedKds && propertyId) {
+    queryParams.set("propertyId", propertyId);
+  } else if (currentRvc?.id) {
+    queryParams.set("rvcId", currentRvc.id);
+  }
   if (selectedStation !== "all") queryParams.set("stationType", selectedStation);
 
   const { data: tickets = [], isLoading, refetch } = useQuery<Ticket[]>({
-    queryKey: ["/api/kds-tickets", currentRvc?.id, selectedStation],
+    queryKey: ["/api/kds-tickets", isDedicatedKds ? propertyId : currentRvc?.id, selectedStation],
     queryFn: async () => {
       const res = await fetch(`/api/kds-tickets?${queryParams.toString()}`, { credentials: "include" });
       return res.json();
     },
-    enabled: !!currentRvc,
+    enabled: isDedicatedKds ? !!propertyId : !!currentRvc,
     select: (data: any[]) =>
       data.map((t) => ({
         ...t,
@@ -104,8 +141,12 @@ export default function KdsPage() {
     refetchInterval: 5000,
   });
 
+  // WebSocket for real-time KDS updates
+  // For dedicated KDS, subscribe to property-wide updates; for POS mode, subscribe to RVC
   useEffect(() => {
-    if (!currentRvc) return;
+    // Need either propertyId (dedicated KDS) or currentRvc (POS mode)
+    if (!isDedicatedKds && !currentRvc) return;
+    if (isDedicatedKds && !propertyId) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -113,7 +154,12 @@ export default function KdsPage() {
 
     socket.onopen = () => {
       setWsConnected(true);
-      socket.send(JSON.stringify({ type: "subscribe", channel: "kds", rvcId: currentRvc.id }));
+      // Subscribe to KDS channel - use rvcId if available, otherwise just channel
+      const subscribeMsg: any = { type: "subscribe", channel: "kds" };
+      if (currentRvc?.id) {
+        subscribeMsg.rvcId = currentRvc.id;
+      }
+      socket.send(JSON.stringify(subscribeMsg));
     };
 
     socket.onmessage = (event) => {
@@ -138,7 +184,7 @@ export default function KdsPage() {
     return () => {
       socket.close();
     };
-  }, [currentRvc, refetch]);
+  }, [currentRvc, propertyId, isDedicatedKds, refetch]);
 
   const bumpMutation = useMutation({
     mutationFn: async (ticketId: string) => {
@@ -207,7 +253,8 @@ export default function KdsPage() {
     bumpAllMutation.mutate();
   }, [bumpAllMutation]);
 
-  if (!currentEmployee || !currentRvc) {
+  // For dedicated KDS devices, skip the employee/RVC check if we have a property from the device
+  if (!isDedicatedKds && (!currentEmployee || !currentRvc)) {
     return <Redirect to="/" />;
   }
 
@@ -215,18 +262,33 @@ export default function KdsPage() {
     <div className="h-screen flex flex-col">
       <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/pos">
-            <Button variant="ghost" size="icon" data-testid="button-back">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <h1 className="text-lg font-semibold">Kitchen Display</h1>
+          {!isDedicatedKds && (
+            <Link href="/pos">
+              <Button variant="ghost" size="icon" data-testid="button-back">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+          )}
+          <h1 className="text-lg font-semibold">
+            {isDedicatedKds && deviceName ? deviceName : "Kitchen Display"}
+          </h1>
           <div
             className={`w-2 h-2 rounded-full ${wsConnected ? "bg-green-500" : "bg-red-500"}`}
             title={wsConnected ? "Connected" : "Disconnected"}
           />
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleChangeDevice}
+            title="Change Device Configuration"
+            data-testid="button-change-device"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+          <ThemeToggle />
+        </div>
       </header>
 
       <KdsDisplay
