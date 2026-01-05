@@ -269,12 +269,11 @@ export default function GiftCardsPage() {
       <DataTable
         data={giftCards}
         columns={columns}
-        onAdd={() => { setEditingItem(null); setFormOpen(true); }}
         onEdit={handleEdit}
         customActions={customActions}
         isLoading={isLoading}
-        searchPlaceholder="Search by card number..."
         emptyMessage="No gift cards issued yet"
+        hideSearch
       />
 
       <EntityForm

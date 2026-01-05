@@ -56,6 +56,7 @@ interface DataTableProps<T extends { id: string }> {
   searchPlaceholder?: string;
   emptyMessage?: string;
   pageSize?: number;
+  hideSearch?: boolean;
 }
 
 export function DataTable<T extends { id: string }>({
@@ -71,6 +72,7 @@ export function DataTable<T extends { id: string }>({
   searchPlaceholder = "Search...",
   emptyMessage = "No items found",
   pageSize = 10,
+  hideSearch = false,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -112,30 +114,34 @@ export function DataTable<T extends { id: string }>({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        {title && <h2 className="text-lg font-semibold">{title}</h2>}
-        <div className="flex items-center gap-2 ml-auto">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-9 w-64"
-              data-testid="input-table-search"
-            />
+      {(title || !hideSearch || onAdd) && (
+        <div className="flex items-center justify-between gap-4">
+          {title && <h2 className="text-lg font-semibold">{title}</h2>}
+          <div className="flex items-center gap-2 ml-auto">
+            {!hideSearch && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder={searchPlaceholder}
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="pl-9 w-64"
+                  data-testid="input-table-search"
+                />
+              </div>
+            )}
+            {onAdd && (
+              <Button onClick={onAdd} data-testid="button-add-item">
+                <Plus className="w-4 h-4 mr-2" />
+                Add New
+              </Button>
+            )}
           </div>
-          {onAdd && (
-            <Button onClick={onAdd} data-testid="button-add-item">
-              <Plus className="w-4 h-4 mr-2" />
-              Add New
-            </Button>
-          )}
         </div>
-      </div>
+      )}
 
       <div className="border rounded-lg">
         <ScrollArea className="h-[calc(100vh-320px)]">
