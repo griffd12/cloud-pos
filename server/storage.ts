@@ -2625,6 +2625,20 @@ export class DatabaseStorage implements IStorage {
       
       const loyaltyRedemptionResult = await tx.delete(loyaltyRedemptions).where(eq(loyaltyRedemptions.propertyId, propertyId));
 
+      // 5c. Delete gift card transactions BEFORE checks (they reference checks via checkId FK)
+      // First get gift card IDs for this property
+      const propertyGiftCards = await tx.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.propertyId, propertyId));
+      const giftCardIds = propertyGiftCards.map(g => g.id);
+      
+      // Delete gift card transactions by propertyId and checkId to catch all
+      let giftCardTransResult = { rowCount: 0 };
+      if (checkIds.length > 0) {
+        giftCardTransResult = await tx.delete(giftCardTransactions).where(inArray(giftCardTransactions.checkId, checkIds));
+      }
+      // Also delete by propertyId to catch any orphaned transactions
+      const additionalGiftCardTrans = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
+      giftCardTransResult = { rowCount: (giftCardTransResult.rowCount || 0) + (additionalGiftCardTrans.rowCount || 0) };
+
       // 6. Delete audit logs and checks
       const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
       const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
@@ -2684,15 +2698,7 @@ export class DatabaseStorage implements IStorage {
       }
       const safeCountsResult = await tx.delete(safeCounts).where(eq(safeCounts.propertyId, propertyId));
 
-      // 4c. Gift cards and transactions for this property
-      // First get gift card IDs for this property before deleting transactions
-      const propertyGiftCards = await tx.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.propertyId, propertyId));
-      const giftCardIds = propertyGiftCards.map(g => g.id);
-      
-      // Delete gift card transactions first (references gift cards)
-      const giftCardTransResult = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
-      
-      // Then delete the gift cards themselves
+      // 4c. Delete gift cards for this property (transactions already deleted above before checks)
       let giftCardsResult = { rowCount: 0 };
       if (giftCardIds.length > 0) {
         giftCardsResult = await tx.delete(giftCards).where(inArray(giftCards.id, giftCardIds));
