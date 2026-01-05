@@ -2560,6 +2560,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           closedAt: new Date(),
         });
 
+        // Activate any pending gift cards on this check (sold but not yet activated)
+        try {
+          const checkItemsForGC = await storage.getCheckItems(checkId);
+          for (const item of checkItemsForGC) {
+            // Skip voided items - don't activate their gift cards
+            if (item.voided) continue;
+            
+            // Gift card items have no menuItemId and name starts with "Gift Card"
+            if (!item.menuItemId && item.menuItemName.startsWith("Gift Card")) {
+              // Get gift card ID from modifiers (stored during sale)
+              const modifiers = item.modifiers as any[] || [];
+              const gcModifier = modifiers.find((m: any) => m.name === "__giftCardId");
+              
+              if (gcModifier?.giftCardId) {
+                // Activate the specific gift card by ID
+                const pendingCard = await storage.getGiftCard(gcModifier.giftCardId);
+                if (pendingCard && pendingCard.status === "pending") {
+                  await storage.updateGiftCard(pendingCard.id, {
+                    status: "active",
+                    currentBalance: pendingCard.initialBalance,
+                    activatedAt: new Date(),
+                    activatedById: employeeId,
+                  });
+                  // Create activation transaction
+                  await storage.createGiftCardTransaction({
+                    giftCardId: pendingCard.id,
+                    transactionType: "activate",
+                    amount: pendingCard.initialBalance || "0",
+                    balanceBefore: "0",
+                    balanceAfter: pendingCard.initialBalance || "0",
+                    propertyId: pendingCard.propertyId || undefined,
+                    checkId,
+                    employeeId,
+                    notes: "Activated after payment",
+                  });
+                  console.log("Activated gift card:", pendingCard.cardNumber);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Gift card activation error:", e);
+        }
+
         await storage.createAuditLog({
           rvcId: check?.rvcId,
           employeeId,
@@ -11968,28 +12012,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Gift card number already exists" });
       }
 
-      // Create the gift card
+      // Create the gift card in PENDING status - will be activated after payment
       const giftCard = await storage.createGiftCard({
         cardNumber,
         propertyId,
         initialBalance: balanceStr,
-        currentBalance: balanceStr,
-        status: "active",
-        activatedAt: new Date(),
-        activatedById: employeeId,
-      });
-
-      // Create activation transaction
-      await storage.createGiftCardTransaction({
-        giftCardId: giftCard.id,
-        transactionType: "activate",
-        amount: balanceStr,
-        balanceBefore: "0",
-        balanceAfter: balanceStr,
-        propertyId,
-        checkId,
-        employeeId,
-        notes: "Initial activation",
+        currentBalance: "0", // Balance is 0 until paid and activated
+        status: "pending", // Not active until payment is complete
+        // No activatedAt or activatedById until payment
       });
 
       // Add gift card sale as a check item if there's an active check
@@ -11997,34 +12027,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (checkId) {
         const check = await storage.getCheck(checkId);
         if (check) {
-          // Get the current round number for this check
-          const existingItems = await storage.getCheckItems(checkId);
-          const maxRound = Math.max(0, ...existingItems.map(i => i.roundNumber || 1));
-          
-          // Create a check item for the gift card sale
+          // Create a check item for the gift card sale (no menuItemId for gift cards)
+          // Store giftCardId in modifiers for proper linkage during activation
           checkItem = await storage.createCheckItem({
             checkId,
             menuItemId: null, // No menu item - this is a special gift card sale
             menuItemName: `Gift Card ${cardNumber.slice(-4)}`,
             quantity: 1,
             unitPrice: balanceStr,
-            totalPrice: balanceStr,
-            sent: true, // Mark as sent immediately
+            modifiers: [{ name: "__giftCardId", priceDelta: "0", giftCardId: giftCard.id, cardNumber }] as any,
+            sent: true, // Mark as sent immediately (no kitchen routing)
             voided: false,
-            roundNumber: maxRound + 1,
-            modifiers: [],
-            specialInstructions: `Gift Card Activation: ${cardNumber}`,
+            // Gift cards are not taxed - set tax fields to 0
+            taxRateAtSale: "0",
+            taxAmount: "0",
+            taxableAmount: balanceStr,
           });
 
           // Recalculate check totals from all non-voided items
           const allItems = await storage.getCheckItems(checkId);
           const itemsSubtotal = allItems
             .filter(item => !item.voided)
-            .reduce((sum, item) => sum + parseFloat(item.totalPrice || "0"), 0);
+            .reduce((sum, item) => {
+              const price = parseFloat(item.unitPrice || "0");
+              const qty = item.quantity || 1;
+              return sum + (price * qty);
+            }, 0);
           
-          // Gift cards are typically not taxed, so total = subtotal for GC items
-          // Keep existing tax calculation for other items
-          const currentTax = parseFloat(check.tax || "0");
+          // Keep existing tax calculation for other items (gift cards add 0 tax)
+          const currentTax = parseFloat(check.taxTotal || "0");
           const newSubtotal = itemsSubtotal.toFixed(2);
           const newTotal = (itemsSubtotal + currentTax).toFixed(2);
           

@@ -36,6 +36,7 @@ interface GiftCardModalProps {
   propertyId: string | undefined;
   employeeId: string | undefined;
   onGiftCardRedeemed?: (amount: string) => void;
+  onGiftCardSold?: (checkItem: any) => void;
 }
 
 interface GiftCardBalance {
@@ -54,6 +55,7 @@ export function GiftCardModal({
   propertyId,
   employeeId,
   onGiftCardRedeemed,
+  onGiftCardSold,
 }: GiftCardModalProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("balance");
@@ -111,8 +113,8 @@ export function GiftCardModal({
     },
     onSuccess: (data) => {
       toast({
-        title: "Gift Card Activated",
-        description: `Card ${data.giftCard.cardNumber} activated with $${amount}`,
+        title: "Gift Card Added to Check",
+        description: `$${amount} gift card added. Please complete payment to activate.`,
       });
       setCardNumber("");
       setAmount("");
@@ -121,6 +123,12 @@ export function GiftCardModal({
         queryClient.invalidateQueries({ queryKey: ["/api/checks", checkId, "items"] });
         queryClient.invalidateQueries({ queryKey: ["/api/checks", checkId] });
       }
+      // Call callback to update local check items state in POS
+      if (data.checkItem && onGiftCardSold) {
+        onGiftCardSold(data.checkItem);
+      }
+      // Close modal so user can see check and pay
+      onClose();
     },
     onError: (error: any) => {
       toast({

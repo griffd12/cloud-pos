@@ -798,7 +798,7 @@ export const checkItems = pgTable("check_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   checkId: varchar("check_id").notNull().references(() => checks.id),
   roundId: varchar("round_id").references(() => rounds.id),
-  menuItemId: varchar("menu_item_id").notNull().references(() => menuItems.id),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id), // Nullable for special items like gift cards
   menuItemName: text("menu_item_name").notNull(),
   quantity: integer("quantity").default(1),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),

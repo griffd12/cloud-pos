@@ -1637,6 +1637,14 @@ export default function PosPage() {
           });
           queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
         }}
+        onGiftCardSold={(checkItem) => {
+          // Add the gift card sale item to the local check items state
+          if (checkItem) {
+            setCheckItems((prev) => [...prev, checkItem]);
+            // Also refresh check to update totals
+            queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+          }
+        }}
       />
 
       <Dialog open={showTipCaptureDialog} onOpenChange={setShowTipCaptureDialog}>
