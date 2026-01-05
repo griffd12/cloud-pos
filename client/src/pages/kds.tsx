@@ -168,14 +168,15 @@ export default function KdsPage() {
 
     socket.onopen = () => {
       setWsConnected(true);
-      // Subscribe to KDS channel - use rvcId for POS mode, propertyId for dedicated KDS
+      // Subscribe to KDS channel
+      // For POS mode: subscribe to specific RVC channel
+      // For dedicated KDS: subscribe to global KDS channel (no rvcId filter)
+      // The client-side filtering by propertyId handles ticket relevance
       const subscribeMsg: Record<string, any> = { type: "subscribe", channel: "kds" };
-      if (isDedicatedKds && propertyId) {
-        subscribeMsg.propertyId = propertyId;
-        if (linkedDeviceId) subscribeMsg.deviceId = linkedDeviceId;
-      } else if (currentRvc?.id) {
+      if (!isDedicatedKds && currentRvc?.id) {
         subscribeMsg.rvcId = currentRvc.id;
       }
+      // Dedicated KDS subscribes to all KDS updates and filters client-side by propertyId
       socket.send(JSON.stringify(subscribeMsg));
     };
 
@@ -201,7 +202,7 @@ export default function KdsPage() {
     return () => {
       socket.close();
     };
-  }, [currentRvc, propertyId, isDedicatedKds, linkedDeviceId, refetch]);
+  }, [currentRvc?.id, propertyId, isDedicatedKds, refetch]);
 
   const bumpMutation = useMutation({
     mutationFn: async (ticketId: string) => {

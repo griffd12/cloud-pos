@@ -79,6 +79,27 @@ Payment auto-send: When a check is paid, any unsent items are automatically rout
 - WebSocket server at `/ws` path for KDS ticket updates
 - Channel-based subscription model for RVC-specific or global updates
 
+### Device Type Configuration
+The system supports dedicated device mode configuration for terminals:
+
+**Device Types**:
+- **POS Workstation**: Full access to POS transaction screen, admin functions, and KDS viewer
+- **KDS Display**: Dedicated kitchen display mode - auto-loads to KDS screen, no access to POS/admin
+
+**Configuration Flow**:
+1. First load: Device setup page (`/setup`) prompts for device type selection
+2. For KDS Display: Select property and specific KDS device (e.g., "Hot Kitchen", "Expo Station")
+3. Configuration stored in localStorage (`pos_device_type`, `pos_device_linked_id`, `pos_device_name`)
+4. KDS devices auto-redirect to `/kds` and cannot access POS or admin routes
+5. Settings icon in header allows reconfiguration
+
+**Implementation**:
+- `DeviceProvider` context manages device state and localStorage persistence
+- Route guards in `App.tsx` enforce device-type restrictions
+- KDS page fetches tickets by `propertyId` for dedicated KDS mode, bypassing employee login
+- WebSocket subscription to global KDS channel for real-time updates
+- Bump/recall operations use `deviceId` instead of `employeeId` for audit purposes
+
 ### Authentication
 - PIN-based employee authentication
 - Role-based privilege system for operation authorization
