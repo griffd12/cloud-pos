@@ -278,6 +278,21 @@ export default function RegisteredDevicesPage() {
     },
   });
 
+  const replaceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/registered-devices/${id}/replace`);
+      return response.json();
+    },
+    onSuccess: (newDevice: RegisteredDevice) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      setEnrollmentCodeDialog({ device: newDevice });
+      toast({ title: "Device replaced", description: "A new enrollment code has been generated for the replacement device." });
+    },
+    onError: () => {
+      toast({ title: "Failed to replace device", variant: "destructive" });
+    },
+  });
+
   const handleEdit = (device: RegisteredDevice) => {
     setEditingItem(device);
     form.reset({
@@ -321,27 +336,50 @@ export default function RegisteredDevicesPage() {
         </Button>
       )}
       {device.status === "enrolled" && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => disableMutation.mutate({ id: device.id, status: "disabled" })}
-          data-testid={`button-disable-${device.id}`}
-        >
-          Disable
-        </Button>
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => replaceMutation.mutate(device.id)}
+            disabled={replaceMutation.isPending}
+            data-testid={`button-replace-${device.id}`}
+          >
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Replace
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => disableMutation.mutate({ id: device.id, status: "disabled" })}
+            data-testid={`button-disable-${device.id}`}
+          >
+            Disable
+          </Button>
+        </>
       )}
       {device.status === "disabled" && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => generateCodeMutation.mutate(device.id)}
-          data-testid={`button-reenable-${device.id}`}
-        >
-          <RefreshCw className="w-4 h-4 mr-1" />
-          Re-enroll
-        </Button>
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => replaceMutation.mutate(device.id)}
+            disabled={replaceMutation.isPending}
+            data-testid={`button-replace-disabled-${device.id}`}
+          >
+            <RefreshCw className="w-4 h-4 mr-1" />
+            Replace
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => generateCodeMutation.mutate(device.id)}
+            data-testid={`button-reenable-${device.id}`}
+          >
+            Re-enroll
+          </Button>
+        </>
       )}
-      {(device.status === "pending" || device.status === "disabled") && (
+      {device.status === "pending" && (
         <Button
           size="sm"
           variant="ghost"

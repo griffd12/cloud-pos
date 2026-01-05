@@ -9816,6 +9816,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Replace device - deletes old device and creates new one with same settings and fresh enrollment code
+  app.post("/api/registered-devices/:id/replace", async (req, res) => {
+    try {
+      // Get the existing device to copy its settings
+      const existingDevice = await storage.getRegisteredDevice(req.params.id);
+      if (!existingDevice) {
+        return res.status(404).json({ message: "Registered device not found" });
+      }
+
+      // Delete the old device
+      await storage.deleteRegisteredDevice(req.params.id);
+
+      // Generate a fresh enrollment code
+      const enrollmentCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+      const enrollmentCodeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Create new device with same settings
+      const newDevice = await storage.createRegisteredDevice({
+        enterpriseId: existingDevice.enterpriseId,
+        propertyId: existingDevice.propertyId,
+        name: existingDevice.name + " (Replacement)",
+        deviceType: existingDevice.deviceType,
+        workstationId: existingDevice.workstationId,
+        kdsDeviceId: existingDevice.kdsDeviceId,
+        serialNumber: null, // Clear since it's new hardware
+        assetTag: null,
+        macAddress: null,
+        notes: `Replacement for previous device. Original notes: ${existingDevice.notes || "None"}`,
+        enrollmentCode,
+        enrollmentCodeExpiresAt,
+        status: "pending",
+      });
+
+      res.json(newDevice);
+    } catch (error) {
+      console.error("Replace registered device error:", error);
+      res.status(500).json({ message: "Failed to replace registered device" });
+    }
+  });
+
   // ============================================================================
   // EMC (Enterprise Management Console) - Email/Password Authentication
   // Accessible from any browser worldwide for system configuration
