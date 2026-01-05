@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Clock, Receipt, ShoppingBag, Send, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 
 interface OpenCheck {
   id: string;
@@ -59,6 +60,7 @@ export function OpenChecksModal({
       if (!rvcId) return [];
       const res = await fetch(`/api/checks/open?rvcId=${rvcId}`, {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Failed to fetch open checks");
       return res.json();

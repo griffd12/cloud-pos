@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import type { Check, CheckItem, LoyaltyMember, LoyaltyReward, LoyaltyTransaction } from "@shared/schema";
 
 interface CheckWithItems extends Check {
@@ -97,6 +97,7 @@ export function CustomerModal({
       if (!searchQuery || searchQuery.length < 2) return [];
       const res = await fetch(`/api/pos/customers/search?query=${encodeURIComponent(searchQuery)}`, {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Search failed");
       return res.json();
@@ -109,6 +110,7 @@ export function CustomerModal({
     queryFn: async () => {
       const res = await fetch(`/api/pos/customers/${selectedCustomer?.id}`, {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Failed to get customer details");
       return res.json();

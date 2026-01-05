@@ -189,6 +189,8 @@ export function KdsDisplay({
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets/bumped"] });
       setShowRecallDialog(false);
       setSelectedRecallTicket(null);
+      // Switch to open view after recalling a ticket
+      setViewMode("open");
     },
   });
 
