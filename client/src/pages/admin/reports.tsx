@@ -249,6 +249,7 @@ interface EmployeeBalanceData {
     employeeCount: number;
     totalChecks: number;
     totalSales: number;
+    totalTax: number;
     totalTips: number;
     totalCollected: number;
   };
@@ -1863,7 +1864,7 @@ export default function ReportsPage() {
         </TabsContent>
 
         <TabsContent value="employee-balance" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Employees</CardTitle>
@@ -1888,12 +1889,23 @@ export default function ReportsPage() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+                <CardTitle className="text-sm font-medium">Net Sales</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="text-employee-total-sales">
                   {employeeBalanceLoading ? "..." : formatCurrency(employeeBalanceData?.summary.totalSales || 0)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Tax</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-employee-total-tax">
+                  {employeeBalanceLoading ? "..." : formatCurrency(employeeBalanceData?.summary.totalTax || 0)}
                 </div>
               </CardContent>
             </Card>
@@ -1923,6 +1935,7 @@ export default function ReportsPage() {
                     <TableHead className="text-right">Gross Sales</TableHead>
                     <TableHead className="text-right">Discounts</TableHead>
                     <TableHead className="text-right">Net Sales</TableHead>
+                    <TableHead className="text-right">Tax</TableHead>
                     <TableHead className="text-right">Cash</TableHead>
                     <TableHead className="text-right">Credit</TableHead>
                     <TableHead className="text-right">Total Collected</TableHead>
@@ -1936,6 +1949,7 @@ export default function ReportsPage() {
                       <TableCell className="text-right">{formatCurrency(emp.grossSales)}</TableCell>
                       <TableCell className="text-right text-destructive">{formatCurrency(emp.discounts)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.netSales)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(emp.tax)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.cashCollected)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(emp.creditCollected)}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(emp.totalCollected)}</TableCell>
@@ -1943,7 +1957,7 @@ export default function ReportsPage() {
                   ))}
                   {(!employeeBalanceData?.employees || employeeBalanceData.employees.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground">
                         No employee data
                       </TableCell>
                     </TableRow>
