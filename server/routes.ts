@@ -2196,17 +2196,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const unsentItems = itemsBeforeVoid.filter((item) => !item.sent && !item.voided);
       const previouslySentItems = itemsBeforeVoid.filter((item) => item.sent && !item.voided);
       
-      // Cancel any KDS tickets associated with unsent items (preview tickets)
-      // Mark them as "voided" so KDS will auto-bump (filter them out)
-      const allTickets = await storage.getKdsTickets();
-      const checkTickets = allTickets.filter((t: any) => t.checkId === checkId);
+      // Get the IDs of items being voided (unsent items)
+      const unsentItemIds = new Set(unsentItems.map(item => item.id));
+      
+      // Cancel KDS tickets - use getKdsTicketsByCheck to get raw tickets with checkId
+      const checkTickets = await storage.getKdsTicketsByCheck(checkId);
       for (const ticket of checkTickets) {
-        // If this is a preview ticket or contains only unsent items, mark as voided
-        if ((ticket as any).isPreview) {
-          const ticketItems = await storage.getKdsTicketItems(ticket.id);
-          for (const ticketItem of ticketItems) {
+        // Get all ticket items for this ticket
+        const ticketItems = await storage.getKdsTicketItems(ticket.id);
+        
+        // Remove ticket items that belong to unsent (being cancelled) items
+        let remainingItems = 0;
+        for (const ticketItem of ticketItems) {
+          if (unsentItemIds.has(ticketItem.checkItemId)) {
+            // This ticket item is for an unsent item being cancelled - remove it
             await storage.removeKdsTicketItem(ticket.id, ticketItem.checkItemId);
+          } else {
+            remainingItems++;
           }
+        }
+        
+        // If ticket has no remaining items, mark it as voided
+        if (remainingItems === 0) {
           await storage.updateKdsTicket(ticket.id, { status: "voided" });
         }
       }
