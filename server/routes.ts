@@ -593,6 +593,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // - /emc/* (EMC uses session-based auth)
   // - /registered-devices/enroll (device enrollment process)
   // - /registered-devices/validate (token validation)
+  // - Requests with valid EMC session token (X-EMC-Session header)
   // Note: req.path inside app.use('/api') omits the /api prefix
   // ============================================================================
   const deviceTokenExemptRoutes = [
@@ -606,6 +607,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const isExempt = deviceTokenExemptRoutes.some(pattern => pattern.test(req.path));
     if (isExempt) {
       return next();
+    }
+
+    // Check for EMC session token - EMC users can access all APIs without device token
+    const emcSessionToken = req.headers["x-emc-session"] as string;
+    if (emcSessionToken) {
+      // Validate EMC session token
+      const sessionTokenHash = crypto.createHash("sha256").update(emcSessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
+      
+      if (session && new Date(session.expiresAt) > new Date()) {
+        const emcUser = await storage.getEmcUser(session.userId);
+        if (emcUser && emcUser.active) {
+          // Valid EMC session - allow access
+          (req as any).emcUser = emcUser;
+          return next();
+        }
+      }
     }
 
     // Get device token from header
