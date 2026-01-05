@@ -1070,15 +1070,15 @@ export default function ReportsPage() {
                     <div className="flex w-full gap-4">
                       <div className="w-1/2">
                         <ResponsiveContainer width="100%" height={200}>
-                          <PieChart>
+                          <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                             <Pie
                               data={tenderMix}
                               dataKey="amount"
                               nameKey="name"
                               cx="50%"
                               cy="50%"
-                              outerRadius={80}
-                              label={({ name, percentage }) => `${name} ${percentage.toFixed(0)}%`}
+                              outerRadius={70}
+                              label={({ percentage }) => `${percentage.toFixed(0)}%`}
                               labelLine={false}
                             >
                               {tenderMix.map((entry, index) => (
