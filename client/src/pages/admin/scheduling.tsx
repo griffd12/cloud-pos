@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -138,6 +138,7 @@ export default function SchedulingPage() {
       if (!selectedProperty) return [];
       const res = await fetch(`/api/shifts?propertyId=${selectedProperty}&startDate=${weekStartStr}&endDate=${weekEndStr}`, {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Failed to fetch shifts");
       return res.json();
@@ -149,7 +150,7 @@ export default function SchedulingPage() {
     queryKey: ["/api/properties", selectedProperty, "employee-job-codes"],
     queryFn: async () => {
       if (!selectedProperty) return {};
-      const res = await fetch(`/api/properties/${selectedProperty}/employee-job-codes`, { credentials: "include" });
+      const res = await fetch(`/api/properties/${selectedProperty}/employee-job-codes`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employee job codes");
       return res.json();
     },

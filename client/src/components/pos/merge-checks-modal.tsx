@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,7 +34,7 @@ export function MergeChecksModal({
     queryKey: ["/api/checks/open", rvcId],
     queryFn: async () => {
       if (!rvcId) return [];
-      const res = await fetch(`/api/checks/open?rvcId=${rvcId}`, { credentials: "include" });
+      const res = await fetch(`/api/checks/open?rvcId=${rvcId}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch open checks");
       return res.json();
     },

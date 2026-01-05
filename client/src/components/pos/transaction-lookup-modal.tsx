@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +36,7 @@ export function TransactionLookupModal({
       if (searchCheckNumber) params.append("checkNumber", searchCheckNumber);
       params.append("limit", "50");
 
-      const res = await fetch(`/api/rvcs/${rvcId}/closed-checks?${params}`, { credentials: "include" });
+      const res = await fetch(`/api/rvcs/${rvcId}/closed-checks?${params}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch closed checks");
       return res.json();
     },

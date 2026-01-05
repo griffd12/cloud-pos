@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import type { Employee, Rvc, Property, Timecard, JobCode, Workstation } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -133,7 +133,7 @@ export default function LoginPage() {
       }
 
       // Normal hourly flow - check clock status
-      const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include" });
+      const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include", headers: getAuthHeaders() });
       let isClockedIn = false;
       let todayTimecard = null;
       if (statusRes.ok) {
@@ -170,7 +170,7 @@ export default function LoginPage() {
     onSuccess: async (data) => {
       setClockEmployee(data.employee);
       
-      const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include" });
+      const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include", headers: getAuthHeaders() });
       let statusData: ClockStatusResponse | null = null;
       if (statusRes.ok) {
         const rawStatus = await statusRes.json();
@@ -181,7 +181,7 @@ export default function LoginPage() {
         setClockStatus(statusData);
       }
       
-      const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes/details`, { credentials: "include" });
+      const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes/details`, { credentials: "include", headers: getAuthHeaders() });
       let jobs: JobCode[] = [];
       if (jobsRes.ok) {
         const jobDetails = await jobsRes.json();
@@ -211,7 +211,7 @@ export default function LoginPage() {
   });
 
   const refreshClockStatus = async (employeeId: string) => {
-    const statusRes = await fetch(`/api/time-punches/status/${employeeId}`, { credentials: "include" });
+    const statusRes = await fetch(`/api/time-punches/status/${employeeId}`, { credentials: "include", headers: getAuthHeaders() });
     if (statusRes.ok) {
       const statusData = await statusRes.json();
       setClockStatus({

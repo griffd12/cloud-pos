@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical, Star, Upload, Image } from "lucide-react";
 import type { PosLayout, PosLayoutCell, MenuItem, Rvc, Property, PosLayoutRvcAssignment } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -397,7 +397,7 @@ export default function PosLayoutsPage() {
       setSelectedRvcId(layout.rvcId || "");
       // Load existing RVC assignments
       try {
-        const res = await fetch(`/api/pos-layouts/${layout.id}/rvc-assignments`, { credentials: "include" });
+        const res = await fetch(`/api/pos-layouts/${layout.id}/rvc-assignments`, { credentials: "include", headers: getAuthHeaders() });
         const assignments: PosLayoutRvcAssignment[] = await res.json();
         setSelectedRvcAssignments(assignments.map(a => ({ 
           propertyId: a.propertyId, 
@@ -527,7 +527,7 @@ export default function PosLayoutsPage() {
     setGridRows(layout.gridRows || 4);
     setGridCols(layout.gridCols || 6);
     
-    const res = await fetch(`/api/pos-layouts/${layout.id}/cells`, { credentials: "include" });
+    const res = await fetch(`/api/pos-layouts/${layout.id}/cells`, { credentials: "include", headers: getAuthHeaders() });
     const existingCells: PosLayoutCell[] = await res.json();
     
     const cellMap = new Map<string, PosLayoutCell>();
