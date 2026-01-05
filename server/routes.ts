@@ -4505,20 +4505,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let closedSubtotalCents = 0;
       let closedTaxCents = 0;
       let closedTotalCents = 0;
+      let closedDiscountCents = 0;
+      let closedServiceChargeCents = 0;
       for (const c of checksClosed) {
         closedSubtotalCents += Math.round(parseFloat(c.subtotal || "0") * 100);
         closedTaxCents += Math.round(parseFloat(c.taxTotal || "0") * 100);
         closedTotalCents += Math.round(parseFloat(c.total || "0") * 100);
+        closedDiscountCents += Math.round(parseFloat(c.discountTotal || "0") * 100);
+        closedServiceChargeCents += Math.round(parseFloat(c.serviceChargeTotal || "0") * 100);
       }
       
       // Sum today's open check values (for reconciliation - only checks from this business date)
       let openSubtotalCents = 0;
       let openTaxCents = 0;
       let openTotalCents = 0;
+      let openDiscountCents = 0;
+      let openServiceChargeCents = 0;
       for (const c of todaysOpenChecks) {
         openSubtotalCents += Math.round(parseFloat(c.subtotal || "0") * 100);
         openTaxCents += Math.round(parseFloat(c.taxTotal || "0") * 100);
         openTotalCents += Math.round(parseFloat(c.total || "0") * 100);
+        openDiscountCents += Math.round(parseFloat(c.discountTotal || "0") * 100);
+        openServiceChargeCents += Math.round(parseFloat(c.serviceChargeTotal || "0") * 100);
       }
       
       // Sum ALL outstanding checks (includes carried over - for total liability)
@@ -4528,14 +4536,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Calculate totals (all checks = closed + open for this business date)
-      const grossSalesCents = closedSubtotalCents + openSubtotalCents;
+      // Note: check.subtotal is POST-discount (net), so we add discounts back to get gross
+      const netSubtotalCents = closedSubtotalCents + openSubtotalCents;
       const taxTotalCents = closedTaxCents + openTaxCents;
       const totalWithTaxCents = closedTotalCents + openTotalCents;
+      const discountTotalCents = closedDiscountCents + openDiscountCents;
+      const serviceChargeTotalCents = closedServiceChargeCents + openServiceChargeCents;
+      
+      // Gross Sales = Net Subtotal + Discounts (pre-discount item totals)
+      const grossSalesCents = netSubtotalCents + discountTotalCents;
       
       // Convert back to dollars
       const grossSales = grossSalesCents / 100;
       const taxTotal = taxTotalCents / 100;
-      const netSales = grossSales; // Discounts would need separate tracking
+      const discountTotal = discountTotalCents / 100;
+      const serviceChargeTotal = serviceChargeTotalCents / 100;
+      // Net Sales = check subtotals (already post-discount)
+      // Formula: Gross - Discounts = Net verified: (netSubtotal + discount) - discount = netSubtotal
+      const netSales = netSubtotalCents / 100;
       const totalWithTax = totalWithTaxCents / 100;
       
       // For item-level breakdown (still useful for reporting)
@@ -4568,7 +4586,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }, 0);
       
       const itemSales = baseItemSales + modifierTotal;
-      const serviceChargeTotal = 0; // Service charges would need separate tracking
       
       // PAYMENTS - Based on businessDate (operating day when payment was applied)
       // Important: p.amount is the TENDERED amount (what customer handed over).
@@ -4632,8 +4649,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       res.json({
         // Sales (based on check business date - includes both open and closed)
-        grossSales,          // All check subtotals (closed + open)
-        netSales,            // Same as grossSales (discounts would reduce this)
+        grossSales,          // All check subtotals (closed + open) - before discounts
+        netSales,            // Gross Sales - Discounts (actual taxable revenue)
         taxTotal,            // All check taxes (closed + open)
         totalWithTax,        // All check totals (closed + open)
         
@@ -4641,9 +4658,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         itemSales: Math.round(itemSales * 100) / 100,
         baseItemSales: Math.round(baseItemSales * 100) / 100,
         modifierTotal: Math.round(modifierTotal * 100) / 100,
-        serviceChargeTotal,
+        serviceChargeTotal: Math.round(serviceChargeTotal * 100) / 100,
         otherCharges: 0,
-        discountTotal: 0, // Would need item-level discount tracking
+        discountTotal: Math.round(discountTotal * 100) / 100,
         
         // Closed check breakdown (for reconciliation: Payments should equal closedTotal)
         closedSubtotal,      // Sum of closed check subtotals
