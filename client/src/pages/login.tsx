@@ -272,9 +272,14 @@ export default function LoginPage() {
   });
 
   const handleDigit = (digit: string) => {
-    if (pin.length < 6) {
-      setPin((prev) => prev + digit);
+    if (pin.length < 6 && !loginMutation.isPending) {
+      const newPin = pin + digit;
+      setPin(newPin);
       setLoginError(null);
+      // Auto-submit when 4 digits are entered
+      if (newPin.length === 4) {
+        loginMutation.mutate(newPin);
+      }
     }
   };
 

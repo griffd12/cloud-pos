@@ -216,9 +216,8 @@ export function PaymentModal({
       const lookupUrl = giftCardPin.trim() 
         ? `/api/gift-cards/lookup/${encodeURIComponent(giftCardNumber.trim())}?pin=${encodeURIComponent(giftCardPin.trim())}`
         : `/api/gift-cards/lookup/${encodeURIComponent(giftCardNumber.trim())}`;
-      const res = await fetch(lookupUrl, {
-        credentials: "include",
-      });
+      // Use apiRequest to include device token header
+      const res = await apiRequest("GET", lookupUrl);
       
       if (!res.ok) {
         const error = await res.json();
