@@ -6712,7 +6712,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         startDate: startDate as string,
         endDate: endDate as string,
       });
-      res.json(timecards);
+      
+      // Calculate real-time hours for open shifts (clocked in but not out)
+      const now = new Date();
+      const enhancedTimecards = timecards.map(tc => {
+        // If shift is still open (has clock in but no clock out), calculate running totals
+        if (tc.clockInTime && !tc.clockOutTime) {
+          const clockIn = new Date(tc.clockInTime);
+          const elapsedMs = now.getTime() - clockIn.getTime();
+          const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
+          
+          // Split into Regular (first 480 min / 8 hrs), OT (481-720 / 8-12 hrs), Double (720+ / 12+ hrs)
+          let regularMinutes = 0;
+          let overtimeMinutes = 0;
+          let doubletimeMinutes = 0;
+          
+          if (elapsedMinutes <= 480) {
+            regularMinutes = elapsedMinutes;
+          } else if (elapsedMinutes <= 720) {
+            regularMinutes = 480;
+            overtimeMinutes = elapsedMinutes - 480;
+          } else {
+            regularMinutes = 480;
+            overtimeMinutes = 240;
+            doubletimeMinutes = elapsedMinutes - 720;
+          }
+          
+          const regularHours = (regularMinutes / 60).toFixed(2);
+          const overtimeHours = (overtimeMinutes / 60).toFixed(2);
+          const doubleTimeHours = (doubletimeMinutes / 60).toFixed(2);
+          const totalHours = ((regularMinutes + overtimeMinutes + doubletimeMinutes) / 60).toFixed(2);
+          
+          // Calculate pay if rate is available
+          const payRate = parseFloat(tc.payRate || "0");
+          const regularPay = (regularMinutes / 60) * payRate;
+          const overtimePay = (overtimeMinutes / 60) * payRate * 1.5;
+          const doublePay = (doubletimeMinutes / 60) * payRate * 2;
+          const totalPay = regularPay + overtimePay + doublePay;
+          
+          return {
+            ...tc,
+            regularHours,
+            overtimeHours,
+            doubleTimeHours,
+            totalHours,
+            regularPay: regularPay.toFixed(2),
+            overtimePay: overtimePay.toFixed(2),
+            doubleTimePay: doublePay.toFixed(2),
+            totalPay: totalPay.toFixed(2),
+            isLive: true, // Flag to indicate this is a running total
+          };
+        }
+        return { ...tc, isLive: false };
+      });
+      
+      res.json(enhancedTimecards);
     } catch (error) {
       console.error("Get timecards error:", error);
       res.status(500).json({ message: "Failed to get timecards" });
