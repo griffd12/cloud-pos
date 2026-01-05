@@ -2009,15 +2009,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!managerPin) {
           return res.status(400).json({ message: "Manager approval required" });
         }
-        // Find employee by PIN and verify they have manager privilege
-        const employees = await storage.getEmployees();
-        const manager = employees.find(e => e.pin === managerPin);
+        // Find employee by PIN using the existing auth function
+        const manager = await storage.getEmployeeByPin(managerPin);
         if (!manager) {
           return res.status(401).json({ message: "Invalid manager PIN" });
         }
         // Check if they have the apply_discount privilege
-        const role = await storage.getRole(manager.roleId);
-        if (!role || !role.privileges.includes("apply_discount")) {
+        const privileges = manager.roleId ? await storage.getRolePrivileges(manager.roleId) : [];
+        if (!privileges.includes("apply_discount")) {
           return res.status(403).json({ message: "Employee does not have discount approval privilege" });
         }
         approvedByEmployeeId = manager.id;
