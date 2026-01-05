@@ -73,13 +73,40 @@ export default function PosPage() {
     selectedSlu,
     pendingItem,
     privileges,
+    workstationId,
     setCurrentCheck,
     setCheckItems,
     setSelectedSlu,
     setPendingItem,
+    setCurrentRvc,
     hasPrivilege,
     logout,
   } = usePosContext();
+
+  // Fetch workstation context to get RVC if not already set
+  const { data: wsContext } = useQuery<{ workstation: any; rvcs: any[]; property: any }>({
+    queryKey: ["/api/workstations", workstationId, "context"],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch workstation context");
+      return res.json();
+    },
+    enabled: !!workstationId && !currentRvc,
+  });
+
+  // Auto-set RVC from workstation if not already set
+  useEffect(() => {
+    if (!currentRvc && wsContext?.rvcs && wsContext.rvcs.length > 0) {
+      // Find the RVC that matches the workstation's rvc_id, or use the first one
+      const workstationRvcId = wsContext.workstation?.rvcId;
+      const matchingRvc = workstationRvcId 
+        ? wsContext.rvcs.find((r: any) => r.id === workstationRvcId)
+        : wsContext.rvcs[0];
+      if (matchingRvc) {
+        setCurrentRvc(matchingRvc);
+      }
+    }
+  }, [currentRvc, wsContext, setCurrentRvc]);
 
   const [showModifierModal, setShowModifierModal] = useState(false);
   const [showManagerApproval, setShowManagerApproval] = useState(false);
