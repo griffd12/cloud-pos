@@ -4,9 +4,39 @@
  * Calculates the "operating day" (business date) based on a timestamp and
  * the property's rollover time. For example, if rollover time is 4:00 AM,
  * transactions at 2:00 AM Tuesday belong to Monday's business date.
+ * 
+ * UNIFIED ROLLOVER LOGIC:
+ * - A business date's period starts at rollover time on that calendar date
+ * - The period ends (closes) at rollover time, which could be:
+ *   - For pre-noon rollovers (00:00-11:59): at that time on the NEXT calendar day
+ *   - For post-noon rollovers (12:00-23:59): at that time on the SAME calendar day (next day's period starts)
+ * 
+ * Wait - that doesn't match the resolveBusinessDate logic. Let me trace through again...
+ * 
+ * Current resolveBusinessDate logic:
+ * - If current time < rollover: business date = previous calendar day
+ * - If current time >= rollover: business date = current calendar day
+ * 
+ * This means:
+ * - For 04:00 rollover at 03:59 on Jan 6: business date = Jan 5
+ * - For 04:00 rollover at 04:00 on Jan 6: business date = Jan 6
+ * So Jan 5's business period ends when we're at/past 04:00 on Jan 6.
+ * 
+ * - For 23:00 rollover at 22:59 on Jan 5: business date = Jan 4
+ * - For 23:00 rollover at 23:00 on Jan 5: business date = Jan 5
+ * - For 23:00 rollover at 00:00 on Jan 6: business date = Jan 5 (00:00 < 23:00, so previous day)
+ * - For 23:00 rollover at 22:59 on Jan 6: business date = Jan 5 (22:59 < 23:00, so previous day)
+ * - For 23:00 rollover at 23:00 on Jan 6: business date = Jan 6
+ * So Jan 5's business period ends when we're at/past 23:00 on Jan 6.
+ * 
+ * So the closing instant for a business date is ALWAYS:
+ * - rollover time on the NEXT calendar day
+ * 
+ * This is because resolveBusinessDate treats rollover as the START of a new business date.
  */
 
 import type { Property } from "@shared/schema";
+import { toZonedTime, fromZonedTime, format } from "date-fns-tz";
 
 /**
  * Validates a YYYY-MM-DD format string.
@@ -29,6 +59,59 @@ export const DEFAULT_BUSINESS_DATE_SETTINGS = {
   currentBusinessDate: null,
   timezone: 'America/New_York',
 };
+
+/**
+ * Calculates the exact UTC instant when a business date closes.
+ * 
+ * The closing instant is rollover time on the NEXT calendar day after the business date.
+ * This is because resolveBusinessDate treats rollover as the START of a new business date.
+ * 
+ * Examples:
+ * - Business date 2026-01-05 with 04:00 rollover: closes at 2026-01-06 04:00 local time
+ * - Business date 2026-01-05 with 23:00 rollover: closes at 2026-01-06 23:00 local time
+ * 
+ * @param businessDate - YYYY-MM-DD formatted business date
+ * @param property - The property with rollover time and timezone settings
+ * @returns UTC Date when the business date closes
+ */
+export function getBusinessDateClosingInstant(
+  businessDate: string,
+  property: Pick<Property, 'businessDateRolloverTime' | 'timezone'>
+): Date {
+  const timezone = property.timezone || 'America/New_York';
+  const rolloverTime = property.businessDateRolloverTime || '04:00';
+  
+  const [year, month, day] = businessDate.split('-').map(Number);
+  
+  // Closing happens at rollover time on the NEXT calendar day
+  const nextDay = new Date(year, month - 1, day + 1);
+  const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
+  
+  // Create the local time string for the closing instant
+  const closingLocalTimeStr = `${nextDayStr}T${rolloverTime}:00`;
+  
+  // Convert to UTC using date-fns-tz
+  const closingInstant = fromZonedTime(closingLocalTimeStr, timezone);
+  
+  return closingInstant;
+}
+
+/**
+ * Checks if the current time has reached or passed the closing instant for a business date.
+ * 
+ * @param businessDate - YYYY-MM-DD formatted business date
+ * @param property - The property with rollover time and timezone settings
+ * @param now - Optional current time (defaults to now)
+ * @returns true if the business date should be closed
+ */
+export function hasReachedClosingTime(
+  businessDate: string,
+  property: Pick<Property, 'businessDateRolloverTime' | 'timezone'>,
+  now: Date = new Date()
+): boolean {
+  const closingInstant = getBusinessDateClosingInstant(businessDate, property);
+  return now.getTime() >= closingInstant.getTime();
+}
 
 /**
  * Resolves the business date for a given timestamp based on property settings.
@@ -69,27 +152,21 @@ export function resolveBusinessDate(
   const rolloverTime = settings.businessDateRolloverTime || '04:00';
   const [rolloverHour, rolloverMinute] = rolloverTime.split(':').map(Number);
   
-  // Convert timestamp to property's local time
-  const localTimeStr = date.toLocaleString('en-US', { 
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false 
-  });
+  // Convert timestamp to property's local time using date-fns-tz
+  const zonedTime = toZonedTime(date, timezone);
   
-  // Parse local time components
-  const [datePart, timePart] = localTimeStr.split(', ');
-  const [month, day, year] = datePart.split('/').map(Number);
-  const [hour, minute] = timePart.split(':').map(Number);
+  // Get local time components
+  const localYear = zonedTime.getFullYear();
+  const localMonth = zonedTime.getMonth();
+  const localDay = zonedTime.getDate();
+  const localHour = zonedTime.getHours();
+  const localMinute = zonedTime.getMinutes();
   
   // Determine if we're before the rollover time
-  const currentMinutes = hour * 60 + minute;
+  const currentMinutes = localHour * 60 + localMinute;
   const rolloverMinutes = rolloverHour * 60 + rolloverMinute;
   
-  let businessDate = new Date(year, month - 1, day);
+  let businessDate = new Date(localYear, localMonth, localDay);
   
   // If current time is before rollover, business date is previous day
   if (currentMinutes < rolloverMinutes) {
@@ -118,7 +195,6 @@ export function getBusinessDateRange(
 ): { start: Date; end: Date } {
   const timezone = property.timezone || 'America/New_York';
   const rolloverTime = property.businessDateRolloverTime || '04:00';
-  const [rolloverHour, rolloverMinute] = rolloverTime.split(':').map(Number);
   
   const [year, month, day] = businessDate.split('-').map(Number);
   
@@ -130,17 +206,9 @@ export function getBusinessDateRange(
   const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
   const endLocalStr = `${nextDayStr}T${rolloverTime}:00`;
   
-  // Convert to UTC timestamps
-  // Using a formatter to get the UTC offset for the timezone
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    timeZoneName: 'short'
-  });
-  
-  // Create date objects representing the local times
-  // This is a simplification - for production, use a proper timezone library like luxon
-  const start = new Date(`${startLocalStr}`);
-  const end = new Date(`${endLocalStr}`);
+  // Convert to UTC using date-fns-tz
+  const start = fromZonedTime(startLocalStr, timezone);
+  const end = fromZonedTime(endLocalStr, timezone);
   
   return { start, end };
 }

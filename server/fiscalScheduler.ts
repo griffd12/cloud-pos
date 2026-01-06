@@ -4,62 +4,21 @@
  * Runs periodically to check if any property has reached its rollover time
  * and automatically closes the business day and opens the next one.
  * 
- * DESIGN NOTE:
- * This scheduler uses the same business date logic as resolveBusinessDate to ensure
- * consistency between transaction attribution and fiscal period management.
- * 
- * According to resolveBusinessDate:
- * - If current local time < rollover time: business date = previous calendar day
- * - If current local time >= rollover time: business date = current calendar day
- * 
- * A business date period is closed when the current business date (as determined
- * by resolveBusinessDate) has advanced past the period's business date.
- * 
- * For typical restaurant operations with early morning rollovers (e.g., 04:00),
- * this means:
- * - Business date 2026-01-05 spans from 2026-01-05 04:00 to 2026-01-06 04:00
- * - The period closes when resolveBusinessDate returns 2026-01-06 (at 04:00 on 2026-01-06)
- * 
- * IMPORTANT: Properties should use early morning rollover times (00:00-06:00) for
- * correct behavior. Pre-midnight rollovers may not work as expected.
+ * Uses the unified rollover logic from businessDate.ts to ensure consistency
+ * between transaction attribution and fiscal period management.
  * 
  * Key design decisions:
- * - Uses the same logic as resolveBusinessDate for consistency
+ * - Uses hasReachedClosingTime from businessDate.ts for consistent rollover logic
  * - Always processes the OLDEST unclosed period first (Simphony-style)
  * - Checks for duplicate periods before creating new ones
  * - Loops until all eligible periods are closed (handles backlog)
  */
 
 import { storage } from "./storage";
-import { resolveBusinessDate, incrementDate } from "./businessDate";
+import { hasReachedClosingTime, incrementDate } from "./businessDate";
 import { log } from "./index";
 
 let schedulerInterval: NodeJS.Timeout | null = null;
-
-/**
- * Checks if the business date should be closed based on current time.
- * A period should be closed when the current business date (per resolveBusinessDate)
- * is LATER than the period's business date.
- * 
- * This ensures consistency with how transactions are attributed to business dates.
- */
-function shouldClosePeriod(
-  property: {
-    id: string;
-    timezone: string | null;
-    businessDateRolloverTime: string | null;
-  },
-  periodBusinessDate: string
-): boolean {
-  const currentBusinessDate = resolveBusinessDate(new Date(), {
-    businessDateRolloverTime: property.businessDateRolloverTime,
-    businessDateMode: "auto",
-    currentBusinessDate: null,
-    timezone: property.timezone,
-  });
-
-  return currentBusinessDate > periodBusinessDate;
-}
 
 /**
  * Process automatic fiscal close for a single property.
@@ -85,7 +44,8 @@ async function processPropertyFiscalClose(propertyId: string): Promise<void> {
 
       const oldestOpenPeriod = openPeriods[0];
 
-      if (!shouldClosePeriod(property, oldestOpenPeriod.businessDate)) {
+      // Use the unified rollover logic from businessDate.ts
+      if (!hasReachedClosingTime(oldestOpenPeriod.businessDate, property)) {
         break;
       }
 
