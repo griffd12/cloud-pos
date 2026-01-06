@@ -10773,6 +10773,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const property = await storage.getProperty(req.params.propertyId);
       if (!property) return res.status(404).json({ message: "Property not found" });
       
+      // SIMPHONY-STYLE BUSINESS DATE: Check for any unclosed fiscal period first
+      // Business date should NOT advance until the previous day is explicitly closed
+      const allPeriods = await storage.getFiscalPeriods(req.params.propertyId);
+      const unclosedPeriod = allPeriods
+        .filter(p => p.status === "open" || p.status === "reopened")
+        .sort((a, b) => a.businessDate.localeCompare(b.businessDate))[0]; // Get oldest unclosed
+      
+      if (unclosedPeriod) {
+        // Return the oldest unclosed period - this is the current business date
+        return res.json(unclosedPeriod);
+      }
+      
+      // No unclosed periods - calculate new business date based on clock
       const businessDate = resolveBusinessDate(new Date(), property);
       let period = await storage.getFiscalPeriodByDate(req.params.propertyId, businessDate);
       
