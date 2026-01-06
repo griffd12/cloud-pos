@@ -412,8 +412,8 @@ export default function LoyaltyPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="programs">Programs</TabsTrigger>
-          <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="rewards">Rewards</TabsTrigger>
+          <TabsTrigger value="members">Members</TabsTrigger>
         </TabsList>
 
         <TabsContent value="programs" className="mt-4">
@@ -456,6 +456,18 @@ export default function LoyaltyPage() {
           />
         </TabsContent>
 
+        <TabsContent value="rewards" className="mt-4">
+          <DataTable
+            data={rewards}
+            columns={rewardColumns}
+            onAdd={() => { setEditingReward(null); setRewardFormOpen(true); }}
+            onEdit={(item) => { setEditingReward(item); setRewardFormOpen(true); }}
+            isLoading={rewardsLoading}
+            searchPlaceholder="Search rewards..."
+            emptyMessage="No rewards created yet"
+          />
+        </TabsContent>
+
         <TabsContent value="members" className="mt-4">
           <DataTable
             data={members}
@@ -466,18 +478,6 @@ export default function LoyaltyPage() {
             isLoading={membersLoading}
             searchPlaceholder="Search members..."
             emptyMessage="No members enrolled yet"
-          />
-        </TabsContent>
-
-        <TabsContent value="rewards" className="mt-4">
-          <DataTable
-            data={rewards}
-            columns={rewardColumns}
-            onAdd={() => { setEditingReward(null); setRewardFormOpen(true); }}
-            onEdit={(item) => { setEditingReward(item); setRewardFormOpen(true); }}
-            isLoading={rewardsLoading}
-            searchPlaceholder="Search rewards..."
-            emptyMessage="No rewards created yet"
           />
         </TabsContent>
       </Tabs>
