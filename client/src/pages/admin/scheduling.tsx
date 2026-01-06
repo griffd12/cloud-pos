@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,7 @@ type EmployeeJobCodeWithDetails = EmployeeJobCode & { jobCode: JobCode };
 
 export default function SchedulingPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [isAddingShift, setIsAddingShift] = useState(false);

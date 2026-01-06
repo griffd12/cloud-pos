@@ -7260,6 +7260,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Invalid job code data", errors: parsed.error.issues });
       }
       const jobCode = await storage.createJobCode(parsed.data);
+      broadcastPosEvent({ type: "job_update" });
       res.status(201).json(jobCode);
     } catch (error) {
       console.error("Create job code error:", error);
@@ -7274,6 +7275,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!jobCode) {
         return res.status(404).json({ message: "Job code not found" });
       }
+      broadcastPosEvent({ type: "job_update" });
       res.json(jobCode);
     } catch (error) {
       console.error("Update job code error:", error);
@@ -7288,6 +7290,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!deleted) {
         return res.status(404).json({ message: "Job code not found" });
       }
+      broadcastPosEvent({ type: "job_update" });
       res.status(204).send();
     } catch (error) {
       console.error("Delete job code error:", error);

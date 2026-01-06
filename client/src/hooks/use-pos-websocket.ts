@@ -122,8 +122,12 @@ function handlePosEvent(event: PosEvent) {
         });
       }
       queryClient.invalidateQueries({
-        predicate: (query) => 
-          getKeyString(query.queryKey[0]).includes("/api/checks")
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/checks") ||
+            key.includes("/api/reports") ||
+            key.includes("/api/sales-summary");
+        }
       });
       break;
 
@@ -170,6 +174,13 @@ function handlePosEvent(event: PosEvent) {
       queryClient.invalidateQueries({
         predicate: (query) => 
           getKeyString(query.queryKey[0]).includes("/api/employees")
+      });
+      break;
+
+    case "job_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => 
+          getKeyString(query.queryKey[0]).includes("/api/job-codes")
       });
       break;
 

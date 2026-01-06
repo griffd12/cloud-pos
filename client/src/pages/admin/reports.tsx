@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const EMC_SESSION_KEY = "emc_session_token";
@@ -418,6 +419,9 @@ interface CheckDetailData {
 }
 
 export default function ReportsPage() {
+  // Enable real-time updates via WebSocket
+  usePosWebSocket();
+  
   const searchParams = useSearch();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("all");

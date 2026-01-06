@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +9,7 @@ import { insertPropertySchema, type Property, type InsertProperty, type Enterpri
 
 export default function PropertiesPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Property | null>(null);
 

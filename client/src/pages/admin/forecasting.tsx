@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { format, addDays, subDays } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import type { Property, SalesForecast, LaborForecast } from "@shared/schema";
 
 export default function ForecastingPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [forecastDate, setForecastDate] = useState(format(new Date(), "yyyy-MM-dd"));
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
@@ -17,6 +18,7 @@ import { format } from "date-fns";
 
 export default function GiftCardsPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftCard | null>(null);
   const [lookupDialogOpen, setLookupDialogOpen] = useState(false);

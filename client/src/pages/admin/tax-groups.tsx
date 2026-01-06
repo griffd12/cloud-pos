@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { insertTaxGroupSchema, type TaxGroup, type InsertTaxGroup } from "@share
 
 export default function TaxGroupsPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TaxGroup | null>(null);
 

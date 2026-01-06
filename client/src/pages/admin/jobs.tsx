@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,10 @@ import { type JobCode, type Role } from "@shared/schema";
 
 export default function JobsPage() {
   const { toast } = useToast();
+  
+  // Enable real-time updates via WebSocket
+  usePosWebSocket();
+  
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<JobCode | null>(null);
   

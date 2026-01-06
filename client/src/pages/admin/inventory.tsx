@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const TRANSACTION_TYPES = ["receive", "sale", "waste", "transfer", "adjustment",
 
 export default function InventoryPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);

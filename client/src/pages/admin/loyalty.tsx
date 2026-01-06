@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
@@ -29,6 +30,7 @@ import { format } from "date-fns";
 
 export default function LoyaltyPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [activeTab, setActiveTab] = useState("programs");
   
   const [programFormOpen, setProgramFormOpen] = useState(false);

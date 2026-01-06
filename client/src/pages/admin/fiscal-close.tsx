@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import type { Property, FiscalPeriod } from "@shared/schema";
 
 export default function FiscalClosePage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<FiscalPeriod | null>(null);

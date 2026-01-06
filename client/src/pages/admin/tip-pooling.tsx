@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import type { Property, Employee, TipPoolPolicy, TipPoolRun, TipAllocation } fro
 
 export default function TipPoolingPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [isCreatingPolicy, setIsCreatingPolicy] = useState(false);
   const [isRunningSettlement, setIsRunningSettlement] = useState(false);

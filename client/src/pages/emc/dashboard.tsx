@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { useEmc } from "@/lib/emc-context";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -18,6 +19,9 @@ import { Link } from "wouter";
 export default function EmcDashboard() {
   const [, navigate] = useLocation();
   const { user, isAuthenticated, logout, isLoading } = useEmc();
+  
+  // Enable real-time updates via WebSocket
+  usePosWebSocket();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

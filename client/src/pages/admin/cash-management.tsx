@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import type { Property, CashDrawer, DrawerAssignment, CashTransaction, SafeCount
 
 export default function CashManagementPage() {
   const { toast } = useToast();
+  usePosWebSocket();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showDrawerDialog, setShowDrawerDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
