@@ -32,7 +32,8 @@ import {
 type MemberWithEnrollments = LoyaltyMember & {
   enrollments?: (LoyaltyMemberEnrollment & { program?: LoyaltyProgram })[];
 };
-import { Star, Users, Gift, Plus, Search, Award, TrendingUp, History, Crown } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Star, Users, Gift, Plus, Search, Award, TrendingUp, History, Crown, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 export default function LoyaltyPage() {
@@ -452,16 +453,73 @@ export default function LoyaltyPage() {
           />
         </TabsContent>
 
-        <TabsContent value="rewards" className="mt-4">
-          <DataTable
-            data={rewards}
-            columns={rewardColumns}
-            onAdd={() => { setEditingReward(null); setRewardFormOpen(true); }}
-            onEdit={(item) => { setEditingReward(item); setRewardFormOpen(true); }}
-            isLoading={rewardsLoading}
-            searchPlaceholder="Search rewards..."
-            emptyMessage="No rewards created yet"
-          />
+        <TabsContent value="rewards" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-muted-foreground text-sm">Rewards grouped by program</p>
+            <Button onClick={() => { setEditingReward(null); setRewardFormOpen(true); }} data-testid="button-add-reward">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Reward
+            </Button>
+          </div>
+          {rewardsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : programs.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                Create a loyalty program first to add rewards
+              </CardContent>
+            </Card>
+          ) : (
+            <Accordion type="multiple" defaultValue={programs.map(p => p.id)} className="space-y-2">
+              {programs.map(program => {
+                const programRewards = rewards.filter(r => r.programId === program.id);
+                return (
+                  <AccordionItem key={program.id} value={program.id} className="border rounded-lg">
+                    <AccordionTrigger className="px-4 hover:no-underline" data-testid={`accordion-program-${program.id}`}>
+                      <div className="flex items-center gap-3">
+                        <Gift className="w-4 h-4" />
+                        <span className="font-medium">{program.name}</span>
+                        <Badge variant={program.active ? "default" : "secondary"}>
+                          {programRewards.length} reward{programRewards.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      {programRewards.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">No rewards for this program yet</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {programRewards.map(reward => (
+                            <div 
+                              key={reward.id} 
+                              className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50 hover-elevate cursor-pointer"
+                              onClick={() => { setEditingReward(reward); setRewardFormOpen(true); }}
+                              data-testid={`row-reward-${reward.id}`}
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium">{reward.name}</p>
+                                {reward.description && (
+                                  <p className="text-sm text-muted-foreground line-clamp-1">{reward.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge variant="outline">{reward.pointsCost} pts</Badge>
+                                <Badge variant={reward.active ? "default" : "secondary"}>
+                                  {reward.active ? "Active" : "Inactive"}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          )}
         </TabsContent>
 
         <TabsContent value="members" className="mt-4">
