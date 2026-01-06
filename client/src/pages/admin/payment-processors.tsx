@@ -37,12 +37,13 @@ import {
 import { Loader2, TestTube } from "lucide-react";
 
 const GATEWAY_TYPES = [
-  { value: "stripe", label: "Stripe" },
-  { value: "elavon", label: "Elavon Converge" },
-  { value: "shift4", label: "Shift4 (Coming Soon)" },
-  { value: "heartland", label: "Heartland (Coming Soon)" },
-  { value: "freedompay", label: "FreedomPay (Coming Soon)" },
-  { value: "eigen", label: "Eigen (Coming Soon)" },
+  { value: "stripe", label: "Stripe", emv: false, description: "Online/card-not-present processing" },
+  { value: "elavon_converge", label: "Elavon Converge", emv: true, description: "EMV terminal integration" },
+  { value: "elavon_fusebox", label: "Elavon Fusebox", emv: true, description: "EMV terminal with multi-processor support" },
+  { value: "shift4", label: "Shift4 (Coming Soon)", emv: true, description: "EMV terminal integration" },
+  { value: "heartland", label: "Heartland (Coming Soon)", emv: true, description: "EMV terminal integration" },
+  { value: "freedompay", label: "FreedomPay (Coming Soon)", emv: true, description: "EMV terminal integration" },
+  { value: "eigen", label: "Eigen (Coming Soon)", emv: true, description: "EMV terminal integration" },
 ];
 
 const ENVIRONMENTS = [

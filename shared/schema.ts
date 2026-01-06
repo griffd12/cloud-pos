@@ -434,6 +434,7 @@ export const menuItemModifierGroups = pgTable("menu_item_modifier_groups", {
 export const PAYMENT_GATEWAY_TYPES = [
   "stripe",
   "elavon_converge",
+  "elavon_fusebox",  // Elavon Fusebox EMV gateway
   "shift4",
   "heartland",
   "freedompay",
