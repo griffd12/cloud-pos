@@ -15,8 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, Plus, Package, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, RotateCcw } from "lucide-react";
-import type { Property, InventoryItem, InventoryStock, InventoryTransaction } from "@shared/schema";
+import { Loader2, Plus, Package, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, RotateCcw, Download } from "lucide-react";
+import type { Property, InventoryItem, InventoryStock, InventoryTransaction, MenuItem } from "@shared/schema";
 
 const UNIT_TYPES = ["each", "oz", "lb", "kg", "g", "ml", "l", "gal", "qt", "pt", "cup", "tbsp", "tsp"];
 const TRANSACTION_TYPES = ["receive", "sale", "waste", "transfer", "adjustment", "count"];
@@ -105,6 +105,35 @@ export default function InventoryPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const importFromMenuMutation = useMutation({
+    mutationFn: async (propertyId: string) => {
+      const res = await apiRequest("POST", "/api/inventory-items/import-from-menu", { propertyId });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items"] });
+      if (data.imported > 0) {
+        toast({ 
+          title: "Menu Items Imported", 
+          description: `Imported ${data.imported} item(s) from menu.${data.skipped > 0 ? ` Skipped ${data.skipped} existing item(s).` : ""}` 
+        });
+      } else if (data.skipped > 0) {
+        toast({ 
+          title: "No New Items", 
+          description: `All ${data.skipped} menu items already exist in inventory.` 
+        });
+      } else {
+        toast({ 
+          title: "No Menu Items", 
+          description: "No menu items found for this property." 
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Import Failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -229,6 +258,19 @@ export default function InventoryPage() {
 
           <TabsContent value="items" className="space-y-4">
             <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => importFromMenuMutation.mutate(selectedPropertyId)} 
+                disabled={importFromMenuMutation.isPending}
+                data-testid="button-import-from-menu"
+              >
+                {importFromMenuMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" />
+                )}
+                Import from Menu
+              </Button>
               <Button onClick={() => setShowItemDialog(true)} data-testid="button-add-item">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Item
@@ -246,6 +288,7 @@ export default function InventoryPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
+                        <TableHead>Source</TableHead>
                         <TableHead>SKU</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead>Unit</TableHead>
@@ -258,6 +301,13 @@ export default function InventoryPage() {
                       {inventoryItems.map(item => (
                         <TableRow key={item.id} className="cursor-pointer hover-elevate" onClick={() => openEditDialog(item)} data-testid={`row-item-${item.id}`}>
                           <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell>
+                            {(item as any).menuItemId ? (
+                              <Badge variant="secondary" className="text-xs">Menu</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">Manual</Badge>
+                            )}
+                          </TableCell>
                           <TableCell className="text-muted-foreground font-mono text-sm">{item.sku || "-"}</TableCell>
                           <TableCell>{item.category || "-"}</TableCell>
                           <TableCell>{item.unitType}</TableCell>
