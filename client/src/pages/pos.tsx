@@ -23,11 +23,12 @@ import { PriceOverrideModal } from "@/components/pos/price-override-modal";
 import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
+import { TillOpeningModal } from "@/components/pos/till-opening-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
+import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount, TillSession } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -80,11 +81,13 @@ export default function PosPage() {
     pendingItem,
     privileges,
     workstationId,
+    activeTillSession,
     setCurrentCheck,
     setCheckItems,
     setSelectedSlu,
     setPendingItem,
     setCurrentRvc,
+    setActiveTillSession,
     hasPrivilege,
     logout,
   } = usePosContext();
@@ -95,10 +98,8 @@ export default function PosPage() {
     queryFn: async () => {
       const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
-        setApiConnected(false);
         throw new Error("Failed to fetch workstation context");
       }
-      setApiConnected(true);
       return res.json();
     },
     enabled: !!workstationId && !currentRvc,
@@ -148,6 +149,42 @@ export default function PosPage() {
   const [isCapturingTip, setIsCapturingTip] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
+  const [showTillOpeningModal, setShowTillOpeningModal] = useState(false);
+
+  // Check for active till session when employee is signed in
+  const { data: fetchedTillSession, isLoading: tillSessionLoading } = useQuery<TillSession | null>({
+    queryKey: ["/api/till-sessions/active", { employeeId: currentEmployee?.id, rvcId: currentRvc?.id }],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/till-sessions/active?employeeId=${currentEmployee?.id}&rvcId=${currentRvc?.id}`,
+        { credentials: "include", headers: getAuthHeaders() }
+      );
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!currentEmployee?.id && !!currentRvc?.id,
+  });
+
+  // Sync fetched till session to context
+  useEffect(() => {
+    if (fetchedTillSession && !activeTillSession) {
+      setActiveTillSession(fetchedTillSession);
+    }
+  }, [fetchedTillSession, activeTillSession, setActiveTillSession]);
+
+  // Show till opening modal if no active session (and not loading)
+  useEffect(() => {
+    if (
+      currentEmployee?.id &&
+      currentRvc?.id &&
+      !tillSessionLoading &&
+      !fetchedTillSession &&
+      !activeTillSession
+    ) {
+      setShowTillOpeningModal(true);
+    }
+  }, [currentEmployee?.id, currentRvc?.id, tillSessionLoading, fetchedTillSession, activeTillSession]);
+
   // Health check query to verify API connection when RVC is already set
   const healthQuery = useQuery({
     queryKey: ["/api/health"],
@@ -276,10 +313,8 @@ export default function PosPage() {
     queryFn: async () => {
       const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
-        setApiConnected(false);
         throw new Error("Failed to fetch menu items");
       }
-      setApiConnected(true);
       return res.json();
     },
     enabled: !!selectedSlu,
@@ -1826,6 +1861,25 @@ export default function PosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {currentEmployee && currentRvc && wsContext?.property && (
+        <TillOpeningModal
+          open={showTillOpeningModal}
+          onClose={() => {
+            setShowTillOpeningModal(false);
+            logout();
+          }}
+          onComplete={(session) => {
+            setActiveTillSession(session);
+            setShowTillOpeningModal(false);
+          }}
+          employeeId={currentEmployee.id}
+          rvcId={currentRvc.id}
+          propertyId={currentRvc.propertyId}
+          workstationId={workstationId || ""}
+          businessDate={wsContext.property.currentBusinessDate || new Date().toISOString().split("T")[0]}
+        />
+      )}
     </div>
   );
 }

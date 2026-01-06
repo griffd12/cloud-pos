@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react";
-import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode, Workstation } from "@shared/schema";
+import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode, Workstation, TillSession } from "@shared/schema";
 
 const RVC_STORAGE_KEY = "pos_selected_rvc";
 const WORKSTATION_STORAGE_KEY = "pos_workstation_id";
@@ -25,6 +25,7 @@ interface PosContextType {
   currentJobCode: JobCode | null;
   workstationId: string | null;
   currentWorkstation: Workstation | null;
+  activeTillSession: TillSession | null;
   
   setCurrentEmployee: (employee: Employee | null) => void;
   setCurrentRvc: (rvc: Rvc | null) => void;
@@ -40,6 +41,7 @@ interface PosContextType {
   setCurrentJobCode: (jobCode: JobCode | null) => void;
   setWorkstationId: (id: string | null) => void;
   setCurrentWorkstation: (workstation: Workstation | null) => void;
+  setActiveTillSession: (session: TillSession | null) => void;
   
   hasPrivilege: (code: string) => boolean;
   logout: () => void;
@@ -90,6 +92,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [currentJobCode, setCurrentJobCode] = useState<JobCode | null>(null);
   const [workstationId, setWorkstationIdState] = useState<string | null>(getInitialWorkstationId);
   const [currentWorkstation, setCurrentWorkstation] = useState<Workstation | null>(null);
+  const [activeTillSession, setActiveTillSession] = useState<TillSession | null>(null);
 
   // Persist workstation ID to localStorage when it changes
   const setWorkstationId = useCallback((id: string | null) => {
@@ -132,6 +135,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     setCurrentTimecard(null);
     setIsSalariedBypass(false);
     setCurrentJobCode(null);
+    setActiveTillSession(null);
     // NOTE: We intentionally do NOT clear currentRvc - it persists until explicitly changed
   }, []);
 
@@ -152,6 +156,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
         currentJobCode,
         workstationId,
         currentWorkstation,
+        activeTillSession,
         setCurrentEmployee,
         setCurrentRvc,
         setCurrentCheck,
@@ -166,6 +171,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
         setCurrentJobCode,
         setWorkstationId,
         setCurrentWorkstation,
+        setActiveTillSession,
         hasPrivilege,
         logout,
       }}
