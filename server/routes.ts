@@ -11627,12 +11627,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const rvcs = await storage.getRvcs(propertyId);
       const rvcIds = rvcs.map((r: any) => r.id);
 
-      // Get all menu items for this property (via RVCs or direct propertyId)
+      // Get all menu items for this property
+      // Include: direct property items, RVC items, and enterprise-level items (no property/RVC assignment)
       const allMenuItems = await storage.getMenuItems();
-      const propertyMenuItems = allMenuItems.filter((mi: any) => 
-        mi.propertyId === propertyId || 
-        (mi.rvcId && rvcIds.includes(mi.rvcId))
-      );
+      const propertyMenuItems = allMenuItems.filter((mi: any) => {
+        // Direct property assignment
+        if (mi.propertyId === propertyId) return true;
+        // RVC assignment for this property
+        if (mi.rvcId && rvcIds.includes(mi.rvcId)) return true;
+        // Enterprise-level items (shared across all properties) - no property or RVC assigned
+        if (!mi.propertyId && !mi.rvcId && mi.enterpriseId === property.enterpriseId) return true;
+        // Global items (no property, RVC, or enterprise - available everywhere)
+        if (!mi.propertyId && !mi.rvcId && !mi.enterpriseId) return true;
+        return false;
+      });
 
       // Get existing inventory items for this property
       const existingInventory = await storage.getInventoryItems(propertyId, undefined);
