@@ -44,6 +44,8 @@ export function TillOpeningModal({
   const [step, setStep] = useState<"start" | "count">("start");
   const [startingAmount, setStartingAmount] = useState("150.00");
   const [denominations, setDenominations] = useState<DenominationCount[]>([]);
+  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
+  const [isCountSubmitting, setIsCountSubmitting] = useState(false);
 
   const { data: cashSettings, isLoading: settingsLoading } = useQuery<RvcCashSettings>({
     queryKey: ["/api/rvcs", rvcId, "cash-settings"],
@@ -86,8 +88,9 @@ export function TillOpeningModal({
     },
     onSuccess: (session) => {
       if (cashSettings?.requireOpeningCount) {
+        // Store session ID and advance to count step - do NOT record count yet
+        setCreatedSessionId(session.id);
         setStep("count");
-        recordOpeningCount(session.id);
       } else {
         activateTillDirectly(session.id);
       }
@@ -98,6 +101,7 @@ export function TillOpeningModal({
   });
 
   const recordOpeningCount = async (sessionId: string) => {
+    setIsCountSubmitting(true);
     try {
       const res = await apiRequest("POST", `/api/till-sessions/${sessionId}/counts`, {
         countType: "open",
@@ -113,6 +117,8 @@ export function TillOpeningModal({
       onComplete(data.session);
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to record count", variant: "destructive" });
+    } finally {
+      setIsCountSubmitting(false);
     }
   };
 
@@ -144,7 +150,9 @@ export function TillOpeningModal({
   };
 
   const handleCountComplete = () => {
-    recordOpeningCount(createTillMutation.data?.id);
+    if (createdSessionId) {
+      recordOpeningCount(createdSessionId);
+    }
   };
 
   const requiresCount = cashSettings?.requireOpeningCount ?? true;
@@ -282,7 +290,12 @@ export function TillOpeningModal({
             </Button>
           )}
           {step === "count" && (
-            <Button onClick={handleCountComplete} data-testid="button-confirm-count">
+            <Button 
+              onClick={handleCountComplete} 
+              disabled={isCountSubmitting}
+              data-testid="button-confirm-count"
+            >
+              {isCountSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Confirm Count & Open Till
             </Button>
           )}

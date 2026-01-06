@@ -10799,9 +10799,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/fiscal-periods/:id/close", async (req, res) => {
     try {
-      const { employeeId, cashActual, notes } = req.body;
+      const { employeeId, cashActual, notes, forceClose } = req.body;
       const period = await storage.getFiscalPeriod(req.params.id);
       if (!period) return res.status(404).json({ message: "Fiscal period not found" });
+
+      // Check for open till sessions for this property and business date
+      const tillSessions = await storage.getTillSessions(period.propertyId, period.businessDate);
+      const openTillSessions = tillSessions.filter(s => s.status === "active");
+      
+      if (openTillSessions.length > 0 && !forceClose) {
+        const employeeIds = [...new Set(openTillSessions.map(s => s.employeeId))];
+        const employees = await Promise.all(employeeIds.map(id => storage.getEmployee(id!)));
+        const employeeNames = employees.filter(Boolean).map(e => `${e!.firstName} ${e!.lastName}`);
+        
+        return res.status(400).json({ 
+          message: "Cannot close fiscal period with open till sessions",
+          openTillSessions: openTillSessions.length,
+          employeeNames,
+          canForceClose: true
+        });
+      }
 
       // Calculate financial totals from checks
       const totals = await storage.calculateFiscalPeriodTotals(period.propertyId, period.businessDate);
