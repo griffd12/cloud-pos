@@ -35,12 +35,17 @@ interface LaborVsSalesReport {
   totalSales: number;
   totalLaborCost: number;
   totalLaborHours: number;
+  totalLiveHours: number;
+  totalLiveCost: number;
   laborCostPercentage: number;
+  activeClockedInCount: number;
   dailyBreakdown: Array<{
     businessDate: string;
     sales: number;
     laborCost: number;
     laborHours: number;
+    liveHours: number;
+    liveCost: number;
     laborPercentage: number;
   }>;
 }
@@ -188,6 +193,17 @@ export default function LaborAnalyticsPage() {
               <Skeleton className="h-96 w-full" />
             ) : laborReport ? (
               <>
+                {laborReport.activeClockedInCount > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <Users className="w-5 h-5 text-blue-500" />
+                    <span className="text-sm font-medium">
+                      {laborReport.activeClockedInCount} employee{laborReport.activeClockedInCount > 1 ? "s" : ""} currently clocked in
+                    </span>
+                    <Badge variant="secondary" className="ml-auto">
+                      Live: {laborReport.totalLiveHours.toFixed(1)} hrs / {formatCurrency(laborReport.totalLiveCost)}
+                    </Badge>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <Card>
                     <CardHeader className="pb-2">
@@ -203,26 +219,42 @@ export default function LaborAnalyticsPage() {
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                         Labor Cost
+                        {laborReport.totalLiveCost > 0 && (
+                          <Badge variant="outline" className="text-xs">includes live</Badge>
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold" data-testid="text-labor-cost">
                         {formatCurrency(laborReport.totalLaborCost)}
                       </div>
+                      {laborReport.totalLiveCost > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Live: {formatCurrency(laborReport.totalLiveCost)}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                         Labor Hours
+                        {laborReport.totalLiveHours > 0 && (
+                          <Badge variant="outline" className="text-xs">includes live</Badge>
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold" data-testid="text-labor-hours">
                         {laborReport.totalLaborHours.toFixed(1)}
                       </div>
+                      {laborReport.totalLiveHours > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Live: {laborReport.totalLiveHours.toFixed(1)} hrs
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                   <Card className={laborReport.laborCostPercentage > laborTarget ? "border-destructive" : ""}>
@@ -268,6 +300,7 @@ export default function LaborAnalyticsPage() {
                           <TableHead>Labor Cost</TableHead>
                           <TableHead>Hours</TableHead>
                           <TableHead>Labor %</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -275,14 +308,38 @@ export default function LaborAnalyticsPage() {
                           <TableRow key={day.businessDate}>
                             <TableCell className="font-medium">{day.businessDate}</TableCell>
                             <TableCell className="tabular-nums">{formatCurrency(day.sales)}</TableCell>
-                            <TableCell className="tabular-nums">{formatCurrency(day.laborCost)}</TableCell>
-                            <TableCell className="tabular-nums">{day.laborHours.toFixed(1)}</TableCell>
+                            <TableCell className="tabular-nums">
+                              {formatCurrency(day.laborCost)}
+                              {day.liveCost > 0 && (
+                                <span className="text-xs text-muted-foreground block">
+                                  (live: {formatCurrency(day.liveCost)})
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="tabular-nums">
+                              {day.laborHours.toFixed(1)}
+                              {day.liveHours > 0 && (
+                                <span className="text-xs text-muted-foreground block">
+                                  (live: {day.liveHours.toFixed(1)})
+                                </span>
+                              )}
+                            </TableCell>
                             <TableCell>
                               <Badge
                                 variant={day.laborPercentage > laborTarget ? "destructive" : "default"}
                               >
                                 {formatPercentage(day.laborPercentage)}
                               </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {day.liveHours > 0 ? (
+                                <Badge variant="outline" className="text-blue-500 border-blue-500/50">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Live
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary">Finalized</Badge>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

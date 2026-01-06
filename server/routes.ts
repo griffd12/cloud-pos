@@ -8238,9 +8238,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const otRule = await storage.getActiveOvertimeRule(propertyId as string);
       const otMultiplier = otRule?.overtimeMultiplier ? parseFloat(otRule.overtimeMultiplier) : 1.5;
       const dtMultiplier = otRule?.doubleTimeMultiplier ? parseFloat(otRule.doubleTimeMultiplier) : 2.0;
+      const dailyOtThreshold = otRule?.dailyOvertimeThreshold ? parseFloat(otRule.dailyOvertimeThreshold) : 8;
+      const dailyDtThreshold = otRule?.dailyDoubleTimeThreshold ? parseFloat(otRule.dailyDoubleTimeThreshold) : 12;
       
       // Aggregate by business date
-      const dailyData: Record<string, { laborHours: number; laborCost: number }> = {};
+      const dailyData: Record<string, { laborHours: number; laborCost: number; liveHours: number; liveCost: number }> = {};
       
       for (const tc of timecardData) {
         const bd = tc.businessDate;
@@ -8248,7 +8250,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!bd) continue;
         
         if (!dailyData[bd]) {
-          dailyData[bd] = { laborHours: 0, laborCost: 0 };
+          dailyData[bd] = { laborHours: 0, laborCost: 0, liveHours: 0, liveCost: 0 };
         }
         const hours = parseFloat(tc.totalHours || "0");
         const payRate = parseFloat(tc.payRate || "0");
@@ -8259,6 +8261,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         dailyData[bd].laborHours += hours;
         // Calculate labor cost using configured multipliers from overtime rule
         dailyData[bd].laborCost += (regularHours * payRate) + (overtimeHours * payRate * otMultiplier) + (doubleTimeHours * payRate * dtMultiplier);
+      }
+      
+      // === LIVE DATA: Include currently clocked-in employees ===
+      // Get open timecards (no clock_out_time) within the date range
+      const openTimecards = timecardData.filter(tc => !tc.clockOutTime && tc.clockInTime);
+      const now = new Date();
+      
+      for (const tc of openTimecards) {
+        const bd = tc.businessDate || new Date().toISOString().split("T")[0];
+        if (!dailyData[bd]) {
+          dailyData[bd] = { laborHours: 0, laborCost: 0, liveHours: 0, liveCost: 0 };
+        }
+        
+        // Calculate live hours from clock_in to now
+        const clockIn = new Date(tc.clockInTime!);
+        const liveHours = Math.max(0, (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60));
+        const payRate = parseFloat(tc.payRate || "0");
+        
+        // Calculate regular/OT/DT based on thresholds
+        let regHrs = 0, otHrs = 0, dtHrs = 0;
+        if (liveHours <= dailyOtThreshold) {
+          regHrs = liveHours;
+        } else if (liveHours <= dailyDtThreshold) {
+          regHrs = dailyOtThreshold;
+          otHrs = liveHours - dailyOtThreshold;
+        } else {
+          regHrs = dailyOtThreshold;
+          otHrs = dailyDtThreshold - dailyOtThreshold;
+          dtHrs = liveHours - dailyDtThreshold;
+        }
+        
+        const liveCost = (regHrs * payRate) + (otHrs * payRate * otMultiplier) + (dtHrs * payRate * dtMultiplier);
+        
+        dailyData[bd].liveHours += liveHours;
+        dailyData[bd].liveCost += liveCost;
       }
       
       // Get sales data from checks (items rung on businessDate, not when check was closed)
@@ -8280,7 +8317,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         salesByDate[bd] += parseFloat(check.subtotal || "0");
       }
       
-      // Build summary
+      // Build summary - include both finalized AND live data
       const summary = {
         propertyId,
         startDate,
@@ -8288,26 +8325,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalSales: 0,
         totalLaborCost: 0,
         totalLaborHours: 0,
+        totalLiveHours: 0,
+        totalLiveCost: 0,
         laborCostPercentage: 0,
         dailyBreakdown: [] as any[],
+        activeClockedInCount: openTimecards.length,
       };
       
       // Get all dates in range
       const allDates = new Set([...Object.keys(dailyData), ...Object.keys(salesByDate)]);
       for (const bd of Array.from(allDates).sort()) {
         const sales = salesByDate[bd] || 0;
-        const laborHours = dailyData[bd]?.laborHours || 0;
-        const laborCost = dailyData[bd]?.laborCost || 0;
+        const finalizedHours = dailyData[bd]?.laborHours || 0;
+        const finalizedCost = dailyData[bd]?.laborCost || 0;
+        const liveHours = dailyData[bd]?.liveHours || 0;
+        const liveCost = dailyData[bd]?.liveCost || 0;
+        
+        // Combined totals (finalized + live)
+        const laborHours = finalizedHours + liveHours;
+        const laborCost = finalizedCost + liveCost;
         
         summary.totalSales += sales;
         summary.totalLaborCost += laborCost;
         summary.totalLaborHours += laborHours;
+        summary.totalLiveHours += liveHours;
+        summary.totalLiveCost += liveCost;
         
         summary.dailyBreakdown.push({
           businessDate: bd,
           sales,
           laborCost,
           laborHours,
+          liveHours,
+          liveCost,
           laborPercentage: sales > 0 ? (laborCost / sales) * 100 : 0,
         });
       }
