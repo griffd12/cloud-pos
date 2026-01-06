@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePosContext } from "@/lib/pos-context";
-import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import type { CheckItem } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
 interface UseInactivityLogoutOptions {
   timeoutMinutes: number | null | undefined;
@@ -17,54 +16,45 @@ export function useInactivityLogout({
   const { currentEmployee, currentCheck, logout } = usePosContext();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
-  // Store current check ID in a ref so it's always fresh
+  // Store current check ID and employee ID in refs so they're always fresh
   const currentCheckIdRef = useRef<string | null>(null);
+  const currentEmployeeIdRef = useRef<string | null>(null);
   
-  // Keep the ref updated
+  // Keep the refs updated
   useEffect(() => {
     currentCheckIdRef.current = currentCheck?.id || null;
   }, [currentCheck?.id]);
+  
+  useEffect(() => {
+    currentEmployeeIdRef.current = currentEmployee?.id || null;
+  }, [currentEmployee?.id]);
 
   const resetTimer = useCallback(() => {
     lastActivityRef.current = Date.now();
   }, []);
 
-  const cancelUnsentItems = useCallback(async () => {
+  // Use the same cancel-transaction endpoint as the Cancel key
+  const cancelTransaction = useCallback(async () => {
     const checkId = currentCheckIdRef.current;
+    const employeeId = currentEmployeeIdRef.current;
+    
     if (!checkId) {
-      console.log("[Auto-Logout] No current check to cancel items from");
+      console.log("[Auto-Logout] No current check to cancel");
       return;
     }
 
-    console.log(`[Auto-Logout] Fetching items for check ${checkId} to cancel unsent ones`);
+    console.log(`[Auto-Logout] Cancelling transaction for check ${checkId}`);
 
     try {
-      // Fetch fresh items from API instead of relying on stale closure
-      const response = await fetch(`/api/checks/${checkId}/items`, {
-        credentials: "include",
-        headers: getAuthHeaders(),
+      const response = await apiRequest("POST", `/api/checks/${checkId}/cancel-transaction`, {
+        employeeId,
+        reason: "Auto-logout due to inactivity",
       });
       
-      if (!response.ok) {
-        console.error("[Auto-Logout] Failed to fetch check items");
-        return;
-      }
-      
-      const items: CheckItem[] = await response.json();
-      const unsentItems = items.filter((item) => !item.sent && !item.voided);
-
-      console.log(`[Auto-Logout] Found ${unsentItems.length} unsent items to cancel`);
-
-      if (unsentItems.length === 0) return;
-
-      for (const item of unsentItems) {
-        console.log(`[Auto-Logout] Deleting unsent item: ${item.id} (${item.menuItemName})`);
-        await apiRequest("DELETE", `/api/check-items/${item.id}`);
-      }
-      
-      console.log("[Auto-Logout] Successfully canceled all unsent items");
+      const data = await response.json();
+      console.log(`[Auto-Logout] Transaction cancelled - voided ${data.voidedCount} item(s)`);
     } catch (error) {
-      console.error("[Auto-Logout] Failed to cancel unsent items during auto-logout:", error);
+      console.error("[Auto-Logout] Failed to cancel transaction:", error);
     }
   }, []);
 
@@ -77,13 +67,14 @@ export function useInactivityLogout({
       if (onBeforeLogout) {
         await onBeforeLogout();
       }
-      await cancelUnsentItems();
+      // Cancel the transaction (voids unsent items, removes from KDS)
+      await cancelTransaction();
     } catch (error) {
       console.error("[Auto-Logout] Error during pre-logout cleanup:", error);
     }
 
     logout();
-  }, [currentEmployee, onBeforeLogout, cancelUnsentItems, logout]);
+  }, [currentEmployee, onBeforeLogout, cancelTransaction, logout]);
 
   useEffect(() => {
     if (!enabled || !timeoutMinutes || timeoutMinutes <= 0 || !currentEmployee) {
