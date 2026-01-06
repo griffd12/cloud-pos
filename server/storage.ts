@@ -4237,9 +4237,9 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Get refunds for this check
-      const checkRefunds = await db.select().from(refunds).where(eq(refunds.checkId, check.id));
+      const checkRefunds = await db.select().from(refunds).where(eq(refunds.originalCheckId, check.id));
       for (const refund of checkRefunds) {
-        refundsTotal += parseFloat(refund.amount || "0");
+        refundsTotal += parseFloat(refund.total || "0");
       }
     }
 
