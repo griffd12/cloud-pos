@@ -13080,15 +13080,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/till-sessions/active", async (req, res) => {
     try {
       const { employeeId, rvcId } = req.query;
+      console.log("GET /api/till-sessions/active - employeeId:", employeeId, "rvcId:", rvcId);
       if (!employeeId || !rvcId) {
+        console.log("Missing required params - employeeId:", employeeId, "rvcId:", rvcId);
         return res.status(400).json({ message: "employeeId and rvcId are required" });
       }
       const session = await storage.getActiveTillSession(
         employeeId as string,
         rvcId as string
       );
+      console.log("Active till session result:", session ? session.id : "null");
       res.json(session || null);
     } catch (error) {
+      console.error("Get active till session error:", error);
       res.status(500).json({ message: "Failed to get active till session" });
     }
   });
@@ -13097,10 +13101,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/till-sessions", async (req, res) => {
     try {
       const { propertyId, rvcId, workstationId, employeeId, businessDate, expectedOpenAmount } = req.body;
+      console.log("POST /api/till-sessions - employeeId:", employeeId, "rvcId:", rvcId, "propertyId:", propertyId);
 
       // Check if employee already has an active till in this RVC
       const existingSession = await storage.getActiveTillSession(employeeId, rvcId);
       if (existingSession) {
+        console.log("Till session already exists:", existingSession.id, "status:", existingSession.status);
         return res.status(400).json({ 
           message: "Employee already has an active till session",
           existingSession,
