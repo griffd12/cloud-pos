@@ -35,7 +35,7 @@ export default function GiftCardsPage() {
   });
 
   const { data: cardTransactions = [] } = useQuery<GiftCardTransaction[]>({
-    queryKey: ["/api/gift-card-transactions", selectedCard?.id],
+    queryKey: ["/api/gift-cards", selectedCard?.id, "transactions"],
     enabled: !!selectedCard?.id,
   });
 
@@ -137,7 +137,7 @@ export default function GiftCardsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/gift-cards"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-card-transactions", selectedCard?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", selectedCard?.id, "transactions"] });
       setReloadDialogOpen(false);
       setReloadAmount("");
       toast({ title: "Card reloaded successfully" });
@@ -154,7 +154,7 @@ export default function GiftCardsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/gift-cards"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-card-transactions", selectedCard?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", selectedCard?.id, "transactions"] });
       setRedeemDialogOpen(false);
       setRedeemAmount("");
       toast({ title: "Redemption successful" });
