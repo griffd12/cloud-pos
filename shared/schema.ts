@@ -241,6 +241,8 @@ export const workstations = pgTable("workstations", {
   hostname: text("hostname"),
   isOnline: boolean("is_online").default(false),
   lastSeenAt: timestamp("last_seen_at"),
+  // Auto-Logout Settings
+  autoLogoutMinutes: integer("auto_logout_minutes"), // null or 0 = disabled
   active: boolean("active").default(true),
 });
 
