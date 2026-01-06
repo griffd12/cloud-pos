@@ -118,8 +118,8 @@ function PropertyBrandingSection({ properties, toast }: { properties: Property[]
   });
 
   const handleFileChange = async (propertyId: string, file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "File too large. Maximum size is 2MB.", variant: "destructive" });
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large. Maximum size is 10MB.", variant: "destructive" });
       return;
     }
     
@@ -128,10 +128,40 @@ function PropertyBrandingSection({ properties, toast }: { properties: Property[]
       return;
     }
 
+    // Resize image to 800x600 before uploading
+    const resizeImage = (dataUrl: string): Promise<string> => {
+      return new Promise((resolve) => {
+        const img = document.createElement("img");
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const TARGET_WIDTH = 800;
+          const TARGET_HEIGHT = 600;
+          canvas.width = TARGET_WIDTH;
+          canvas.height = TARGET_HEIGHT;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            // Fill with white background first
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+            // Calculate scaling to fit within 800x600 while maintaining aspect ratio
+            const scale = Math.min(TARGET_WIDTH / img.width, TARGET_HEIGHT / img.height);
+            const scaledWidth = img.width * scale;
+            const scaledHeight = img.height * scale;
+            const x = (TARGET_WIDTH - scaledWidth) / 2;
+            const y = (TARGET_HEIGHT - scaledHeight) / 2;
+            ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+          }
+          resolve(canvas.toDataURL("image/png"));
+        };
+        img.src = dataUrl;
+      });
+    };
+
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const dataUrl = e.target?.result as string;
-      updateLogoMutation.mutate({ propertyId, logoUrl: dataUrl });
+      const resizedDataUrl = await resizeImage(dataUrl);
+      updateLogoMutation.mutate({ propertyId, logoUrl: resizedDataUrl });
     };
     reader.readAsDataURL(file);
   };
