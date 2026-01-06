@@ -522,6 +522,32 @@ export default function ReportsPage() {
     }
   }, [dateRange, customStartDate, customEndDate]);
   
+  // Generate human-readable date range display
+  const dateRangeDisplay = useMemo(() => {
+    const formatDate = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    };
+    
+    const startDate = new Date(dateParams.startDate);
+    const endDate = new Date(dateParams.endDate);
+    const startFormatted = formatDate(dateParams.startDate);
+    const endFormatted = formatDate(dateParams.endDate);
+    
+    // Check if same day
+    const isSameDay = startDate.toDateString() === endDate.toDateString();
+    
+    if (isSameDay) {
+      return startFormatted;
+    }
+    return `${startFormatted} - ${endFormatted}`;
+  }, [dateParams]);
+
   const buildUrl = (endpoint: string) => {
     const params = new URLSearchParams();
     params.set("startDate", dateParams.startDate);
@@ -812,6 +838,13 @@ export default function ReportsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <Badge variant="outline" className="text-sm px-3 py-1" data-testid="badge-date-range">
+                <Clock className="h-3.5 w-3.5 mr-2" />
+                {dateRangeDisplay}
+              </Badge>
             </div>
           </div>
         </CardContent>
