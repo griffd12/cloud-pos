@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePosContext } from "@/lib/pos-context";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import type { CheckItem } from "@shared/schema";
 
 interface UseInactivityLogoutOptions {
   timeoutMinutes: number | null | undefined;
@@ -13,29 +14,59 @@ export function useInactivityLogout({
   enabled,
   onBeforeLogout,
 }: UseInactivityLogoutOptions) {
-  const { currentEmployee, currentCheck, checkItems, logout } = usePosContext();
+  const { currentEmployee, currentCheck, logout } = usePosContext();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
+  // Store current check ID in a ref so it's always fresh
+  const currentCheckIdRef = useRef<string | null>(null);
+  
+  // Keep the ref updated
+  useEffect(() => {
+    currentCheckIdRef.current = currentCheck?.id || null;
+  }, [currentCheck?.id]);
 
   const resetTimer = useCallback(() => {
     lastActivityRef.current = Date.now();
   }, []);
 
   const cancelUnsentItems = useCallback(async () => {
-    if (!currentCheck?.id) return;
+    const checkId = currentCheckIdRef.current;
+    if (!checkId) {
+      console.log("[Auto-Logout] No current check to cancel items from");
+      return;
+    }
 
-    const unsentItems = checkItems.filter((item) => !item.sent);
-
-    if (unsentItems.length === 0) return;
+    console.log(`[Auto-Logout] Fetching items for check ${checkId} to cancel unsent ones`);
 
     try {
+      // Fetch fresh items from API instead of relying on stale closure
+      const response = await fetch(`/api/checks/${checkId}/items`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
+      
+      if (!response.ok) {
+        console.error("[Auto-Logout] Failed to fetch check items");
+        return;
+      }
+      
+      const items: CheckItem[] = await response.json();
+      const unsentItems = items.filter((item) => !item.sent && !item.voided);
+
+      console.log(`[Auto-Logout] Found ${unsentItems.length} unsent items to cancel`);
+
+      if (unsentItems.length === 0) return;
+
       for (const item of unsentItems) {
+        console.log(`[Auto-Logout] Deleting unsent item: ${item.id} (${item.menuItemName})`);
         await apiRequest("DELETE", `/api/check-items/${item.id}`);
       }
+      
+      console.log("[Auto-Logout] Successfully canceled all unsent items");
     } catch (error) {
-      console.error("Failed to cancel unsent items during auto-logout:", error);
+      console.error("[Auto-Logout] Failed to cancel unsent items during auto-logout:", error);
     }
-  }, [currentCheck?.id, checkItems]);
+  }, []);
 
   const performAutoLogout = useCallback(async () => {
     if (!currentEmployee) return;
