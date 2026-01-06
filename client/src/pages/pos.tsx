@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -89,19 +90,24 @@ export default function PosPage() {
     logout,
   } = usePosContext();
 
-  // Fetch workstation context to get RVC if not already set
+  // Fetch workstation context (always fetch when workstationId is available for settings like auto-logout)
   const { data: wsContext } = useQuery<{ workstation: any; rvcs: any[]; property: any }>({
     queryKey: ["/api/workstations", workstationId, "context"],
     queryFn: async () => {
       const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
-        setApiConnected(false);
         throw new Error("Failed to fetch workstation context");
       }
-      setApiConnected(true);
       return res.json();
     },
-    enabled: !!workstationId && !currentRvc,
+    enabled: !!workstationId,
+    staleTime: 60000,
+  });
+
+  // Auto-logout after inactivity - cancel unsent items and sign out
+  useInactivityLogout({
+    timeoutMinutes: wsContext?.workstation?.autoLogoutMinutes,
+    enabled: !!currentEmployee && !!wsContext?.workstation?.autoLogoutMinutes,
   });
 
   // Auto-set RVC from workstation if not already set
@@ -276,10 +282,8 @@ export default function PosPage() {
     queryFn: async () => {
       const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
-        setApiConnected(false);
         throw new Error("Failed to fetch menu items");
       }
-      setApiConnected(true);
       return res.json();
     },
     enabled: !!selectedSlu,
