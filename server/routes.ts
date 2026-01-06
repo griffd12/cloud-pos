@@ -10804,6 +10804,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/fiscal-periods/totals/:propertyId/:businessDate", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.params;
+      const totals = await storage.calculateFiscalPeriodTotals(propertyId, businessDate);
+      res.json(totals);
+    } catch (error) {
+      console.error("Get fiscal period totals error:", error);
+      res.status(500).json({ message: "Failed to get fiscal period totals" });
+    }
+  });
+
   app.post("/api/fiscal-periods/:id/close", async (req, res) => {
     try {
       const { employeeId, cashActual, notes } = req.body;

@@ -1,32 +1,33 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
-import { Loader2, Calendar, Lock, Unlock, DollarSign, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { getAuthHeaders } from "@/lib/queryClient";
+import { Loader2, Calendar, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import type { Property, FiscalPeriod } from "@shared/schema";
 
+interface LiveTotals {
+  grossSales: string;
+  netSales: string;
+  taxCollected: string;
+  tipsTotal: string;
+  discountsTotal: string;
+  refundsTotal: string;
+  serviceChargesTotal: string;
+  checkCount: number;
+  guestCount: number;
+  cashExpected: string;
+  cardTotal: string;
+}
+
 export default function FiscalClosePage() {
-  const { toast } = useToast();
   usePosWebSocket();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
-  const [showCloseDialog, setShowCloseDialog] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<FiscalPeriod | null>(null);
-  const [pin, setPin] = useState("");
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [cashVariance, setCashVariance] = useState("");
-  const [notes, setNotes] = useState("");
 
   const { data: properties = [], isLoading: propertiesLoading } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -44,6 +45,19 @@ export default function FiscalClosePage() {
     enabled: !!selectedPropertyId,
   });
 
+  const { data: liveTotals } = useQuery<LiveTotals>({
+    queryKey: ["/api/fiscal-periods/totals", selectedPropertyId, currentPeriod?.businessDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/fiscal-periods/totals/${selectedPropertyId}/${currentPeriod?.businessDate}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch totals");
+      return res.json();
+    },
+    enabled: !!selectedPropertyId && !!currentPeriod?.businessDate,
+    refetchInterval: 30000,
+  });
+
   const { data: fiscalPeriods = [], isLoading: periodsLoading } = useQuery<FiscalPeriod[]>({
     queryKey: ["/api/fiscal-periods", selectedPropertyId],
     queryFn: async () => {
@@ -56,50 +70,6 @@ export default function FiscalClosePage() {
     enabled: !!selectedPropertyId,
   });
 
-  const closePeriodMutation = useMutation({
-    mutationFn: async (data: { periodId: string; pin: string; cashVariance?: string; notes?: string }) => {
-      const res = await apiRequest("POST", `/api/fiscal-periods/${data.periodId}/close`, {
-        pin: data.pin,
-        cashVariance: data.cashVariance,
-        notes: data.notes,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/fiscal-periods"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fiscal-periods/current"] });
-      setShowCloseDialog(false);
-      resetDialog();
-      toast({ title: "Day Closed", description: "Fiscal period has been closed successfully." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Close Failed", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const resetDialog = () => {
-    setPin("");
-    setAcknowledged(false);
-    setCashVariance("");
-    setNotes("");
-    setSelectedPeriod(null);
-  };
-
-  const handleCloseDay = () => {
-    if (!selectedPeriod || !pin || !acknowledged) return;
-    closePeriodMutation.mutate({
-      periodId: selectedPeriod.id,
-      pin,
-      cashVariance: cashVariance || undefined,
-      notes: notes || undefined,
-    });
-  };
-
-  const openCloseDialog = (period: FiscalPeriod) => {
-    setSelectedPeriod(period);
-    setShowCloseDialog(true);
-  };
-
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
 
   const formatCurrency = (value: string | null | undefined) => {
@@ -107,12 +77,33 @@ export default function FiscalClosePage() {
     return `$${parseFloat(value).toFixed(2)}`;
   };
 
+  const getNextRolloverTime = () => {
+    if (!selectedProperty) return null;
+    const rolloverTime = selectedProperty.businessDateRolloverTime || "04:00";
+    const [hour, minute] = rolloverTime.split(":").map(Number);
+    const period = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    return `${displayHour}:${minute.toString().padStart(2, "0")} ${period}`;
+  };
+
+  const displayTotals = liveTotals || {
+    grossSales: currentPeriod?.grossSales || "0",
+    netSales: currentPeriod?.netSales || "0",
+    taxCollected: currentPeriod?.taxCollected || "0",
+    tipsTotal: currentPeriod?.tipsTotal || "0",
+    discountsTotal: currentPeriod?.discountsTotal || "0",
+    checkCount: currentPeriod?.checkCount || 0,
+    guestCount: currentPeriod?.guestCount || 0,
+    cashExpected: currentPeriod?.cashExpected || "0",
+    cardTotal: currentPeriod?.cardTotal || "0",
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Fiscal Close / End of Day</h1>
-          <p className="text-muted-foreground">Manage business dates and close fiscal periods</p>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Business Day Status</h1>
+          <p className="text-muted-foreground">View current business day and fiscal period history</p>
         </div>
       </div>
 
@@ -152,88 +143,82 @@ export default function FiscalClosePage() {
                       <Calendar className="w-5 h-5" />
                       Business Date: {currentPeriod.businessDate}
                     </CardTitle>
-                    <CardDescription>
-                      Status: <Badge variant={currentPeriod.status === "open" ? "default" : "secondary"}>{currentPeriod.status}</Badge>
+                    <CardDescription className="flex items-center gap-2 flex-wrap">
+                      <span>Status:</span>
+                      <Badge variant={currentPeriod.status === "open" ? "default" : "secondary"}>{currentPeriod.status}</Badge>
+                      {selectedProperty && (
+                        <span className="flex items-center gap-1 text-xs">
+                          <Clock className="w-3 h-3" />
+                          Auto-close at {getNextRolloverTime()} ({selectedProperty.timezone || "America/New_York"})
+                        </span>
+                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Gross Sales</p>
-                        <p className="text-xl font-semibold" data-testid="text-gross-sales">{formatCurrency(currentPeriod.grossSales)}</p>
+                        <p className="text-xl font-semibold" data-testid="text-gross-sales">{formatCurrency(displayTotals.grossSales)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Net Sales</p>
-                        <p className="text-xl font-semibold" data-testid="text-net-sales">{formatCurrency(currentPeriod.netSales)}</p>
+                        <p className="text-xl font-semibold" data-testid="text-net-sales">{formatCurrency(displayTotals.netSales)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Total Tax</p>
-                        <p className="text-xl font-semibold">{formatCurrency(currentPeriod.taxCollected)}</p>
+                        <p className="text-xl font-semibold">{formatCurrency(displayTotals.taxCollected)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Total Tips</p>
-                        <p className="text-xl font-semibold">{formatCurrency(currentPeriod.tipsTotal)}</p>
+                        <p className="text-xl font-semibold">{formatCurrency(displayTotals.tipsTotal)}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                       <div>
                         <p className="text-sm text-muted-foreground">Checks</p>
-                        <p className="text-lg font-medium">{currentPeriod.checkCount || 0}</p>
+                        <p className="text-lg font-medium">{displayTotals.checkCount || 0}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Guests</p>
-                        <p className="text-lg font-medium">{currentPeriod.guestCount || 0}</p>
+                        <p className="text-lg font-medium">{displayTotals.guestCount || 0}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Discounts</p>
-                        <p className="text-lg font-medium">{formatCurrency(currentPeriod.discountsTotal)}</p>
+                        <p className="text-lg font-medium">{formatCurrency(displayTotals.discountsTotal)}</p>
                       </div>
                     </div>
 
-                    {currentPeriod.status === "open" && (
-                      <Button 
-                        className="w-full mt-4" 
-                        onClick={() => openCloseDialog(currentPeriod)}
-                        data-testid="button-close-day"
-                      >
-                        <Lock className="w-4 h-4 mr-2" />
-                        Close Business Day
-                      </Button>
-                    )}
+                    <div className="mt-4 p-3 bg-muted rounded-md flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      <span className="text-sm">
+                        This business day will automatically close at rollover time
+                      </span>
+                    </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Cash Reconciliation</CardTitle>
+                    <CardTitle className="text-base">Payment Summary</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Expected Cash</p>
-                        <p className="text-lg font-medium">{formatCurrency(currentPeriod.cashExpected)}</p>
+                        <p className="text-sm text-muted-foreground">Cash Expected</p>
+                        <p className="text-lg font-medium">{formatCurrency(displayTotals.cashExpected)}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Actual Cash</p>
-                        <p className="text-lg font-medium">{formatCurrency(currentPeriod.cashActual)}</p>
+                        <p className="text-sm text-muted-foreground">Card Payments</p>
+                        <p className="text-lg font-medium">{formatCurrency(displayTotals.cardTotal)}</p>
                       </div>
                     </div>
-                    {currentPeriod.cashVariance && parseFloat(currentPeriod.cashVariance) !== 0 && (
-                      <div className={`flex items-center gap-2 p-3 rounded-md ${parseFloat(currentPeriod.cashVariance) > 0 ? "bg-green-100 dark:bg-green-900/20" : "bg-red-100 dark:bg-red-900/20"}`}>
-                        {parseFloat(currentPeriod.cashVariance) > 0 ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm">Variance: {formatCurrency(currentPeriod.cashVariance)}</span>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               </div>
             ) : (
               <Card>
                 <CardContent className="p-8 text-center text-muted-foreground">
+                  <AlertCircle className="w-8 h-8 mx-auto mb-2" />
                   No current fiscal period found. A new period will be created automatically.
                 </CardContent>
               </Card>
@@ -244,12 +229,13 @@ export default function FiscalClosePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Fiscal Period History</CardTitle>
+                <CardDescription>Previous business day closings</CardDescription>
               </CardHeader>
               <CardContent>
                 {periodsLoading ? (
-                  <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                  <div className="flex justify-center p-4"><Loader2 className="w-6 h-6 animate-spin" /></div>
                 ) : fiscalPeriods.length === 0 ? (
-                  <p className="text-center text-muted-foreground p-4">No fiscal periods found.</p>
+                  <p className="text-muted-foreground text-center py-4">No fiscal periods found.</p>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -258,23 +244,29 @@ export default function FiscalClosePage() {
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Gross Sales</TableHead>
                         <TableHead className="text-right">Net Sales</TableHead>
-                        <TableHead className="text-right">Cash Variance</TableHead>
+                        <TableHead className="text-right">Tax</TableHead>
+                        <TableHead className="text-right">Checks</TableHead>
                         <TableHead>Closed At</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {fiscalPeriods.map(period => (
+                      {fiscalPeriods
+                        .sort((a, b) => b.businessDate.localeCompare(a.businessDate))
+                        .map(period => (
                         <TableRow key={period.id} data-testid={`row-period-${period.id}`}>
                           <TableCell className="font-medium">{period.businessDate}</TableCell>
                           <TableCell>
-                            <Badge variant={period.status === "open" ? "default" : period.status === "closed" ? "secondary" : "outline"}>
+                            <Badge variant={period.status === "closed" ? "secondary" : "default"}>
                               {period.status}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(period.grossSales)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(period.netSales)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(period.cashVariance)}</TableCell>
-                          <TableCell>{period.closedAt ? format(new Date(period.closedAt), "MMM d, h:mm a") : "-"}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(period.taxCollected)}</TableCell>
+                          <TableCell className="text-right">{period.checkCount || 0}</TableCell>
+                          <TableCell>
+                            {period.closedAt ? format(new Date(period.closedAt), "MMM d, h:mm a") : "-"}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -285,71 +277,6 @@ export default function FiscalClosePage() {
           </TabsContent>
         </Tabs>
       )}
-
-      <Dialog open={showCloseDialog} onOpenChange={(open) => { if (!open) resetDialog(); setShowCloseDialog(open); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Close Business Day</DialogTitle>
-            <DialogDescription>
-              Close fiscal period for {selectedProperty?.name} - {selectedPeriod?.businessDate}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Cash Variance (optional)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={cashVariance}
-                onChange={(e) => setCashVariance(e.target.value)}
-                data-testid="input-cash-variance"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Notes (optional)</Label>
-              <Input
-                placeholder="Any notes for this close..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                data-testid="input-notes"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Manager PIN</Label>
-              <Input
-                type="password"
-                placeholder="Enter PIN"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                data-testid="input-pin"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="acknowledge"
-                checked={acknowledged}
-                onCheckedChange={(c) => setAcknowledged(c === true)}
-                data-testid="checkbox-acknowledge"
-              />
-              <label htmlFor="acknowledge" className="text-sm">
-                I confirm all transactions have been reviewed and the day is ready to close.
-              </label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCloseDialog(false)}>Cancel</Button>
-            <Button
-              onClick={handleCloseDay}
-              disabled={!pin || !acknowledged || closePeriodMutation.isPending}
-              data-testid="button-confirm-close"
-            >
-              {closePeriodMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Close Day
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
