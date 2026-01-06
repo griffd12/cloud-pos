@@ -8,16 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Monitor, Printer, Tv, Network, Search, ExternalLink, Plus, Settings } from "lucide-react";
+import { Monitor, Printer, Tv, Network, Search, ExternalLink, Plus, Settings, Shield } from "lucide-react";
 import type { Property } from "@shared/schema";
 
 type HubDevice = {
   id: string;
   name: string;
-  deviceType: "workstation" | "printer" | "kds_device" | "order_device";
+  deviceType: "workstation" | "printer" | "kds_device" | "order_device" | "registered_device";
   propertyId: string | null;
   propertyName: string;
-  status: "active" | "inactive" | "offline";
+  status: "active" | "inactive" | "offline" | "pending" | "enrolled" | "disabled" | "revoked";
   ipAddress: string | null;
   model: string | null;
   lastUpdated: Date | null;
@@ -32,6 +32,7 @@ type HubResponse = {
     printers: number;
     kdsDevices: number;
     orderDevices: number;
+    registeredDevices: number;
     active: number;
     inactive: number;
   };
@@ -42,6 +43,7 @@ const DEVICE_TYPE_CONFIG = {
   printer: { label: "Printer", icon: Printer, color: "text-green-600 dark:text-green-400" },
   kds_device: { label: "KDS Display", icon: Tv, color: "text-orange-600 dark:text-orange-400" },
   order_device: { label: "Order Device", icon: Network, color: "text-purple-600 dark:text-purple-400" },
+  registered_device: { label: "Registered Device", icon: Shield, color: "text-cyan-600 dark:text-cyan-400" },
 };
 
 export default function DevicesHubPage() {
@@ -89,6 +91,7 @@ export default function DevicesHubPage() {
     printers: 0,
     kdsDevices: 0,
     orderDevices: 0,
+    registeredDevices: 0,
     active: 0,
     inactive: 0,
   };
@@ -106,6 +109,9 @@ export default function DevicesHubPage() {
         break;
       case "order_device":
         navigate("/admin/order-devices?add=true");
+        break;
+      case "registered_device":
+        navigate("/admin/registered-devices?add=true");
         break;
     }
   };
@@ -127,7 +133,7 @@ export default function DevicesHubPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Card
           className={`cursor-pointer hover-elevate ${filterDeviceType === "workstation" ? "ring-2 ring-primary" : ""}`}
           onClick={() => setFilterDeviceType(filterDeviceType === "workstation" ? "" : "workstation")}
@@ -180,6 +186,19 @@ export default function DevicesHubPage() {
             </div>
           </CardContent>
         </Card>
+        <Card
+          className={`cursor-pointer hover-elevate ${filterDeviceType === "registered_device" ? "ring-2 ring-primary" : ""}`}
+          onClick={() => setFilterDeviceType(filterDeviceType === "registered_device" ? "" : "registered_device")}
+          data-testid="card-summary-registered-devices"
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <Shield className="w-8 h-8 text-cyan-600 dark:text-cyan-400" />
+            <div>
+              <div className="text-2xl font-bold">{summary.registeredDevices}</div>
+              <div className="text-xs text-muted-foreground">Registered</div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -197,6 +216,7 @@ export default function DevicesHubPage() {
                 <SelectItem value="printer">Printer</SelectItem>
                 <SelectItem value="kds_device">KDS Display</SelectItem>
                 <SelectItem value="order_device">Order Device</SelectItem>
+                <SelectItem value="registered_device">Registered Device</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -234,6 +254,7 @@ export default function DevicesHubPage() {
                 <SelectItem value="printer">Printers</SelectItem>
                 <SelectItem value="kds_device">KDS Displays</SelectItem>
                 <SelectItem value="order_device">Order Devices</SelectItem>
+                <SelectItem value="registered_device">Registered</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterStatus || "_all"} onValueChange={(v) => setFilterStatus(v === "_all" ? "" : v)}>
@@ -244,6 +265,9 @@ export default function DevicesHubPage() {
                 <SelectItem value="_all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="enrolled">Enrolled</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
               </SelectContent>
             </Select>
           </div>

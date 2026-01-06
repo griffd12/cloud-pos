@@ -4101,11 +4101,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { propertyId, deviceType } = req.query;
       
       // Fetch all device types in parallel
-      const [workstations, printers, kdsDevices, orderDevices, properties] = await Promise.all([
+      const [workstations, printers, kdsDevices, orderDevices, registeredDevices, properties] = await Promise.all([
         storage.getWorkstations(),
         storage.getPrinters(),
         storage.getKdsDevices(),
         storage.getOrderDevices(),
+        storage.getRegisteredDevices(),
         storage.getProperties(),
       ]);
       
@@ -4116,10 +4117,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       type HubDevice = {
         id: string;
         name: string;
-        deviceType: "workstation" | "printer" | "kds_device" | "order_device";
+        deviceType: "workstation" | "printer" | "kds_device" | "order_device" | "registered_device";
         propertyId: string | null;
         propertyName: string;
-        status: "active" | "inactive" | "offline";
+        status: "active" | "inactive" | "offline" | "pending" | "enrolled" | "disabled" | "revoked";
         ipAddress: string | null;
         model: string | null;
         lastUpdated: Date | null;
@@ -4176,7 +4177,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           propertyName: propertyMap.get(kds.propertyId)?.name || "Unknown",
           status: kds.active ? "active" : "inactive",
           ipAddress: kds.ipAddress || null,
-          model: kds.displayMode || null,
+          model: kds.stationType || null,
           lastUpdated: null,
           configUrl: `/admin/kds-devices?edit=${kds.id}`,
         });
@@ -4200,6 +4201,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
       
+      // Add registered devices (enrolled hardware)
+      for (const rd of registeredDevices) {
+        if (propertyId && rd.propertyId !== propertyId) continue;
+        if (deviceType && deviceType !== "registered_device") continue;
+        hubDevices.push({
+          id: rd.id,
+          name: rd.name,
+          deviceType: "registered_device",
+          propertyId: rd.propertyId,
+          propertyName: propertyMap.get(rd.propertyId)?.name || "Unknown",
+          status: rd.status as any,
+          ipAddress: null,
+          model: rd.deviceType === "pos_workstation" ? "POS Terminal" : "KDS Display",
+          lastUpdated: rd.enrolledAt || null,
+          configUrl: `/admin/registered-devices?edit=${rd.id}`,
+        });
+      }
+      
       // Sort by property name, then by device type, then by name
       hubDevices.sort((a, b) => {
         const propCompare = a.propertyName.localeCompare(b.propertyName);
@@ -4216,8 +4235,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         printers: hubDevices.filter(d => d.deviceType === "printer").length,
         kdsDevices: hubDevices.filter(d => d.deviceType === "kds_device").length,
         orderDevices: hubDevices.filter(d => d.deviceType === "order_device").length,
-        active: hubDevices.filter(d => d.status === "active").length,
-        inactive: hubDevices.filter(d => d.status !== "active").length,
+        registeredDevices: hubDevices.filter(d => d.deviceType === "registered_device").length,
+        active: hubDevices.filter(d => d.status === "active" || d.status === "enrolled").length,
+        inactive: hubDevices.filter(d => d.status !== "active" && d.status !== "enrolled").length,
       };
       
       res.json({ devices: hubDevices, summary });
