@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Button } from "@/components/ui/button";
@@ -155,19 +155,44 @@ export default function PosPage() {
   const [showTillClosingModal, setShowTillClosingModal] = useState(false);
   const [showCashMovementModal, setShowCashMovementModal] = useState(false);
 
+  // Track if we've done the initial till session check for this employee
+  const [tillSessionChecked, setTillSessionChecked] = useState(false);
+  const prevEmployeeId = useRef<string | undefined>(undefined);
+
+  // Reset tillSessionChecked when employee changes (login/logout)
+  useEffect(() => {
+    if (currentEmployee?.id !== prevEmployeeId.current) {
+      setTillSessionChecked(false);
+      prevEmployeeId.current = currentEmployee?.id;
+    }
+  }, [currentEmployee?.id]);
+
   // Check for active till session when employee is signed in
-  const { data: fetchedTillSession, isLoading: tillSessionLoading } = useQuery<TillSession | null>({
+  const { data: fetchedTillSession, isLoading: tillSessionLoading, isFetching: tillSessionFetching, isSuccess: tillSessionSuccess } = useQuery<TillSession | null>({
     queryKey: ["/api/till-sessions/active", { employeeId: currentEmployee?.id, rvcId: currentRvc?.id }],
     queryFn: async () => {
+      console.log("Fetching active till session for employee:", currentEmployee?.id, "rvc:", currentRvc?.id);
       const res = await fetch(
         `/api/till-sessions/active?employeeId=${currentEmployee?.id}&rvcId=${currentRvc?.id}`,
         { credentials: "include", headers: getAuthHeaders() }
       );
       if (!res.ok) return null;
-      return res.json();
+      const data = await res.json();
+      console.log("Active till session result:", data);
+      return data;
     },
     enabled: !!currentEmployee?.id && !!currentRvc?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
+    gcTime: 0, // Don't cache results
   });
+
+  // Mark as checked when query completes
+  useEffect(() => {
+    if (tillSessionSuccess && !tillSessionFetching) {
+      setTillSessionChecked(true);
+    }
+  }, [tillSessionSuccess, tillSessionFetching]);
 
   // Sync fetched till session to context
   useEffect(() => {
@@ -176,18 +201,20 @@ export default function PosPage() {
     }
   }, [fetchedTillSession, activeTillSession, setActiveTillSession]);
 
-  // Show till opening modal if no active session (and not loading)
+  // Show till opening modal if no active session (and query has completed)
   useEffect(() => {
     if (
       currentEmployee?.id &&
       currentRvc?.id &&
+      tillSessionChecked &&
       !tillSessionLoading &&
+      !tillSessionFetching &&
       !fetchedTillSession &&
       !activeTillSession
     ) {
       setShowTillOpeningModal(true);
     }
-  }, [currentEmployee?.id, currentRvc?.id, tillSessionLoading, fetchedTillSession, activeTillSession]);
+  }, [currentEmployee?.id, currentRvc?.id, tillSessionChecked, tillSessionLoading, tillSessionFetching, fetchedTillSession, activeTillSession]);
 
   // Health check query to verify API connection when RVC is already set
   const healthQuery = useQuery({

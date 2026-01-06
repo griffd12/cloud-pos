@@ -2812,6 +2812,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         paymentStatus,
       });
 
+      // Update till session cashSalesTotal for cash payments
+      if (tender.type === "cash" && employeeId && checkForBiz?.rvcId) {
+        try {
+          const activeTill = await storage.getActiveTillSession(employeeId, checkForBiz.rvcId);
+          if (activeTill) {
+            const currentCashSales = parseFloat(activeTill.cashSalesTotal || "0");
+            const paymentAmount = parseFloat(amount || "0");
+            await storage.updateTillSession(activeTill.id, {
+              cashSalesTotal: (currentCashSales + paymentAmount).toFixed(2),
+              transactionCount: (activeTill.transactionCount || 0) + 1,
+            });
+            console.log("Updated till cashSalesTotal:", currentCashSales + paymentAmount);
+          }
+        } catch (e) {
+          console.error("Error updating till cashSalesTotal:", e);
+        }
+      }
+
       const check = await storage.getCheck(checkId);
       if (!check) return res.status(404).json({ message: "Check not found" });
       
