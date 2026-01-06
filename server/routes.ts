@@ -4764,8 +4764,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter items by businessDate or addedAt timestamp
+      // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
+        if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
         // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
@@ -4781,7 +4783,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Aggregate by category
+      // Aggregate by category (only revenue items)
       const categoryTotals: Record<string, { name: string; quantity: number; sales: number }> = {};
       
       for (const item of itemsInPeriod) {
@@ -4854,8 +4856,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter items by businessDate or addedAt timestamp
+      // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
+        if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
         // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
@@ -5239,9 +5243,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkMap = new Map(checksInScope.map(c => [c.id, c]));
       
       // Filter items by businessDate - this captures sales from ALL checks (open and closed)
+      // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
       const itemsInScope = allCheckItems.filter(item => {
         if (!checkIdsInScope.has(item.checkId)) return false;
         if (item.voided) return false;
+        if (item.isNonRevenue) return false; // Exclude gift card sales/reloads
         if (useBusinessDate) {
           return item.businessDate === businessDate;
         }
@@ -5602,8 +5608,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter items by businessDate (consistent with sales-summary and top-items)
+      // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
       const checkItems = allCheckItems.filter(ci => {
         if (ci.voided) return false;
+        if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
         // Apply RVC filter
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
@@ -5619,7 +5627,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Build category -> items mapping
+      // Build category -> items mapping (only revenue items)
       const categoryData: Record<string, { 
         name: string; 
         totalQuantity: number; 
@@ -5744,8 +5752,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter items by businessDate or addedAt timestamp
+      // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
+        if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
         // Apply RVC filter first
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
@@ -5988,9 +5998,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         // Get items for this check that match the businessDate filter
         // This ensures we count items by their actual business date
+        // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
         const checkItems = allCheckItems.filter(ci => {
           if (ci.checkId !== check.id) return false;
           if (ci.voided) return false;
+          if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
           if (useBusinessDate) {
             return ci.businessDate === businessDate;
           }
