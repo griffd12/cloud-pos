@@ -45,6 +45,7 @@ import FamilyGroupsPage from "../admin/family-groups";
 import UtilitiesPage from "../admin/utilities";
 import ReportsPage from "../admin/reports";
 import DevicesPage from "../admin/devices";
+import DevicesHubPage from "../admin/devices-hub";
 import TimecardsPage from "../admin/timecards";
 import SchedulingPage from "../admin/scheduling";
 import LineUpPage from "../admin/line-up";
@@ -314,6 +315,7 @@ export default function EmcAdminLayout() {
               <Route path="/emc/utilities" component={UtilitiesPage} />
               <Route path="/emc/reports" component={ReportsPage} />
               <Route path="/emc/devices" component={DevicesPage} />
+              <Route path="/emc/devices-hub" component={DevicesHubPage} />
               <Route path="/emc/timecards" component={TimecardsPage} />
               <Route path="/emc/scheduling" component={SchedulingPage} />
               <Route path="/emc/line-up" component={LineUpPage} />

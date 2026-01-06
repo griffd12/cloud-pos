@@ -44,6 +44,7 @@ import FamilyGroupsPage from "./family-groups";
 import UtilitiesPage from "./utilities";
 import ReportsPage from "./reports";
 import DevicesPage from "./devices";
+import DevicesHubPage from "./devices-hub";
 import TimecardsPage from "./timecards";
 import SchedulingPage from "./scheduling";
 import LineUpPage from "./line-up";
@@ -289,6 +290,7 @@ export default function AdminLayout() {
               <Route path="/admin/utilities" component={UtilitiesPage} />
               <Route path="/admin/reports" component={ReportsPage} />
               <Route path="/admin/devices" component={DevicesPage} />
+              <Route path="/admin/devices-hub" component={DevicesHubPage} />
               <Route path="/admin/timecards" component={TimecardsPage} />
               <Route path="/admin/scheduling" component={SchedulingPage} />
               <Route path="/admin/line-up" component={LineUpPage} />

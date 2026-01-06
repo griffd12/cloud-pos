@@ -48,6 +48,7 @@ import {
   Bell,
   CheckCircle,
   FileText,
+  Cpu,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -146,7 +147,8 @@ const menuGroupsTemplate = [
   {
     label: "System",
     items: [
-      { title: "Device Management", url: "/admin/devices", icon: Monitor },
+      { title: "Devices Hub", url: "/admin/devices-hub", icon: Monitor },
+      { title: "Registered Devices", url: "/admin/devices", icon: Cpu },
       { title: "Utilities", url: "/admin/utilities", icon: Wrench },
       { title: "Onboarding Checklist", url: "/admin/onboarding", icon: ClipboardCheck },
     ],
