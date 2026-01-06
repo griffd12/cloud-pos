@@ -84,8 +84,13 @@ export default function LoyaltyPage() {
     queryKey: ["/api/loyalty-rewards"],
   });
 
-  const { data: memberTransactions = [] } = useQuery<LoyaltyTransaction[]>({
+  const { data: memberTransactions = [] } = useQuery<(LoyaltyTransaction & { programName?: string })[]>({
     queryKey: ["/api/loyalty-transactions", selectedMember?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/loyalty-transactions/${selectedMember?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
     enabled: !!selectedMember?.id,
   });
 
@@ -877,7 +882,12 @@ export default function LoyaltyPage() {
                       {memberTransactions.map((tx) => (
                         <div key={tx.id} className="flex items-center justify-between p-3 border rounded-md">
                           <div>
-                            <p className="font-medium capitalize">{tx.transactionType}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium capitalize">{tx.transactionType}</p>
+                              {tx.programName && (
+                                <Badge variant="outline" className="text-xs">{tx.programName}</Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">{tx.reason}</p>
                             <p className="text-xs text-muted-foreground">
                               {tx.createdAt && format(new Date(tx.createdAt), "MMM d, yyyy h:mm a")}

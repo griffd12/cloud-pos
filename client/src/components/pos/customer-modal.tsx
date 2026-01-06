@@ -466,7 +466,7 @@ export function CustomerModal({
                                 </span>
                                 <Badge variant="secondary" className="text-xs">
                                   <Star className="w-3 h-3 mr-1" />
-                                  {customer.currentPoints || 0} pts
+                                  Member
                                 </Badge>
                               </div>
                               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
@@ -523,14 +523,37 @@ export function CustomerModal({
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-primary">
-                      {customerDetails.customer.currentPoints || 0}
+                      {(customerDetails.customer as any).enrollments?.reduce((sum: number, e: any) => sum + (e.currentPoints || 0), 0) || 0}
                     </div>
-                    <p className="text-sm text-muted-foreground">Current Points</p>
+                    <p className="text-sm text-muted-foreground">Total Points</p>
                     <p className="text-xs text-muted-foreground">
-                      {customerDetails.customer.lifetimePoints || 0} lifetime
+                      {(customerDetails.customer as any).enrollments?.length || 0} program(s)
                     </p>
                   </div>
                 </div>
+
+                {/* Program Enrollments */}
+                {(customerDetails.customer as any).enrollments?.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">Program Enrollments</h4>
+                    <div className="space-y-2">
+                      {(customerDetails.customer as any).enrollments.map((enrollment: any) => (
+                        <div key={enrollment.id} className="flex items-center justify-between gap-4 p-2 bg-muted/50 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <Star className="w-4 h-4 text-yellow-500" />
+                            <span className="font-medium">{enrollment.program?.name || "Unknown"}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline">{enrollment.currentPoints || 0} pts</Badge>
+                            <Badge variant={enrollment.status === "active" ? "default" : "secondary"}>
+                              {enrollment.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <Separator />
 
@@ -856,20 +879,41 @@ export function CustomerModal({
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="p-4 bg-muted rounded-md text-center">
-                  <div className="text-3xl font-bold">{customerDetails?.customer.currentPoints || 0}</div>
-                  <p className="text-sm text-muted-foreground">Available Points</p>
-                </div>
+                {/* Per-program balances */}
+                {(customerDetails?.customer as any)?.enrollments?.length > 0 ? (
+                  <div className="space-y-2">
+                    {(customerDetails?.customer as any).enrollments.map((enrollment: any) => (
+                      <div key={enrollment.id} className="p-3 bg-muted rounded-md flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          <Star className="w-4 h-4 text-yellow-500" />
+                          <span className="font-medium">{enrollment.program?.name || "Unknown"}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-bold">{enrollment.currentPoints || 0}</div>
+                          <p className="text-xs text-muted-foreground">points</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-muted rounded-md text-center">
+                    <div className="text-3xl font-bold">0</div>
+                    <p className="text-sm text-muted-foreground">No programs enrolled</p>
+                  </div>
+                )}
 
                 {customerDetails?.availableRewards && customerDetails.availableRewards.length > 0 ? (
                   <div className="space-y-2">
                     <h4 className="font-medium">Available Rewards</h4>
-                    {customerDetails.availableRewards.map((reward) => (
+                    {customerDetails.availableRewards.map((reward: any) => (
                       <Card key={reward.id} className="p-3" data-testid={`card-reward-${reward.id}`}>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <div>
                             <span className="font-medium">{reward.name}</span>
                             <p className="text-sm text-muted-foreground">{reward.description}</p>
+                            {reward.programName && (
+                              <p className="text-xs text-muted-foreground">{reward.programName}</p>
+                            )}
                           </div>
                           <Badge>
                             <Star className="w-3 h-3 mr-1" />
@@ -892,13 +936,18 @@ export function CustomerModal({
                     <h4 className="font-medium">Recent Transactions</h4>
                     <ScrollArea className="h-[150px]">
                       <div className="space-y-1 pr-2">
-                        {customerDetails.transactions.slice(0, 10).map((tx) => (
+                        {customerDetails.transactions.slice(0, 10).map((tx: any) => (
                           <div
                             key={tx.id}
                             className="flex items-center justify-between p-2 text-sm bg-muted/50 rounded"
                           >
-                            <span className="text-muted-foreground">{tx.reason || tx.transactionType}</span>
-                            <span className={tx.points >= 0 ? "text-green-600" : "text-red-600"}>
+                            <div>
+                              <span className="text-muted-foreground">{tx.reason || tx.transactionType}</span>
+                              {tx.programName && (
+                                <span className="text-xs text-muted-foreground ml-2">({tx.programName})</span>
+                              )}
+                            </div>
+                            <span className={tx.transactionType === "redeem" ? "text-red-600" : "text-green-600"}>
                               {tx.points >= 0 ? "+" : ""}
                               {tx.points}
                             </span>

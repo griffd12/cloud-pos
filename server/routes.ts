@@ -11229,6 +11229,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Get loyalty transactions for a member
+  app.get("/api/loyalty-transactions/:memberId", async (req, res) => {
+    try {
+      const transactions = await storage.getLoyaltyTransactionsByMember(req.params.memberId);
+      // Include program name for each transaction
+      const programs = await storage.getLoyaltyPrograms();
+      const transactionsWithPrograms = transactions.map(tx => ({
+        ...tx,
+        programName: programs.find(p => p.id === tx.programId)?.name || "Unknown",
+      }));
+      res.json(transactionsWithPrograms);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get loyalty transactions" });
+    }
+  });
+
   app.patch("/api/loyalty-members/:id", async (req, res) => {
     try {
       const member = await storage.getLoyaltyMember(req.params.id);
@@ -12141,6 +12157,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const member = await storage.getLoyaltyMember(req.params.id);
       if (!member) return res.status(404).json({ message: "Customer not found" });
 
+      // Get enrollments with program details
+      const enrollments = await storage.getLoyaltyEnrollments(member.id);
+      const programs = await storage.getLoyaltyPrograms();
+      const enrollmentsWithPrograms = enrollments.map(e => ({
+        ...e,
+        program: programs.find(p => p.id === e.programId),
+      }));
+
       // Get recent checks for this customer
       const recentChecks = await storage.getChecksByCustomer(member.id, 10);
       
@@ -12152,20 +12176,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         })
       );
       
-      // Get loyalty transactions
+      // Get loyalty transactions with program names
       const transactions = await storage.getLoyaltyTransactionsByMember(member.id);
+      const transactionsWithPrograms = transactions.map(tx => ({
+        ...tx,
+        programName: programs.find(p => p.id === tx.programId)?.name || "Unknown",
+      }));
       
-      // Get available rewards
-      const rewards = await storage.getLoyaltyRewards(member.programId);
-      const availableRewards = rewards.filter(r => 
-        r.active && 
-        (member.currentPoints || 0) >= (r.pointsCost || 0)
-      );
+      // Get available rewards across all enrolled programs
+      const availableRewards: any[] = [];
+      for (const enrollment of enrollmentsWithPrograms.filter(e => e.status === "active")) {
+        const programRewards = await storage.getLoyaltyRewards(enrollment.programId);
+        const redeemable = programRewards.filter(r => 
+          r.active && 
+          (enrollment.currentPoints || 0) >= (r.pointsCost || 0)
+        ).map(r => ({
+          ...r,
+          programName: enrollment.program?.name,
+          enrollmentId: enrollment.id,
+          enrollmentPoints: enrollment.currentPoints,
+        }));
+        availableRewards.push(...redeemable);
+      }
 
       res.json({
-        customer: member,
+        customer: { ...member, enrollments: enrollmentsWithPrograms },
         recentChecks: checksWithItems,
-        transactions,
+        transactions: transactionsWithPrograms,
         availableRewards,
       });
     } catch (error) {
