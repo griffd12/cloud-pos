@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -66,6 +67,10 @@ interface SelectedModifier {
 
 export default function PosPage() {
   const { toast } = useToast();
+  
+  // Enable real-time updates via WebSocket for menu changes, gift cards, etc.
+  usePosWebSocket();
+  
   const {
     currentEmployee,
     currentRvc,

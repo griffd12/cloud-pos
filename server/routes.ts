@@ -181,6 +181,24 @@ function broadcastReportUpdate(reportType?: string) {
   });
 }
 
+function broadcastGiftCardUpdate(cardId?: string) {
+  broadcastPosEvent({
+    type: "gift_card_update",
+    payload: { cardId }
+  });
+}
+
+function broadcastDashboardUpdate(propertyId?: string) {
+  broadcastPosEvent({
+    type: "dashboard_update",
+    payload: { propertyId }
+  });
+}
+
+function broadcastTipUpdate() {
+  broadcastPosEvent({ type: "tip_update" });
+}
+
 // Shared helper to send unsent items to KDS with proper round and ticket creation
 async function sendItemsToKds(
   checkId: string,
@@ -8110,6 +8128,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       const result = await storage.runTipPoolSettlement(propertyId, businessDate, policyId, runById);
+      broadcastTipUpdate();
       res.status(201).json(result);
     } catch (error) {
       console.error("Tip pool settlement error:", error);
@@ -10938,6 +10957,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         employeeId: req.body.activatedById,
       });
 
+      broadcastGiftCardUpdate(card.id);
       res.status(201).json(card);
     } catch (error) {
       res.status(500).json({ message: "Failed to create gift card" });
@@ -10966,6 +10986,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         employeeId,
       });
 
+      broadcastGiftCardUpdate(card.id);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Failed to reload gift card" });
@@ -11022,6 +11043,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         referenceNumber,
       });
 
+      broadcastGiftCardUpdate(card.id);
+      broadcastDashboardUpdate(propertyId);
       res.json({ 
         success: true,
         giftCard: updated, 
@@ -12510,6 +12533,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      broadcastGiftCardUpdate(giftCard.id);
       res.status(201).json({
         success: true,
         giftCard,
@@ -12558,6 +12582,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         notes: `Reloaded $${amount}`,
       });
 
+      broadcastGiftCardUpdate(giftCard.id);
       res.json({
         success: true,
         cardNumber: giftCard.cardNumber,
@@ -12646,6 +12671,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         notes: `Redeemed on check`,
       });
 
+      broadcastGiftCardUpdate(giftCard.id);
       res.json({
         success: true,
         transaction,

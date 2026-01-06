@@ -15,6 +15,8 @@ interface PosEvent {
     entityId?: string;
     reportType?: string;
     rvcId?: string;
+    cardId?: string;
+    propertyId?: string;
   };
 }
 
@@ -231,6 +233,44 @@ function handlePosEvent(event: PosEvent) {
             key.includes("/api/fiscal") ||
             key.includes("/api/sales-forecast") ||
             key.includes("/api/labor-forecast");
+        }
+      });
+      break;
+
+    case "gift_card_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/gift-cards") ||
+            key.includes("/api/pos/gift-cards");
+        }
+      });
+      if (event.payload?.cardId) {
+        queryClient.invalidateQueries({
+          predicate: (query) => 
+            query.queryKey.some(k => k === event.payload?.cardId)
+        });
+      }
+      break;
+
+    case "dashboard_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/dashboard") ||
+            key.includes("/api/sales-summary") ||
+            key.includes("/api/reports") ||
+            key.includes("/api/checks");
+        }
+      });
+      break;
+
+    case "tip_update":
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/tip-pool") ||
+            key.includes("/api/tip-allocations");
         }
       });
       break;
