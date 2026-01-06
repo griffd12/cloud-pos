@@ -13209,7 +13209,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const { movementType, amount, reason, employeeId, managerApprovalId } = req.body;
 
-      if (!["paid_in", "paid_out"].includes(movementType)) {
+      if (!["paid_in", "paid_out", "drop"].includes(movementType)) {
         return res.status(400).json({ message: "Invalid movement type" });
       }
 
@@ -13226,16 +13226,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         managerApprovalId,
       });
 
-      // Update session totals
+      // Update session totals based on movement type
       if (movementType === "paid_in") {
         const currentPaidIn = parseFloat(session.paidInTotal || "0");
         await storage.updateTillSession(session.id, {
           paidInTotal: (currentPaidIn + amountNum).toFixed(2),
         });
-      } else {
+      } else if (movementType === "paid_out") {
         const currentPaidOut = parseFloat(session.paidOutTotal || "0");
         await storage.updateTillSession(session.id, {
           paidOutTotal: (currentPaidOut + amountNum).toFixed(2),
+        });
+      } else if (movementType === "drop") {
+        const currentDrops = parseFloat(session.dropsTotal || "0");
+        await storage.updateTillSession(session.id, {
+          dropsTotal: (currentDrops + amountNum).toFixed(2),
         });
       }
 

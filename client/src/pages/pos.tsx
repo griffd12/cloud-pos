@@ -25,12 +25,13 @@ import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
 import { TillOpeningModal } from "@/components/pos/till-opening-modal";
 import { TillClosingModal } from "@/components/pos/till-closing-modal";
+import { CashMovementModal } from "@/components/pos/cash-movement-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount, TillSession } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, DollarSign } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, DollarSign, Banknote } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -152,6 +153,7 @@ export default function PosPage() {
   const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
   const [showTillOpeningModal, setShowTillOpeningModal] = useState(false);
   const [showTillClosingModal, setShowTillClosingModal] = useState(false);
+  const [showCashMovementModal, setShowCashMovementModal] = useState(false);
 
   // Check for active till session when employee is signed in
   const { data: fetchedTillSession, isLoading: tillSessionLoading } = useQuery<TillSession | null>({
@@ -1108,15 +1110,26 @@ export default function PosPage() {
           )}
           <ThemeToggle />
           {activeTillSession && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTillClosingModal(true)}
-              data-testid="button-close-till"
-            >
-              <DollarSign className="w-4 h-4 mr-1" />
-              Close Till
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCashMovementModal(true)}
+                data-testid="button-cash-operations"
+              >
+                <Banknote className="w-4 h-4 mr-1" />
+                Cash
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTillClosingModal(true)}
+                data-testid="button-close-till"
+              >
+                <DollarSign className="w-4 h-4 mr-1" />
+                Close Till
+              </Button>
+            </>
           )}
           <Button
             variant="ghost"
@@ -1911,6 +1924,15 @@ export default function PosPage() {
           }}
           tillSession={activeTillSession}
           rvcId={currentRvc.id}
+        />
+      )}
+
+      {activeTillSession && currentEmployee && (
+        <CashMovementModal
+          open={showCashMovementModal}
+          onClose={() => setShowCashMovementModal(false)}
+          tillSession={activeTillSession}
+          employeeId={currentEmployee.id}
         />
       )}
     </div>
