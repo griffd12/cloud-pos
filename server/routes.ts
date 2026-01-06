@@ -12671,12 +12671,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       if (!workingCheckId) {
         // Auto-create a new check for this gift card sale
-        // Get RVC for order type default
+        // Get RVC for business date lookup
         const rvc = rvcId ? await storage.getRvc(rvcId) : null;
         if (!rvc) {
           return res.status(400).json({ message: "Revenue center (RVC) required to create a check" });
         }
-        const orderType = rvc.orderTypeDefault || "take_out";
+        // Gift card auto-created checks always default to "take_out"
+        const orderType = "take_out";
         
         // Get property business date
         const property = rvc.propertyId ? await storage.getProperty(rvc.propertyId) : null;
