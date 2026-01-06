@@ -34,7 +34,8 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import type { Check, CheckItem, LoyaltyMember, LoyaltyReward, LoyaltyTransaction } from "@shared/schema";
+import type { Check, CheckItem, LoyaltyMember, LoyaltyReward, LoyaltyTransaction, LoyaltyProgram } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface CheckWithItems extends Check {
   items: CheckItem[];
@@ -90,6 +91,8 @@ export function CustomerModal({
     phone: "",
     email: "",
   });
+  const [showEnrollInProgram, setShowEnrollInProgram] = useState(false);
+  const [selectedEnrollProgramId, setSelectedEnrollProgramId] = useState("");
 
   const { data: searchResults = [], isLoading: isSearching } = useQuery<LoyaltyMember[]>({
     queryKey: ["/api/pos/customers/search", searchQuery],
@@ -118,9 +121,9 @@ export function CustomerModal({
     enabled: !!selectedCustomer?.id,
   });
 
-  const { data: loyaltyPrograms = [], isLoading: isLoadingPrograms } = useQuery<any[]>({
+  const { data: loyaltyPrograms = [], isLoading: isLoadingPrograms } = useQuery<LoyaltyProgram[]>({
     queryKey: ["/api/loyalty-programs"],
-    enabled: open && showEnrollForm,
+    enabled: open && (showEnrollForm || showEnrollInProgram),
   });
 
   const attachMutation = useMutation({
@@ -261,6 +264,30 @@ export function CustomerModal({
     },
   });
 
+  const enrollInProgramMutation = useMutation({
+    mutationFn: async ({ memberId, programId }: { memberId: string; programId: string }) => {
+      const res = await apiRequest("POST", `/api/loyalty-members/${memberId}/enrollments`, { programId });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Enrolled in Program",
+        description: "Member has been enrolled in the selected program",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos/customers", selectedCustomer?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members"] });
+      setShowEnrollInProgram(false);
+      setSelectedEnrollProgramId("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Enrollment Failed",
+        description: error.message || "Could not enroll in program",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
     if (!open) {
       setSearchQuery("");
@@ -268,6 +295,8 @@ export function CustomerModal({
       setActiveTab("search");
       setShowEnrollForm(false);
       setShowAddPoints(false);
+      setShowEnrollInProgram(false);
+      setSelectedEnrollProgramId("");
     }
   }, [open]);
 
@@ -679,6 +708,62 @@ export function CustomerModal({
                       Add Points
                     </Button>
                   </div>
+                ) : showEnrollInProgram ? (
+                  <div className="p-3 bg-muted rounded-md space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">Enroll in Program</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setShowEnrollInProgram(false); setSelectedEnrollProgramId(""); }}
+                        data-testid="button-cancel-enroll-program"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Select Program</Label>
+                      <Select value={selectedEnrollProgramId} onValueChange={setSelectedEnrollProgramId}>
+                        <SelectTrigger data-testid="select-enroll-program">
+                          <SelectValue placeholder="Choose a program" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {loyaltyPrograms
+                            .filter(p => p.active && !(customerDetails?.customer as any)?.enrollments?.some((e: any) => e.programId === p.id))
+                            .map((program) => (
+                              <SelectItem key={program.id} value={program.id}>
+                                {program.name} ({program.programType})
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      {loyaltyPrograms.filter(p => p.active && !(customerDetails?.customer as any)?.enrollments?.some((e: any) => e.programId === p.id)).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-2">
+                          Already enrolled in all active programs
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={() => {
+                        if (selectedCustomer?.id && selectedEnrollProgramId) {
+                          enrollInProgramMutation.mutate({
+                            memberId: selectedCustomer.id,
+                            programId: selectedEnrollProgramId,
+                          });
+                        }
+                      }}
+                      disabled={enrollInProgramMutation.isPending || !selectedEnrollProgramId}
+                      className="w-full"
+                      data-testid="button-submit-enroll-program"
+                    >
+                      {enrollInProgramMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Star className="w-4 h-4 mr-2" />
+                      )}
+                      Enroll in Program
+                    </Button>
+                  </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {currentCheck && !currentCustomerId && (
@@ -733,6 +818,14 @@ export function CustomerModal({
                     >
                       <Pencil className="w-4 h-4 mr-2" />
                       Edit Profile
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowEnrollInProgram(true)}
+                      data-testid="button-show-enroll-in-program"
+                    >
+                      <Star className="w-4 h-4 mr-2" />
+                      Add to Program
                     </Button>
                     {customerDetails.recentChecks.length > 0 && currentCheck && (
                       <Button

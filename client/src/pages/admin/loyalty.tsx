@@ -71,6 +71,8 @@ export default function LoyaltyPage() {
   const [redeemRewardOpen, setRedeemRewardOpen] = useState(false);
   const [selectedRewardId, setSelectedRewardId] = useState("");
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState("");
+  const [enrollInProgramOpen, setEnrollInProgramOpen] = useState(false);
+  const [enrollProgramId, setEnrollProgramId] = useState("");
 
   const { data: programs = [], isLoading: programsLoading } = useQuery<LoyaltyProgram[]>({
     queryKey: ["/api/loyalty-programs"],
@@ -162,6 +164,14 @@ export default function LoyaltyPage() {
 
   const rewardColumns: Column<LoyaltyReward>[] = [
     { key: "name", header: "Reward Name", sortable: true },
+    {
+      key: "programId",
+      header: "Program",
+      render: (value) => {
+        const program = programs.find(p => p.id === value);
+        return program ? <Badge variant="outline">{program.name}</Badge> : <span className="text-muted-foreground">-</span>;
+      },
+    },
     { key: "description", header: "Description" },
     {
       key: "pointsCost",
@@ -170,7 +180,12 @@ export default function LoyaltyPage() {
       sortable: true,
     },
     {
-      key: "type",
+      key: "autoAwardAtPoints",
+      header: "Auto-Award At",
+      render: (value) => value ? <span className="font-bold tabular-nums">{value} pts</span> : <span className="text-muted-foreground">-</span>,
+    },
+    {
+      key: "rewardType",
       header: "Type",
       render: (value) => <Badge variant="outline">{value}</Badge>,
     },
@@ -316,6 +331,27 @@ export default function LoyaltyPage() {
     },
     onError: (error: any) => {
       toast({ title: error.message || "Failed to redeem reward", variant: "destructive" });
+    },
+  });
+
+  const enrollInProgramMutation = useMutation({
+    mutationFn: async ({ memberId, programId }: { memberId: string; programId: string }) => {
+      const response = await apiRequest("POST", `/api/loyalty-members/${memberId}/enrollments`, { programId });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members"] });
+      setEnrollInProgramOpen(false);
+      setEnrollProgramId("");
+      toast({ title: "Enrolled in program successfully" });
+      // Refresh selected member data
+      if (selectedMember) {
+        const updatedMember = members.find(m => m.id === selectedMember.id);
+        if (updatedMember) setSelectedMember(updatedMember);
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || "Failed to enroll in program", variant: "destructive" });
     },
   });
 
@@ -871,6 +907,14 @@ export default function LoyaltyPage() {
                     <Award className="w-4 h-4 mr-2" />
                     Redeem Reward ({availableRewards.length} available)
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEnrollInProgramOpen(true)}
+                    data-testid="button-enroll-in-program"
+                  >
+                    <Star className="w-4 h-4 mr-2" />
+                    Enroll in Program
+                  </Button>
                 </div>
               </TabsContent>
               <TabsContent value="history">
@@ -1044,6 +1088,58 @@ export default function LoyaltyPage() {
               data-testid="button-redeem-reward-submit"
             >
               Redeem Reward
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={enrollInProgramOpen} onOpenChange={(open) => { setEnrollInProgramOpen(open); if (!open) setEnrollProgramId(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enroll in Program</DialogTitle>
+            <DialogDescription>
+              Select a loyalty program to enroll {selectedMember?.firstName} in
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Program</Label>
+              <Select value={enrollProgramId} onValueChange={setEnrollProgramId}>
+                <SelectTrigger data-testid="select-enroll-program">
+                  <SelectValue placeholder="Choose a program" />
+                </SelectTrigger>
+                <SelectContent>
+                  {programs
+                    .filter(p => p.active && !selectedMember?.enrollments?.some(e => e.programId === p.id))
+                    .map((program) => (
+                      <SelectItem key={program.id} value={program.id}>
+                        {program.name} ({program.programType})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {programs.filter(p => p.active && !selectedMember?.enrollments?.some(e => e.programId === p.id)).length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                This member is already enrolled in all active programs
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnrollInProgramOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (selectedMember && enrollProgramId) {
+                  enrollInProgramMutation.mutate({
+                    memberId: selectedMember.id,
+                    programId: enrollProgramId,
+                  });
+                }
+              }}
+              disabled={!enrollProgramId || enrollInProgramMutation.isPending}
+              data-testid="button-enroll-program-submit"
+            >
+              Enroll in Program
             </Button>
           </DialogFooter>
         </DialogContent>
