@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Button } from "@/components/ui/button";
@@ -23,15 +23,12 @@ import { PriceOverrideModal } from "@/components/pos/price-override-modal";
 import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
-import { TillOpeningModal } from "@/components/pos/till-opening-modal";
-import { TillClosingModal } from "@/components/pos/till-closing-modal";
-import { CashMovementModal } from "@/components/pos/cash-movement-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
-import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount, TillSession } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, DollarSign, Banknote } from "lucide-react";
+import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -83,13 +80,11 @@ export default function PosPage() {
     pendingItem,
     privileges,
     workstationId,
-    activeTillSession,
     setCurrentCheck,
     setCheckItems,
     setSelectedSlu,
     setPendingItem,
     setCurrentRvc,
-    setActiveTillSession,
     hasPrivilege,
     logout,
   } = usePosContext();
@@ -100,8 +95,10 @@ export default function PosPage() {
     queryFn: async () => {
       const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
+        setApiConnected(false);
         throw new Error("Failed to fetch workstation context");
       }
+      setApiConnected(true);
       return res.json();
     },
     enabled: !!workstationId && !currentRvc,
@@ -151,60 +148,6 @@ export default function PosPage() {
   const [isCapturingTip, setIsCapturingTip] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
-  const [showTillOpeningModal, setShowTillOpeningModal] = useState(false);
-  const [showTillClosingModal, setShowTillClosingModal] = useState(false);
-  const [showCashMovementModal, setShowCashMovementModal] = useState(false);
-
-  // Track till session fetch state per employee login
-  const [tillCheckDone, setTillCheckDone] = useState(false);
-  const lastCheckedEmployeeId = useRef<string | null>(null);
-
-  // Fetch active till session for this workstation when employee logs in
-  useEffect(() => {
-    async function checkTillSession() {
-      if (!workstationId || !currentRvc?.id || !currentEmployee?.id) {
-        return;
-      }
-      
-      // Only check once per employee login
-      if (lastCheckedEmployeeId.current === currentEmployee.id && tillCheckDone) {
-        return;
-      }
-      
-      lastCheckedEmployeeId.current = currentEmployee.id;
-      setTillCheckDone(false);
-      
-      try {
-        console.log("Checking till session for workstation:", workstationId, "rvc:", currentRvc.id);
-        const res = await fetch(
-          `/api/till-sessions/active?workstationId=${workstationId}&rvcId=${currentRvc.id}`,
-          { credentials: "include", headers: getAuthHeaders() }
-        );
-        
-        if (res.ok) {
-          const session = await res.json();
-          console.log("Found active till session:", session?.id);
-          if (session) {
-            setActiveTillSession(session);
-            setTillCheckDone(true);
-            return;
-          }
-        }
-        
-        // No active session found - show opening modal
-        console.log("No active till session, showing opening modal");
-        setTillCheckDone(true);
-        setShowTillOpeningModal(true);
-      } catch (error) {
-        console.error("Error checking till session:", error);
-        setTillCheckDone(true);
-        setShowTillOpeningModal(true);
-      }
-    }
-    
-    checkTillSession();
-  }, [currentEmployee?.id, workstationId, currentRvc?.id, setActiveTillSession]);
-
   // Health check query to verify API connection when RVC is already set
   const healthQuery = useQuery({
     queryKey: ["/api/health"],
@@ -333,8 +276,10 @@ export default function PosPage() {
     queryFn: async () => {
       const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
+        setApiConnected(false);
         throw new Error("Failed to fetch menu items");
       }
+      setApiConnected(true);
       return res.json();
     },
     enabled: !!selectedSlu,
@@ -583,7 +528,6 @@ export default function PosPage() {
         tenderId: data.tenderId,
         amount: data.amount.toString(),
         employeeId: currentEmployee?.id,
-        workstationId,
         paymentTransactionId: data.paymentTransactionId,
       });
       const result = await response.json();
@@ -1126,36 +1070,10 @@ export default function PosPage() {
             </Link>
           )}
           <ThemeToggle />
-          {activeTillSession && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCashMovementModal(true)}
-                data-testid="button-cash-operations"
-              >
-                <Banknote className="w-4 h-4 mr-1" />
-                Cash
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTillClosingModal(true)}
-                data-testid="button-close-till"
-              >
-                <DollarSign className="w-4 h-4 mr-1" />
-                Close Till
-              </Button>
-            </>
-          )}
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
-              // Sign Out just logs out the employee - till stays open for workstation
-              // Use the explicit "Close Till" button to close the till
-              logout();
-            }}
+            onClick={logout}
             data-testid="button-sign-out"
           >
             <LogOut className="w-4 h-4" />
@@ -1908,48 +1826,6 @@ export default function PosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {currentEmployee && currentRvc && wsContext?.property && (
-        <TillOpeningModal
-          open={showTillOpeningModal}
-          onClose={() => {
-            setShowTillOpeningModal(false);
-            logout();
-          }}
-          onComplete={(session) => {
-            setActiveTillSession(session);
-            setShowTillOpeningModal(false);
-          }}
-          employeeId={currentEmployee.id}
-          rvcId={currentRvc.id}
-          propertyId={currentRvc.propertyId}
-          workstationId={workstationId || ""}
-          businessDate={wsContext.property.currentBusinessDate || new Date().toISOString().split("T")[0]}
-        />
-      )}
-
-      {activeTillSession && currentRvc && (
-        <TillClosingModal
-          open={showTillClosingModal}
-          onClose={() => setShowTillClosingModal(false)}
-          onComplete={() => {
-            setShowTillClosingModal(false);
-            setActiveTillSession(null);
-            logout();
-          }}
-          tillSession={activeTillSession}
-          rvcId={currentRvc.id}
-        />
-      )}
-
-      {activeTillSession && currentEmployee && (
-        <CashMovementModal
-          open={showCashMovementModal}
-          onClose={() => setShowCashMovementModal(false)}
-          tillSession={activeTillSession}
-          employeeId={currentEmployee.id}
-        />
-      )}
     </div>
   );
 }
