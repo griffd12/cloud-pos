@@ -13263,7 +13263,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const drops = parseFloat(session.dropsTotal || "0");
       const tips = parseFloat(session.tipsTotal || "0");
 
-      const expectedInDrawer = startAmount + cashSales - cashRefunds + paidIn - paidOut - drops - tips;
+      const expectedCash = startAmount + cashSales - cashRefunds + paidIn - paidOut - drops - tips;
+
+      // Transaction count is tracked on session (or 0 if not set)
+      const transactionCount = session.transactionCount || 0;
+      // Card/other sales would need payment tracking - for now show as 0
+      const cardSales = 0;
+      const otherSales = 0;
+      const totalSales = cashSales + cardSales + otherSales;
 
       res.json({
         tillSessionId: session.id,
@@ -13271,15 +13278,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         businessDate: session.businessDate,
         openedAt: session.openedAt,
         status: session.status,
+        transactionCount,
         // Amounts
         startingBank: startAmount.toFixed(2),
         cashSales: cashSales.toFixed(2),
+        cardSales: cardSales.toFixed(2),
+        otherSales: otherSales.toFixed(2),
+        totalSales: totalSales.toFixed(2),
         cashRefunds: cashRefunds.toFixed(2),
         paidIn: paidIn.toFixed(2),
         paidOut: paidOut.toFixed(2),
-        drops: drops.toFixed(2),
+        cashDrops: drops.toFixed(2),
         tips: tips.toFixed(2),
-        expectedInDrawer: expectedInDrawer.toFixed(2),
+        expectedCash: expectedCash.toFixed(2),
         // If closed, include close info
         actualCloseAmount: session.actualCloseAmount,
         closeVariance: session.closeVariance,
@@ -13287,6 +13298,75 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get shift summary" });
+    }
+  });
+
+  // Close a till session
+  app.post("/api/till-sessions/:id/close", async (req, res) => {
+    try {
+      const session = await storage.getTillSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Till session not found" });
+      }
+      if (session.status === "closed") {
+        return res.status(400).json({ message: "Till session is already closed" });
+      }
+
+      const { closingAmount, closingNotes, denominations } = req.body;
+      const closingAmountNum = parseFloat(closingAmount);
+      if (isNaN(closingAmountNum) || closingAmountNum < 0) {
+        return res.status(400).json({ message: "Invalid closing amount" });
+      }
+
+      // Calculate expected
+      const startAmount = parseFloat(session.actualOpenAmount || session.expectedOpenAmount);
+      const cashSales = parseFloat(session.cashSalesTotal || "0");
+      const cashRefunds = parseFloat(session.cashRefundsTotal || "0");
+      const paidIn = parseFloat(session.paidInTotal || "0");
+      const paidOut = parseFloat(session.paidOutTotal || "0");
+      const drops = parseFloat(session.dropsTotal || "0");
+      const tips = parseFloat(session.tipsTotal || "0");
+      const expectedCash = startAmount + cashSales - cashRefunds + paidIn - paidOut - drops - tips;
+      const variance = closingAmountNum - expectedCash;
+
+      // Create closing count record if denominations provided
+      if (denominations && denominations.length > 0) {
+        const countId = crypto.randomUUID();
+        await storage.createTillCount({
+          id: countId,
+          tillSessionId: session.id,
+          countType: "close",
+          expectedAmount: expectedCash.toFixed(2),
+          actualAmount: closingAmount,
+          variance: variance.toFixed(2),
+          countedByEmployeeId: session.employeeId,
+        });
+
+        // Record denominations
+        for (const denom of denominations) {
+          await storage.createTillCountDenomination({
+            tillCountId: countId,
+            denomination: denom.denomination,
+            quantity: denom.quantity,
+            subtotal: denom.subtotal,
+          });
+        }
+      }
+
+      // Update session to closed
+      const closedSession = await storage.updateTillSession(session.id, {
+        status: "closed",
+        closedAt: new Date(),
+        expectedCloseAmount: expectedCash.toFixed(2),
+        actualCloseAmount: closingAmount,
+        closeVariance: variance.toFixed(2),
+        closingNotes: closingNotes || null,
+      });
+
+      res.json(closedSession);
+    } catch (error: any) {
+      console.error("Till close error:", error);
+      res.status(500).json({ message: error.message || "Failed to close till" });
     }
   });
 

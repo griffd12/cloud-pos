@@ -24,12 +24,13 @@ import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
 import { TillOpeningModal } from "@/components/pos/till-opening-modal";
+import { TillClosingModal } from "@/components/pos/till-closing-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount, TillSession } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, DollarSign } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -150,6 +151,7 @@ export default function PosPage() {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
   const [showTillOpeningModal, setShowTillOpeningModal] = useState(false);
+  const [showTillClosingModal, setShowTillClosingModal] = useState(false);
 
   // Check for active till session when employee is signed in
   const { data: fetchedTillSession, isLoading: tillSessionLoading } = useQuery<TillSession | null>({
@@ -1105,10 +1107,27 @@ export default function PosPage() {
             </Link>
           )}
           <ThemeToggle />
+          {activeTillSession && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTillClosingModal(true)}
+              data-testid="button-close-till"
+            >
+              <DollarSign className="w-4 h-4 mr-1" />
+              Close Till
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
-            onClick={logout}
+            onClick={() => {
+              if (activeTillSession) {
+                setShowTillClosingModal(true);
+              } else {
+                logout();
+              }
+            }}
             data-testid="button-sign-out"
           >
             <LogOut className="w-4 h-4" />
@@ -1878,6 +1897,20 @@ export default function PosPage() {
           propertyId={currentRvc.propertyId}
           workstationId={workstationId || ""}
           businessDate={wsContext.property.currentBusinessDate || new Date().toISOString().split("T")[0]}
+        />
+      )}
+
+      {activeTillSession && currentRvc && (
+        <TillClosingModal
+          open={showTillClosingModal}
+          onClose={() => setShowTillClosingModal(false)}
+          onComplete={() => {
+            setShowTillClosingModal(false);
+            setActiveTillSession(null);
+            logout();
+          }}
+          tillSession={activeTillSession}
+          rvcId={currentRvc.id}
         />
       )}
     </div>
