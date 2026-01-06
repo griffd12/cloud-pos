@@ -64,14 +64,22 @@ export function useInactivityLogout({
     }
 
     const timeoutMs = timeoutMinutes * 60 * 1000;
+    console.log(`[Auto-Logout] Timer active: ${timeoutMinutes} minutes (${timeoutMs}ms)`);
 
     const checkInactivity = () => {
       const elapsed = Date.now() - lastActivityRef.current;
+      const remaining = Math.max(0, timeoutMs - elapsed);
       if (elapsed >= timeoutMs) {
+        console.log("[Auto-Logout] Timeout reached, logging out");
         performAutoLogout();
+      } else if (remaining < 60000) {
+        // Log warning in last minute
+        console.log(`[Auto-Logout] Warning: ${Math.ceil(remaining / 1000)}s until auto-logout`);
       }
     };
 
+    // Reset the activity timestamp when timer starts
+    lastActivityRef.current = Date.now();
     timerRef.current = setInterval(checkInactivity, 10000);
 
     return () => {
