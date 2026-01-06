@@ -19,12 +19,19 @@ import {
   insertLoyaltyRewardSchema,
   type LoyaltyProgram,
   type LoyaltyMember,
+  type LoyaltyMemberEnrollment,
+  type LoyaltyMemberWithEnrollments,
   type LoyaltyTransaction,
   type LoyaltyReward,
   type InsertLoyaltyProgram,
   type InsertLoyaltyMember,
   type InsertLoyaltyReward,
 } from "@shared/schema";
+
+// Extended member type from API that includes enrollments
+type MemberWithEnrollments = LoyaltyMember & {
+  enrollments?: (LoyaltyMemberEnrollment & { program?: LoyaltyProgram })[];
+};
 import { Star, Users, Gift, Plus, Search, Award, TrendingUp, History, Crown } from "lucide-react";
 import { format } from "date-fns";
 
@@ -37,7 +44,6 @@ export default function LoyaltyPage() {
   const [editingProgram, setEditingProgram] = useState<LoyaltyProgram | null>(null);
   const [programFormData, setProgramFormData] = useState({
     name: "",
-    description: "",
     programType: "points" as "points" | "visits" | "spend" | "tiered",
     pointsPerDollar: "1",
     visitsForReward: "10",
@@ -48,8 +54,8 @@ export default function LoyaltyPage() {
   });
   
   const [memberFormOpen, setMemberFormOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState<LoyaltyMember | null>(null);
-  const [selectedMember, setSelectedMember] = useState<LoyaltyMember | null>(null);
+  const [editingMember, setEditingMember] = useState<MemberWithEnrollments | null>(null);
+  const [selectedMember, setSelectedMember] = useState<MemberWithEnrollments | null>(null);
   const [memberDetailOpen, setMemberDetailOpen] = useState(false);
   const [lookupDialogOpen, setLookupDialogOpen] = useState(false);
   const [lookupEmail, setLookupEmail] = useState("");
@@ -63,12 +69,13 @@ export default function LoyaltyPage() {
   
   const [redeemRewardOpen, setRedeemRewardOpen] = useState(false);
   const [selectedRewardId, setSelectedRewardId] = useState("");
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState("");
 
   const { data: programs = [], isLoading: programsLoading } = useQuery<LoyaltyProgram[]>({
     queryKey: ["/api/loyalty-programs"],
   });
 
-  const { data: members = [], isLoading: membersLoading } = useQuery<LoyaltyMember[]>({
+  const { data: members = [], isLoading: membersLoading } = useQuery<MemberWithEnrollments[]>({
     queryKey: ["/api/loyalty-members"],
   });
 
@@ -116,33 +123,34 @@ export default function LoyaltyPage() {
     },
   ];
 
-  const memberColumns: Column<LoyaltyMember>[] = [
+  const memberColumns: Column<MemberWithEnrollments>[] = [
     { key: "firstName", header: "First Name", sortable: true },
     { key: "lastName", header: "Last Name", sortable: true },
     { key: "email", header: "Email", sortable: true },
     { key: "phone", header: "Phone" },
     {
-      key: "currentPoints",
-      header: "Points",
-      render: (value) => <span className="font-bold tabular-nums">{value || 0}</span>,
-      sortable: true,
-    },
-    {
-      key: "currentTier",
-      header: "Tier",
-      render: (value) => {
-        const colors: Record<string, "default" | "secondary" | "outline"> = {
-          gold: "default",
-          silver: "secondary",
-          bronze: "outline",
-        };
-        return value ? <Badge variant={colors[value] || "outline"}>{value}</Badge> : <Badge variant="outline">Standard</Badge>;
+      key: "enrollments",
+      header: "Programs",
+      render: (_, row) => {
+        const count = row.enrollments?.length || 0;
+        return <Badge variant="outline">{count} program{count !== 1 ? "s" : ""}</Badge>;
       },
     },
     {
-      key: "lifetimePoints",
+      key: "id",
+      header: "Total Points",
+      render: (_, row) => {
+        const totalPoints = row.enrollments?.reduce((sum, e) => sum + (e.currentPoints || 0), 0) || 0;
+        return <span className="font-bold tabular-nums">{totalPoints}</span>;
+      },
+    },
+    {
+      key: "memberNumber",
       header: "Lifetime Points",
-      render: (value) => value || 0,
+      render: (_, row) => {
+        const lifetimeTotal = row.enrollments?.reduce((sum, e) => sum + (e.lifetimePoints || 0), 0) || 0;
+        return lifetimeTotal;
+      },
     },
   ];
 
@@ -173,25 +181,8 @@ export default function LoyaltyPage() {
     { name: "lastName", label: "Last Name", type: "text", required: true },
     { name: "email", label: "Email", type: "text", required: true },
     { name: "phone", label: "Phone", type: "text" },
-    {
-      name: "programId",
-      label: "Loyalty Program",
-      type: "select",
-      options: programs.map(p => ({ value: p.id, label: p.name })),
-      required: true,
-    },
-    {
-      name: "tier",
-      label: "Tier",
-      type: "select",
-      options: [
-        { value: "standard", label: "Standard" },
-        { value: "bronze", label: "Bronze" },
-        { value: "silver", label: "Silver" },
-        { value: "gold", label: "Gold" },
-      ],
-      defaultValue: "standard",
-    },
+    { name: "birthDate", label: "Birth Date", type: "text", placeholder: "YYYY-MM-DD" },
+    { name: "notes", label: "Notes", type: "textarea" },
   ];
 
   const rewardFormFields: FormFieldConfig[] = [
@@ -286,8 +277,8 @@ export default function LoyaltyPage() {
   });
 
   const earnMutation = useMutation({
-    mutationFn: async ({ memberId, points, reason }: { memberId: string; points: number; reason: string }) => {
-      const response = await apiRequest("POST", `/api/loyalty-members/${memberId}/earn`, { points, reason });
+    mutationFn: async ({ memberId, points, reason, enrollmentId }: { memberId: string; points: number; reason: string; enrollmentId?: string }) => {
+      const response = await apiRequest("POST", `/api/loyalty-members/${memberId}/earn`, { points, reason, enrollmentId });
       return response.json();
     },
     onSuccess: () => {
@@ -296,6 +287,7 @@ export default function LoyaltyPage() {
       setEarnPointsOpen(false);
       setEarnPoints("");
       setEarnReason("");
+      setSelectedEnrollmentId("");
       toast({ title: "Points added successfully" });
     },
     onError: () => {
@@ -304,8 +296,8 @@ export default function LoyaltyPage() {
   });
 
   const redeemMutation = useMutation({
-    mutationFn: async ({ memberId, rewardId }: { memberId: string; rewardId: string }) => {
-      const response = await apiRequest("POST", `/api/loyalty-members/${memberId}/redeem`, { rewardId });
+    mutationFn: async ({ memberId, rewardId, enrollmentId, points }: { memberId: string; rewardId: string; enrollmentId: string; points: number }) => {
+      const response = await apiRequest("POST", `/api/loyalty-members/${memberId}/redeem`, { rewardId, enrollmentId, points });
       return response.json();
     },
     onSuccess: () => {
@@ -313,6 +305,7 @@ export default function LoyaltyPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty-transactions", selectedMember?.id] });
       setRedeemRewardOpen(false);
       setSelectedRewardId("");
+      setSelectedEnrollmentId("");
       toast({ title: "Reward redeemed successfully" });
     },
     onError: (error: any) => {
@@ -337,25 +330,30 @@ export default function LoyaltyPage() {
     },
   });
 
-  const handleViewMember = (member: LoyaltyMember) => {
+  const handleViewMember = (member: MemberWithEnrollments) => {
     setSelectedMember(member);
     setMemberDetailOpen(true);
   };
 
-  const memberActions: CustomAction<LoyaltyMember>[] = [
+  const memberActions: CustomAction<MemberWithEnrollments>[] = [
     { label: "View Details", icon: History, onClick: handleViewMember },
   ];
 
   const totalMembers = members.length;
-  const totalPoints = members.reduce((sum, m) => sum + (m.currentPoints || 0), 0);
+  const totalPoints = members.reduce((sum, m) => {
+    const memberPoints = m.enrollments?.reduce((eSum, e) => eSum + (e.currentPoints || 0), 0) || 0;
+    return sum + memberPoints;
+  }, 0);
   const activePrograms = programs.filter(p => p.active).length;
 
-  const availableRewards = rewards.filter(r => 
-    r.active && 
-    selectedMember && 
-    r.programId === selectedMember.programId && 
-    (selectedMember.currentPoints || 0) >= (r.pointsCost || 0)
-  );
+  // Get available rewards based on selected member's enrollments
+  const availableRewards = selectedMember?.enrollments?.flatMap(enrollment => {
+    return rewards.filter(r => 
+      r.active && 
+      r.programId === enrollment.programId && 
+      (enrollment.currentPoints || 0) >= (r.pointsCost || 0)
+    );
+  }) || [];
 
   return (
     <div className="p-6 space-y-6">
@@ -424,7 +422,6 @@ export default function LoyaltyPage() {
               setEditingProgram(null); 
               setProgramFormData({
                 name: "",
-                description: "",
                 programType: "points",
                 pointsPerDollar: "1",
                 visitsForReward: "10",
@@ -439,7 +436,6 @@ export default function LoyaltyPage() {
               setEditingProgram(item); 
               setProgramFormData({
                 name: item.name || "",
-                description: item.description || "",
                 programType: (item.programType as "points" | "visits" | "spend" | "tiered") || "points",
                 pointsPerDollar: item.pointsPerDollar || "1",
                 visitsForReward: String(item.visitsForReward || 10),
@@ -497,16 +493,6 @@ export default function LoyaltyPage() {
                 onChange={(e) => setProgramFormData({ ...programFormData, name: e.target.value })}
                 placeholder="Rewards Program"
                 data-testid="input-program-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="prog-desc">Description</Label>
-              <Input
-                id="prog-desc"
-                value={programFormData.description}
-                onChange={(e) => setProgramFormData({ ...programFormData, description: e.target.value })}
-                placeholder="Earn rewards on every purchase"
-                data-testid="input-program-description"
               />
             </div>
             <div className="space-y-2">
@@ -655,7 +641,6 @@ export default function LoyaltyPage() {
               onClick={() => {
                 const data: any = {
                   name: programFormData.name,
-                  description: programFormData.description,
                   programType: programFormData.programType,
                   active: programFormData.active,
                 };
@@ -750,27 +735,65 @@ export default function LoyaltyPage() {
               <TabsContent value="info" className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 py-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Current Points</p>
-                    <p className="text-3xl font-bold text-primary" data-testid="text-member-points">
-                      {(selectedMember.currentPoints || 0).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Tier</p>
-                    <div className="flex items-center gap-2">
-                      <Crown className="w-5 h-5 text-yellow-500" />
-                      <span className="text-lg font-medium capitalize">{selectedMember.currentTier || "Standard"}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Lifetime Points</p>
-                    <p className="text-lg font-medium">{(selectedMember.lifetimePoints || 0).toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">Member Number</p>
+                    <p className="text-lg font-medium" data-testid="text-member-number">{selectedMember.memberNumber}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Email</p>
                     <p className="text-lg font-medium">{selectedMember.email}</p>
                   </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Phone</p>
+                    <p className="text-lg font-medium">{selectedMember.phone || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Birth Date</p>
+                    <p className="text-lg font-medium">{selectedMember.birthDate || "-"}</p>
+                  </div>
                 </div>
+
+                {/* Program Enrollments */}
+                <div className="space-y-3">
+                  <h4 className="font-medium">Program Enrollments</h4>
+                  {selectedMember.enrollments && selectedMember.enrollments.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedMember.enrollments.map((enrollment) => (
+                        <div key={enrollment.id} className="p-3 border rounded-md space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">
+                              {enrollment.program?.name || "Unknown Program"}
+                            </span>
+                            <Badge variant={enrollment.status === "active" ? "default" : "secondary"}>
+                              {enrollment.status}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Points:</span>
+                              <span className="ml-1 font-bold" data-testid={`text-enrollment-points-${enrollment.id}`}>
+                                {(enrollment.currentPoints || 0).toLocaleString()}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Visits:</span>
+                              <span className="ml-1 font-medium">{enrollment.visitCount || 0}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Tier:</span>
+                              <span className="ml-1 font-medium capitalize">{enrollment.currentTier || "Standard"}</span>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Lifetime: {(enrollment.lifetimePoints || 0).toLocaleString()} pts / ${parseFloat(enrollment.lifetimeSpend || "0").toFixed(2)} spent
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">No program enrollments yet</p>
+                  )}
+                </div>
+
                 <div className="flex gap-2 flex-wrap">
                   <Button onClick={() => setEarnPointsOpen(true)} data-testid="button-add-points">
                     <Plus className="w-4 h-4 mr-2" />
@@ -818,13 +841,32 @@ export default function LoyaltyPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={earnPointsOpen} onOpenChange={setEarnPointsOpen}>
+      <Dialog open={earnPointsOpen} onOpenChange={(open) => { setEarnPointsOpen(open); if (!open) setSelectedEnrollmentId(""); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Points</DialogTitle>
             <DialogDescription>Add points to {selectedMember?.firstName}'s account</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {selectedMember?.enrollments && selectedMember.enrollments.length > 1 && (
+              <div className="space-y-2">
+                <Label>Target Program (optional)</Label>
+                <Select value={selectedEnrollmentId} onValueChange={setSelectedEnrollmentId}>
+                  <SelectTrigger data-testid="select-earn-enrollment">
+                    <SelectValue placeholder="All enrolled programs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All enrolled programs</SelectItem>
+                    {selectedMember.enrollments.map((enrollment) => (
+                      <SelectItem key={enrollment.id} value={enrollment.id}>
+                        {enrollment.program?.name || "Unknown"} ({enrollment.currentPoints || 0} pts)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Leave blank to add points to all active enrollments</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="earnPoints">Points</Label>
               <Input
@@ -855,6 +897,7 @@ export default function LoyaltyPage() {
                 memberId: selectedMember.id,
                 points: parseInt(earnPoints),
                 reason: earnReason,
+                enrollmentId: selectedEnrollmentId || undefined,
               })}
               disabled={!earnPoints || parseInt(earnPoints) <= 0 || earnMutation.isPending}
               data-testid="button-earn-submit"
@@ -865,39 +908,71 @@ export default function LoyaltyPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={redeemRewardOpen} onOpenChange={setRedeemRewardOpen}>
+      <Dialog open={redeemRewardOpen} onOpenChange={(open) => { setRedeemRewardOpen(open); if (!open) { setSelectedRewardId(""); setSelectedEnrollmentId(""); }}}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Redeem Reward</DialogTitle>
             <DialogDescription>
-              Current points: {(selectedMember?.currentPoints || 0).toLocaleString()}
+              Select which program to redeem from
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Select Reward</Label>
-              <Select value={selectedRewardId} onValueChange={setSelectedRewardId}>
-                <SelectTrigger data-testid="select-reward">
-                  <SelectValue placeholder="Choose a reward" />
+              <Label>Select Program</Label>
+              <Select value={selectedEnrollmentId} onValueChange={(val) => { setSelectedEnrollmentId(val); setSelectedRewardId(""); }}>
+                <SelectTrigger data-testid="select-redeem-enrollment">
+                  <SelectValue placeholder="Choose a program" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableRewards.map((reward) => (
-                    <SelectItem key={reward.id} value={reward.id}>
-                      {reward.name} ({reward.pointsCost} pts)
+                  {selectedMember?.enrollments?.filter(e => (e.currentPoints || 0) > 0).map((enrollment) => (
+                    <SelectItem key={enrollment.id} value={enrollment.id}>
+                      {enrollment.program?.name || "Unknown"} ({enrollment.currentPoints || 0} pts available)
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {selectedEnrollmentId && (
+              <div className="space-y-2">
+                <Label>Select Reward</Label>
+                <Select value={selectedRewardId} onValueChange={setSelectedRewardId}>
+                  <SelectTrigger data-testid="select-reward">
+                    <SelectValue placeholder="Choose a reward" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      const enrollment = selectedMember?.enrollments?.find(e => e.id === selectedEnrollmentId);
+                      const programRewards = rewards.filter(r => 
+                        r.active && 
+                        r.programId === enrollment?.programId && 
+                        (enrollment?.currentPoints || 0) >= (r.pointsCost || 0)
+                      );
+                      return programRewards.map((reward) => (
+                        <SelectItem key={reward.id} value={reward.id}>
+                          {reward.name} ({reward.pointsCost} pts)
+                        </SelectItem>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRedeemRewardOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => selectedMember && redeemMutation.mutate({
-                memberId: selectedMember.id,
-                rewardId: selectedRewardId,
-              })}
-              disabled={!selectedRewardId || redeemMutation.isPending}
+              onClick={() => {
+                const reward = rewards.find(r => r.id === selectedRewardId);
+                if (selectedMember && reward) {
+                  redeemMutation.mutate({
+                    memberId: selectedMember.id,
+                    rewardId: selectedRewardId,
+                    enrollmentId: selectedEnrollmentId,
+                    points: reward.pointsCost || 0,
+                  });
+                }
+              }}
+              disabled={!selectedRewardId || !selectedEnrollmentId || redeemMutation.isPending}
               data-testid="button-redeem-reward-submit"
             >
               Redeem Reward

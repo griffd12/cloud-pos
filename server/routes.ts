@@ -11128,9 +11128,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/loyalty-members", async (req, res) => {
     try {
-      const { programId, search } = req.query;
-      const members = await storage.getLoyaltyMembers(programId as string, search as string);
-      res.json(members);
+      const { search } = req.query;
+      const members = await storage.getLoyaltyMembers(search as string);
+      // Augment with enrollments for each member
+      const membersWithEnrollments = await Promise.all(
+        members.map(async (member) => {
+          const enrollments = await storage.getLoyaltyEnrollments(member.id);
+          return { ...member, enrollments };
+        })
+      );
+      res.json(membersWithEnrollments);
     } catch (error) {
       res.status(500).json({ message: "Failed to get loyalty members" });
     }
@@ -11141,7 +11148,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Can lookup by member number, phone, or email
       const member = await storage.getLoyaltyMemberByIdentifier(req.params.identifier);
       if (!member) return res.status(404).json({ message: "Member not found" });
-      res.json(member);
+      // Return with enrollments
+      const memberWithEnrollments = await storage.getLoyaltyMemberWithEnrollments(member.id);
+      res.json(memberWithEnrollments);
     } catch (error) {
       res.status(500).json({ message: "Failed to lookup member" });
     }
@@ -11149,7 +11158,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/loyalty-members/:id", async (req, res) => {
     try {
-      const member = await storage.getLoyaltyMember(req.params.id);
+      const member = await storage.getLoyaltyMemberWithEnrollments(req.params.id);
       if (!member) return res.status(404).json({ message: "Member not found" });
       res.json(member);
     } catch (error) {
@@ -11159,10 +11168,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/loyalty-members", async (req, res) => {
     try {
-      const member = await storage.createLoyaltyMember(req.body);
-      res.status(201).json(member);
+      const { programIds, ...memberData } = req.body;
+      const member = await storage.createLoyaltyMember(memberData);
+      
+      // Create enrollments for each program if provided
+      if (programIds && Array.isArray(programIds)) {
+        for (const programId of programIds) {
+          await storage.createLoyaltyEnrollment({
+            memberId: member.id,
+            programId,
+          });
+        }
+      }
+      
+      const memberWithEnrollments = await storage.getLoyaltyMemberWithEnrollments(member.id);
+      res.status(201).json(memberWithEnrollments);
     } catch (error) {
       res.status(500).json({ message: "Failed to create loyalty member" });
+    }
+  });
+
+  // Enrollment routes
+  app.get("/api/loyalty-members/:id/enrollments", async (req, res) => {
+    try {
+      const enrollments = await storage.getLoyaltyEnrollments(req.params.id);
+      res.json(enrollments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get enrollments" });
+    }
+  });
+
+  app.post("/api/loyalty-members/:id/enrollments", async (req, res) => {
+    try {
+      const { programId } = req.body;
+      const member = await storage.getLoyaltyMember(req.params.id);
+      if (!member) return res.status(404).json({ message: "Member not found" });
+      
+      // Check if already enrolled in this program
+      const existingEnrollments = await storage.getLoyaltyEnrollments(req.params.id);
+      if (existingEnrollments.some(e => e.programId === programId)) {
+        return res.status(400).json({ message: "Already enrolled in this program" });
+      }
+      
+      const enrollment = await storage.createLoyaltyEnrollment({
+        memberId: req.params.id,
+        programId,
+      });
+      res.status(201).json(enrollment);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create enrollment" });
+    }
+  });
+
+  app.patch("/api/loyalty-enrollments/:id", async (req, res) => {
+    try {
+      const enrollment = await storage.updateLoyaltyEnrollment(req.params.id, req.body);
+      res.json(enrollment);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update enrollment" });
     }
   });
 
@@ -11186,103 +11249,150 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Earn points/visits on a specific enrollment (or all enrollments for the member)
   app.post("/api/loyalty-members/:id/earn", async (req, res) => {
     try {
-      const { points, checkId, checkTotal, propertyId, employeeId, reason } = req.body;
+      const { points, checkId, checkTotal, propertyId, employeeId, reason, enrollmentId } = req.body;
       const member = await storage.getLoyaltyMember(req.params.id);
       if (!member) return res.status(404).json({ message: "Member not found" });
 
-      const oldLifetime = member.lifetimePoints || 0;
-      const newPoints = (member.currentPoints || 0) + points;
-      const newLifetime = oldLifetime + points;
-
-      const updated = await storage.updateLoyaltyMember(req.params.id, {
-        currentPoints: newPoints,
-        lifetimePoints: newLifetime,
-        visitCount: (member.visitCount || 0) + 1,
-        lifetimeSpend: (parseFloat(member.lifetimeSpend || "0") + parseFloat(checkTotal || "0")).toString(),
-        lastVisitAt: new Date(),
-      });
-
-      await storage.createLoyaltyTransaction({
-        memberId: member.id,
-        propertyId,
-        transactionType: "earn",
-        points,
-        pointsBefore: member.currentPoints || 0,
-        pointsAfter: newPoints,
-        checkId,
-        checkTotal,
-        employeeId,
-        reason,
-      });
-
-      // Check for auto-awards after earning points
-      const autoAwardedRewards: string[] = [];
-      const rewards = await storage.getLoyaltyRewards(member.programId);
-      const memberTransactions = await storage.getLoyaltyTransactionsByMember(member.id);
+      // Get all active enrollments for this member
+      let enrollments = await storage.getLoyaltyEnrollments(req.params.id);
+      enrollments = enrollments.filter(e => e.status === "active");
       
-      for (const reward of rewards) {
-        if (!reward.active || !reward.autoAwardAtPoints) continue;
-        
-        // Check if member just crossed the threshold (wasn't over before, now is)
-        if (oldLifetime < reward.autoAwardAtPoints && newLifetime >= reward.autoAwardAtPoints) {
-          // Check if autoAwardOnce and already awarded
-          if (reward.autoAwardOnce) {
-            const alreadyAwarded = memberTransactions.some(
-              tx => tx.reason?.includes(`Auto-award: ${reward.name}`)
-            );
-            if (alreadyAwarded) continue;
+      if (enrollmentId) {
+        // Only update specific enrollment
+        enrollments = enrollments.filter(e => e.id === enrollmentId);
+      }
+
+      const updatedEnrollments = [];
+      const autoAwardedRewards: string[] = [];
+
+      for (const enrollment of enrollments) {
+        // Get the program to determine earning type
+        const programs = await storage.getLoyaltyPrograms();
+        const program = programs.find(p => p.id === enrollment.programId);
+        if (!program) continue;
+
+        const oldLifetime = enrollment.lifetimePoints || 0;
+        const oldVisits = enrollment.visitCount || 0;
+        let earnedPoints = 0;
+        let visitIncrement = 0;
+
+        // Calculate earnings based on program type
+        if (program.programType === "points" || program.programType === "tiered") {
+          // Points-based: earn points per dollar
+          const pointsPerDollar = parseFloat(program.pointsPerDollar || "1");
+          earnedPoints = points || Math.floor(parseFloat(checkTotal || "0") * pointsPerDollar);
+        } else if (program.programType === "visits") {
+          // Visit-based: increment visit count
+          visitIncrement = 1;
+        } else if (program.programType === "spend") {
+          // Spend-based: track lifetime spend
+          earnedPoints = points || 0;
+        }
+
+        const newPoints = (enrollment.currentPoints || 0) + earnedPoints;
+        const newLifetime = oldLifetime + earnedPoints;
+        const newVisits = oldVisits + visitIncrement;
+        const newSpend = (parseFloat(enrollment.lifetimeSpend || "0") + parseFloat(checkTotal || "0")).toString();
+
+        // Update the enrollment
+        const updated = await storage.updateLoyaltyEnrollment(enrollment.id, {
+          currentPoints: newPoints,
+          lifetimePoints: newLifetime,
+          visitCount: newVisits,
+          lifetimeSpend: newSpend,
+          lastActivityAt: new Date(),
+        });
+
+        // Create transaction for this enrollment
+        await storage.createLoyaltyTransaction({
+          memberId: member.id,
+          programId: enrollment.programId,
+          enrollmentId: enrollment.id,
+          propertyId,
+          transactionType: "earn",
+          points: earnedPoints,
+          pointsBefore: enrollment.currentPoints || 0,
+          pointsAfter: newPoints,
+          visitIncrement,
+          visitsBefore: oldVisits,
+          visitsAfter: newVisits,
+          checkId,
+          checkTotal,
+          employeeId,
+          reason,
+        });
+
+        updatedEnrollments.push(updated);
+
+        // Check for auto-awards
+        const rewards = await storage.getLoyaltyRewards(enrollment.programId);
+        for (const reward of rewards) {
+          if (!reward.active || !reward.autoAwardAtPoints) continue;
+          if (oldLifetime < reward.autoAwardAtPoints && newLifetime >= reward.autoAwardAtPoints) {
+            autoAwardedRewards.push(`${program.name}: ${reward.name}`);
           }
-          
-          // Award the reward (add points value or create notification)
-          autoAwardedRewards.push(reward.name);
-          
-          // Log the auto-award as a transaction
-          await storage.createLoyaltyTransaction({
-            memberId: member.id,
-            propertyId,
-            transactionType: "earn",
-            points: 0, // The reward itself, not additional points
-            pointsBefore: newPoints,
-            pointsAfter: newPoints,
-            reason: `Auto-award: ${reward.name} (reached ${reward.autoAwardAtPoints} lifetime points)`,
-          });
         }
       }
 
-      res.json({ ...updated, autoAwardedRewards });
+      res.json({ member, updatedEnrollments, autoAwardedRewards });
     } catch (error) {
+      console.error("Earn points error:", error);
       res.status(500).json({ message: "Failed to earn points" });
     }
   });
 
+  // Redeem points from a specific enrollment
   app.post("/api/loyalty-members/:id/redeem", async (req, res) => {
     try {
-      const { points, checkId, propertyId, employeeId, reason } = req.body;
+      const { points, checkId, propertyId, employeeId, reason, enrollmentId, rewardId } = req.body;
       const member = await storage.getLoyaltyMember(req.params.id);
       if (!member) return res.status(404).json({ message: "Member not found" });
-      if ((member.currentPoints || 0) < points) {
+
+      if (!enrollmentId) {
+        return res.status(400).json({ message: "enrollmentId is required for redemption" });
+      }
+
+      const enrollment = await storage.getLoyaltyEnrollment(enrollmentId);
+      if (!enrollment) return res.status(404).json({ message: "Enrollment not found" });
+      if ((enrollment.currentPoints || 0) < points) {
         return res.status(400).json({ message: "Insufficient points" });
       }
 
-      const newPoints = (member.currentPoints || 0) - points;
+      const newPoints = (enrollment.currentPoints || 0) - points;
 
-      const updated = await storage.updateLoyaltyMember(req.params.id, {
+      const updated = await storage.updateLoyaltyEnrollment(enrollmentId, {
         currentPoints: newPoints,
+        lastActivityAt: new Date(),
       });
 
       await storage.createLoyaltyTransaction({
         memberId: member.id,
+        programId: enrollment.programId,
+        enrollmentId,
         propertyId,
         transactionType: "redeem",
         points: -points,
-        pointsBefore: member.currentPoints || 0,
+        pointsBefore: enrollment.currentPoints || 0,
         pointsAfter: newPoints,
         checkId,
         employeeId,
         reason,
       });
+
+      // If redeeming a reward, create redemption record
+      if (rewardId) {
+        await storage.createLoyaltyRedemption({
+          memberId: member.id,
+          rewardId,
+          checkId,
+          propertyId,
+          pointsUsed: points,
+          employeeId,
+        });
+      }
 
       res.json(updated);
     } catch (error) {

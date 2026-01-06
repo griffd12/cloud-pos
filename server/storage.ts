@@ -110,6 +110,9 @@ import {
   type AccountingExport, type InsertAccountingExport,
   type LoyaltyProgram, type InsertLoyaltyProgram,
   type LoyaltyMember, type InsertLoyaltyMember,
+  type LoyaltyMemberEnrollment, type InsertLoyaltyMemberEnrollment,
+  type LoyaltyMemberWithEnrollments,
+  loyaltyMemberEnrollments,
   type LoyaltyTransaction, type InsertLoyaltyTransaction,
   type LoyaltyReward, type InsertLoyaltyReward,
   type LoyaltyRedemption, type InsertLoyaltyRedemption,
@@ -658,14 +661,29 @@ export interface IStorage {
   getLoyaltyPrograms(enterpriseId?: string): Promise<LoyaltyProgram[]>;
   createLoyaltyProgram(data: InsertLoyaltyProgram): Promise<LoyaltyProgram>;
   updateLoyaltyProgram(id: string, data: Partial<InsertLoyaltyProgram>): Promise<LoyaltyProgram | undefined>;
-  getLoyaltyMembers(programId?: string, search?: string): Promise<LoyaltyMember[]>;
+  
+  // Loyalty Members (customer profiles)
+  getLoyaltyMembers(search?: string): Promise<LoyaltyMember[]>;
   getLoyaltyMember(id: string): Promise<LoyaltyMember | undefined>;
+  getLoyaltyMemberWithEnrollments(id: string): Promise<LoyaltyMemberWithEnrollments | undefined>;
   getLoyaltyMemberByIdentifier(identifier: string): Promise<LoyaltyMember | undefined>;
   createLoyaltyMember(data: InsertLoyaltyMember): Promise<LoyaltyMember>;
   updateLoyaltyMember(id: string, data: Partial<InsertLoyaltyMember>): Promise<LoyaltyMember | undefined>;
+  
+  // Loyalty Enrollments (member-program connections)
+  getLoyaltyEnrollments(memberId: string): Promise<LoyaltyMemberEnrollment[]>;
+  getLoyaltyEnrollmentsByProgram(programId: string): Promise<LoyaltyMemberEnrollment[]>;
+  getLoyaltyEnrollment(id: string): Promise<LoyaltyMemberEnrollment | undefined>;
+  createLoyaltyEnrollment(data: InsertLoyaltyMemberEnrollment): Promise<LoyaltyMemberEnrollment>;
+  updateLoyaltyEnrollment(id: string, data: Partial<InsertLoyaltyMemberEnrollment>): Promise<LoyaltyMemberEnrollment | undefined>;
+  
+  // Loyalty Transactions
   createLoyaltyTransaction(data: InsertLoyaltyTransaction): Promise<LoyaltyTransaction>;
   getLoyaltyTransactionsByMember(memberId: string): Promise<LoyaltyTransaction[]>;
-  getLoyaltyRewards(programId: string): Promise<LoyaltyReward[]>;
+  getLoyaltyTransactionsByEnrollment(enrollmentId: string): Promise<LoyaltyTransaction[]>;
+  
+  // Loyalty Rewards
+  getLoyaltyRewards(programId?: string): Promise<LoyaltyReward[]>;
   getLoyaltyReward(id: string): Promise<LoyaltyReward | undefined>;
   createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward>;
   updateLoyaltyReward(id: string, data: Partial<InsertLoyaltyReward>): Promise<LoyaltyReward | undefined>;
@@ -4372,9 +4390,8 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getLoyaltyMembers(programId?: string, search?: string): Promise<LoyaltyMember[]> {
+  async getLoyaltyMembers(search?: string): Promise<LoyaltyMember[]> {
     const conditions = [];
-    if (programId) conditions.push(eq(loyaltyMembers.programId, programId));
     if (search) {
       conditions.push(or(
         ilike(loyaltyMembers.firstName, `%${search}%`),
@@ -4390,6 +4407,24 @@ export class DatabaseStorage implements IStorage {
   async getLoyaltyMember(id: string): Promise<LoyaltyMember | undefined> {
     const [result] = await db.select().from(loyaltyMembers).where(eq(loyaltyMembers.id, id));
     return result;
+  }
+
+  async getLoyaltyMemberWithEnrollments(id: string): Promise<LoyaltyMemberWithEnrollments | undefined> {
+    const member = await this.getLoyaltyMember(id);
+    if (!member) return undefined;
+    
+    const enrollments = await db.select().from(loyaltyMemberEnrollments)
+      .where(eq(loyaltyMemberEnrollments.memberId, id));
+    
+    const enrollmentsWithPrograms = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const [program] = await db.select().from(loyaltyPrograms)
+          .where(eq(loyaltyPrograms.id, enrollment.programId));
+        return { ...enrollment, program };
+      })
+    );
+    
+    return { ...member, enrollments: enrollmentsWithPrograms };
   }
 
   async getLoyaltyMemberByIdentifier(identifier: string): Promise<LoyaltyMember | undefined> {
@@ -4411,6 +4446,34 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // Loyalty Enrollments
+  async getLoyaltyEnrollments(memberId: string): Promise<LoyaltyMemberEnrollment[]> {
+    return db.select().from(loyaltyMemberEnrollments)
+      .where(eq(loyaltyMemberEnrollments.memberId, memberId));
+  }
+
+  async getLoyaltyEnrollmentsByProgram(programId: string): Promise<LoyaltyMemberEnrollment[]> {
+    return db.select().from(loyaltyMemberEnrollments)
+      .where(eq(loyaltyMemberEnrollments.programId, programId));
+  }
+
+  async getLoyaltyEnrollment(id: string): Promise<LoyaltyMemberEnrollment | undefined> {
+    const [result] = await db.select().from(loyaltyMemberEnrollments)
+      .where(eq(loyaltyMemberEnrollments.id, id));
+    return result;
+  }
+
+  async createLoyaltyEnrollment(data: InsertLoyaltyMemberEnrollment): Promise<LoyaltyMemberEnrollment> {
+    const [result] = await db.insert(loyaltyMemberEnrollments).values(data).returning();
+    return result;
+  }
+
+  async updateLoyaltyEnrollment(id: string, data: Partial<InsertLoyaltyMemberEnrollment>): Promise<LoyaltyMemberEnrollment | undefined> {
+    const [result] = await db.update(loyaltyMemberEnrollments).set(data)
+      .where(eq(loyaltyMemberEnrollments.id, id)).returning();
+    return result;
+  }
+
   async createLoyaltyTransaction(data: InsertLoyaltyTransaction): Promise<LoyaltyTransaction> {
     const [result] = await db.insert(loyaltyTransactions).values(data).returning();
     return result;
@@ -4420,8 +4483,16 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(loyaltyTransactions).where(eq(loyaltyTransactions.memberId, memberId));
   }
 
-  async getLoyaltyRewards(programId: string): Promise<LoyaltyReward[]> {
-    return db.select().from(loyaltyRewards).where(eq(loyaltyRewards.programId, programId));
+  async getLoyaltyTransactionsByEnrollment(enrollmentId: string): Promise<LoyaltyTransaction[]> {
+    return db.select().from(loyaltyTransactions)
+      .where(eq(loyaltyTransactions.enrollmentId, enrollmentId));
+  }
+
+  async getLoyaltyRewards(programId?: string): Promise<LoyaltyReward[]> {
+    if (programId) {
+      return db.select().from(loyaltyRewards).where(eq(loyaltyRewards.programId, programId));
+    }
+    return db.select().from(loyaltyRewards);
   }
 
   async createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward> {

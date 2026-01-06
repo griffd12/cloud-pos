@@ -2268,25 +2268,39 @@ export const loyaltyPrograms = pgTable("loyalty_programs", {
 export const MEMBER_STATUSES = ["active", "inactive", "suspended"] as const;
 export type MemberStatus = typeof MEMBER_STATUSES[number];
 
+// Customer profile - can be enrolled in multiple loyalty programs
 export const loyaltyMembers = pgTable("loyalty_members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  programId: varchar("program_id").notNull().references(() => loyaltyPrograms.id),
   memberNumber: text("member_number").notNull().unique(),
   firstName: text("first_name"),
   lastName: text("last_name"),
   email: text("email"),
   phone: text("phone"),
   birthDate: text("birth_date"), // MM-DD format for birthday rewards
+  status: text("status").default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  notes: text("notes"),
+});
+
+// Junction table - links members to programs with per-program metrics
+export const ENROLLMENT_STATUSES = ["active", "inactive", "suspended"] as const;
+export type EnrollmentStatus = typeof ENROLLMENT_STATUSES[number];
+
+export const loyaltyMemberEnrollments = pgTable("loyalty_member_enrollments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memberId: varchar("member_id").notNull().references(() => loyaltyMembers.id),
+  programId: varchar("program_id").notNull().references(() => loyaltyPrograms.id),
+  // Per-program metrics
   currentPoints: integer("current_points").default(0),
   lifetimePoints: integer("lifetime_points").default(0),
   currentTier: text("current_tier").default("standard"),
   visitCount: integer("visit_count").default(0),
   lifetimeSpend: decimal("lifetime_spend", { precision: 12, scale: 2 }).default("0"),
+  // Status and dates
   status: text("status").default("active"),
   enrolledAt: timestamp("enrolled_at").defaultNow(),
-  lastVisitAt: timestamp("last_visit_at"),
+  lastActivityAt: timestamp("last_activity_at"),
   pointsExpirationDate: timestamp("points_expiration_date"),
-  notes: text("notes"),
 });
 
 export const LOYALTY_TRANSACTION_TYPES = ["earn", "redeem", "adjust", "expire", "transfer"] as const;
@@ -2295,11 +2309,19 @@ export type LoyaltyTransactionType = typeof LOYALTY_TRANSACTION_TYPES[number];
 export const loyaltyTransactions = pgTable("loyalty_transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   memberId: varchar("member_id").notNull().references(() => loyaltyMembers.id),
+  programId: varchar("program_id").notNull().references(() => loyaltyPrograms.id),
+  enrollmentId: varchar("enrollment_id").references(() => loyaltyMemberEnrollments.id),
   propertyId: varchar("property_id").references(() => properties.id),
   transactionType: text("transaction_type").notNull(),
-  points: integer("points").notNull(), // Positive for earn, negative for redeem
-  pointsBefore: integer("points_before").notNull(),
-  pointsAfter: integer("points_after").notNull(),
+  // For points-based programs
+  points: integer("points").default(0), // Positive for earn, negative for redeem
+  pointsBefore: integer("points_before").default(0),
+  pointsAfter: integer("points_after").default(0),
+  // For visit-based programs
+  visitIncrement: integer("visit_increment").default(0),
+  visitsBefore: integer("visits_before").default(0),
+  visitsAfter: integer("visits_after").default(0),
+  // Transaction context
   checkId: varchar("check_id").references(() => checks.id),
   checkTotal: decimal("check_total", { precision: 12, scale: 2 }),
   employeeId: varchar("employee_id").references(() => employees.id),
@@ -2344,7 +2366,8 @@ export const loyaltyRedemptions = pgTable("loyalty_redemptions", {
 });
 
 export const insertLoyaltyProgramSchema = createInsertSchema(loyaltyPrograms).omit({ id: true, createdAt: true });
-export const insertLoyaltyMemberSchema = createInsertSchema(loyaltyMembers).omit({ id: true, enrolledAt: true });
+export const insertLoyaltyMemberSchema = createInsertSchema(loyaltyMembers).omit({ id: true, createdAt: true });
+export const insertLoyaltyMemberEnrollmentSchema = createInsertSchema(loyaltyMemberEnrollments).omit({ id: true, enrolledAt: true });
 export const insertLoyaltyTransactionSchema = createInsertSchema(loyaltyTransactions).omit({ id: true, createdAt: true });
 export const insertLoyaltyRewardSchema = createInsertSchema(loyaltyRewards).omit({ id: true, createdAt: true });
 export const insertLoyaltyRedemptionSchema = createInsertSchema(loyaltyRedemptions).omit({ id: true, redeemedAt: true });
@@ -2353,12 +2376,19 @@ export type LoyaltyProgram = typeof loyaltyPrograms.$inferSelect;
 export type InsertLoyaltyProgram = z.infer<typeof insertLoyaltyProgramSchema>;
 export type LoyaltyMember = typeof loyaltyMembers.$inferSelect;
 export type InsertLoyaltyMember = z.infer<typeof insertLoyaltyMemberSchema>;
+export type LoyaltyMemberEnrollment = typeof loyaltyMemberEnrollments.$inferSelect;
+export type InsertLoyaltyMemberEnrollment = z.infer<typeof insertLoyaltyMemberEnrollmentSchema>;
 export type LoyaltyTransaction = typeof loyaltyTransactions.$inferSelect;
 export type InsertLoyaltyTransaction = z.infer<typeof insertLoyaltyTransactionSchema>;
 export type LoyaltyReward = typeof loyaltyRewards.$inferSelect;
 export type InsertLoyaltyReward = z.infer<typeof insertLoyaltyRewardSchema>;
 export type LoyaltyRedemption = typeof loyaltyRedemptions.$inferSelect;
 export type InsertLoyaltyRedemption = z.infer<typeof insertLoyaltyRedemptionSchema>;
+
+// Extended type for member with all their enrollments
+export type LoyaltyMemberWithEnrollments = LoyaltyMember & {
+  enrollments: (LoyaltyMemberEnrollment & { program?: LoyaltyProgram })[];
+};
 
 // ============================================================================
 // PHASE 3: ONLINE ORDERING INTEGRATION

@@ -69,7 +69,7 @@ Includes robust features for enterprise management:
 - **Fiscal Close / End-of-Day**: Business date management, daily totals, cash reconciliation.
 - **Cash Management**: Cash drawer configuration, assignments, transactions (paid in/out, drops), safe counts.
 - **Gift Cards**: Enterprise or property-specific gift cards with activation, reload, redemption, and balance tracking.
-- **Loyalty Programs**: Points/visits/spend-based programs, member management, reward catalog.
+- **Loyalty Programs**: Multi-enrollment architecture where members can enroll in multiple programs simultaneously. Each enrollment tracks its own metrics (currentPoints, lifetimePoints, visitCount, currentTier, lifetimeSpend). Supports points/visits/spend/tiered program types with program-specific reward catalogs.
 - **Online Ordering Integration**: Support for external order sources (DoorDash, UberEats, etc.) with order injection and menu mapping.
 - **Inventory Management**: Item catalog, stock tracking, transaction types, recipe costing, low stock alerts.
 - **Sales & Labor Forecasting**: Daily sales projections and hourly labor needs calculation.
