@@ -11513,6 +11513,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // INVENTORY MANAGEMENT ROUTES
   // ============================================================================
 
+  // Path-based route for frontend compatibility (uses queryKey.join("/"))
+  app.get("/api/inventory-items/:propertyId", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      const { category } = req.query;
+      const items = await storage.getInventoryItems(propertyId, category as string);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get inventory items" });
+    }
+  });
+
   app.get("/api/inventory-items", async (req, res) => {
     try {
       const { propertyId, category } = req.query;
@@ -11541,6 +11553,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Path-based route for frontend compatibility
+  app.get("/api/inventory-stock/:propertyId", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      const stock = await storage.getInventoryStock(propertyId);
+      res.json(stock);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get inventory stock" });
+    }
+  });
+
   app.get("/api/inventory-stock", async (req, res) => {
     try {
       const { propertyId } = req.query;
@@ -11548,6 +11571,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(stock);
     } catch (error) {
       res.status(500).json({ message: "Failed to get inventory stock" });
+    }
+  });
+
+  // Path-based route for frontend compatibility
+  app.get("/api/inventory-transactions/:propertyId", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      const transactions = await storage.getInventoryTransactions(propertyId);
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get inventory transactions" });
+    }
+  });
+
+  app.get("/api/inventory-transactions", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const transactions = await storage.getInventoryTransactions(propertyId as string);
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get inventory transactions" });
     }
   });
 

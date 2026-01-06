@@ -4602,6 +4602,12 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getInventoryTransactions(propertyId: string): Promise<InventoryTransaction[]> {
+    return db.select().from(inventoryTransactions)
+      .where(eq(inventoryTransactions.propertyId, propertyId))
+      .orderBy(desc(inventoryTransactions.transactionDate));
+  }
+
   async getRecipes(menuItemId?: string): Promise<Recipe[]> {
     if (menuItemId) {
       return db.select().from(recipes).where(eq(recipes.menuItemId, menuItemId));
