@@ -167,13 +167,13 @@ export default function PosPage() {
     }
   }, [currentEmployee?.id]);
 
-  // Check for active till session when employee is signed in
+  // Check for active till session when workstation is set
   const { data: fetchedTillSession, isLoading: tillSessionLoading, isFetching: tillSessionFetching, isSuccess: tillSessionSuccess } = useQuery<TillSession | null>({
-    queryKey: ["/api/till-sessions/active", { employeeId: currentEmployee?.id, rvcId: currentRvc?.id }],
+    queryKey: ["/api/till-sessions/active", { workstationId, rvcId: currentRvc?.id }],
     queryFn: async () => {
-      console.log("Fetching active till session for employee:", currentEmployee?.id, "rvc:", currentRvc?.id);
+      console.log("Fetching active till session for workstation:", workstationId, "rvc:", currentRvc?.id);
       const res = await fetch(
-        `/api/till-sessions/active?employeeId=${currentEmployee?.id}&rvcId=${currentRvc?.id}`,
+        `/api/till-sessions/active?workstationId=${workstationId}&rvcId=${currentRvc?.id}`,
         { credentials: "include", headers: getAuthHeaders() }
       );
       if (!res.ok) return null;
@@ -181,7 +181,7 @@ export default function PosPage() {
       console.log("Active till session result:", data);
       return data;
     },
-    enabled: !!currentEmployee?.id && !!currentRvc?.id,
+    enabled: !!workstationId && !!currentRvc?.id,
     staleTime: 0,
     refetchOnMount: "always",
     gcTime: 0, // Don't cache results
@@ -594,6 +594,7 @@ export default function PosPage() {
         tenderId: data.tenderId,
         amount: data.amount.toString(),
         employeeId: currentEmployee?.id,
+        workstationId,
         paymentTransactionId: data.paymentTransactionId,
       });
       const result = await response.json();

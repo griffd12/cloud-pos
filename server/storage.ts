@@ -715,7 +715,7 @@ export interface IStorage {
   // Till Sessions
   getTillSessions(propertyId: string, businessDate?: string): Promise<TillSession[]>;
   getTillSession(id: string): Promise<TillSession | undefined>;
-  getActiveTillSession(employeeId: string, rvcId: string): Promise<TillSession | undefined>;
+  getActiveTillSession(workstationId: string, rvcId: string): Promise<TillSession | undefined>;
   createTillSession(data: InsertTillSession): Promise<TillSession>;
   updateTillSession(id: string, data: Partial<InsertTillSession>): Promise<TillSession | undefined>;
 
@@ -4864,10 +4864,10 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getActiveTillSession(employeeId: string, rvcId: string): Promise<TillSession | undefined> {
+  async getActiveTillSession(workstationId: string, rvcId: string): Promise<TillSession | undefined> {
     const [result] = await db.select().from(tillSessions)
       .where(and(
-        eq(tillSessions.employeeId, employeeId),
+        eq(tillSessions.workstationId, workstationId),
         eq(tillSessions.rvcId, rvcId),
         inArray(tillSessions.status, ["opening", "active"])
       ));

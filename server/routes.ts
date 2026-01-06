@@ -2759,7 +2759,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks/:id/payments", async (req, res) => {
     try {
       const checkId = req.params.id;
-      const { tenderId, amount, employeeId, paymentTransactionId } = req.body;
+      const { tenderId, amount, employeeId, workstationId, paymentTransactionId } = req.body;
 
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
@@ -2813,9 +2813,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       // Update till session cashSalesTotal for cash payments
-      if (tender.type === "cash" && employeeId && checkForBiz?.rvcId) {
+      if (tender.type === "cash" && workstationId && checkForBiz?.rvcId) {
         try {
-          const activeTill = await storage.getActiveTillSession(employeeId, checkForBiz.rvcId);
+          const activeTill = await storage.getActiveTillSession(workstationId, checkForBiz.rvcId);
           if (activeTill) {
             const currentCashSales = parseFloat(activeTill.cashSalesTotal || "0");
             const paymentAmount = parseFloat(amount || "0");
@@ -13076,17 +13076,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Get active till session for an employee in an RVC
+  // Get active till session for a workstation in an RVC
   app.get("/api/till-sessions/active", async (req, res) => {
     try {
-      const { employeeId, rvcId } = req.query;
-      console.log("GET /api/till-sessions/active - employeeId:", employeeId, "rvcId:", rvcId);
-      if (!employeeId || !rvcId) {
-        console.log("Missing required params - employeeId:", employeeId, "rvcId:", rvcId);
-        return res.status(400).json({ message: "employeeId and rvcId are required" });
+      const { workstationId, rvcId } = req.query;
+      console.log("GET /api/till-sessions/active - workstationId:", workstationId, "rvcId:", rvcId);
+      if (!workstationId || !rvcId) {
+        console.log("Missing required params - workstationId:", workstationId, "rvcId:", rvcId);
+        return res.status(400).json({ message: "workstationId and rvcId are required" });
       }
       const session = await storage.getActiveTillSession(
-        employeeId as string,
+        workstationId as string,
         rvcId as string
       );
       console.log("Active till session result:", session ? session.id : "null");
@@ -13101,14 +13101,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/till-sessions", async (req, res) => {
     try {
       const { propertyId, rvcId, workstationId, employeeId, businessDate, expectedOpenAmount } = req.body;
-      console.log("POST /api/till-sessions - employeeId:", employeeId, "rvcId:", rvcId, "propertyId:", propertyId);
+      console.log("POST /api/till-sessions - workstationId:", workstationId, "rvcId:", rvcId, "propertyId:", propertyId);
 
-      // Check if employee already has an active till in this RVC
-      const existingSession = await storage.getActiveTillSession(employeeId, rvcId);
+      // Check if workstation already has an active till in this RVC
+      const existingSession = await storage.getActiveTillSession(workstationId, rvcId);
       if (existingSession) {
         console.log("Till session already exists:", existingSession.id, "status:", existingSession.status);
         return res.status(400).json({ 
-          message: "Employee already has an active till session",
+          message: "This workstation already has an active till session",
           existingSession,
         });
       }
