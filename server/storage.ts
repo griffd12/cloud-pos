@@ -128,6 +128,12 @@ import {
   type AlertSubscription, type InsertAlertSubscription,
   type ItemAvailability, type InsertItemAvailability,
   type PrepItem, type InsertPrepItem,
+  // Till Sessions & Cash Management
+  rvcCashSettings, tillSessions, tillCounts, tillCountDenominations,
+  type RvcCashSettings, type InsertRvcCashSettings,
+  type TillSession, type InsertTillSession,
+  type TillCount, type InsertTillCount,
+  type TillCountDenomination, type InsertTillCountDenomination,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -697,6 +703,29 @@ export interface IStorage {
   getChecksByCustomer(customerId: string, limit?: number): Promise<Check[]>;
   attachCustomerToCheck(checkId: string, customerId: string): Promise<Check | undefined>;
   detachCustomerFromCheck(checkId: string): Promise<Check | undefined>;
+
+  // ============================================================================
+  // TILL SESSIONS & CASH MANAGEMENT
+  // ============================================================================
+
+  // RVC Cash Settings
+  getRvcCashSettings(rvcId: string): Promise<RvcCashSettings | undefined>;
+  upsertRvcCashSettings(rvcId: string, data: Partial<InsertRvcCashSettings>): Promise<RvcCashSettings>;
+
+  // Till Sessions
+  getTillSessions(propertyId: string, businessDate?: string): Promise<TillSession[]>;
+  getTillSession(id: string): Promise<TillSession | undefined>;
+  getActiveTillSession(employeeId: string, rvcId: string): Promise<TillSession | undefined>;
+  createTillSession(data: InsertTillSession): Promise<TillSession>;
+  updateTillSession(id: string, data: Partial<InsertTillSession>): Promise<TillSession | undefined>;
+
+  // Till Counts
+  getTillCounts(tillSessionId: string): Promise<TillCount[]>;
+  createTillCount(data: InsertTillCount): Promise<TillCount>;
+
+  // Till Count Denominations
+  getTillCountDenominations(tillCountId: string): Promise<TillCountDenomination[]>;
+  createTillCountDenominations(data: InsertTillCountDenomination[]): Promise<TillCountDenomination[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4797,6 +4826,80 @@ export class DatabaseStorage implements IStorage {
   async updateOfflineOrderQueue(id: string, data: Partial<InsertOfflineOrderQueue>): Promise<OfflineOrderQueue | undefined> {
     const [result] = await db.update(offlineOrderQueue).set(data).where(eq(offlineOrderQueue.id, id)).returning();
     return result;
+  }
+
+  // ============================================================================
+  // TILL SESSIONS & CASH MANAGEMENT
+  // ============================================================================
+
+  async getRvcCashSettings(rvcId: string): Promise<RvcCashSettings | undefined> {
+    const [result] = await db.select().from(rvcCashSettings).where(eq(rvcCashSettings.rvcId, rvcId));
+    return result;
+  }
+
+  async upsertRvcCashSettings(rvcId: string, data: Partial<InsertRvcCashSettings>): Promise<RvcCashSettings> {
+    const existing = await this.getRvcCashSettings(rvcId);
+    if (existing) {
+      const [result] = await db.update(rvcCashSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(rvcCashSettings.rvcId, rvcId))
+        .returning();
+      return result;
+    } else {
+      const [result] = await db.insert(rvcCashSettings)
+        .values({ rvcId, ...data })
+        .returning();
+      return result;
+    }
+  }
+
+  async getTillSessions(propertyId: string, businessDate?: string): Promise<TillSession[]> {
+    const conditions = [eq(tillSessions.propertyId, propertyId)];
+    if (businessDate) conditions.push(eq(tillSessions.businessDate, businessDate));
+    return db.select().from(tillSessions).where(and(...conditions)).orderBy(desc(tillSessions.createdAt));
+  }
+
+  async getTillSession(id: string): Promise<TillSession | undefined> {
+    const [result] = await db.select().from(tillSessions).where(eq(tillSessions.id, id));
+    return result;
+  }
+
+  async getActiveTillSession(employeeId: string, rvcId: string): Promise<TillSession | undefined> {
+    const [result] = await db.select().from(tillSessions)
+      .where(and(
+        eq(tillSessions.employeeId, employeeId),
+        eq(tillSessions.rvcId, rvcId),
+        inArray(tillSessions.status, ["opening", "active"])
+      ));
+    return result;
+  }
+
+  async createTillSession(data: InsertTillSession): Promise<TillSession> {
+    const [result] = await db.insert(tillSessions).values(data).returning();
+    return result;
+  }
+
+  async updateTillSession(id: string, data: Partial<InsertTillSession>): Promise<TillSession | undefined> {
+    const [result] = await db.update(tillSessions).set(data).where(eq(tillSessions.id, id)).returning();
+    return result;
+  }
+
+  async getTillCounts(tillSessionId: string): Promise<TillCount[]> {
+    return db.select().from(tillCounts).where(eq(tillCounts.tillSessionId, tillSessionId)).orderBy(tillCounts.recordedAt);
+  }
+
+  async createTillCount(data: InsertTillCount): Promise<TillCount> {
+    const [result] = await db.insert(tillCounts).values(data).returning();
+    return result;
+  }
+
+  async getTillCountDenominations(tillCountId: string): Promise<TillCountDenomination[]> {
+    return db.select().from(tillCountDenominations).where(eq(tillCountDenominations.tillCountId, tillCountId));
+  }
+
+  async createTillCountDenominations(data: InsertTillCountDenomination[]): Promise<TillCountDenomination[]> {
+    if (data.length === 0) return [];
+    return db.insert(tillCountDenominations).values(data).returning();
   }
 }
 

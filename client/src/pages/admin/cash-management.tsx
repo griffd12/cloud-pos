@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { format } from "date-fns";
@@ -12,10 +12,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, Plus, DollarSign, ArrowDownToLine, ArrowUpFromLine, Wallet, Banknote, Lock } from "lucide-react";
-import type { Property, CashDrawer, DrawerAssignment, CashTransaction, SafeCount } from "@shared/schema";
+import { Loader2, Plus, DollarSign, ArrowDownToLine, ArrowUpFromLine, Wallet, Banknote, Lock, Settings, Save } from "lucide-react";
+import type { Property, CashDrawer, DrawerAssignment, CashTransaction, SafeCount, Rvc, RvcCashSettings } from "@shared/schema";
 
 export default function CashManagementPage() {
   const { toast } = useToast();
@@ -60,6 +61,46 @@ export default function CashManagementPage() {
     enabled: !!selectedPropertyId,
   });
 
+  const { data: rvcs = [] } = useQuery<Rvc[]>({
+    queryKey: ["/api/rvcs"],
+  });
+
+  const propertyRvcs = rvcs.filter(r => r.propertyId === selectedPropertyId);
+  const [selectedRvcId, setSelectedRvcId] = useState<string>("");
+
+  const { data: rvcCashSettings, isLoading: settingsLoading } = useQuery<RvcCashSettings>({
+    queryKey: ["/api/rvcs", selectedRvcId, "cash-settings"],
+    enabled: !!selectedRvcId,
+  });
+
+  const [settingsForm, setSettingsForm] = useState({
+    defaultStartingBank: "150.00",
+    requireOpeningCount: true,
+    requireClosingCount: true,
+    allowStartingBankOverride: true,
+    dropReminderThreshold: "500.00",
+  });
+
+  useEffect(() => {
+    if (rvcCashSettings) {
+      setSettingsForm({
+        defaultStartingBank: rvcCashSettings.defaultStartingBank || "150.00",
+        requireOpeningCount: rvcCashSettings.requireOpeningCount ?? true,
+        requireClosingCount: rvcCashSettings.requireClosingCount ?? true,
+        allowStartingBankOverride: rvcCashSettings.allowStartingBankOverride ?? true,
+        dropReminderThreshold: rvcCashSettings.dropReminderThreshold || "500.00",
+      });
+    } else if (selectedRvcId) {
+      setSettingsForm({
+        defaultStartingBank: "150.00",
+        requireOpeningCount: true,
+        requireClosingCount: true,
+        allowStartingBankOverride: true,
+        dropReminderThreshold: "500.00",
+      });
+    }
+  }, [rvcCashSettings, selectedRvcId]);
+
   const createDrawerMutation = useMutation({
     mutationFn: async (data: { name: string; propertyId: string }) => {
       const res = await apiRequest("POST", "/api/cash-drawers", data);
@@ -100,6 +141,20 @@ export default function CashManagementPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/safe-counts"] });
       resetSafeCountDialog();
       toast({ title: "Safe Count Recorded", description: "Safe count has been recorded." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveRvcSettingsMutation = useMutation({
+    mutationFn: async (data: typeof settingsForm) => {
+      const res = await apiRequest("PUT", `/api/rvcs/${selectedRvcId}/cash-settings`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", selectedRvcId, "cash-settings"] });
+      toast({ title: "Settings Saved", description: "Till settings have been updated." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -202,6 +257,7 @@ export default function CashManagementPage() {
             <TabsTrigger value="drawers" data-testid="tab-drawers">Cash Drawers</TabsTrigger>
             <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
             <TabsTrigger value="safe" data-testid="tab-safe">Safe Counts</TabsTrigger>
+            <TabsTrigger value="till-settings" data-testid="tab-till-settings">Till Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="drawers" className="space-y-4">
@@ -317,6 +373,130 @@ export default function CashManagementPage() {
                     )}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="till-settings" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Settings className="w-4 h-4" />
+                  Till Settings by Revenue Center
+                </CardTitle>
+                <CardDescription>Configure opening/closing count requirements and default amounts per RVC</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Select Revenue Center</Label>
+                  <Select value={selectedRvcId} onValueChange={setSelectedRvcId}>
+                    <SelectTrigger className="w-64" data-testid="select-rvc-settings">
+                      <SelectValue placeholder="Select RVC..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {propertyRvcs.map(rvc => (
+                        <SelectItem key={rvc.id} value={rvc.id}>{rvc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedRvcId && (
+                  <>
+                    {settingsLoading ? (
+                      <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label>Default Starting Bank</Label>
+                            <div className="relative">
+                              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={settingsForm.defaultStartingBank}
+                                onChange={(e) => setSettingsForm(s => ({ ...s, defaultStartingBank: e.target.value }))}
+                                className="pl-9"
+                                data-testid="input-starting-bank"
+                              />
+                            </div>
+                            <p className="text-sm text-muted-foreground">Default amount when opening a till</p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Drop Reminder Threshold</Label>
+                            <div className="relative">
+                              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={settingsForm.dropReminderThreshold}
+                                onChange={(e) => setSettingsForm(s => ({ ...s, dropReminderThreshold: e.target.value }))}
+                                className="pl-9"
+                                data-testid="input-drop-threshold"
+                              />
+                            </div>
+                            <p className="text-sm text-muted-foreground">Remind employee to drop cash when till exceeds this amount</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Require Opening Count</Label>
+                              <p className="text-sm text-muted-foreground">Employees must count denomination before starting</p>
+                            </div>
+                            <Switch
+                              checked={settingsForm.requireOpeningCount}
+                              onCheckedChange={(checked) => setSettingsForm(s => ({ ...s, requireOpeningCount: checked }))}
+                              data-testid="switch-require-open-count"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Require Closing Count</Label>
+                              <p className="text-sm text-muted-foreground">Employees must count denomination when closing</p>
+                            </div>
+                            <Switch
+                              checked={settingsForm.requireClosingCount}
+                              onCheckedChange={(checked) => setSettingsForm(s => ({ ...s, requireClosingCount: checked }))}
+                              data-testid="switch-require-close-count"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Allow Starting Bank Override</Label>
+                              <p className="text-sm text-muted-foreground">Allow employees to change the default starting amount</p>
+                            </div>
+                            <Switch
+                              checked={settingsForm.allowStartingBankOverride}
+                              onCheckedChange={(checked) => setSettingsForm(s => ({ ...s, allowStartingBankOverride: checked }))}
+                              data-testid="switch-allow-override"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={() => saveRvcSettingsMutation.mutate(settingsForm)}
+                            disabled={saveRvcSettingsMutation.isPending}
+                            data-testid="button-save-till-settings"
+                          >
+                            {saveRvcSettingsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                            Save Settings
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {!selectedRvcId && propertyRvcs.length === 0 && (
+                  <p className="text-muted-foreground text-center py-4">No revenue centers configured for this property.</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

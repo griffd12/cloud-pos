@@ -2138,6 +2138,149 @@ export type SafeCount = typeof safeCounts.$inferSelect;
 export type InsertSafeCount = z.infer<typeof insertSafeCountSchema>;
 
 // ============================================================================
+// PHASE 2: CASH MANAGEMENT - TILL SESSIONS & DENOMINATION COUNTING
+// ============================================================================
+
+// RVC-level cash management configuration
+export const rvcCashSettings = pgTable("rvc_cash_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rvcId: varchar("rvc_id").notNull().references(() => rvcs.id).unique(),
+  defaultStartingBank: decimal("default_starting_bank", { precision: 12, scale: 2 }).default("150.00"),
+  requireOpeningCount: boolean("require_opening_count").default(true),
+  requireClosingCount: boolean("require_closing_count").default(true),
+  allowStartingBankOverride: boolean("allow_starting_bank_override").default(true),
+  dropReminderThreshold: decimal("drop_reminder_threshold", { precision: 12, scale: 2 }).default("500.00"),
+  denominationTemplate: jsonb("denomination_template"), // Custom denomination config if needed
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Till session statuses
+export const TILL_SESSION_STATUSES = ["opening", "active", "closing", "closed"] as const;
+export type TillSessionStatus = typeof TILL_SESSION_STATUSES[number];
+
+// Till sessions - tracks full lifecycle of a till/drawer
+export const tillSessions = pgTable("till_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  rvcId: varchar("rvc_id").notNull().references(() => rvcs.id),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  drawerId: varchar("drawer_id").references(() => cashDrawers.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  businessDate: text("business_date").notNull(),
+  status: text("status").default("opening"),
+  // Opening
+  expectedOpenAmount: decimal("expected_open_amount", { precision: 12, scale: 2 }).notNull(),
+  actualOpenAmount: decimal("actual_open_amount", { precision: 12, scale: 2 }),
+  openVariance: decimal("open_variance", { precision: 12, scale: 2 }),
+  openNote: text("open_note"),
+  openedAt: timestamp("opened_at"),
+  // Activity totals (updated during session)
+  cashSalesTotal: decimal("cash_sales_total", { precision: 12, scale: 2 }).default("0"),
+  cashRefundsTotal: decimal("cash_refunds_total", { precision: 12, scale: 2 }).default("0"),
+  paidInTotal: decimal("paid_in_total", { precision: 12, scale: 2 }).default("0"),
+  paidOutTotal: decimal("paid_out_total", { precision: 12, scale: 2 }).default("0"),
+  dropsTotal: decimal("drops_total", { precision: 12, scale: 2 }).default("0"),
+  tipsTotal: decimal("tips_total", { precision: 12, scale: 2 }).default("0"),
+  // Closing
+  expectedCloseAmount: decimal("expected_close_amount", { precision: 12, scale: 2 }),
+  actualCloseAmount: decimal("actual_close_amount", { precision: 12, scale: 2 }),
+  closeVariance: decimal("close_variance", { precision: 12, scale: 2 }),
+  closeNote: text("close_note"),
+  closedAt: timestamp("closed_at"),
+  closedById: varchar("closed_by_id").references(() => employees.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Count types for till counting
+export const TILL_COUNT_TYPES = ["open", "close", "drop", "spot"] as const;
+export type TillCountType = typeof TILL_COUNT_TYPES[number];
+
+// Till counts - individual count records
+export const tillCounts = pgTable("till_counts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tillSessionId: varchar("till_session_id").notNull().references(() => tillSessions.id),
+  countType: text("count_type").notNull(), // open, close, drop, spot
+  expectedAmount: decimal("expected_amount", { precision: 12, scale: 2 }),
+  countedAmount: decimal("counted_amount", { precision: 12, scale: 2 }).notNull(),
+  variance: decimal("variance", { precision: 12, scale: 2 }),
+  note: text("note"),
+  recordedById: varchar("recorded_by_id").notNull().references(() => employees.id),
+  recordedAt: timestamp("recorded_at").defaultNow(),
+});
+
+// Denomination breakdown for each count
+export const tillCountDenominations = pgTable("till_count_denominations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tillCountId: varchar("till_count_id").notNull().references(() => tillCounts.id),
+  denominationCode: text("denomination_code").notNull(), // "100", "50", "20", "10", "5", "1", "0.25", "0.10", "0.05", "0.01"
+  denominationValue: decimal("denomination_value", { precision: 10, scale: 2 }).notNull(),
+  quantity: integer("quantity").notNull().default(0),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
+});
+
+// Default denomination template
+export const DEFAULT_DENOMINATIONS = [
+  { code: "100", label: "$100 Bills", value: 100.00 },
+  { code: "50", label: "$50 Bills", value: 50.00 },
+  { code: "20", label: "$20 Bills", value: 20.00 },
+  { code: "10", label: "$10 Bills", value: 10.00 },
+  { code: "5", label: "$5 Bills", value: 5.00 },
+  { code: "1", label: "$1 Bills", value: 1.00 },
+  { code: "0.25", label: "Quarters", value: 0.25 },
+  { code: "0.10", label: "Dimes", value: 0.10 },
+  { code: "0.05", label: "Nickels", value: 0.05 },
+  { code: "0.01", label: "Pennies", value: 0.01 },
+] as const;
+
+// Relations
+export const rvcCashSettingsRelations = relations(rvcCashSettings, ({ one }) => ({
+  rvc: one(rvcs, { fields: [rvcCashSettings.rvcId], references: [rvcs.id] }),
+}));
+
+export const tillSessionsRelations = relations(tillSessions, ({ one, many }) => ({
+  property: one(properties, { fields: [tillSessions.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [tillSessions.rvcId], references: [rvcs.id] }),
+  workstation: one(workstations, { fields: [tillSessions.workstationId], references: [workstations.id] }),
+  drawer: one(cashDrawers, { fields: [tillSessions.drawerId], references: [cashDrawers.id] }),
+  employee: one(employees, { fields: [tillSessions.employeeId], references: [employees.id] }),
+  closedBy: one(employees, { fields: [tillSessions.closedById], references: [employees.id] }),
+  counts: many(tillCounts),
+}));
+
+export const tillCountsRelations = relations(tillCounts, ({ one, many }) => ({
+  tillSession: one(tillSessions, { fields: [tillCounts.tillSessionId], references: [tillSessions.id] }),
+  recordedBy: one(employees, { fields: [tillCounts.recordedById], references: [employees.id] }),
+  denominations: many(tillCountDenominations),
+}));
+
+export const tillCountDenominationsRelations = relations(tillCountDenominations, ({ one }) => ({
+  tillCount: one(tillCounts, { fields: [tillCountDenominations.tillCountId], references: [tillCounts.id] }),
+}));
+
+// Insert schemas
+export const insertRvcCashSettingsSchema = createInsertSchema(rvcCashSettings).omit({ id: true, updatedAt: true });
+export const insertTillSessionSchema = createInsertSchema(tillSessions).omit({ id: true, createdAt: true });
+export const insertTillCountSchema = createInsertSchema(tillCounts).omit({ id: true, recordedAt: true });
+export const insertTillCountDenominationSchema = createInsertSchema(tillCountDenominations).omit({ id: true });
+
+// Types
+export type RvcCashSettings = typeof rvcCashSettings.$inferSelect;
+export type InsertRvcCashSettings = z.infer<typeof insertRvcCashSettingsSchema>;
+export type TillSession = typeof tillSessions.$inferSelect;
+export type InsertTillSession = z.infer<typeof insertTillSessionSchema>;
+export type TillCount = typeof tillCounts.$inferSelect;
+export type InsertTillCount = z.infer<typeof insertTillCountSchema>;
+export type TillCountDenomination = typeof tillCountDenominations.$inferSelect;
+export type InsertTillCountDenomination = z.infer<typeof insertTillCountDenominationSchema>;
+
+// Extended types
+export type TillSessionWithDetails = TillSession & {
+  employee?: { firstName: string; lastName: string; employeeNumber: string };
+  rvc?: { name: string };
+  counts?: (TillCount & { denominations?: TillCountDenomination[] })[];
+};
+
+// ============================================================================
 // PHASE 2: GIFT CARDS
 // ============================================================================
 

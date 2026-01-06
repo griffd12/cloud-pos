@@ -32,6 +32,12 @@ import {
   TERMINAL_MODELS,
   TERMINAL_CONNECTION_TYPES,
   TERMINAL_DEVICE_STATUSES,
+  // Till/Cash Management schemas
+  insertRvcCashSettingsSchema,
+  insertTillSessionSchema,
+  insertTillCountSchema,
+  insertTillCountDenominationSchema,
+  DEFAULT_DENOMINATIONS,
 } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -12951,6 +12957,336 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Gift card redeem error:", error);
       res.status(500).json({ message: error.message || "Failed to redeem gift card" });
+    }
+  });
+
+  // ============================================================================
+  // TILL SESSIONS & CASH MANAGEMENT
+  // ============================================================================
+
+  // Get RVC cash settings
+  app.get("/api/rvcs/:rvcId/cash-settings", async (req, res) => {
+    try {
+      const settings = await storage.getRvcCashSettings(req.params.rvcId);
+      if (!settings) {
+        // Return defaults if no settings exist
+        res.json({
+          rvcId: req.params.rvcId,
+          defaultStartingBank: "150.00",
+          requireOpeningCount: true,
+          requireClosingCount: true,
+          allowStartingBankOverride: true,
+          dropReminderThreshold: "500.00",
+          denominationTemplate: null,
+        });
+      } else {
+        res.json(settings);
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get cash settings" });
+    }
+  });
+
+  // Update RVC cash settings
+  app.put("/api/rvcs/:rvcId/cash-settings", async (req, res) => {
+    try {
+      const parsed = insertRvcCashSettingsSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid data", errors: parsed.error.errors });
+      }
+      const settings = await storage.upsertRvcCashSettings(req.params.rvcId, parsed.data);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update cash settings" });
+    }
+  });
+
+  // Get denomination template
+  app.get("/api/denominations/template", async (req, res) => {
+    res.json(DEFAULT_DENOMINATIONS);
+  });
+
+  // Get till sessions for a property
+  app.get("/api/properties/:propertyId/till-sessions", async (req, res) => {
+    try {
+      const { businessDate } = req.query;
+      const sessions = await storage.getTillSessions(
+        req.params.propertyId,
+        businessDate as string | undefined
+      );
+      res.json(sessions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get till sessions" });
+    }
+  });
+
+  // Get a specific till session
+  app.get("/api/till-sessions/:id", async (req, res) => {
+    try {
+      const session = await storage.getTillSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Till session not found" });
+      }
+      // Get all counts for this session
+      const counts = await storage.getTillCounts(session.id);
+      const countsWithDenominations = await Promise.all(
+        counts.map(async (count) => ({
+          ...count,
+          denominations: await storage.getTillCountDenominations(count.id),
+        }))
+      );
+      res.json({ ...session, counts: countsWithDenominations });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get till session" });
+    }
+  });
+
+  // Get active till session for an employee in an RVC
+  app.get("/api/till-sessions/active", async (req, res) => {
+    try {
+      const { employeeId, rvcId } = req.query;
+      if (!employeeId || !rvcId) {
+        return res.status(400).json({ message: "employeeId and rvcId are required" });
+      }
+      const session = await storage.getActiveTillSession(
+        employeeId as string,
+        rvcId as string
+      );
+      res.json(session || null);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get active till session" });
+    }
+  });
+
+  // Open a new till session
+  app.post("/api/till-sessions", async (req, res) => {
+    try {
+      const { propertyId, rvcId, workstationId, employeeId, businessDate, expectedOpenAmount } = req.body;
+
+      // Check if employee already has an active till in this RVC
+      const existingSession = await storage.getActiveTillSession(employeeId, rvcId);
+      if (existingSession) {
+        return res.status(400).json({ 
+          message: "Employee already has an active till session",
+          existingSession,
+        });
+      }
+
+      // Create the till session
+      const session = await storage.createTillSession({
+        propertyId,
+        rvcId,
+        workstationId,
+        employeeId,
+        businessDate,
+        status: "opening",
+        expectedOpenAmount: expectedOpenAmount || "150.00",
+      });
+
+      res.status(201).json(session);
+    } catch (error: any) {
+      console.error("Create till session error:", error);
+      res.status(500).json({ message: error.message || "Failed to create till session" });
+    }
+  });
+
+  // Record a till count (open, close, drop, spot)
+  app.post("/api/till-sessions/:id/counts", async (req, res) => {
+    try {
+      const session = await storage.getTillSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Till session not found" });
+      }
+
+      const { countType, expectedAmount, countedAmount, note, recordedById, denominations } = req.body;
+
+      // Calculate variance
+      const expected = parseFloat(expectedAmount || "0");
+      const counted = parseFloat(countedAmount);
+      const variance = (counted - expected).toFixed(2);
+
+      // Create the count record
+      const count = await storage.createTillCount({
+        tillSessionId: session.id,
+        countType,
+        expectedAmount: expectedAmount || null,
+        countedAmount: countedAmount,
+        variance,
+        note,
+        recordedById,
+      });
+
+      // Create denomination breakdown if provided
+      if (denominations && Array.isArray(denominations) && denominations.length > 0) {
+        const denominationRecords = denominations.map((d: any) => ({
+          tillCountId: count.id,
+          denominationCode: d.code,
+          denominationValue: d.value.toString(),
+          quantity: d.quantity,
+          subtotal: (d.value * d.quantity).toFixed(2),
+        }));
+        await storage.createTillCountDenominations(denominationRecords);
+      }
+
+      // Update session based on count type
+      if (countType === "open") {
+        await storage.updateTillSession(session.id, {
+          status: "active",
+          actualOpenAmount: countedAmount,
+          openVariance: variance,
+          openNote: note,
+          openedAt: new Date(),
+        });
+      } else if (countType === "close") {
+        // Calculate expected close amount
+        const startAmount = parseFloat(session.actualOpenAmount || session.expectedOpenAmount);
+        const cashSales = parseFloat(session.cashSalesTotal || "0");
+        const cashRefunds = parseFloat(session.cashRefundsTotal || "0");
+        const paidIn = parseFloat(session.paidInTotal || "0");
+        const paidOut = parseFloat(session.paidOutTotal || "0");
+        const drops = parseFloat(session.dropsTotal || "0");
+        const tips = parseFloat(session.tipsTotal || "0");
+
+        const expectedCloseAmount = (startAmount + cashSales - cashRefunds + paidIn - paidOut - drops - tips).toFixed(2);
+        const closeVariance = (counted - parseFloat(expectedCloseAmount)).toFixed(2);
+
+        await storage.updateTillSession(session.id, {
+          status: "closed",
+          expectedCloseAmount,
+          actualCloseAmount: countedAmount,
+          closeVariance,
+          closeNote: note,
+          closedAt: new Date(),
+          closedById: recordedById,
+        });
+      } else if (countType === "drop") {
+        // Update drops total
+        const currentDrops = parseFloat(session.dropsTotal || "0");
+        const newDropsTotal = (currentDrops + counted).toFixed(2);
+        await storage.updateTillSession(session.id, {
+          dropsTotal: newDropsTotal,
+        });
+
+        // Also create a cash transaction for audit trail
+        await storage.createCashTransaction({
+          propertyId: session.propertyId,
+          employeeId: recordedById,
+          transactionType: "drop",
+          amount: countedAmount,
+          businessDate: session.businessDate,
+          reason: note || "Cash drop to safe",
+        });
+      }
+
+      // Refetch updated session
+      const updatedSession = await storage.getTillSession(session.id);
+      const countWithDenominations = {
+        ...count,
+        denominations: await storage.getTillCountDenominations(count.id),
+      };
+
+      res.status(201).json({
+        count: countWithDenominations,
+        session: updatedSession,
+      });
+    } catch (error: any) {
+      console.error("Create till count error:", error);
+      res.status(500).json({ message: error.message || "Failed to record count" });
+    }
+  });
+
+  // Record paid in/out on a till session
+  app.post("/api/till-sessions/:id/movements", async (req, res) => {
+    try {
+      const session = await storage.getTillSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Till session not found" });
+      }
+
+      if (session.status !== "active") {
+        return res.status(400).json({ message: "Till session is not active" });
+      }
+
+      const { movementType, amount, reason, employeeId, managerApprovalId } = req.body;
+
+      if (!["paid_in", "paid_out"].includes(movementType)) {
+        return res.status(400).json({ message: "Invalid movement type" });
+      }
+
+      const amountNum = parseFloat(amount);
+
+      // Create cash transaction
+      await storage.createCashTransaction({
+        propertyId: session.propertyId,
+        employeeId,
+        transactionType: movementType,
+        amount: amount,
+        businessDate: session.businessDate,
+        reason,
+        managerApprovalId,
+      });
+
+      // Update session totals
+      if (movementType === "paid_in") {
+        const currentPaidIn = parseFloat(session.paidInTotal || "0");
+        await storage.updateTillSession(session.id, {
+          paidInTotal: (currentPaidIn + amountNum).toFixed(2),
+        });
+      } else {
+        const currentPaidOut = parseFloat(session.paidOutTotal || "0");
+        await storage.updateTillSession(session.id, {
+          paidOutTotal: (currentPaidOut + amountNum).toFixed(2),
+        });
+      }
+
+      const updatedSession = await storage.getTillSession(session.id);
+      res.json(updatedSession);
+    } catch (error: any) {
+      console.error("Till movement error:", error);
+      res.status(500).json({ message: error.message || "Failed to record movement" });
+    }
+  });
+
+  // Get shift summary for a till session (for closing)
+  app.get("/api/till-sessions/:id/summary", async (req, res) => {
+    try {
+      const session = await storage.getTillSession(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Till session not found" });
+      }
+
+      const startAmount = parseFloat(session.actualOpenAmount || session.expectedOpenAmount);
+      const cashSales = parseFloat(session.cashSalesTotal || "0");
+      const cashRefunds = parseFloat(session.cashRefundsTotal || "0");
+      const paidIn = parseFloat(session.paidInTotal || "0");
+      const paidOut = parseFloat(session.paidOutTotal || "0");
+      const drops = parseFloat(session.dropsTotal || "0");
+      const tips = parseFloat(session.tipsTotal || "0");
+
+      const expectedInDrawer = startAmount + cashSales - cashRefunds + paidIn - paidOut - drops - tips;
+
+      res.json({
+        tillSessionId: session.id,
+        employeeId: session.employeeId,
+        businessDate: session.businessDate,
+        openedAt: session.openedAt,
+        status: session.status,
+        // Amounts
+        startingBank: startAmount.toFixed(2),
+        cashSales: cashSales.toFixed(2),
+        cashRefunds: cashRefunds.toFixed(2),
+        paidIn: paidIn.toFixed(2),
+        paidOut: paidOut.toFixed(2),
+        drops: drops.toFixed(2),
+        tips: tips.toFixed(2),
+        expectedInDrawer: expectedInDrawer.toFixed(2),
+        // If closed, include close info
+        actualCloseAmount: session.actualCloseAmount,
+        closeVariance: session.closeVariance,
+        closedAt: session.closedAt,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get shift summary" });
     }
   });
 
