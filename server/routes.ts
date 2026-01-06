@@ -4092,6 +4092,142 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // DEVICES HUB - Aggregated view of all device types
+  // ============================================================================
+
+  // Get aggregated devices hub data (workstations, printers, KDS, order devices)
+  app.get("/api/devices-hub", async (req, res) => {
+    try {
+      const { propertyId, deviceType } = req.query;
+      
+      // Fetch all device types in parallel
+      const [workstations, printers, kdsDevices, orderDevices, properties] = await Promise.all([
+        storage.getWorkstations(),
+        storage.getPrinters(),
+        storage.getKdsDevices(),
+        storage.getOrderDevices(),
+        storage.getProperties(),
+      ]);
+      
+      // Build a property lookup map
+      const propertyMap = new Map(properties.map(p => [p.id, p]));
+      
+      // Transform each device type into a unified format
+      type HubDevice = {
+        id: string;
+        name: string;
+        deviceType: "workstation" | "printer" | "kds_device" | "order_device";
+        propertyId: string | null;
+        propertyName: string;
+        status: "active" | "inactive" | "offline";
+        ipAddress: string | null;
+        model: string | null;
+        lastUpdated: Date | null;
+        configUrl: string;
+      };
+      
+      const hubDevices: HubDevice[] = [];
+      
+      // Add workstations
+      for (const ws of workstations) {
+        if (propertyId && ws.propertyId !== propertyId) continue;
+        if (deviceType && deviceType !== "workstation") continue;
+        hubDevices.push({
+          id: ws.id,
+          name: ws.name,
+          deviceType: "workstation",
+          propertyId: ws.propertyId,
+          propertyName: propertyMap.get(ws.propertyId)?.name || "Unknown",
+          status: ws.active ? "active" : "inactive",
+          ipAddress: ws.ipAddress || null,
+          model: ws.deviceType || null,
+          lastUpdated: null,
+          configUrl: `/admin/workstations?edit=${ws.id}`,
+        });
+      }
+      
+      // Add printers
+      for (const printer of printers) {
+        if (propertyId && printer.propertyId !== propertyId) continue;
+        if (deviceType && deviceType !== "printer") continue;
+        hubDevices.push({
+          id: printer.id,
+          name: printer.name,
+          deviceType: "printer",
+          propertyId: printer.propertyId,
+          propertyName: propertyMap.get(printer.propertyId)?.name || "Unknown",
+          status: printer.active ? "active" : "inactive",
+          ipAddress: printer.ipAddress || null,
+          model: printer.printerType || null,
+          lastUpdated: null,
+          configUrl: `/admin/printers?edit=${printer.id}`,
+        });
+      }
+      
+      // Add KDS devices
+      for (const kds of kdsDevices) {
+        if (propertyId && kds.propertyId !== propertyId) continue;
+        if (deviceType && deviceType !== "kds_device") continue;
+        hubDevices.push({
+          id: kds.id,
+          name: kds.name,
+          deviceType: "kds_device",
+          propertyId: kds.propertyId,
+          propertyName: propertyMap.get(kds.propertyId)?.name || "Unknown",
+          status: kds.active ? "active" : "inactive",
+          ipAddress: kds.ipAddress || null,
+          model: kds.displayMode || null,
+          lastUpdated: null,
+          configUrl: `/admin/kds-devices?edit=${kds.id}`,
+        });
+      }
+      
+      // Add order devices (logical routing containers)
+      for (const od of orderDevices) {
+        if (propertyId && od.propertyId !== propertyId) continue;
+        if (deviceType && deviceType !== "order_device") continue;
+        hubDevices.push({
+          id: od.id,
+          name: od.name,
+          deviceType: "order_device",
+          propertyId: od.propertyId,
+          propertyName: propertyMap.get(od.propertyId)?.name || "Unknown",
+          status: od.active ? "active" : "inactive",
+          ipAddress: null,
+          model: "Routing Container",
+          lastUpdated: null,
+          configUrl: `/admin/order-devices?edit=${od.id}`,
+        });
+      }
+      
+      // Sort by property name, then by device type, then by name
+      hubDevices.sort((a, b) => {
+        const propCompare = a.propertyName.localeCompare(b.propertyName);
+        if (propCompare !== 0) return propCompare;
+        const typeCompare = a.deviceType.localeCompare(b.deviceType);
+        if (typeCompare !== 0) return typeCompare;
+        return a.name.localeCompare(b.name);
+      });
+      
+      // Build summary counts
+      const summary = {
+        total: hubDevices.length,
+        workstations: hubDevices.filter(d => d.deviceType === "workstation").length,
+        printers: hubDevices.filter(d => d.deviceType === "printer").length,
+        kdsDevices: hubDevices.filter(d => d.deviceType === "kds_device").length,
+        orderDevices: hubDevices.filter(d => d.deviceType === "order_device").length,
+        active: hubDevices.filter(d => d.status === "active").length,
+        inactive: hubDevices.filter(d => d.status !== "active").length,
+      };
+      
+      res.json({ devices: hubDevices, summary });
+    } catch (error) {
+      console.error("Error fetching devices hub:", error);
+      res.status(500).json({ message: "Failed to fetch devices hub" });
+    }
+  });
+
+  // ============================================================================
   // DEVICE REGISTRY (CAL - Client Application Loader)
   // ============================================================================
 
