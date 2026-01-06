@@ -2341,6 +2341,7 @@ export const loyaltyRewards = pgTable("loyalty_rewards", {
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }),
   discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }),
   freeMenuItemId: varchar("free_menu_item_id").references(() => menuItems.id),
+  giftCardAmount: decimal("gift_card_amount", { precision: 10, scale: 2 }), // For gift_card reward type
   minPurchase: decimal("min_purchase", { precision: 10, scale: 2 }),
   maxRedemptions: integer("max_redemptions"), // null = unlimited
   redemptionCount: integer("redemption_count").default(0),

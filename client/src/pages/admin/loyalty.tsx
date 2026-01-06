@@ -33,7 +33,8 @@ type MemberWithEnrollments = LoyaltyMember & {
   enrollments?: (LoyaltyMemberEnrollment & { program?: LoyaltyProgram })[];
 };
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Star, Users, Gift, Plus, Search, Award, TrendingUp, History, Crown, Loader2 } from "lucide-react";
+import { Star, Users, Gift, Plus, Search, Award, TrendingUp, History, Crown, Loader2, Pencil, Trash2 } from "lucide-react";
+import type { MenuItem } from "@shared/schema";
 import { format } from "date-fns";
 
 export default function LoyaltyPage() {
@@ -84,6 +85,10 @@ export default function LoyaltyPage() {
 
   const { data: rewards = [], isLoading: rewardsLoading } = useQuery<LoyaltyReward[]>({
     queryKey: ["/api/loyalty-rewards"],
+  });
+
+  const { data: menuItems = [] } = useQuery<MenuItem[]>({
+    queryKey: ["/api/menu-items"],
   });
 
   const { data: memberTransactions = [] } = useQuery<(LoyaltyTransaction & { programName?: string })[]>({
@@ -207,33 +212,43 @@ export default function LoyaltyPage() {
   ];
 
   const rewardFormFields: FormFieldConfig[] = [
-    { name: "name", label: "Reward Name", type: "text", placeholder: "Free Appetizer", required: true },
-    { name: "description", label: "Description", type: "textarea", placeholder: "Redeem for any appetizer" },
-    { name: "pointsCost", label: "Points to Redeem (manual)", type: "number", placeholder: "100", description: "Points required for manual redemption" },
-    { name: "autoAwardAtPoints", label: "Auto-Award at Points", type: "number", placeholder: "500", description: "Automatically award when member reaches this many lifetime points" },
-    { name: "autoAwardOnce", label: "Auto-Award Once Only", type: "switch", defaultValue: true, description: "Only auto-award once per member" },
-    {
-      name: "rewardType",
-      label: "Reward Type",
-      type: "select",
-      options: [
-        { value: "discount", label: "Discount" },
-        { value: "free_item", label: "Free Item" },
-        { value: "gift_card", label: "Gift Card" },
-        { value: "experience", label: "Experience" },
-      ],
-      required: true,
-      defaultValue: "discount",
-    },
-    { name: "discountAmount", label: "Discount Amount ($)", type: "decimal", placeholder: "5.00" },
-    { name: "discountPercent", label: "Discount Percent (%)", type: "decimal", placeholder: "10" },
     {
       name: "programId",
       label: "Loyalty Program",
       type: "select",
       options: programs.map(p => ({ value: p.id, label: p.name })),
       required: true,
+      description: "Which program this reward belongs to",
     },
+    { name: "name", label: "Reward Name", type: "text", placeholder: "Free Appetizer", required: true },
+    { name: "description", label: "Description", type: "textarea", placeholder: "Redeem for any appetizer" },
+    {
+      name: "rewardType",
+      label: "Reward Type",
+      type: "select",
+      options: [
+        { value: "discount", label: "Discount - Apply $ or % off" },
+        { value: "free_item", label: "Free Item - Award a specific menu item" },
+        { value: "gift_card", label: "Gift Card - Issue a gift card amount" },
+        { value: "points_multiplier", label: "Points Multiplier - Bonus points on next visit" },
+      ],
+      required: true,
+      defaultValue: "discount",
+      description: "How the reward will be applied",
+    },
+    { name: "discountAmount", label: "Discount Amount ($)", type: "decimal", placeholder: "5.00", description: "For Discount type: fixed dollar amount off" },
+    { name: "discountPercent", label: "Discount Percent (%)", type: "decimal", placeholder: "10", description: "For Discount type: percentage off" },
+    {
+      name: "freeMenuItemId",
+      label: "Free Menu Item",
+      type: "select",
+      options: menuItems.map(m => ({ value: m.id, label: `${m.name} ($${m.price})` })),
+      description: "For Free Item type: select the specific item to award",
+    },
+    { name: "giftCardAmount", label: "Gift Card Amount ($)", type: "decimal", placeholder: "10.00", description: "For Gift Card type: the value of the gift card issued" },
+    { name: "pointsCost", label: "Points to Redeem", type: "number", placeholder: "100", description: "Points required for manual redemption at POS" },
+    { name: "autoAwardAtPoints", label: "Auto-Award at Points", type: "number", placeholder: "500", description: "Automatically award when member reaches this many lifetime points (leave blank for manual only)" },
+    { name: "autoAwardOnce", label: "Auto-Award Once Only", type: "switch", defaultValue: true, description: "Only auto-award this reward once per member" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 
@@ -294,6 +309,21 @@ export default function LoyaltyPage() {
     },
     onError: () => {
       toast({ title: "Failed to save reward", variant: "destructive" });
+    },
+  });
+
+  const deleteRewardMutation = useMutation({
+    mutationFn: async (rewardId: string) => {
+      const response = await apiRequest("DELETE", `/api/loyalty-rewards/${rewardId}`);
+      if (response.status === 204) return { success: true };
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-rewards"] });
+      toast({ title: "Reward deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete reward", variant: "destructive" });
     },
   });
 
@@ -532,27 +562,63 @@ export default function LoyaltyPage() {
                         <p className="text-sm text-muted-foreground py-2">No rewards for this program yet</p>
                       ) : (
                         <div className="space-y-2">
-                          {programRewards.map(reward => (
-                            <div 
-                              key={reward.id} 
-                              className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50 hover-elevate cursor-pointer"
-                              onClick={() => { setEditingReward(reward); setRewardFormOpen(true); }}
-                              data-testid={`row-reward-${reward.id}`}
-                            >
-                              <div className="flex-1">
-                                <p className="font-medium">{reward.name}</p>
-                                {reward.description && (
-                                  <p className="text-sm text-muted-foreground line-clamp-1">{reward.description}</p>
-                                )}
+                          {programRewards.map(reward => {
+                            const rewardTypeLabels: Record<string, string> = {
+                              discount: "Discount",
+                              free_item: "Free Item",
+                              gift_card: "Gift Card",
+                              points_multiplier: "Points Multiplier",
+                            };
+                            const linkedMenuItem = menuItems.find(m => m.id === reward.freeMenuItemId);
+                            return (
+                              <div 
+                                key={reward.id} 
+                                className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50"
+                                data-testid={`row-reward-${reward.id}`}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium">{reward.name}</p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
+                                    <span>{rewardTypeLabels[reward.rewardType || "discount"] || reward.rewardType}</span>
+                                    {reward.discountAmount && <span>- ${reward.discountAmount} off</span>}
+                                    {reward.discountPercent && <span>- {reward.discountPercent}% off</span>}
+                                    {linkedMenuItem && <span>- {linkedMenuItem.name}</span>}
+                                    {reward.giftCardAmount && <span>- ${reward.giftCardAmount} card</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline">{reward.pointsCost || 0} pts</Badge>
+                                  {reward.autoAwardAtPoints && (
+                                    <Badge variant="secondary" className="text-xs">Auto @ {reward.autoAwardAtPoints}</Badge>
+                                  )}
+                                  <Badge variant={reward.active ? "default" : "secondary"}>
+                                    {reward.active ? "Active" : "Inactive"}
+                                  </Badge>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => { setEditingReward(reward); setRewardFormOpen(true); }}
+                                    data-testid={`button-edit-reward-${reward.id}`}
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Delete reward "${reward.name}"?`)) {
+                                        deleteRewardMutation.mutate(reward.id);
+                                      }
+                                    }}
+                                    data-testid={`button-delete-reward-${reward.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <Badge variant="outline">{reward.pointsCost} pts</Badge>
-                                <Badge variant={reward.active ? "default" : "secondary"}>
-                                  {reward.active ? "Active" : "Inactive"}
-                                </Badge>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </AccordionContent>
