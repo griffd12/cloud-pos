@@ -155,70 +155,55 @@ export default function PosPage() {
   const [showTillClosingModal, setShowTillClosingModal] = useState(false);
   const [showCashMovementModal, setShowCashMovementModal] = useState(false);
 
-  // Track if we've done the initial till session check for this employee
-  const [tillSessionChecked, setTillSessionChecked] = useState(false);
-  const prevEmployeeId = useRef<string | undefined>(undefined);
+  // Track till session fetch state per employee login
+  const [tillCheckDone, setTillCheckDone] = useState(false);
+  const lastCheckedEmployeeId = useRef<string | null>(null);
 
-  // Reset tillSessionChecked when employee changes (login/logout)
+  // Fetch active till session for this workstation when employee logs in
   useEffect(() => {
-    if (currentEmployee?.id !== prevEmployeeId.current) {
-      setTillSessionChecked(false);
-      prevEmployeeId.current = currentEmployee?.id;
-      // Invalidate till session query to force refetch on employee change
-      if (workstationId && currentRvc?.id) {
-        queryClient.invalidateQueries({ queryKey: ["/api/till-sessions/active", { workstationId, rvcId: currentRvc?.id }] });
+    async function checkTillSession() {
+      if (!workstationId || !currentRvc?.id || !currentEmployee?.id) {
+        return;
+      }
+      
+      // Only check once per employee login
+      if (lastCheckedEmployeeId.current === currentEmployee.id && tillCheckDone) {
+        return;
+      }
+      
+      lastCheckedEmployeeId.current = currentEmployee.id;
+      setTillCheckDone(false);
+      
+      try {
+        console.log("Checking till session for workstation:", workstationId, "rvc:", currentRvc.id);
+        const res = await fetch(
+          `/api/till-sessions/active?workstationId=${workstationId}&rvcId=${currentRvc.id}`,
+          { credentials: "include", headers: getAuthHeaders() }
+        );
+        
+        if (res.ok) {
+          const session = await res.json();
+          console.log("Found active till session:", session?.id);
+          if (session) {
+            setActiveTillSession(session);
+            setTillCheckDone(true);
+            return;
+          }
+        }
+        
+        // No active session found - show opening modal
+        console.log("No active till session, showing opening modal");
+        setTillCheckDone(true);
+        setShowTillOpeningModal(true);
+      } catch (error) {
+        console.error("Error checking till session:", error);
+        setTillCheckDone(true);
+        setShowTillOpeningModal(true);
       }
     }
-  }, [currentEmployee?.id, workstationId, currentRvc?.id]);
-
-  // Check for active till session when workstation is set
-  const { data: fetchedTillSession, isLoading: tillSessionLoading, isFetching: tillSessionFetching, isSuccess: tillSessionSuccess, refetch: refetchTillSession } = useQuery<TillSession | null>({
-    queryKey: ["/api/till-sessions/active", { workstationId, rvcId: currentRvc?.id }],
-    queryFn: async () => {
-      console.log("Fetching active till session for workstation:", workstationId, "rvc:", currentRvc?.id);
-      const res = await fetch(
-        `/api/till-sessions/active?workstationId=${workstationId}&rvcId=${currentRvc?.id}`,
-        { credentials: "include", headers: getAuthHeaders() }
-      );
-      if (!res.ok) return null;
-      const data = await res.json();
-      console.log("Active till session result:", data);
-      return data;
-    },
-    enabled: !!workstationId && !!currentRvc?.id && !!currentEmployee?.id,
-    staleTime: 0,
-    refetchOnMount: "always",
-    gcTime: 0, // Don't cache results
-  });
-
-  // Mark as checked when query completes
-  useEffect(() => {
-    if (tillSessionSuccess && !tillSessionFetching) {
-      setTillSessionChecked(true);
-    }
-  }, [tillSessionSuccess, tillSessionFetching]);
-
-  // Sync fetched till session to context
-  useEffect(() => {
-    if (fetchedTillSession && !activeTillSession) {
-      setActiveTillSession(fetchedTillSession);
-    }
-  }, [fetchedTillSession, activeTillSession, setActiveTillSession]);
-
-  // Show till opening modal if no active session (and query has completed)
-  useEffect(() => {
-    if (
-      currentEmployee?.id &&
-      currentRvc?.id &&
-      tillSessionChecked &&
-      !tillSessionLoading &&
-      !tillSessionFetching &&
-      !fetchedTillSession &&
-      !activeTillSession
-    ) {
-      setShowTillOpeningModal(true);
-    }
-  }, [currentEmployee?.id, currentRvc?.id, tillSessionChecked, tillSessionLoading, tillSessionFetching, fetchedTillSession, activeTillSession]);
+    
+    checkTillSession();
+  }, [currentEmployee?.id, workstationId, currentRvc?.id, setActiveTillSession]);
 
   // Health check query to verify API connection when RVC is already set
   const healthQuery = useQuery({
@@ -1167,11 +1152,9 @@ export default function PosPage() {
             variant="ghost"
             size="icon"
             onClick={() => {
-              if (activeTillSession) {
-                setShowTillClosingModal(true);
-              } else {
-                logout();
-              }
+              // Sign Out just logs out the employee - till stays open for workstation
+              // Use the explicit "Close Till" button to close the till
+              logout();
             }}
             data-testid="button-sign-out"
           >
