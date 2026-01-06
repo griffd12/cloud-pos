@@ -2480,6 +2480,7 @@ export const inventoryItems = pgTable("inventory_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
   propertyId: varchar("property_id").references(() => properties.id),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id), // Link to source menu item if imported
   name: text("name").notNull(),
   sku: text("sku"),
   category: text("category"),

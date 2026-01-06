@@ -11609,6 +11609,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Import menu items as inventory items for a property
+  app.post("/api/inventory-items/import-from-menu", async (req, res) => {
+    try {
+      const { propertyId } = req.body;
+      if (!propertyId) {
+        return res.status(400).json({ message: "propertyId is required" });
+      }
+
+      // Get property and its RVCs
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+
+      // Get all RVCs for this property
+      const rvcs = await storage.getRvcs(propertyId);
+      const rvcIds = rvcs.map((r: any) => r.id);
+
+      // Get all menu items for this property (via RVCs or direct propertyId)
+      const allMenuItems = await storage.getMenuItems();
+      const propertyMenuItems = allMenuItems.filter((mi: any) => 
+        mi.propertyId === propertyId || 
+        (mi.rvcId && rvcIds.includes(mi.rvcId))
+      );
+
+      // Get existing inventory items for this property
+      const existingInventory = await storage.getInventoryItems(propertyId, undefined);
+      const existingNames = new Set(existingInventory.map((i: any) => i.name.toLowerCase()));
+
+      // Create inventory items for menu items that don't already exist
+      const created: any[] = [];
+      const skipped: string[] = [];
+
+      for (const menuItem of propertyMenuItems) {
+        if (existingNames.has(menuItem.name.toLowerCase())) {
+          skipped.push(menuItem.name);
+          continue;
+        }
+
+        // Create inventory item from menu item
+        const inventoryItem = await storage.createInventoryItem({
+          name: menuItem.name,
+          propertyId: propertyId,
+          enterpriseId: property.enterpriseId,
+          category: menuItem.familyGroupId ? "Menu Item" : "General",
+          unitType: "each",
+          trackInventory: true,
+          menuItemId: menuItem.id, // Link to the source menu item
+        });
+        created.push(inventoryItem);
+        existingNames.add(menuItem.name.toLowerCase()); // Prevent duplicates within batch
+      }
+
+      res.json({
+        imported: created.length,
+        skipped: skipped.length,
+        items: created,
+        skippedItems: skipped,
+      });
+    } catch (error) {
+      console.error("Import menu items error:", error);
+      res.status(500).json({ message: "Failed to import menu items" });
+    }
+  });
+
   app.get("/api/recipes", async (req, res) => {
     try {
       const { menuItemId } = req.query;
