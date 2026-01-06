@@ -228,8 +228,10 @@ export default function PaymentProcessorsPage() {
     switch (selectedGateway) {
       case "stripe":
         return "Secrets needed: {PREFIX}_SECRET_KEY. Example: If prefix is 'STRIPE', you need STRIPE_SECRET_KEY in Replit Secrets.";
-      case "elavon":
+      case "elavon_converge":
         return "Secrets needed: {PREFIX}_MERCHANT_ID, {PREFIX}_USER_ID, {PREFIX}_PIN. Example: If prefix is 'ELAVON', you need ELAVON_MERCHANT_ID, ELAVON_USER_ID, ELAVON_PIN in Replit Secrets.";
+      case "elavon_fusebox":
+        return "Secrets needed: {PREFIX}_SITE_ID, {PREFIX}_CHAIN_CODE, {PREFIX}_LOCATION_ID. Example: If prefix is 'ELAVON_FB', you need ELAVON_FB_SITE_ID, ELAVON_FB_CHAIN_CODE, ELAVON_FB_LOCATION_ID in Replit Secrets.";
       default:
         return "Set the prefix used to look up API credentials from Replit Secrets.";
     }
@@ -311,9 +313,12 @@ export default function PaymentProcessorsPage() {
                           <SelectItem 
                             key={type.value} 
                             value={type.value}
-                            disabled={!["stripe", "elavon"].includes(type.value)}
+                            disabled={!["stripe", "elavon_converge", "elavon_fusebox"].includes(type.value)}
                           >
-                            {type.label}
+                            <div className="flex flex-col">
+                              <span>{type.label}</span>
+                              <span className="text-xs text-muted-foreground">{type.description}</span>
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
