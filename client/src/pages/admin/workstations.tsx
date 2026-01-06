@@ -243,6 +243,7 @@ function WorkstationFormDialog({
       backupVoidPrinterId: null,
       ipAddress: "",
       hostname: "",
+      autoLogoutMinutes: null,
       active: true,
     },
   });
@@ -290,6 +291,7 @@ function WorkstationFormDialog({
           backupVoidPrinterId: editingItem.backupVoidPrinterId || null,
           ipAddress: editingItem.ipAddress || "",
           hostname: editingItem.hostname || "",
+          autoLogoutMinutes: editingItem.autoLogoutMinutes ?? null,
           active: editingItem.active ?? true,
         });
       } else {
@@ -314,11 +316,12 @@ function WorkstationFormDialog({
           backupVoidPrinterId: null,
           ipAddress: "",
           hostname: "",
+          autoLogoutMinutes: null,
           active: true,
         });
       }
     }
-  }, [open, editingItem, properties]);
+  }, [open, editingItem, properties, form]);
 
   const cleanPrinterId = (value: string | null | undefined): string | null => {
     if (!value || value === "__none__") return null;
@@ -632,6 +635,34 @@ function WorkstationFormDialog({
                       )}
                     />
                   </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="autoLogoutMinutes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Auto-Logout (minutes)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="0 = disabled"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              field.onChange(val === "" ? null : parseInt(val, 10));
+                            }}
+                            data-testid="input-autoLogoutMinutes"
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Automatically sign out employee after this many minutes of inactivity. Unsent items will be cancelled. Set to 0 or leave empty to disable.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 <div className="border rounded-md p-4 space-y-4">
