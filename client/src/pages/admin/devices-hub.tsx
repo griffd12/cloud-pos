@@ -51,7 +51,7 @@ export default function DevicesHubPage() {
   const [filterDeviceType, setFilterDeviceType] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
 
-  const buildQueryString = () => {
+  const buildQueryPath = () => {
     const params = new URLSearchParams();
     if (filterPropertyId) params.set("propertyId", filterPropertyId);
     if (filterDeviceType) params.set("deviceType", filterDeviceType);
@@ -59,13 +59,10 @@ export default function DevicesHubPage() {
     return queryStr ? `/api/devices-hub?${queryStr}` : "/api/devices-hub";
   };
 
+  const queryPath = buildQueryPath();
+
   const { data: hubData, isLoading } = useQuery<HubResponse>({
-    queryKey: ["/api/devices-hub", filterPropertyId, filterDeviceType],
-    queryFn: async () => {
-      const res = await fetch(buildQueryString());
-      if (!res.ok) throw new Error("Failed to fetch devices hub");
-      return res.json();
-    },
+    queryKey: [queryPath],
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
