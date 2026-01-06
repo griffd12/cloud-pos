@@ -34,11 +34,21 @@ export default function FiscalClosePage() {
 
   const { data: currentPeriod, isLoading: currentLoading } = useQuery<FiscalPeriod>({
     queryKey: ["/api/fiscal-periods/current", selectedPropertyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/fiscal-periods/current/${selectedPropertyId}`);
+      if (!res.ok) throw new Error("Failed to fetch current period");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
   const { data: fiscalPeriods = [], isLoading: periodsLoading } = useQuery<FiscalPeriod[]>({
     queryKey: ["/api/fiscal-periods", selectedPropertyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/fiscal-periods?propertyId=${selectedPropertyId}`);
+      if (!res.ok) throw new Error("Failed to fetch fiscal periods");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
