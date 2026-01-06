@@ -95,8 +95,16 @@ export function TillOpeningModal({
         activateTillDirectly(session.id);
       }
     },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    onError: (error: any) => {
+      // Check if error response contains existing session info (from ApiError)
+      const existingSession = error?.bodyJson?.existingSession;
+      if (existingSession) {
+        // This workstation already has an active till session - use it
+        toast({ title: "Till Session Found", description: "Using existing active till session for this workstation" });
+        onComplete(existingSession);
+        return;
+      }
+      toast({ title: "Error", description: error.message || "Failed to create till session", variant: "destructive" });
     },
   });
 

@@ -164,11 +164,15 @@ export default function PosPage() {
     if (currentEmployee?.id !== prevEmployeeId.current) {
       setTillSessionChecked(false);
       prevEmployeeId.current = currentEmployee?.id;
+      // Invalidate till session query to force refetch on employee change
+      if (workstationId && currentRvc?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/till-sessions/active", { workstationId, rvcId: currentRvc?.id }] });
+      }
     }
-  }, [currentEmployee?.id]);
+  }, [currentEmployee?.id, workstationId, currentRvc?.id]);
 
   // Check for active till session when workstation is set
-  const { data: fetchedTillSession, isLoading: tillSessionLoading, isFetching: tillSessionFetching, isSuccess: tillSessionSuccess } = useQuery<TillSession | null>({
+  const { data: fetchedTillSession, isLoading: tillSessionLoading, isFetching: tillSessionFetching, isSuccess: tillSessionSuccess, refetch: refetchTillSession } = useQuery<TillSession | null>({
     queryKey: ["/api/till-sessions/active", { workstationId, rvcId: currentRvc?.id }],
     queryFn: async () => {
       console.log("Fetching active till session for workstation:", workstationId, "rvc:", currentRvc?.id);
@@ -181,7 +185,7 @@ export default function PosPage() {
       console.log("Active till session result:", data);
       return data;
     },
-    enabled: !!workstationId && !!currentRvc?.id,
+    enabled: !!workstationId && !!currentRvc?.id && !!currentEmployee?.id,
     staleTime: 0,
     refetchOnMount: "always",
     gcTime: 0, // Don't cache results

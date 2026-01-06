@@ -21,10 +21,31 @@ export function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+// Custom error class that preserves JSON response body
+export class ApiError extends Error {
+  status: number;
+  bodyText: string;
+  bodyJson: any | null;
+
+  constructor(status: number, bodyText: string, bodyJson: any | null = null) {
+    super(`${status}: ${bodyJson?.message || bodyText}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.bodyText = bodyText;
+    this.bodyJson = bodyJson;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let jsonBody: any = null;
+    try {
+      jsonBody = JSON.parse(text);
+    } catch {
+      // Not JSON, leave as null
+    }
+    throw new ApiError(res.status, text, jsonBody);
   }
 }
 
