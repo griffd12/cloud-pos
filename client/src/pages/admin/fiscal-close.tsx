@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Loader2, Calendar, Lock, Unlock, DollarSign, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { Property, FiscalPeriod } from "@shared/schema";
 
@@ -35,7 +35,9 @@ export default function FiscalClosePage() {
   const { data: currentPeriod, isLoading: currentLoading } = useQuery<FiscalPeriod>({
     queryKey: ["/api/fiscal-periods/current", selectedPropertyId],
     queryFn: async () => {
-      const res = await fetch(`/api/fiscal-periods/current/${selectedPropertyId}`);
+      const res = await fetch(`/api/fiscal-periods/current/${selectedPropertyId}`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) throw new Error("Failed to fetch current period");
       return res.json();
     },
@@ -45,7 +47,9 @@ export default function FiscalClosePage() {
   const { data: fiscalPeriods = [], isLoading: periodsLoading } = useQuery<FiscalPeriod[]>({
     queryKey: ["/api/fiscal-periods", selectedPropertyId],
     queryFn: async () => {
-      const res = await fetch(`/api/fiscal-periods?propertyId=${selectedPropertyId}`);
+      const res = await fetch(`/api/fiscal-periods?propertyId=${selectedPropertyId}`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) throw new Error("Failed to fetch fiscal periods");
       return res.json();
     },
