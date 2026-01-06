@@ -6458,6 +6458,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Recalculate timecard
       await storage.recalculateTimecard(employeeId, businessDate);
 
+      // Broadcast real-time update
+      broadcastPosEvent({ type: "schedule_update" });
+
       res.status(201).json(punch);
     } catch (error) {
       console.error("Clock in error:", error);
@@ -6513,6 +6516,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate timecard after clock out punch
       await storage.recalculateTimecard(employeeId, businessDate);
+
+      // Broadcast real-time update
+      broadcastPosEvent({ type: "schedule_update" });
 
       res.status(201).json(punch);
     } catch (error) {
@@ -6572,6 +6578,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate timecard
       await storage.recalculateTimecard(punch.employeeId, punch.businessDate);
+
+      // Broadcast real-time update
+      broadcastPosEvent({ type: "schedule_update" });
 
       res.json(punch);
     } catch (error) {
@@ -6875,6 +6884,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (existing.propertyId && existing.businessDate) {
         await storage.calculateLaborSnapshot(existing.propertyId, existing.businessDate);
       }
+
+      // Broadcast real-time update
+      broadcastPosEvent({ type: "schedule_update" });
       
       res.json(timecard);
     } catch (error) {
