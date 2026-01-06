@@ -824,6 +824,10 @@ export const checkItems = pgTable("check_items", {
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }), // Calculated discount amount
   discountAppliedBy: varchar("discount_applied_by").references(() => employees.id), // Who applied the discount
   discountApprovedBy: varchar("discount_approved_by").references(() => employees.id), // Manager who approved (if required)
+  // Non-revenue flag for items that should not count toward sales (e.g., gift card sales/reloads)
+  // Gift card sales are liabilities, not revenue - revenue is recognized when redeemed
+  isNonRevenue: boolean("is_non_revenue").default(false),
+  nonRevenueType: text("non_revenue_type"), // 'gift_card_sale', 'gift_card_reload', etc.
 });
 
 // Check Payments

@@ -4591,11 +4591,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      const baseItemSales = itemsInPeriod.reduce((sum, ci) => 
+      // Separate revenue items from non-revenue items (gift card sales/reloads are liabilities)
+      const revenueItems = itemsInPeriod.filter(ci => !ci.isNonRevenue);
+      const nonRevenueItems = itemsInPeriod.filter(ci => ci.isNonRevenue);
+      
+      // Calculate non-revenue totals (gift card sales, reloads - these are liabilities, not income)
+      const nonRevenueTotal = nonRevenueItems.reduce((sum, ci) => 
         sum + parseFloat(ci.unitPrice || "0") * (ci.quantity || 1), 0
       );
       
-      const modifierTotal = itemsInPeriod.reduce((sum, ci) => {
+      // Base item sales only from revenue items
+      const baseItemSales = revenueItems.reduce((sum, ci) => 
+        sum + parseFloat(ci.unitPrice || "0") * (ci.quantity || 1), 0
+      );
+      
+      const modifierTotal = revenueItems.reduce((sum, ci) => {
         if (!ci.modifiers || !Array.isArray(ci.modifiers)) return sum;
         const modSum = (ci.modifiers as any[]).reduce((mSum, mod) => {
           return mSum + parseFloat(mod.priceDelta || "0");
@@ -4673,12 +4683,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalWithTax,        // All check totals (closed + open)
         
         // Item-level breakdown (for detailed reporting)
+        // Note: itemSales excludes non-revenue items (gift card sales/reloads)
         itemSales: Math.round(itemSales * 100) / 100,
         baseItemSales: Math.round(baseItemSales * 100) / 100,
         modifierTotal: Math.round(modifierTotal * 100) / 100,
         serviceChargeTotal: Math.round(serviceChargeTotal * 100) / 100,
         otherCharges: 0,
         discountTotal: Math.round(discountTotal * 100) / 100,
+        
+        // Non-revenue transactions (gift card sales/reloads are liabilities, not income)
+        nonRevenueTotal: Math.round(nonRevenueTotal * 100) / 100,
+        nonRevenueItemCount: nonRevenueItems.length,
         
         // Closed check breakdown (for reconciliation: Payments should equal closedTotal)
         closedSubtotal,      // Sum of closed check subtotals
@@ -5452,8 +5467,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter items by businessDate (consistent with sales-summary and top-items)
+      // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
       let checkItems = allCheckItems.filter(ci => {
         if (ci.voided) return false;
+        if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
         // Apply RVC filter
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(ci.checkId);
@@ -5469,7 +5486,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Aggregate by menu item
+      // Aggregate by menu item (only revenue items)
       const itemSales: Record<string, { 
         name: string; 
         category: string;
@@ -12464,7 +12481,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Sell/activate a new gift card
   app.post("/api/pos/gift-cards/sell", async (req, res) => {
     try {
-      const { cardNumber, initialBalance, propertyId, employeeId, checkId } = req.body;
+      const { cardNumber, initialBalance, propertyId, employeeId, checkId, rvcId } = req.body;
 
       // Validate initialBalance is a valid number
       const parsedBalance = parseFloat(initialBalance);
@@ -12489,56 +12506,99 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // No activatedAt or activatedById until payment
       });
 
-      // Add gift card sale as a check item if there's an active check
-      let checkItem = null;
-      if (checkId) {
-        const check = await storage.getCheck(checkId);
-        if (check) {
-          // Create a check item for the gift card sale (no menuItemId for gift cards)
-          // Store giftCardId in modifiers for proper linkage during activation
-          checkItem = await storage.createCheckItem({
-            checkId,
-            menuItemId: null, // No menu item - this is a special gift card sale
-            menuItemName: `Gift Card ${cardNumber.slice(-4)}`,
-            quantity: 1,
-            unitPrice: balanceStr,
-            modifiers: [{ name: "__giftCardId", priceDelta: "0", giftCardId: giftCard.id, cardNumber }] as any,
-            sent: true, // Mark as sent immediately (no kitchen routing)
-            voided: false,
-            // Gift cards are not taxed - set tax fields to 0
-            taxRateAtSale: "0",
-            taxAmount: "0",
-            taxableAmount: balanceStr,
-          });
-
-          // Recalculate check totals from all non-voided items
-          const allItems = await storage.getCheckItems(checkId);
-          const itemsSubtotal = allItems
-            .filter(item => !item.voided)
-            .reduce((sum, item) => {
-              const price = parseFloat(item.unitPrice || "0");
-              const qty = item.quantity || 1;
-              return sum + (price * qty);
-            }, 0);
-          
-          // Keep existing tax calculation for other items (gift cards add 0 tax)
-          const currentTax = parseFloat(check.taxTotal || "0");
-          const newSubtotal = itemsSubtotal.toFixed(2);
-          const newTotal = (itemsSubtotal + currentTax).toFixed(2);
-          
-          await storage.updateCheck(checkId, {
-            subtotal: newSubtotal,
-            total: newTotal,
-          });
+      // Determine working checkId - create a new check if none exists
+      let workingCheckId = checkId;
+      let createdCheck = null;
+      
+      if (!workingCheckId) {
+        // Auto-create a new check for this gift card sale
+        // Get RVC for order type default
+        const rvc = rvcId ? await storage.getRvc(rvcId) : null;
+        if (!rvc) {
+          return res.status(400).json({ message: "Revenue center (RVC) required to create a check" });
         }
+        const orderType = rvc.orderTypeDefault || "take_out";
+        
+        // Get property business date
+        const property = rvc.propertyId ? await storage.getProperty(rvc.propertyId) : null;
+        const businessDate = property?.currentBusinessDate || new Date().toISOString().split("T")[0];
+        
+        // Generate check number
+        const existingChecks = await storage.getChecks();
+        const rvcChecks = existingChecks.filter(c => c.rvcId === rvcId);
+        const checkNumber = rvcChecks.length + 1;
+        
+        createdCheck = await storage.createCheck({
+          rvcId,
+          employeeId,
+          checkNumber,
+          orderType,
+          status: "open",
+          subtotal: "0",
+          taxTotal: "0",
+          discountTotal: "0",
+          serviceChargeTotal: "0",
+          total: "0",
+          guestCount: 1,
+          businessDate,
+        });
+        workingCheckId = createdCheck.id;
+      }
+
+      // Create a check item for the gift card sale (no menuItemId for gift cards)
+      // Store giftCardId in modifiers for proper linkage during activation
+      // Mark as NON-REVENUE - gift card sales are liabilities, not income
+      const checkItem = await storage.createCheckItem({
+        checkId: workingCheckId,
+        menuItemId: null, // No menu item - this is a special gift card sale
+        menuItemName: `Gift Card ${cardNumber.slice(-4)}`,
+        quantity: 1,
+        unitPrice: balanceStr,
+        modifiers: [{ name: "__giftCardId", priceDelta: "0", giftCardId: giftCard.id, cardNumber }] as any,
+        sent: true, // Mark as sent immediately (no kitchen routing)
+        voided: false,
+        // Gift cards are not taxed - set tax fields to 0
+        taxRateAtSale: "0",
+        taxAmount: "0",
+        taxableAmount: balanceStr,
+        // NON-REVENUE: Gift card sales are liabilities, not revenue
+        // Revenue is recognized when the customer redeems the card
+        isNonRevenue: true,
+        nonRevenueType: "gift_card_sale",
+      });
+
+      // Recalculate check totals from all non-voided items
+      const check = await storage.getCheck(workingCheckId);
+      if (check) {
+        const allItems = await storage.getCheckItems(workingCheckId);
+        const itemsSubtotal = allItems
+          .filter(item => !item.voided)
+          .reduce((sum, item) => {
+            const price = parseFloat(item.unitPrice || "0");
+            const qty = item.quantity || 1;
+            return sum + (price * qty);
+          }, 0);
+        
+        // Keep existing tax calculation for other items (gift cards add 0 tax)
+        const currentTax = parseFloat(check.taxTotal || "0");
+        const newSubtotal = itemsSubtotal.toFixed(2);
+        const newTotal = (itemsSubtotal + currentTax).toFixed(2);
+        
+        await storage.updateCheck(workingCheckId, {
+          subtotal: newSubtotal,
+          total: newTotal,
+        });
       }
 
       broadcastGiftCardUpdate(giftCard.id);
+      broadcastDashboardUpdate(propertyId);
+      
       res.status(201).json({
         success: true,
         giftCard,
         checkItem,
-        message: `Gift card activated with $${initialBalance} balance`,
+        check: createdCheck, // Return created check if one was auto-created
+        message: `Gift card added to check. Complete payment to activate.`,
       });
     } catch (error: any) {
       console.error("Gift card sell error:", error);

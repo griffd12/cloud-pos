@@ -35,8 +35,9 @@ interface GiftCardModalProps {
   checkId: string | undefined;
   propertyId: string | undefined;
   employeeId: string | undefined;
+  rvcId: string | undefined;
   onGiftCardRedeemed?: (amount: string) => void;
-  onGiftCardSold?: (checkItem: any) => void;
+  onGiftCardSold?: (checkItem: any, createdCheck?: any) => void;
 }
 
 interface GiftCardBalance {
@@ -54,6 +55,7 @@ export function GiftCardModal({
   checkId,
   propertyId,
   employeeId,
+  rvcId,
   onGiftCardRedeemed,
   onGiftCardSold,
 }: GiftCardModalProps) {
@@ -108,6 +110,7 @@ export function GiftCardModal({
         propertyId,
         employeeId,
         checkId,
+        rvcId,
       });
       return res.json();
     },
@@ -118,14 +121,21 @@ export function GiftCardModal({
       });
       setCardNumber("");
       setAmount("");
+      
+      // Determine which check to invalidate - either existing or newly created
+      const workingCheckId = data.check?.id || checkId;
+      
       // Refresh check items and check data to show the gift card sale
-      if (checkId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/checks", checkId, "items"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/checks", checkId] });
+      if (workingCheckId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", workingCheckId, "items"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", workingCheckId] });
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
+      
       // Call callback to update local check items state in POS
+      // Pass both the check item and the created check (if auto-created)
       if (data.checkItem && onGiftCardSold) {
-        onGiftCardSold(data.checkItem);
+        onGiftCardSold(data.checkItem, data.check);
       }
       // Close modal so user can see check and pay
       onClose();

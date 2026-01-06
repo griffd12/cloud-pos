@@ -1719,6 +1719,7 @@ export default function PosPage() {
         checkId={currentCheck?.id}
         propertyId={currentRvc?.propertyId}
         employeeId={currentEmployee?.id}
+        rvcId={currentRvc?.id}
         onGiftCardRedeemed={(amount) => {
           toast({
             title: "Gift Card Applied",
@@ -1726,11 +1727,17 @@ export default function PosPage() {
           });
           queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
         }}
-        onGiftCardSold={(checkItem) => {
-          // Add the gift card sale item to the local check items state
-          if (checkItem) {
+        onGiftCardSold={(checkItem, createdCheck) => {
+          // If a new check was auto-created for the gift card sale, set it as current
+          if (createdCheck) {
+            setCurrentCheck(createdCheck);
+            setCheckItems([checkItem]);
+            // Refresh checks list
+            queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
+          } else if (checkItem) {
+            // Add the gift card sale item to existing check items
             setCheckItems((prev) => [...prev, checkItem]);
-            // Also refresh check to update totals
+            // Refresh check to update totals
             queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
           }
         }}
