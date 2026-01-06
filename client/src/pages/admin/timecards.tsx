@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { format, startOfWeek, endOfWeek, addDays } from "date-fns";
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 import {
   Calendar,
   Clock,
@@ -64,6 +65,9 @@ export default function TimecardsPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
+
+  // Get the selected property's timezone (default to America/New_York if not set)
+  const selectedPropertyTimezone = properties.find(p => p.id === selectedProperty)?.timezone || "America/New_York";
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -172,7 +176,7 @@ export default function TimecardsPage() {
 
   const formatTime = (date: Date | string | null) => {
     if (!date) return "--:--";
-    return format(new Date(date), "h:mm a");
+    return formatInTimeZone(new Date(date), selectedPropertyTimezone, "h:mm a");
   };
 
   const formatHours = (hours: string | number | null) => {
@@ -475,8 +479,8 @@ export default function TimecardsPage() {
                                                   e.stopPropagation();
                                                   setEditingPunch(pair.clockIn);
                                                   setPunchEditForm({
-                                                    date: format(new Date(pair.clockIn.actualTimestamp), "yyyy-MM-dd"),
-                                                    time: format(new Date(pair.clockIn.actualTimestamp), "HH:mm"),
+                                                    date: formatInTimeZone(new Date(pair.clockIn.actualTimestamp), selectedPropertyTimezone, "yyyy-MM-dd"),
+                                                    time: formatInTimeZone(new Date(pair.clockIn.actualTimestamp), selectedPropertyTimezone, "HH:mm"),
                                                     reason: "",
                                                   });
                                                 }}
@@ -502,8 +506,8 @@ export default function TimecardsPage() {
                                                     e.stopPropagation();
                                                     setEditingPunch(pair.clockOut);
                                                     setPunchEditForm({
-                                                      date: format(new Date(pair.clockOut!.actualTimestamp), "yyyy-MM-dd"),
-                                                      time: format(new Date(pair.clockOut!.actualTimestamp), "HH:mm"),
+                                                      date: formatInTimeZone(new Date(pair.clockOut!.actualTimestamp), selectedPropertyTimezone, "yyyy-MM-dd"),
+                                                      time: formatInTimeZone(new Date(pair.clockOut!.actualTimestamp), selectedPropertyTimezone, "HH:mm"),
                                                       reason: "",
                                                     });
                                                   }}
@@ -679,11 +683,11 @@ export default function TimecardsPage() {
                   toast({ title: "Error", description: "Date and time are required", variant: "destructive" });
                   return;
                 }
-                // Create a proper Date object from local date/time and convert to ISO string
-                const localDateTime = new Date(`${punchEditForm.date}T${punchEditForm.time}:00`);
+                // Convert from property timezone to UTC for storage
+                const utcDateTime = fromZonedTime(`${punchEditForm.date}T${punchEditForm.time}:00`, selectedPropertyTimezone);
                 updatePunchMutation.mutate({
                   id: editingPunch!.id,
-                  actualTimestamp: localDateTime.toISOString(),
+                  actualTimestamp: utcDateTime.toISOString(),
                   editReason: punchEditForm.reason,
                 });
               }}
