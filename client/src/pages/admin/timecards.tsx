@@ -679,9 +679,11 @@ export default function TimecardsPage() {
                   toast({ title: "Error", description: "Date and time are required", variant: "destructive" });
                   return;
                 }
+                // Create a proper Date object from local date/time and convert to ISO string
+                const localDateTime = new Date(`${punchEditForm.date}T${punchEditForm.time}:00`);
                 updatePunchMutation.mutate({
                   id: editingPunch!.id,
-                  actualTimestamp: `${punchEditForm.date}T${punchEditForm.time}:00`,
+                  actualTimestamp: localDateTime.toISOString(),
                   editReason: punchEditForm.reason,
                 });
               }}
