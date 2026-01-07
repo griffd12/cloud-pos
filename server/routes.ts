@@ -4676,11 +4676,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : allChecks;
       
       // CHECK MOVEMENT TRACKING
-      // When using businessDate, filter by check.businessDate field
-      // Checks Started = opened/started for the business date
+      // Uses DUAL DATE MODEL:
+      // - originBusinessDate = when check was STARTED (never changes)
+      // - businessDate = when check was CLOSED or last modified
+      
+      // Checks Started = checks CREATED on this business date
       const checksStarted = checksInScope.filter(c => {
         if (useBusinessDate) {
-          return c.businessDate === businessDate;
+          // Use originBusinessDate for when check was started
+          const originDate = (c as any).originBusinessDate || c.businessDate;
+          return originDate === businessDate;
         } else {
           if (!c.openedAt) return false;
           const openDate = new Date(c.openedAt);
@@ -4688,11 +4693,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Checks Closed = closed for the business date
+      // Checks Closed = closed ON this business date
       const checksClosed = checksInScope.filter(c => {
         if (c.status !== "closed") return false;
         if (useBusinessDate) {
-          // For business date mode, check if the check's business date matches
+          // businessDate = when check was closed
           return c.businessDate === businessDate;
         } else {
           if (!c.closedAt) return false;
@@ -4701,20 +4706,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       });
       
-      // Checks Carried Over = checks from PREVIOUS business dates that are still open
-      // These are checks that weren't closed before business date reset
+      // Checks Carried Over = checks STARTED before this date that are:
+      // A) Still open (traditional carry-over), OR
+      // B) Closed ON this date (carried-over then closed)
       const checksCarriedOver = checksInScope.filter(c => {
-        if (c.status !== "open") return false; // Only open checks can be carried over
         if (useBusinessDate) {
-          // Open checks from a business date BEFORE the selected date
-          // Guard: both must be valid YYYY-MM-DD strings for comparison
-          if (!c.businessDate || !businessDate) return false;
-          return c.businessDate < (businessDate as string);
+          const originDate = (c as any).originBusinessDate || c.businessDate;
+          if (!originDate || !businessDate) return false;
+          // Check started BEFORE the selected date
+          if (originDate >= (businessDate as string)) return false;
+          // Either still open OR closed on the selected date
+          if (c.status === "open") return true;
+          if (c.status === "closed" && c.businessDate === businessDate) return true;
+          return false;
         } else {
           if (!c.openedAt) return false;
           const openDate = new Date(c.openedAt);
-          // Opened before the start of the period and still open
-          return openDate < start;
+          return openDate < start && c.status === "open";
         }
       });
       
@@ -4722,12 +4730,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // This represents the total liability - all unpaid checks
       const checksOutstanding = checksInScope.filter(c => c.status === "open");
       
-      // Today's open checks = open checks from THIS business date only (for reconciliation)
+      // Today's open checks = open checks STARTED on THIS business date only (for reconciliation)
       // These are checks started today that haven't been closed yet
       const todaysOpenChecks = checksInScope.filter(c => {
         if (c.status !== "open") return false;
         if (useBusinessDate) {
-          return c.businessDate === businessDate;
+          // Use originBusinessDate for when check was started
+          const originDate = (c as any).originBusinessDate || c.businessDate;
+          return originDate === businessDate;
         }
         return true;
       });
