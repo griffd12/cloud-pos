@@ -407,7 +407,8 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
   const totalDiscounts = itemDiscountTotal + checkLevelDiscountTotal;
 
   // Round to 2 decimal places for financial accuracy
-  const subtotal = Math.round(netSubtotal * 100) / 100;
+  // Subtotal = gross item totals BEFORE discounts (what the user expects to see)
+  const subtotal = Math.round(grossSubtotal * 100) / 100;
   const tax = Math.round(addOnTax * 100) / 100;
   const total = Math.round((netSubtotal + addOnTax) * 100) / 100;
 
