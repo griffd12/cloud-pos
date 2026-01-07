@@ -2658,7 +2658,13 @@ export class DatabaseStorage implements IStorage {
         roundsResult = await tx.delete(rounds).where(inArray(rounds.checkId, checkIds));
       }
 
-      // 5b. Delete loyalty transactions and redemptions BEFORE checks (they reference checks)
+      // 5b. Get affected loyalty member IDs BEFORE deleting transactions (for later reset)
+      const affectedLoyaltyMembers = await tx.select({ memberId: loyaltyTransactions.memberId })
+        .from(loyaltyTransactions)
+        .where(eq(loyaltyTransactions.propertyId, propertyId));
+      const affectedMemberIds = [...new Set(affectedLoyaltyMembers.map(m => m.memberId).filter(Boolean))] as string[];
+      
+      // 5c. Delete loyalty transactions and redemptions BEFORE checks (they reference checks)
       // Must delete by BOTH propertyId AND checkId since checkId is the FK constraint
       let loyaltyTransResult = { rowCount: 0 };
       if (checkIds.length > 0) {
@@ -2750,18 +2756,12 @@ export class DatabaseStorage implements IStorage {
       }
 
       // 4d. Reset loyalty member points for members who had transactions at this property
-      // Get unique member IDs from the deleted loyalty transactions
-      const affectedMembers = await tx.select({ memberId: loyaltyTransactions.memberId })
-        .from(loyaltyTransactions)
-        .where(eq(loyaltyTransactions.propertyId, propertyId));
-      const memberIds = [...new Set(affectedMembers.map(m => m.memberId))];
-      
-      // Reset all loyalty members to zero (since we're clearing all transactional data)
+      // Uses affectedMemberIds captured BEFORE deletion in step 5b
       let loyaltyMembersReset = { rowCount: 0 };
-      if (memberIds.length > 0) {
+      if (affectedMemberIds.length > 0) {
         loyaltyMembersReset = await tx.update(loyaltyMembers)
           .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
-          .where(inArray(loyaltyMembers.id, memberIds));
+          .where(inArray(loyaltyMembers.id, affectedMemberIds));
       }
       // Also reset all members in the enterprise's programs (full reset)
       const enterprisePrograms = await tx.select({ id: loyaltyPrograms.id }).from(loyaltyPrograms);
