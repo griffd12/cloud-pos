@@ -45,7 +45,7 @@ export function usePosWebSocket() {
             ws.close();
             return;
           }
-          ws.send(JSON.stringify({ action: "subscribe", channel: "all" }));
+          ws.send(JSON.stringify({ type: "subscribe", channel: "all" }));
         };
 
         ws.onmessage = (event) => {
