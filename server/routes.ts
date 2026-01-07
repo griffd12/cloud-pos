@@ -199,6 +199,27 @@ function broadcastTipUpdate() {
   broadcastPosEvent({ type: "tip_update" });
 }
 
+function broadcastAvailabilityUpdate(propertyId: string, menuItemId?: string) {
+  broadcastPosEvent({
+    type: "availability_update",
+    payload: { propertyId, menuItemId }
+  });
+}
+
+function broadcastTimePunchUpdate(propertyId: string, employeeId?: string) {
+  broadcastPosEvent({
+    type: "time_punch_update",
+    payload: { propertyId, employeeId }
+  });
+}
+
+function broadcastTimecardUpdate(propertyId: string, employeeId?: string) {
+  broadcastPosEvent({
+    type: "timecard_update",
+    payload: { propertyId, employeeId }
+  });
+}
+
 // Shared helper to send unsent items to KDS with proper round and ticket creation
 async function sendItemsToKds(
   checkId: string,
@@ -2608,6 +2629,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Always broadcast KDS update so cancelled tickets disappear
       broadcastKdsUpdate(check.rvcId);
+      
+      // Broadcast availability update if items were voided and availability was restored
+      if (voidedItems.length > 0 && propertyId) {
+        broadcastAvailabilityUpdate(propertyId);
+      }
 
       // Get the updated check to return to the client
       const updatedCheck = await storage.getCheck(checkId);
@@ -6672,8 +6698,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Recalculate timecard
       await storage.recalculateTimecard(employeeId, businessDate);
 
-      // Broadcast real-time update
-      broadcastPosEvent({ type: "schedule_update" });
+      // Broadcast real-time updates for time clock and timecards
+      broadcastTimePunchUpdate(propertyId, employeeId);
+      broadcastTimecardUpdate(propertyId, employeeId);
+      broadcastScheduleUpdate();
 
       res.status(201).json(punch);
     } catch (error) {
@@ -6731,8 +6759,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Recalculate timecard after clock out punch
       await storage.recalculateTimecard(employeeId, businessDate);
 
-      // Broadcast real-time update
-      broadcastPosEvent({ type: "schedule_update" });
+      // Broadcast real-time updates for time clock and timecards
+      broadcastTimePunchUpdate(propertyId, employeeId);
+      broadcastTimecardUpdate(propertyId, employeeId);
+      broadcastScheduleUpdate();
 
       res.status(201).json(punch);
     } catch (error) {
@@ -6793,8 +6823,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Recalculate timecard
       await storage.recalculateTimecard(punch.employeeId, punch.businessDate);
 
-      // Broadcast real-time update
-      broadcastPosEvent({ type: "schedule_update" });
+      // Broadcast real-time updates for time clock and timecards
+      broadcastTimePunchUpdate(punch.propertyId, punch.employeeId);
+      broadcastTimecardUpdate(punch.propertyId, punch.employeeId);
+      broadcastScheduleUpdate();
 
       res.json(punch);
     } catch (error) {
@@ -6819,6 +6851,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate timecard
       await storage.recalculateTimecard(punch.employeeId, punch.businessDate);
+
+      // Broadcast real-time updates
+      broadcastTimePunchUpdate(punch.propertyId, punch.employeeId);
+      broadcastTimecardUpdate(punch.propertyId, punch.employeeId);
+      broadcastScheduleUpdate();
 
       res.json(punch);
     } catch (error) {
@@ -12115,6 +12152,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/item-availability", async (req, res) => {
     try {
       const availability = await storage.createItemAvailability(req.body);
+      // Broadcast real-time update to all connected clients
+      broadcastAvailabilityUpdate(availability.propertyId, availability.menuItemId || undefined);
       res.status(201).json(availability);
     } catch (error) {
       res.status(500).json({ message: "Failed to create item availability" });
@@ -12124,6 +12163,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/item-availability/:id", async (req, res) => {
     try {
       const availability = await storage.updateItemAvailability(req.params.id, req.body);
+      if (availability) {
+        // Broadcast real-time update to all connected clients
+        broadcastAvailabilityUpdate(availability.propertyId, availability.menuItemId || undefined);
+      }
       res.json(availability);
     } catch (error) {
       res.status(500).json({ message: "Failed to update item availability" });
@@ -12157,6 +12200,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           employeeId,
           metadata: { menuItemId: item.menuItemId },
         });
+        
+        // Broadcast real-time update to all connected clients
+        broadcastAvailabilityUpdate(item.propertyId, item.menuItemId || undefined);
       }
 
       res.json(availability);
