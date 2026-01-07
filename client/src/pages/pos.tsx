@@ -380,13 +380,15 @@ export default function PosPage() {
       });
       return response.json();
     },
-    onSuccess: (newItem: CheckItem) => {
+    onSuccess: (newItem: CheckItem, variables) => {
       setCheckItems((prev) => [...prev, newItem]);
       setShowModifierModal(false);
       setPendingItem(null);
       setItemModifierGroups([]);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      // Decrement availability when item is successfully added (for modifier flow)
+      decrementQuantity(variables.menuItem.id);
     },
     onError: () => {
       toast({ title: "Failed to add item", variant: "destructive" });
@@ -849,14 +851,14 @@ export default function PosPage() {
           setCheckItems((prev) => [...prev, pendingCheckItem]);
           setEditingItem(pendingCheckItem); // Set as editing so we update it rather than create new
           queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+          // Decrement availability for dynamic order mode (item already created)
+          decrementQuantity(item.id);
         }
         
         setItemModifierGroups(groups);
         setPendingItem(item);
         setShowModifierModal(true);
-        
-        // Decrement availability when item is added
-        decrementQuantity(item.id);
+        // Note: For non-dynamic mode, decrement happens in handleConfirmModifiers when item is actually added
       } else {
         // No required modifiers, add item directly
         const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
@@ -1176,6 +1178,13 @@ export default function PosPage() {
                       }
                     };
                     
+                    const handlePointerCancel = () => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    };
+                    
                     return (
                       <div
                         key={cell.id}
@@ -1194,6 +1203,7 @@ export default function PosPage() {
                           onPointerDown={handlePointerDown}
                           onPointerUp={handlePointerUp}
                           onPointerLeave={handlePointerLeave}
+                          onPointerCancel={handlePointerCancel}
                           onContextMenu={(e) => e.preventDefault()}
                           data-testid={`button-layout-cell-${cell.id}`}
                         >

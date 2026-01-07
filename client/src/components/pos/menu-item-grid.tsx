@@ -61,6 +61,13 @@ export function MenuItemGrid({ items, onSelectItem, isLoading }: MenuItemGridPro
     }
   }, []);
 
+  const handlePointerCancel = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
   const handleSetAvailability = useCallback(() => {
     setShowAvailabilityDialog(true);
   }, []);
@@ -132,6 +139,7 @@ export function MenuItemGrid({ items, onSelectItem, isLoading }: MenuItemGridPro
                 onPointerDown={() => handlePointerDown(item)}
                 onPointerUp={() => handlePointerUp(item)}
                 onPointerLeave={handlePointerLeave}
+                onPointerCancel={handlePointerCancel}
                 onContextMenu={(e) => e.preventDefault()}
                 data-testid={`button-menu-item-${item.id}`}
               >
