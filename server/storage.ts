@@ -67,6 +67,7 @@ import {
   type Refund, type InsertRefund,
   type RefundItem, type InsertRefundItem,
   type RefundPayment, type InsertRefundPayment,
+  type PrintJob, type InsertPrintJob, printJobs,
   // T&A imports
   type JobCode, type InsertJobCode,
   type EmployeeJobCode, type InsertEmployeeJobCode,
@@ -408,6 +409,13 @@ export interface IStorage {
   // Audit Logs
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(rvcId?: string): Promise<AuditLog[]>;
+
+  // Print Jobs
+  createPrintJob(data: InsertPrintJob): Promise<PrintJob>;
+  getPrintJob(id: string): Promise<PrintJob | undefined>;
+  getPendingPrintJobs(workstationId?: string, propertyId?: string): Promise<PrintJob[]>;
+  updatePrintJob(id: string, data: Partial<PrintJob>): Promise<PrintJob | undefined>;
+  findReceiptPrinter(propertyId: string): Promise<Printer | undefined>;
 
   // KDS Tickets
   getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]>;
@@ -2002,6 +2010,44 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(auditLogs).where(eq(auditLogs.rvcId, rvcId)).orderBy(desc(auditLogs.createdAt));
     }
     return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt));
+  }
+
+  // Print Jobs
+  async createPrintJob(data: InsertPrintJob): Promise<PrintJob> {
+    const [result] = await db.insert(printJobs).values(data).returning();
+    return result;
+  }
+
+  async getPrintJob(id: string): Promise<PrintJob | undefined> {
+    const [result] = await db.select().from(printJobs).where(eq(printJobs.id, id));
+    return result;
+  }
+
+  async getPendingPrintJobs(workstationId?: string, propertyId?: string): Promise<PrintJob[]> {
+    const conditions = [eq(printJobs.status, "pending")];
+    if (workstationId) {
+      conditions.push(eq(printJobs.workstationId, workstationId));
+    }
+    if (propertyId) {
+      conditions.push(eq(printJobs.propertyId, propertyId));
+    }
+    return db.select().from(printJobs).where(and(...conditions)).orderBy(printJobs.priority, printJobs.createdAt);
+  }
+
+  async updatePrintJob(id: string, data: Partial<PrintJob>): Promise<PrintJob | undefined> {
+    const [result] = await db.update(printJobs).set(data).where(eq(printJobs.id, id)).returning();
+    return result;
+  }
+
+  async findReceiptPrinter(propertyId: string): Promise<Printer | undefined> {
+    const [result] = await db.select().from(printers)
+      .where(and(
+        eq(printers.propertyId, propertyId),
+        eq(printers.active, true),
+        eq(printers.printerType, "receipt")
+      ))
+      .limit(1);
+    return result;
   }
 
   // KDS Tickets

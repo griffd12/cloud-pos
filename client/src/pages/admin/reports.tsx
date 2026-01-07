@@ -38,8 +38,10 @@ import { Separator } from "@/components/ui/separator";
 import { 
   DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, 
   Banknote, Smartphone, Package, Layers, ChevronDown, ChevronRight, BarChart3,
-  FileText, UserCheck, Timer, GitCompare, X, Download
+  FileText, UserCheck, Timer, GitCompare, X, Download, Printer
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportData, commonFormatters } from "@/lib/export-utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
@@ -432,6 +434,7 @@ interface CheckDetailData {
 export default function ReportsPage() {
   // Enable real-time updates via WebSocket
   usePosWebSocket();
+  const { toast } = useToast();
   
   const searchParams = useSearch();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -442,6 +445,36 @@ export default function ReportsPage() {
   const [customEndDate, setCustomEndDate] = useState<string>("");
   const [selectedCheckId, setSelectedCheckId] = useState<string | null>(null);
   const [checkModalOpen, setCheckModalOpen] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const handlePrintCheck = async (checkId: string) => {
+    try {
+      setIsPrinting(true);
+      const response = await apiRequest("POST", `/api/print/check/${checkId}`, {});
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: "Print job created",
+          description: data.jobId ? "Receipt sent to print queue" : "Receipt sent to printer",
+        });
+      } else {
+        toast({
+          title: "Print failed",
+          description: data.error || "Failed to print receipt",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Print error",
+        description: error.message || "Failed to print",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -2453,12 +2486,26 @@ export default function ReportsPage() {
       <Dialog open={checkModalOpen} onOpenChange={setCheckModalOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5" />
-              Check #{checkDetailData?.check.checkNumber || "..."}
-              <Badge variant={checkDetailData?.check.status === "open" ? "default" : "secondary"}>
-                {checkDetailData?.check.status || "..."}
-              </Badge>
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-5 w-5" />
+                Check #{checkDetailData?.check.checkNumber || "..."}
+                <Badge variant={checkDetailData?.check.status === "open" ? "default" : "secondary"}>
+                  {checkDetailData?.check.status || "..."}
+                </Badge>
+              </div>
+              {checkDetailData && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handlePrintCheck(checkDetailData.check.id)}
+                  disabled={isPrinting}
+                  data-testid="button-print-check"
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  {isPrinting ? "Printing..." : "Print"}
+                </Button>
+              )}
             </DialogTitle>
           </DialogHeader>
           

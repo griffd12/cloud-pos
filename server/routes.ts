@@ -41,6 +41,17 @@ import {
   isGatewayTypeSupported,
   getRequiredCredentialKeys,
 } from "./payments";
+import {
+  ESCPOSBuilder,
+  buildCheckReceipt,
+  buildKitchenTicket,
+  printToNetworkPrinter,
+  createPrintJob,
+  findReceiptPrinter,
+  getPrinter,
+  type PrintAgentMessage,
+  type PrintAgentResponse,
+} from "./printService";
 
 const clients: Map<string, Set<WebSocket>> = new Map();
 
@@ -13388,6 +13399,236 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Gift card redeem error:", error);
       res.status(500).json({ message: error.message || "Failed to redeem gift card" });
+    }
+  });
+
+  // ============================================================================
+  // PRINTING ROUTES
+  // ============================================================================
+
+  // Print a check receipt
+  app.post("/api/print/check/:checkId", async (req, res) => {
+    try {
+      const { checkId } = req.params;
+      const { printerId, workstationId, direct } = req.body;
+
+      // Build the receipt
+      const printer = printerId ? await getPrinter(printerId) : null;
+      const charWidth = printer?.characterWidth || 42;
+      const receiptBuilder = await buildCheckReceipt(checkId, charWidth);
+      const escPosData = receiptBuilder.toBase64();
+      const plainTextData = receiptBuilder.toPlainText();
+
+      // If direct print requested and we have a network printer
+      if (direct && printer && printer.connectionType === "network" && printer.ipAddress) {
+        const data = receiptBuilder.build();
+        const result = await printToNetworkPrinter(
+          printer.ipAddress,
+          printer.port || 9100,
+          data
+        );
+
+        if (result.success) {
+          res.json({ success: true, message: "Printed successfully" });
+        } else {
+          res.status(500).json({ success: false, error: result.error });
+        }
+      } else {
+        // Create a print job for the queue (for local/agent printing or when no printer specified)
+        // Get propertyId from the check's RVC
+        const check = await storage.getCheck(checkId);
+        if (!check) {
+          return res.status(404).json({ message: "Check not found" });
+        }
+        const rvc = await storage.getRvc(check.rvcId);
+        if (!rvc) {
+          return res.status(404).json({ message: "RVC not found" });
+        }
+
+        const job = await createPrintJob(
+          rvc.propertyId,
+          "check_receipt",
+          escPosData,
+          plainTextData,
+          {
+            printerId: printerId || undefined,
+            workstationId,
+            checkId,
+          }
+        );
+
+        res.json({
+          success: true,
+          jobId: job.id,
+          escPosData,
+          plainTextData,
+        });
+      }
+    } catch (error: any) {
+      console.error("Print check error:", error);
+      res.status(500).json({ message: error.message || "Failed to print check" });
+    }
+  });
+
+  // Get print preview (ESC/POS data without printing)
+  app.get("/api/print/preview/check/:checkId", async (req, res) => {
+    try {
+      const { checkId } = req.params;
+      const charWidth = parseInt(req.query.charWidth as string) || 42;
+
+      const receiptBuilder = await buildCheckReceipt(checkId, charWidth);
+
+      res.json({
+        escPosData: receiptBuilder.toBase64(),
+        plainTextData: receiptBuilder.toPlainText(),
+      });
+    } catch (error: any) {
+      console.error("Print preview error:", error);
+      res.status(500).json({ message: error.message || "Failed to generate preview" });
+    }
+  });
+
+  // Print kitchen ticket
+  app.post("/api/print/kitchen-ticket", async (req, res) => {
+    try {
+      const { orderNumber, items, orderType, tableNumber, printerId, charWidth } = req.body;
+
+      const ticketBuilder = buildKitchenTicket(
+        orderNumber,
+        items,
+        orderType,
+        tableNumber,
+        charWidth || 42
+      );
+
+      const escPosData = ticketBuilder.toBase64();
+      const plainTextData = ticketBuilder.toPlainText();
+
+      // Direct print if printer specified
+      if (printerId) {
+        const printer = await getPrinter(printerId);
+        if (printer && printer.connectionType === "network" && printer.ipAddress) {
+          const data = ticketBuilder.build();
+          const result = await printToNetworkPrinter(
+            printer.ipAddress,
+            printer.port || 9100,
+            data
+          );
+
+          if (result.success) {
+            return res.json({ success: true, message: "Printed successfully" });
+          } else {
+            return res.status(500).json({ success: false, error: result.error });
+          }
+        }
+      }
+
+      // Return data for agent printing
+      res.json({
+        success: true,
+        escPosData,
+        plainTextData,
+      });
+    } catch (error: any) {
+      console.error("Print kitchen ticket error:", error);
+      res.status(500).json({ message: error.message || "Failed to print kitchen ticket" });
+    }
+  });
+
+  // Test printer connection
+  app.post("/api/print/test/:printerId", async (req, res) => {
+    try {
+      const { printerId } = req.params;
+      const printer = await getPrinter(printerId);
+
+      if (!printer) {
+        return res.status(404).json({ message: "Printer not found" });
+      }
+
+      if (printer.connectionType !== "network" || !printer.ipAddress) {
+        return res.status(400).json({
+          message: "Only network printers can be tested from the server. Use the print agent for local printers.",
+        });
+      }
+
+      // Build test page
+      const builder = new ESCPOSBuilder(printer.characterWidth || 42);
+      builder.align("center").bold().doubleSize();
+      builder.line("PRINTER TEST");
+      builder.normalSize().bold(false);
+      builder.newLine();
+      builder.line(`Printer: ${printer.name}`);
+      builder.line(`IP: ${printer.ipAddress}:${printer.port}`);
+      builder.line(`Model: ${printer.model || "Unknown"}`);
+      builder.line(`Char Width: ${printer.characterWidth}`);
+      builder.newLine();
+      builder.separator();
+      builder.line("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+      builder.line("abcdefghijklmnopqrstuvwxyz");
+      builder.line("0123456789!@#$%^&*()");
+      builder.separator();
+      builder.newLine();
+      builder.line(new Date().toLocaleString());
+      builder.cut();
+
+      const result = await printToNetworkPrinter(
+        printer.ipAddress,
+        printer.port || 9100,
+        builder.build()
+      );
+
+      if (result.success) {
+        // Update printer status
+        await storage.updatePrinter(printerId, {
+          isOnline: true,
+          lastSeenAt: new Date(),
+        });
+        res.json({ success: true, message: "Test page printed successfully" });
+      } else {
+        await storage.updatePrinter(printerId, {
+          isOnline: false,
+        });
+        res.status(500).json({ success: false, error: result.error });
+      }
+    } catch (error: any) {
+      console.error("Printer test error:", error);
+      res.status(500).json({ message: error.message || "Failed to test printer" });
+    }
+  });
+
+  // Get pending print jobs for a workstation (for print agent)
+  app.get("/api/print/jobs/pending", async (req, res) => {
+    try {
+      const { workstationId, propertyId } = req.query;
+
+      const jobs = await storage.getPendingPrintJobs(
+        workstationId as string | undefined,
+        propertyId as string | undefined
+      );
+
+      res.json(jobs);
+    } catch (error: any) {
+      console.error("Get pending jobs error:", error);
+      res.status(500).json({ message: error.message || "Failed to get pending jobs" });
+    }
+  });
+
+  // Update print job status (from print agent)
+  app.patch("/api/print/jobs/:jobId", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const { status, error } = req.body;
+
+      const job = await storage.updatePrintJob(jobId, {
+        status,
+        lastError: error,
+        printedAt: status === "completed" ? new Date() : undefined,
+      });
+
+      res.json(job);
+    } catch (error: any) {
+      console.error("Update print job error:", error);
+      res.status(500).json({ message: error.message || "Failed to update job" });
     }
   });
 

@@ -64,6 +64,17 @@ Comprehensive module with:
 ### Payment Processing
 PCI-compliant, gateway-agnostic framework supporting Stripe and Elavon Converge. No card data is stored; only transaction IDs and safe data are retained. Credentials are stored as Replit secrets.
 
+### Printing System
+Comprehensive receipt and report printing system supporting both network and local printers:
+- **Network Printing**: Direct TCP/IP printing to port 9100 for network-connected thermal printers (Epson, Star)
+- **Local Print Agent**: WebSocket-based print agent support for serial/USB connected printers
+- **ESC/POS Support**: Built-in ESC/POS command builder for Epson-compatible thermal printers
+- **Print Job Queue**: Database-backed print job queue with retry handling and status tracking
+- **Print Classes**: Simphony-style print class routing for kitchen ticket distribution
+- **Supported Features**: Check receipts, kitchen tickets, sales reports, employee reports, test prints
+- **Hardware Support**: Epson TM-T88V/VI series, Star TSP series, and other ESC/POS compatible printers
+- **Print Service Location**: `server/printService.ts` for ESC/POS building and network printing
+
 ### Enterprise Features
 Includes robust features for enterprise management:
 - **Fiscal Close / End-of-Day**: Business date management, daily totals, cash reconciliation.

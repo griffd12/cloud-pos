@@ -978,6 +978,41 @@ export const kdsTicketItems = pgTable("kds_ticket_items", {
 });
 
 // ============================================================================
+// PRINT JOBS (Queue for network/local printing)
+// ============================================================================
+
+export const PRINT_JOB_TYPES = ["check_receipt", "kitchen_ticket", "sales_report", "employee_report", "end_of_day", "cash_drawer"] as const;
+export type PrintJobType = (typeof PRINT_JOB_TYPES)[number];
+
+export const PRINT_JOB_STATUSES = ["pending", "printing", "completed", "failed", "cancelled"] as const;
+export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
+
+export const printJobs = pgTable("print_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  printerId: varchar("printer_id").references(() => printers.id),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  jobType: text("job_type").notNull(), // check_receipt, kitchen_ticket, sales_report, employee_report, end_of_day
+  status: text("status").notNull().default("pending"), // pending, printing, completed, failed, cancelled
+  priority: integer("priority").default(5), // 1-10, lower = higher priority
+  // Reference data
+  checkId: varchar("check_id").references(() => checks.id),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  businessDate: text("business_date"),
+  // Print content
+  escPosData: text("esc_pos_data"), // Base64 encoded ESC/POS commands
+  plainTextData: text("plain_text_data"), // Plain text fallback for debugging
+  // Retry handling
+  attempts: integer("attempts").default(0),
+  maxAttempts: integer("max_attempts").default(3),
+  lastError: text("last_error"),
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  printedAt: timestamp("printed_at"),
+  expiresAt: timestamp("expires_at"),
+});
+
+// ============================================================================
 // INSERT SCHEMAS & TYPES
 // ============================================================================
 
@@ -1036,6 +1071,7 @@ export const insertKdsTicketSchema = createInsertSchema(kdsTickets).omit({ id: t
 export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true });
 export const insertRefundItemSchema = createInsertSchema(refundItems).omit({ id: true });
 export const insertRefundPaymentSchema = createInsertSchema(refundPayments).omit({ id: true });
+export const insertPrintJobSchema = createInsertSchema(printJobs).omit({ id: true, createdAt: true });
 
 // Types
 export type Enterprise = typeof enterprises.$inferSelect;
@@ -1128,6 +1164,8 @@ export type RefundItem = typeof refundItems.$inferSelect;
 export type InsertRefundItem = z.infer<typeof insertRefundItemSchema>;
 export type RefundPayment = typeof refundPayments.$inferSelect;
 export type InsertRefundPayment = z.infer<typeof insertRefundPaymentSchema>;
+export type PrintJob = typeof printJobs.$inferSelect;
+export type InsertPrintJob = z.infer<typeof insertPrintJobSchema>;
 
 // Privilege codes as constants
 export const PRIVILEGE_CODES = {
