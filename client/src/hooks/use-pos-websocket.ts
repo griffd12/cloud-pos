@@ -17,6 +17,8 @@ interface PosEvent {
     rvcId?: string;
     cardId?: string;
     propertyId?: string;
+    menuItemId?: string;
+    employeeId?: string;
   };
 }
 
@@ -271,6 +273,41 @@ function handlePosEvent(event: PosEvent) {
           const key = getKeyString(query.queryKey[0]);
           return key.includes("/api/tip-pool") ||
             key.includes("/api/tip-allocations");
+        }
+      });
+      break;
+
+    case "availability_update":
+      // Invalidate item availability queries for real-time sync across all terminals
+      if (event.payload?.propertyId) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/item-availability", event.payload.propertyId]
+        });
+      }
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/item-availability");
+        }
+      });
+      break;
+
+    case "time_punch_update":
+      // Invalidate time punch queries for real-time sync
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/time-punches");
+        }
+      });
+      break;
+
+    case "timecard_update":
+      // Invalidate timecard queries for real-time sync
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = getKeyString(query.queryKey[0]);
+          return key.includes("/api/timecards");
         }
       });
       break;

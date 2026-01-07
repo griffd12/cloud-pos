@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { ArrowLeft, Settings, Wifi, WifiOff } from "lucide-react";
 import { Link, Redirect, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,9 @@ export default function KdsPage() {
   const [wsConnected, setWsConnected] = useState(false);
   const [selectedStation, setSelectedStation] = useState("all");
   const [initialized, setInitialized] = useState(false);
+
+  // Real-time sync for menu updates, employee changes, etc.
+  usePosWebSocket();
 
   // Check if this is a dedicated KDS device
   const isDedicatedKds = deviceType === "kds" && isConfigured;

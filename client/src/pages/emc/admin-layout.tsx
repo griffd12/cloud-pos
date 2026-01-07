@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEmc } from "@/lib/emc-context";
+import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import type { Enterprise, Property, Rvc } from "@shared/schema";
 import {
   Building2,
@@ -186,6 +187,9 @@ function EmcDashboard() {
 export default function EmcAdminLayout() {
   const [, navigate] = useLocation();
   const { user, isAuthenticated, logout, isLoading } = useEmc();
+
+  // Real-time sync for all data changes across the system
+  usePosWebSocket();
 
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises"],
