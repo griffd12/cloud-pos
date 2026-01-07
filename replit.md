@@ -89,6 +89,12 @@ Includes robust features for enterprise management:
 - **Offline Order Queue**: Client-side order capture during network outages with sync retry.
 - **Accounting Export**: GL account code mapping and export generation.
 
+### External API Integration
+The system provides API endpoints for integration with external management applications:
+- **GET /api/sales/:date** - Returns daily sales data (totalSales, transactionCount, averageTicket)
+- **Authentication**: API key via `x-api-key` header (uses `MANAGER_APP_API_KEY` secret)
+- **Optional Filters**: `propertyId` query parameter for property-specific data
+
 ## External Dependencies
 
 ### Database
