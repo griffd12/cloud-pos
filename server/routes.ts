@@ -2836,7 +2836,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (alreadyExists) {
           // Payment already recorded (likely from /api/stripe/record-payment), skip creation
           const check = await storage.getCheck(checkId);
-          const paidAmount = existingPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+          const paidAmount = existingPayments
+            .filter(p => p.paymentStatus === "completed")
+            .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
           console.log("Payment already exists, skipping duplicate creation for:", paymentTransactionId);
           broadcastPaymentUpdate(checkId);
           return res.json({ ...check, paidAmount, payment: alreadyExists });
@@ -2886,7 +2888,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Use persisted totals from check record (set by recalculateCheckTotals)
       const total = parseFloat(check.total || "0");
-      const paidAmount = Math.round(payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0) * 100) / 100;
+      // Only count completed payments (not voided or authorized)
+      const paidAmount = Math.round(payments
+        .filter(p => p.paymentStatus === "completed")
+        .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0) * 100) / 100;
 
       // Use 5 cent tolerance to handle floating point rounding issues across multiple items
       const tolerance = 0.05;
@@ -3013,7 +3018,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/checks/:id/payments", async (req, res) => {
     const payments = await storage.getPayments(req.params.id);
-    const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    // Only count completed payments (not voided, authorized, or failed)
+    const paidAmount = payments
+      .filter(p => p.paymentStatus === "completed")
+      .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
     res.json({ payments, paidAmount });
   });
 
@@ -9829,7 +9837,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (check) {
         const allPayments = await storage.getPayments(payment.checkId);
         const total = parseFloat(check.total || "0");
-        const paidAmount = allPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        // Only count completed payments
+        const paidAmount = allPayments
+          .filter(p => p.paymentStatus === "completed")
+          .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
 
         if (paidAmount >= total - 0.01) {
           // Close the check
@@ -9916,7 +9927,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (updatedCheck) {
         const allPayments = await storage.getPayments(checkId);
         const checkTotal = parseFloat(updatedCheck.total || "0");
-        const paidAmount = allPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+        // Only count completed payments
+        const paidAmount = allPayments
+          .filter(p => p.paymentStatus === "completed")
+          .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
 
         if (paidAmount >= checkTotal - 0.01) {
           await storage.updateCheck(checkId, { status: "closed", closedAt: new Date() });
@@ -10273,7 +10287,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const updatedCheck = await storage.getCheck(session.checkId);
           if (updatedCheck) {
             const allPayments = await storage.getPayments(session.checkId);
-            const totalPaid = allPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+            // Only count completed payments
+            const totalPaid = allPayments
+              .filter(p => p.paymentStatus === "completed")
+              .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
             const checkTotal = parseFloat(updatedCheck.total || "0");
             if (totalPaid >= checkTotal && checkTotal > 0) {
               await storage.updateCheck(session.checkId, { status: "closed", closedAt: new Date() });
@@ -10986,8 +11003,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Calculate total paid and check if check should be closed
       const allPayments = await storage.getPayments(checkId);
-      const totalPaid = allPayments.reduce((sum: number, p: { amount: string | null }) => 
-        sum + parseFloat(p.amount || "0"), 0);
+      // Only count completed payments
+      const totalPaid = allPayments
+        .filter(p => p.paymentStatus === "completed")
+        .reduce((sum: number, p: { amount: string | null }) => 
+          sum + parseFloat(p.amount || "0"), 0);
       const checkTotal = parseFloat(check.total || "0");
 
       let updatedCheck = check;
