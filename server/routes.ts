@@ -2874,9 +2874,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const total = parseFloat(check.total || "0");
       const paidAmount = Math.round(payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0) * 100) / 100;
 
-      console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - 0.01);
+      // Use 5 cent tolerance to handle floating point rounding issues across multiple items
+      const tolerance = 0.05;
+      console.log("Payment check - paidAmount:", paidAmount, "total:", total, "should close:", paidAmount >= total - tolerance);
       
-      if (paidAmount >= total - 0.01) {
+      if (paidAmount >= total - tolerance) {
         // Check if RVC has dynamic order mode enabled
         const rvc = await storage.getRvc(check?.rvcId || "");
         const isDynamicMode = rvc?.dynamicOrderMode || false;
