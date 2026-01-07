@@ -47,11 +47,13 @@ export const DEFAULT_BUSINESS_DATE_SETTINGS = {
 };
 
 /**
- * Resolves the business date for a given timestamp based on property settings.
+ * Gets the current business date for a property.
  * 
- * The rollover time determines when the business date advances:
- * - For AM rollovers (before noon): close happens on the NEXT calendar day
- * - For PM rollovers (noon or later): close happens on the SAME calendar day
+ * SIMPLE RULE: The property has a current business date. Everything posts to it.
+ * When the business date rolls over (manually or automatically), it advances.
+ * 
+ * If currentBusinessDate is set, use it directly.
+ * If not set (legacy), calculate from timestamp using rollover rules.
  */
 export function resolveBusinessDate(
   timestamp: Date | string,
@@ -59,10 +61,14 @@ export function resolveBusinessDate(
 ): string {
   const settings = property ?? DEFAULT_BUSINESS_DATE_SETTINGS;
   
-  if (settings.businessDateMode === 'manual' && isValidBusinessDateFormat(settings.currentBusinessDate)) {
+  // SIMPLE: If property has a current business date set, USE IT
+  // This is the intended behavior - everything posts to the current business date
+  if (isValidBusinessDateFormat(settings.currentBusinessDate)) {
     return settings.currentBusinessDate!;
   }
 
+  // FALLBACK: Calculate from timestamp if currentBusinessDate not set
+  // This is only for initial setup or if property lacks a business date
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
   const timezone = settings.timezone || 'America/New_York';
   const rolloverTime = settings.businessDateRolloverTime || '04:00';
