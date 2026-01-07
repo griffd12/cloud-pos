@@ -2526,6 +2526,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      // Get the RVC to find the propertyId for availability restoration
+      const rvc = await storage.getRevenueCenter(check.rvcId);
+      const propertyId = rvc?.propertyId;
+
       // Void all unsent items with "transaction_cancelled" reason
       const voidedItems: any[] = [];
       for (const item of unsentItems) {
@@ -2535,6 +2539,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           voidedAt: new Date(),
         });
         voidedItems.push(voidedItem);
+        
+        // Restore item availability if this menu item had availability tracking
+        if (propertyId && item.menuItemId) {
+          const quantity = item.quantity || 1;
+          await storage.restoreItemAvailability(item.menuItemId, propertyId, quantity);
+        }
         
         await storage.createAuditLog({
           rvcId: check.rvcId,
@@ -2546,6 +2556,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             menuItemName: item.menuItemName, 
             reason: reason || "Transaction cancelled",
             checkNumber: check.checkNumber,
+            availabilityRestored: propertyId && item.menuItemId ? true : false,
           },
         });
       }

@@ -4703,6 +4703,37 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getItemAvailabilityByMenuItem(menuItemId: string, propertyId: string): Promise<ItemAvailability | undefined> {
+    const [result] = await db.select().from(itemAvailability)
+      .where(and(
+        eq(itemAvailability.menuItemId, menuItemId),
+        eq(itemAvailability.propertyId, propertyId)
+      ))
+      .limit(1);
+    return result;
+  }
+
+  async restoreItemAvailability(menuItemId: string, propertyId: string, quantity: number = 1): Promise<ItemAvailability | undefined> {
+    const existing = await this.getItemAvailabilityByMenuItem(menuItemId, propertyId);
+    if (!existing || existing.currentQuantity === null) return existing;
+    
+    const newQuantity = existing.currentQuantity + quantity;
+    const newSoldQuantity = Math.max(0, (existing.soldQuantity || 0) - quantity);
+    
+    const [result] = await db.update(itemAvailability)
+      .set({ 
+        currentQuantity: newQuantity,
+        soldQuantity: newSoldQuantity,
+        isAvailable: newQuantity > 0,
+        is86ed: false,
+        eightySixedAt: null,
+        updatedAt: new Date() 
+      })
+      .where(eq(itemAvailability.id, existing.id))
+      .returning();
+    return result;
+  }
+
   async getPrepItems(propertyId: string): Promise<PrepItem[]> {
     return db.select().from(prepItems).where(eq(prepItems.propertyId, propertyId));
   }
