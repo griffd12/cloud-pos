@@ -448,6 +448,24 @@ export default function ReportsPage() {
     queryKey: ["/api/rvcs"],
   });
 
+  // Determine which property to use for business date lookup
+  const businessDatePropertyId = useMemo(() => {
+    if (selectedPropertyId !== "all") return selectedPropertyId;
+    return properties[0]?.id || null;
+  }, [selectedPropertyId, properties]);
+
+  // Fetch current business date from the selected property
+  const { data: businessDateInfo } = useQuery<{ currentBusinessDate: string; nextBusinessDate: string }>({
+    queryKey: ["/api/properties", businessDatePropertyId, "business-date"],
+    queryFn: async () => {
+      if (!businessDatePropertyId) return { currentBusinessDate: new Date().toISOString().split('T')[0], nextBusinessDate: "" };
+      const res = await authFetch(`/api/properties/${businessDatePropertyId}/business-date`);
+      if (!res.ok) throw new Error("Failed to fetch business date");
+      return res.json();
+    },
+    enabled: !!businessDatePropertyId,
+  });
+
   const filteredRvcs = useMemo(() => {
     if (selectedPropertyId === "all") return rvcs;
     return rvcs.filter((r) => r.propertyId === selectedPropertyId);
@@ -463,13 +481,18 @@ export default function ReportsPage() {
     // Helper to format date as YYYY-MM-DD for businessDate
     const formatBusinessDate = (d: Date) => d.toISOString().split('T')[0];
     
+    // Use the current business date from the property (not calendar date)
+    const currentBusinessDate = businessDateInfo?.currentBusinessDate || formatBusinessDate(todayStart);
+    
     switch (dateRange) {
       case "yesterday": {
-        const start = new Date(todayStart);
-        start.setDate(start.getDate() - 1);
-        const end = new Date(start);
+        // Yesterday relative to current BUSINESS date
+        const bizDate = new Date(currentBusinessDate + "T00:00:00");
+        bizDate.setDate(bizDate.getDate() - 1);
+        bizDate.setHours(0, 0, 0, 0);
+        const end = new Date(bizDate);
         end.setHours(23, 59, 59, 999);
-        return { startDate: start.toISOString(), endDate: end.toISOString(), businessDate: formatBusinessDate(start) };
+        return { startDate: bizDate.toISOString(), endDate: end.toISOString(), businessDate: formatBusinessDate(bizDate) };
       }
       case "week": {
         const start = new Date(todayStart);
@@ -514,13 +537,23 @@ export default function ReportsPage() {
           }
           return { startDate: start.toISOString(), endDate: end.toISOString() };
         }
-        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString(), businessDate: formatBusinessDate(todayStart) };
+        // Fall back to current business date
+        const bizDate = new Date(currentBusinessDate + "T00:00:00");
+        bizDate.setHours(0, 0, 0, 0);
+        const bizDateEnd = new Date(bizDate);
+        bizDateEnd.setHours(23, 59, 59, 999);
+        return { startDate: bizDate.toISOString(), endDate: bizDateEnd.toISOString(), businessDate: currentBusinessDate };
       }
-      default:
-        // Today - include businessDate for precise filtering
-        return { startDate: todayStart.toISOString(), endDate: todayEnd.toISOString(), businessDate: formatBusinessDate(todayStart) };
+      default: {
+        // Today - use current BUSINESS date (not calendar date) for precise filtering
+        const bizDate = new Date(currentBusinessDate + "T00:00:00");
+        bizDate.setHours(0, 0, 0, 0);
+        const bizDateEnd = new Date(bizDate);
+        bizDateEnd.setHours(23, 59, 59, 999);
+        return { startDate: bizDate.toISOString(), endDate: bizDateEnd.toISOString(), businessDate: currentBusinessDate };
+      }
     }
-  }, [dateRange, customStartDate, customEndDate]);
+  }, [dateRange, customStartDate, customEndDate, businessDateInfo]);
   
   // Generate human-readable date range display
   const dateRangeDisplay = useMemo(() => {
