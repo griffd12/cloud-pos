@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { ItemAvailability } from "@shared/schema";
 
@@ -13,6 +13,7 @@ export function useItemAvailability() {
       if (!propertyId) return [];
       const res = await fetch(`/api/item-availability?propertyId=${propertyId}`, {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (!res.ok) return [];
       return res.json();
