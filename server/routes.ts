@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import Stripe from "stripe";
@@ -13649,6 +13649,93 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Update print job error:", error);
       res.status(500).json({ message: error.message || "Failed to update job" });
+    }
+  });
+
+  // ============================================================================
+  // EXTERNAL API - Manager App Integration
+  // ============================================================================
+
+  // Middleware for API key authentication on external endpoints
+  const validateApiKey = (req: Request, res: Response, next: NextFunction) => {
+    const apiKey = req.headers["x-api-key"] || req.query.apiKey;
+    const validKey = process.env.MANAGER_APP_API_KEY;
+
+    if (!validKey) {
+      console.error("MANAGER_APP_API_KEY not configured");
+      return res.status(500).json({ error: "API not configured" });
+    }
+
+    if (!apiKey || apiKey !== validKey) {
+      return res.status(401).json({ error: "Invalid or missing API key" });
+    }
+
+    next();
+  };
+
+  // GET /api/sales/:date - Returns daily sales data for Manager app
+  // Date format: YYYY-MM-DD
+  app.get("/api/sales/:date", validateApiKey, async (req, res) => {
+    try {
+      const { date } = req.params;
+      const { propertyId } = req.query;
+
+      // Validate date format
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ 
+          error: "Invalid date format. Use YYYY-MM-DD" 
+        });
+      }
+
+      // Get all closed checks for the business date
+      const allChecks = await storage.getChecks();
+      const checksForDate = allChecks.filter(check => {
+        const matchesDate = check.businessDate === date;
+        const isClosed = check.status === "closed";
+        const matchesProperty = !propertyId || (async () => {
+          if (check.rvcId) {
+            const rvc = await storage.getRvc(check.rvcId);
+            return rvc?.propertyId === propertyId;
+          }
+          return true;
+        })();
+        return matchesDate && isClosed;
+      });
+
+      // For property filtering, we need to do it properly
+      let filteredChecks = checksForDate;
+      if (propertyId) {
+        const propertyChecks = [];
+        for (const check of checksForDate) {
+          if (check.rvcId) {
+            const rvc = await storage.getRvc(check.rvcId);
+            if (rvc?.propertyId === propertyId) {
+              propertyChecks.push(check);
+            }
+          }
+        }
+        filteredChecks = propertyChecks;
+      }
+
+      // Calculate totals
+      const totalSales = filteredChecks.reduce((sum, check) => 
+        sum + parseFloat(check.total || "0"), 0);
+      const transactionCount = filteredChecks.length;
+      const averageTicket = transactionCount > 0 
+        ? totalSales / transactionCount 
+        : 0;
+
+      res.json({
+        date,
+        totalSales: Math.round(totalSales * 100) / 100,
+        transactionCount,
+        averageTicket: Math.round(averageTicket * 100) / 100,
+        propertyId: propertyId || null,
+      });
+
+    } catch (error: any) {
+      console.error("Sales API error:", error);
+      res.status(500).json({ error: "Failed to retrieve sales data" });
     }
   });
 
