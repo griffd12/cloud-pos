@@ -2760,28 +2760,20 @@ export class DatabaseStorage implements IStorage {
         giftCardsResult = await tx.delete(giftCards).where(inArray(giftCards.id, giftCardIds));
       }
 
-      // 4d. Reset loyalty member points for members who had transactions at this property
-      // Uses affectedMemberIds captured BEFORE deletion in step 5b
-      console.log('[clearSalesData] Resetting loyalty members, affectedMemberIds:', affectedMemberIds.length);
-      let loyaltyMembersReset = { rowCount: 0 };
-      if (affectedMemberIds.length > 0) {
-        loyaltyMembersReset = await tx.update(loyaltyMembers)
-          .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
-          .where(inArray(loyaltyMembers.id, affectedMemberIds));
-        console.log('[clearSalesData] Affected members reset:', loyaltyMembersReset.rowCount);
-      }
-      // Also reset all members in the enterprise's programs (full reset)
+      // 4d. Reset loyalty member enrollments for all programs (full reset)
+      // The member-program relationship is in loyaltyMemberEnrollments, not loyaltyMembers
       console.log('[clearSalesData] Fetching enterprise programs...');
       const enterprisePrograms = await tx.select({ id: loyaltyPrograms.id }).from(loyaltyPrograms);
       const programIds = enterprisePrograms.map(p => p.id);
       console.log('[clearSalesData] Enterprise program IDs:', programIds.length);
+      
+      let enrollmentsReset = { rowCount: 0 };
       if (programIds.length > 0) {
-        console.log('[clearSalesData] Resetting all members by programId...');
-        const allMembersReset = await tx.update(loyaltyMembers)
-          .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
-          .where(inArray(loyaltyMembers.programId, programIds));
-        console.log('[clearSalesData] All members reset:', allMembersReset.rowCount);
-        loyaltyMembersReset = { rowCount: (loyaltyMembersReset.rowCount || 0) + (allMembersReset.rowCount || 0) };
+        console.log('[clearSalesData] Resetting all enrollments by programId...');
+        enrollmentsReset = await tx.update(loyaltyMemberEnrollments)
+          .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0", currentTier: null })
+          .where(inArray(loyaltyMemberEnrollments.programId, programIds));
+        console.log('[clearSalesData] Enrollments reset:', enrollmentsReset.rowCount);
       }
 
       // 4e. Online orders
@@ -2836,7 +2828,7 @@ export class DatabaseStorage implements IStorage {
           giftCards: giftCardsResult.rowCount || 0,
           loyaltyTransactions: loyaltyTransResult.rowCount || 0,
           loyaltyRedemptions: loyaltyRedemptionResult.rowCount || 0,
-          loyaltyMembersReset: loyaltyMembersReset.rowCount || 0,
+          loyaltyMembersReset: enrollmentsReset.rowCount || 0,
           onlineOrders: onlineOrdersResult.rowCount || 0,
           inventoryTransactions: invTransResult.rowCount || 0,
           inventoryStock: invStockResult.rowCount || 0,
