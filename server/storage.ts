@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql, inArray, gte, lte, or, ilike } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte, or, ilike, isNotNull } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees, employeeAssignments,
   majorGroups, familyGroups,
@@ -4704,11 +4704,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getItemAvailabilityByMenuItem(menuItemId: string, propertyId: string): Promise<ItemAvailability | undefined> {
+    // First try to find a record with actual quantity data (non-null currentQuantity)
+    const [activeRecord] = await db.select().from(itemAvailability)
+      .where(and(
+        eq(itemAvailability.menuItemId, menuItemId),
+        eq(itemAvailability.propertyId, propertyId),
+        isNotNull(itemAvailability.currentQuantity)
+      ))
+      .orderBy(desc(itemAvailability.updatedAt))
+      .limit(1);
+    
+    if (activeRecord) return activeRecord;
+    
+    // Fall back to any record (for cases where only 86'd status matters)
     const [result] = await db.select().from(itemAvailability)
       .where(and(
         eq(itemAvailability.menuItemId, menuItemId),
         eq(itemAvailability.propertyId, propertyId)
       ))
+      .orderBy(desc(itemAvailability.updatedAt))
       .limit(1);
     return result;
   }
