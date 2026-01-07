@@ -2376,7 +2376,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         employeeId,
         orderType: orderType || "dine_in",
         status: "open",
-        businessDate,
+        originBusinessDate: businessDate, // When check was STARTED (never changes)
+        businessDate, // Current business date (updates when closed)
       });
       
       // Broadcast real-time update for new check
@@ -2830,10 +2831,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      // CRITICAL: Payment inherits business date from the check
-      // A payment cannot logically exist before its check, so they must share the same business date
+      // CRITICAL: Payment uses the CURRENT business date from the property
+      // When a carried-over check is paid, the payment posts to the CURRENT date, not the original
       const checkForBiz = await storage.getCheck(checkId);
-      const businessDate = checkForBiz?.businessDate;
+      let businessDate: string | undefined;
+      if (checkForBiz) {
+        const rvc = await storage.getRvc(checkForBiz.rvcId);
+        if (rvc) {
+          const property = await storage.getProperty(rvc.propertyId);
+          if (property) {
+            businessDate = resolveBusinessDate(new Date(), property);
+          }
+        }
+      }
 
       // Check if this is an authorized (pre-auth) transaction
       let paymentStatus = "completed";
@@ -2910,9 +2920,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         // Totals are already persisted via recalculateCheckTotals, just update status
+        // IMPORTANT: Update businessDate to current date when closing (for carried-over checks)
         const updatedCheck = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),
+          businessDate, // Close date = current business date
         });
 
         // Activate any pending gift cards on this check (sold but not yet activated)
