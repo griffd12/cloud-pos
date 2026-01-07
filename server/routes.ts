@@ -2527,7 +2527,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // Get the RVC to find the propertyId for availability restoration
-      const rvc = await storage.getRevenueCenter(check.rvcId);
+      const rvc = await storage.getRvc(check.rvcId);
       const propertyId = rvc?.propertyId;
 
       // Void all unsent items with "transaction_cancelled" reason
