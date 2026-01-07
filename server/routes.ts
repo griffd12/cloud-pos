@@ -4655,6 +4655,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       const allCheckItems = await storage.getAllCheckItems();
       const allPayments = await storage.getAllPayments();
+      const allRefunds = await storage.getRefunds();
       
       // Get valid RVC IDs for property filter
       let validRvcIds: string[] | null = null;
@@ -4873,6 +4874,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Tips would need to be tracked separately if the system supports them
       const totalTips = 0;
       
+      // REFUNDS - Subtract refund amounts from payments received
+      // Refunds are money going OUT, so they reduce net payments received
+      const refundsInPeriod = allRefunds.filter(r => {
+        // Apply RVC filter
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        // Filter by business date or timestamp
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= start && refundDate <= end;
+        }
+      });
+      
+      const totalRefunds = refundsInPeriod.reduce((sum, r) => sum + parseFloat(r.total || "0"), 0);
+      const refundCount = refundsInPeriod.length;
+      
+      // Net payments = gross payments - refunds
+      const netPayments = totalPayments - totalRefunds;
+      
       // Calculate totals for check movement (carried over and started use check.total)
       const carriedOverTotal = checksCarriedOver.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
       const startedTotal = checksStarted.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
@@ -4883,7 +4905,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Closed check totals for reconciliation (already calculated from cents above)
       const closedSubtotal = closedSubtotalCents / 100;
       const closedTax = closedTaxCents / 100;
-      const closedTotal = closedTotalCents / 100;
+      const grossClosedTotal = closedTotalCents / 100;
+      
+      // For reconciliation, subtract refunded amounts from closed check totals
+      // This ensures Expected (closedTotal - refunds) = Received (payments - refunds)
+      const closedTotal = grossClosedTotal - totalRefunds;
       
       // Open check totals for reconciliation
       const openSubtotal = openSubtotalCents / 100;
@@ -4920,8 +4946,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         openTax,             // Sum of open check taxes  
         openTotal,           // Sum of open check totals (subtotal + tax) - THIS IS OUTSTANDING
         
-        // Payments (based on payment date - should equal closedTotal)
-        totalPayments: Math.round(totalPayments * 100) / 100,
+        // Payments (based on payment date)
+        // totalPayments = gross payments received
+        // totalRefunds = money returned via refunds
+        // netPayments = totalPayments - totalRefunds (should equal closedTotal - refundedCheckTotals)
+        totalPayments: Math.round(netPayments * 100) / 100, // Now returns net (after refunds)
+        grossPayments: Math.round(totalPayments * 100) / 100, // Gross before refunds
+        totalRefunds: Math.round(totalRefunds * 100) / 100,
+        refundCount,
         totalTips: Math.round(totalTips * 100) / 100,
         paymentCount: paymentsInPeriod.length,
         
