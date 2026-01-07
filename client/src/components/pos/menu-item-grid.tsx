@@ -164,7 +164,7 @@ export function MenuItemGrid({ items, onSelectItem, isLoading }: MenuItemGridPro
               
               {showQuantityBadge && (
                 <span
-                  className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shadow-sm"
+                  className="absolute top-1 right-1 min-w-6 h-6 px-1.5 rounded-full bg-red-500 text-white text-sm font-bold flex items-center justify-center shadow-sm"
                   data-testid={`badge-quantity-${item.id}`}
                 >
                   {quantity}

@@ -429,6 +429,10 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+      // Invalidate item availability cache so restored quantities show immediately
+      if (currentRvc?.propertyId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/item-availability", currentRvc.propertyId] });
+      }
       // Clear check state and sign out
       setCurrentCheck(null);
       setCheckItems([]);
