@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
@@ -24,8 +24,12 @@ import { PriceOverrideModal } from "@/components/pos/price-override-modal";
 import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
+import { ItemOptionsPopup } from "@/components/pos/item-options-popup";
+import { SetAvailabilityDialog } from "@/components/pos/set-availability-dialog";
+import { SoldOutConfirmDialog } from "@/components/pos/sold-out-confirm-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
+import { useItemAvailability } from "@/hooks/use-item-availability";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
@@ -154,6 +158,18 @@ export default function PosPage() {
   const [isCapturingTip, setIsCapturingTip] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
+  
+  // Item availability state for custom layout long-press
+  const [longPressItem, setLongPressItem] = useState<MenuItem | null>(null);
+  const [showItemOptionsPopup, setShowItemOptionsPopup] = useState(false);
+  const [showSetAvailabilityDialog, setShowSetAvailabilityDialog] = useState(false);
+  const [soldOutConfirmItem, setSoldOutConfirmItem] = useState<MenuItem | null>(null);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef(false);
+  
+  // Item availability hook
+  const { getQuantityRemaining, isItemAvailable, setAvailability, decrementQuantity, isUpdating: isAvailabilityUpdating } = useItemAvailability();
+  
   // Health check query to verify API connection when RVC is already set
   const healthQuery = useQuery({
     queryKey: ["/api/health"],
@@ -790,7 +806,13 @@ export default function PosPage() {
     setSelectedSlu(slu);
   };
 
-  const handleSelectItem = async (item: MenuItemWithModifiers) => {
+  const handleSelectItem = async (item: MenuItemWithModifiers, skipAvailabilityCheck?: boolean) => {
+    // Check availability unless explicitly skipped (e.g., user confirmed sold-out item)
+    if (!skipAvailabilityCheck && !isItemAvailable(item.id)) {
+      setSoldOutConfirmItem(item);
+      return;
+    }
+    
     let checkToUse = currentCheck;
     
     if (!checkToUse) {
@@ -832,6 +854,9 @@ export default function PosPage() {
         setItemModifierGroups(groups);
         setPendingItem(item);
         setShowModifierModal(true);
+        
+        // Decrement availability when item is added
+        decrementQuantity(item.id);
       } else {
         // No required modifiers, add item directly
         const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
@@ -845,6 +870,9 @@ export default function PosPage() {
         setCheckItems((prev) => [...prev, newItem]);
         queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
         queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+        
+        // Decrement availability when item is added
+        decrementQuantity(item.id);
       }
     } catch {
       toast({ title: "Failed to add item", variant: "destructive" });
@@ -1115,26 +1143,84 @@ export default function PosPage() {
                       xlarge: "text-base",
                     };
                     const layoutFontSize = (activeLayout?.fontSize as keyof typeof fontSizeClasses) || "medium";
+                    
+                    // Availability info
+                    const quantity = getQuantityRemaining(menuItem.id);
+                    const available = isItemAvailable(menuItem.id);
+                    const showQuantityBadge = quantity !== null && quantity > 0;
+                    const is86ed = !available;
+                    
+                    const handlePointerDown = () => {
+                      isLongPressRef.current = false;
+                      longPressTimerRef.current = setTimeout(() => {
+                        isLongPressRef.current = true;
+                        setLongPressItem(menuItem);
+                        setShowItemOptionsPopup(true);
+                      }, 500);
+                    };
+                    
+                    const handlePointerUp = () => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                      if (!isLongPressRef.current) {
+                        handleSelectItem(menuItem);
+                      }
+                    };
+                    
+                    const handlePointerLeave = () => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    };
+                    
                     return (
-                      <Button
+                      <div
                         key={cell.id}
-                        className={`h-full w-full flex flex-col items-center justify-center font-medium ${fontSizeClasses[layoutFontSize]}`}
+                        className="relative"
                         style={{
-                          backgroundColor: cell.backgroundColor || "#3B82F6",
-                          color: cell.textColor || "#FFFFFF",
                           gridRow: `${cell.rowIndex + 1} / span ${cell.rowSpan || 1}`,
                           gridColumn: `${cell.colIndex + 1} / span ${cell.colSpan || 1}`,
                         }}
-                        onClick={() => handleSelectItem(menuItem)}
-                        data-testid={`button-layout-cell-${cell.id}`}
                       >
-                        <span className="truncate max-w-full">
-                          {cell.displayLabel || menuItem.shortName || menuItem.name}
-                        </span>
-                        <span className={`${priceFontSizeClasses[layoutFontSize]} opacity-70`}>
-                          ${parseFloat(menuItem.price || "0").toFixed(2)}
-                        </span>
-                      </Button>
+                        <Button
+                          className={`h-full w-full flex flex-col items-center justify-center font-medium ${fontSizeClasses[layoutFontSize]} ${is86ed ? "opacity-60" : ""}`}
+                          style={{
+                            backgroundColor: cell.backgroundColor || "#3B82F6",
+                            color: cell.textColor || "#FFFFFF",
+                          }}
+                          onPointerDown={handlePointerDown}
+                          onPointerUp={handlePointerUp}
+                          onPointerLeave={handlePointerLeave}
+                          onContextMenu={(e) => e.preventDefault()}
+                          data-testid={`button-layout-cell-${cell.id}`}
+                        >
+                          <span className="truncate max-w-full">
+                            {cell.displayLabel || menuItem.shortName || menuItem.name}
+                          </span>
+                          <span className={`${priceFontSizeClasses[layoutFontSize]} opacity-70`}>
+                            ${parseFloat(menuItem.price || "0").toFixed(2)}
+                          </span>
+                          
+                          {is86ed && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <X className="w-12 h-12 text-white opacity-50" strokeWidth={3} />
+                            </div>
+                          )}
+                        </Button>
+                        
+                        {showQuantityBadge && (
+                          <Badge
+                            variant="secondary"
+                            className="absolute -top-1 -right-1 min-w-6 h-6 flex items-center justify-center text-xs font-bold bg-white text-black"
+                            data-testid={`badge-quantity-layout-${menuItem.id}`}
+                          >
+                            {quantity}
+                          </Badge>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -1830,6 +1916,49 @@ export default function PosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Item Availability Dialogs (for custom layout long-press) */}
+      <ItemOptionsPopup
+        open={showItemOptionsPopup}
+        onOpenChange={setShowItemOptionsPopup}
+        item={longPressItem}
+        onSetAvailability={() => setShowSetAvailabilityDialog(true)}
+        onQuick86={() => {
+          if (!longPressItem) return;
+          const is86ed = !isItemAvailable(longPressItem.id);
+          if (is86ed) {
+            setAvailability({ menuItemId: longPressItem.id, quantity: null, is86ed: false });
+          } else {
+            setAvailability({ menuItemId: longPressItem.id, quantity: 0, is86ed: true });
+          }
+        }}
+        is86ed={longPressItem ? !isItemAvailable(longPressItem.id) : false}
+      />
+
+      <SetAvailabilityDialog
+        open={showSetAvailabilityDialog}
+        onOpenChange={setShowSetAvailabilityDialog}
+        item={longPressItem}
+        currentQuantity={longPressItem ? getQuantityRemaining(longPressItem.id) : null}
+        onSave={(quantity) => {
+          if (longPressItem) {
+            setAvailability({ menuItemId: longPressItem.id, quantity });
+          }
+        }}
+        isSaving={isAvailabilityUpdating}
+      />
+
+      <SoldOutConfirmDialog
+        open={!!soldOutConfirmItem}
+        onOpenChange={(open) => !open && setSoldOutConfirmItem(null)}
+        item={soldOutConfirmItem}
+        onConfirm={() => {
+          if (soldOutConfirmItem) {
+            handleSelectItem(soldOutConfirmItem, true);
+            setSoldOutConfirmItem(null);
+          }
+        }}
+      />
     </div>
   );
 }
