@@ -782,7 +782,8 @@ export const checks = pgTable("checks", {
   tableNumber: text("table_number"),
   openedAt: timestamp("opened_at").defaultNow(),
   closedAt: timestamp("closed_at"),
-  businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this check belongs to
+  originBusinessDate: text("origin_business_date"), // YYYY-MM-DD format, the business date when check was FIRST created (never changes)
+  businessDate: text("business_date"), // YYYY-MM-DD format, the business date when check was CLOSED (updated on close)
   loyaltyPointsEarned: integer("loyalty_points_earned"), // Points earned on this check
   loyaltyPointsRedeemed: integer("loyalty_points_redeemed"), // Points redeemed on this check
 });
