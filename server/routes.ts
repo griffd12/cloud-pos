@@ -2762,13 +2762,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.voidKdsTicketItem(itemId);
 
       const check = await storage.getCheck(item.checkId);
+      
+      // Restore item availability if this menu item had availability tracking
+      let availabilityRestored = false;
+      let propertyId: string | undefined;
+      if (check && item.menuItemId) {
+        const rvc = await storage.getRvc(check.rvcId);
+        propertyId = rvc?.propertyId;
+        if (propertyId) {
+          const quantity = item.quantity || 1;
+          await storage.restoreItemAvailability(item.menuItemId, propertyId, quantity);
+          availabilityRestored = true;
+        }
+      }
+      
       await storage.createAuditLog({
         rvcId: check?.rvcId,
         employeeId,
         action: item.sent ? "void_sent" : "void_unsent",
         targetType: "check_item",
         targetId: itemId,
-        details: { menuItemName: item.menuItemName, reason },
+        details: { menuItemName: item.menuItemName, reason, availabilityRestored },
         reasonCode: reason,
         managerApprovalId,
       });
@@ -2780,6 +2794,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await recallBumpedTicketsOnModification(item.checkId);
 
       broadcastKdsUpdate(check?.rvcId || undefined);
+      
+      // Broadcast availability update if quantity was restored
+      if (availabilityRestored && propertyId) {
+        broadcastAvailabilityUpdate(propertyId);
+      }
+      
       res.json(updated);
     } catch (error) {
       console.error("Void error:", error);

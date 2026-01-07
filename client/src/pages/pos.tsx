@@ -461,6 +461,10 @@ export default function PosPage() {
       setPendingVoidItem(null);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      // Invalidate item availability cache so restored quantities show immediately
+      if (currentRvc?.propertyId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/item-availability", currentRvc.propertyId] });
+      }
     },
     onError: (error: any) => {
       if (showManagerApproval) {
