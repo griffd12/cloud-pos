@@ -4748,6 +4748,30 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async decrementItemAvailability(menuItemId: string, propertyId: string, delta: number = 1): Promise<ItemAvailability | undefined> {
+    const existing = await this.getItemAvailabilityByMenuItem(menuItemId, propertyId);
+    // If no record or unlimited quantity (null), nothing to decrement
+    if (!existing || existing.currentQuantity === null) return existing;
+    
+    // Calculate new quantity atomically (can't go below 0)
+    const newQuantity = Math.max(0, existing.currentQuantity - delta);
+    const newSoldQuantity = (existing.soldQuantity || 0) + delta;
+    const isNowSoldOut = newQuantity === 0;
+    
+    const [result] = await db.update(itemAvailability)
+      .set({ 
+        currentQuantity: newQuantity,
+        soldQuantity: newSoldQuantity,
+        isAvailable: !isNowSoldOut,
+        is86ed: isNowSoldOut,
+        eightySixedAt: isNowSoldOut ? new Date() : existing.eightySixedAt,
+        updatedAt: new Date() 
+      })
+      .where(eq(itemAvailability.id, existing.id))
+      .returning();
+    return result;
+  }
+
   async getPrepItems(propertyId: string): Promise<PrepItem[]> {
     return db.select().from(prepItems).where(eq(prepItems.propertyId, propertyId));
   }

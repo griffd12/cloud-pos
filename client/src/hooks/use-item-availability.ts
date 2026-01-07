@@ -81,16 +81,12 @@ export function useItemAvailability() {
 
   const decrementQuantityMutation = useMutation({
     mutationFn: async (menuItemId: string) => {
-      const existing = availabilityMap.get(menuItemId);
-      if (!existing || existing.currentQuantity === null) return null;
-      
-      const newQty = Math.max(0, existing.currentQuantity - 1);
-      const response = await apiRequest("PUT", `/api/item-availability/${existing.id}`, {
-        currentQuantity: newQty,
-        soldQuantity: (existing.soldQuantity || 0) + 1,
-        is86ed: newQty === 0,
-        isAvailable: newQty > 0,
-        eightySixedAt: newQty === 0 ? new Date().toISOString() : null,
+      // Use atomic server-side decrement to prevent race conditions
+      // when multiple items are added quickly
+      const response = await apiRequest("POST", `/api/item-availability/decrement`, {
+        menuItemId,
+        propertyId,
+        delta: 1,
       });
       return response.json();
     },

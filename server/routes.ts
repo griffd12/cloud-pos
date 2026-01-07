@@ -12193,6 +12193,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Atomic decrement endpoint - prevents race conditions when multiple items are added quickly
+  app.post("/api/item-availability/decrement", async (req, res) => {
+    try {
+      const { menuItemId, propertyId, delta = 1 } = req.body;
+      
+      if (!menuItemId || !propertyId) {
+        return res.status(400).json({ message: "menuItemId and propertyId are required" });
+      }
+      
+      const availability = await storage.decrementItemAvailability(menuItemId, propertyId, delta);
+      
+      if (availability) {
+        // Broadcast real-time update to all connected clients
+        broadcastAvailabilityUpdate(propertyId, menuItemId);
+      }
+      
+      // Return the updated availability (or null if no record exists)
+      res.json(availability || { menuItemId, propertyId, currentQuantity: null, is86ed: false });
+    } catch (error) {
+      console.error("Decrement availability error:", error);
+      res.status(500).json({ message: "Failed to decrement availability" });
+    }
+  });
+
   app.post("/api/item-availability/:id/86", async (req, res) => {
     try {
       const { employeeId } = req.body;
