@@ -2567,6 +2567,8 @@ export class DatabaseStorage implements IStorage {
 
     // Use transaction to ensure atomicity - either all tables are cleared or none
     return await db.transaction(async (tx) => {
+      console.log('[clearSalesData] Starting transaction for property:', propertyId, 'rvcIds:', rvcIds);
+      
       // STEP 1: Gather all affected IDs upfront
       // Get check IDs for this property
       const propertyChecks = await tx.select({ id: checks.id }).from(checks).where(inArray(checks.rvcId, rvcIds));
@@ -2691,8 +2693,11 @@ export class DatabaseStorage implements IStorage {
       giftCardTransResult = { rowCount: (giftCardTransResult.rowCount || 0) + (additionalGiftCardTrans.rowCount || 0) };
 
       // 6. Delete audit logs and checks
+      console.log('[clearSalesData] Deleting audit logs and checks for rvcIds:', rvcIds.length);
       const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
+      console.log('[clearSalesData] Audit logs deleted:', auditResult.rowCount);
       const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
+      console.log('[clearSalesData] Checks deleted:', checksResult.rowCount);
 
       // STEP 3: Delete labor/time & attendance data for this property
       // Delete in FK-safe order
@@ -2757,19 +2762,25 @@ export class DatabaseStorage implements IStorage {
 
       // 4d. Reset loyalty member points for members who had transactions at this property
       // Uses affectedMemberIds captured BEFORE deletion in step 5b
+      console.log('[clearSalesData] Resetting loyalty members, affectedMemberIds:', affectedMemberIds.length);
       let loyaltyMembersReset = { rowCount: 0 };
       if (affectedMemberIds.length > 0) {
         loyaltyMembersReset = await tx.update(loyaltyMembers)
           .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
           .where(inArray(loyaltyMembers.id, affectedMemberIds));
+        console.log('[clearSalesData] Affected members reset:', loyaltyMembersReset.rowCount);
       }
       // Also reset all members in the enterprise's programs (full reset)
+      console.log('[clearSalesData] Fetching enterprise programs...');
       const enterprisePrograms = await tx.select({ id: loyaltyPrograms.id }).from(loyaltyPrograms);
       const programIds = enterprisePrograms.map(p => p.id);
+      console.log('[clearSalesData] Enterprise program IDs:', programIds.length);
       if (programIds.length > 0) {
+        console.log('[clearSalesData] Resetting all members by programId...');
         const allMembersReset = await tx.update(loyaltyMembers)
           .set({ currentPoints: 0, lifetimePoints: 0, visitCount: 0, lifetimeSpend: "0" })
           .where(inArray(loyaltyMembers.programId, programIds));
+        console.log('[clearSalesData] All members reset:', allMembersReset.rowCount);
         loyaltyMembersReset = { rowCount: (loyaltyMembersReset.rowCount || 0) + (allMembersReset.rowCount || 0) };
       }
 
