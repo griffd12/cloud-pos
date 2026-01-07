@@ -396,6 +396,16 @@ function CategoryRows({ category, totalSales }: { category: CategorySaleDetail; 
   );
 }
 
+interface CheckPayment {
+  id: string;
+  checkId: string;
+  tenderId: string;
+  tenderName: string;
+  amount: string;
+  tipAmount?: string | null;
+  paidAt?: string | null;
+}
+
 interface CheckDetailData {
   check: {
     id: string;
@@ -416,6 +426,7 @@ interface CheckDetailData {
     changeDue?: number;
   };
   items: CheckItem[];
+  payments?: CheckPayment[];
 }
 
 export default function ReportsPage() {
@@ -2551,6 +2562,22 @@ export default function ReportsPage() {
                           <span className="text-muted-foreground">Tendered</span>
                           <span className="text-green-600 dark:text-green-400">{formatCurrency(checkDetailData.check.tenderedAmount)}</span>
                         </div>
+                        {checkDetailData.payments && checkDetailData.payments.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-border/50">
+                            <span className="text-xs text-muted-foreground font-medium">Payments:</span>
+                            {checkDetailData.payments.map((payment, index) => (
+                              <div key={payment.id} className="flex justify-between text-sm mt-1" data-testid={`payment-row-${index}`}>
+                                <span className="text-muted-foreground">{payment.tenderName}</span>
+                                <span className="text-green-600 dark:text-green-400">
+                                  {formatCurrency(parseFloat(payment.amount || "0"))}
+                                  {payment.tipAmount && parseFloat(payment.tipAmount) > 0 && (
+                                    <span className="text-xs ml-1">(+{formatCurrency(parseFloat(payment.tipAmount))} tip)</span>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {(checkDetailData.check.changeDue ?? 0) > 0 && (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Change Due</span>

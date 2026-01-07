@@ -2352,7 +2352,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // For cash over-tender: paidAmount is what was applied, changeDue is difference
     const paidAmount = Math.min(totalTendered, checkTotal);
     const changeDue = Math.max(0, totalTendered - checkTotal);
-    res.json({ check: { ...check, paidAmount, tenderedAmount: totalTendered, changeDue }, items });
+    res.json({ check: { ...check, paidAmount, tenderedAmount: totalTendered, changeDue }, items, payments });
   });
 
   app.post("/api/checks", async (req, res) => {
