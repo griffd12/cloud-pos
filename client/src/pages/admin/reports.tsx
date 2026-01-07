@@ -2550,12 +2550,12 @@ export default function ReportsPage() {
                       <span className="text-muted-foreground">Tax</span>
                       <span>{formatCurrency(parseFloat(checkDetailData.check.taxTotal || "0"))}</span>
                     </div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-lg font-bold">
+                    <div className="flex justify-between text-sm font-medium pt-1 border-t border-border/50">
                       <span>Total</span>
                       <span>{formatCurrency(parseFloat(checkDetailData.check.total || "0"))}</span>
                     </div>
+                  </div>
+                  <div className="space-y-1">
                     {checkDetailData.check.tenderedAmount !== undefined && checkDetailData.check.tenderedAmount > 0 && (
                       <>
                         <div className="flex justify-between text-sm">
@@ -2563,7 +2563,7 @@ export default function ReportsPage() {
                           <span className="text-green-600 dark:text-green-400">{formatCurrency(checkDetailData.check.tenderedAmount)}</span>
                         </div>
                         {checkDetailData.payments && checkDetailData.payments.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-border/50">
+                          <div className="mt-1">
                             <span className="text-xs text-muted-foreground font-medium">Payments:</span>
                             {checkDetailData.payments.map((payment, index) => (
                               <div key={payment.id} className="flex justify-between text-sm mt-1" data-testid={`payment-row-${index}`}>
