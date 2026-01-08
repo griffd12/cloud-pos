@@ -134,8 +134,8 @@ export default function PrintAgentsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/print-agents"] });
       setFormOpen(false);
       form.reset();
-      if (data.token) {
-        setNewAgentToken(data.token);
+      if (data.agentToken) {
+        setNewAgentToken(data.agentToken);
         setTokenDialogOpen(true);
       }
       toast({ title: "Print agent created" });
@@ -147,7 +147,7 @@ export default function PrintAgentsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<PrintAgent> & { id: string }) => {
-      const response = await apiRequest("PUT", "/api/print-agents/" + data.id, data);
+      const response = await apiRequest("PATCH", "/api/print-agents/" + data.id, data);
       return response.json();
     },
     onSuccess: () => {
@@ -184,8 +184,8 @@ export default function PrintAgentsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/print-agents"] });
       setRegenerateConfirmOpen(false);
       setAgentToRegenerate(null);
-      if (data.token) {
-        setRegeneratedToken(data.token);
+      if (data.agentToken) {
+        setRegeneratedToken(data.agentToken);
         setTokenDialogOpen(true);
       }
       toast({ title: "Token regenerated" });
@@ -197,7 +197,7 @@ export default function PrintAgentsPage() {
 
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const response = await apiRequest("PUT", "/api/print-agents/" + id, { status });
+      const response = await apiRequest("PATCH", "/api/print-agents/" + id, { status });
       return response.json();
     },
     onSuccess: () => {
