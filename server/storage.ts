@@ -130,6 +130,10 @@ import {
   type AlertSubscription, type InsertAlertSubscription,
   type ItemAvailability, type InsertItemAvailability,
   type PrepItem, type InsertPrepItem,
+  descriptorLogoAssets, descriptorSets,
+  type DescriptorLogoAsset, type InsertDescriptorLogoAsset,
+  type DescriptorSet, type InsertDescriptorSet,
+  type DescriptorScopeType,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -718,6 +722,23 @@ export interface IStorage {
   getChecksByCustomer(customerId: string, limit?: number): Promise<Check[]>;
   attachCustomerToCheck(checkId: string, customerId: string): Promise<Check | undefined>;
   detachCustomerFromCheck(checkId: string): Promise<Check | undefined>;
+
+  // ============================================================================
+  // GUEST CHECK DESCRIPTORS
+  // ============================================================================
+  
+  getDescriptorSet(scopeType: DescriptorScopeType, scopeId: string): Promise<DescriptorSet | undefined>;
+  getDescriptorSets(enterpriseId: string): Promise<DescriptorSet[]>;
+  createDescriptorSet(data: InsertDescriptorSet): Promise<DescriptorSet>;
+  updateDescriptorSet(id: string, data: Partial<InsertDescriptorSet>): Promise<DescriptorSet | undefined>;
+  deleteDescriptorSet(id: string): Promise<boolean>;
+  getEffectiveDescriptors(rvcId: string): Promise<{ headerLines: string[]; trailerLines: string[]; logoEnabled: boolean; logoAssetId: string | null }>;
+  
+  // Logo Assets
+  getDescriptorLogoAsset(id: string): Promise<DescriptorLogoAsset | undefined>;
+  getDescriptorLogoAssets(enterpriseId: string): Promise<DescriptorLogoAsset[]>;
+  createDescriptorLogoAsset(data: InsertDescriptorLogoAsset): Promise<DescriptorLogoAsset>;
+  deleteDescriptorLogoAsset(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5015,6 +5036,110 @@ export class DatabaseStorage implements IStorage {
   async updateOfflineOrderQueue(id: string, data: Partial<InsertOfflineOrderQueue>): Promise<OfflineOrderQueue | undefined> {
     const [result] = await db.update(offlineOrderQueue).set(data).where(eq(offlineOrderQueue.id, id)).returning();
     return result;
+  }
+
+  // ============================================================================
+  // GUEST CHECK DESCRIPTORS
+  // ============================================================================
+
+  async getDescriptorSet(scopeType: DescriptorScopeType, scopeId: string): Promise<DescriptorSet | undefined> {
+    const [result] = await db.select().from(descriptorSets)
+      .where(and(eq(descriptorSets.scopeType, scopeType), eq(descriptorSets.scopeId, scopeId)));
+    return result;
+  }
+
+  async getDescriptorSets(enterpriseId: string): Promise<DescriptorSet[]> {
+    return db.select().from(descriptorSets).where(eq(descriptorSets.enterpriseId, enterpriseId));
+  }
+
+  async createDescriptorSet(data: InsertDescriptorSet): Promise<DescriptorSet> {
+    const [result] = await db.insert(descriptorSets).values(data).returning();
+    return result;
+  }
+
+  async updateDescriptorSet(id: string, data: Partial<InsertDescriptorSet>): Promise<DescriptorSet | undefined> {
+    const [result] = await db.update(descriptorSets)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(descriptorSets.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteDescriptorSet(id: string): Promise<boolean> {
+    const result = await db.delete(descriptorSets).where(eq(descriptorSets.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getEffectiveDescriptors(rvcId: string): Promise<{ headerLines: string[]; trailerLines: string[]; logoEnabled: boolean; logoAssetId: string | null }> {
+    const rvc = await this.getRvc(rvcId);
+    if (!rvc) {
+      return { headerLines: [], trailerLines: [], logoEnabled: false, logoAssetId: null };
+    }
+
+    const property = await this.getProperty(rvc.propertyId);
+    if (!property) {
+      return { headerLines: [], trailerLines: [], logoEnabled: false, logoAssetId: null };
+    }
+
+    const enterpriseId = property.enterpriseId;
+
+    const rvcDescriptor = await this.getDescriptorSet("rvc", rvcId);
+    const propertyDescriptor = await this.getDescriptorSet("property", rvc.propertyId);
+    const enterpriseDescriptor = await this.getDescriptorSet("enterprise", enterpriseId);
+
+    let headerLines: string[] = [];
+    let trailerLines: string[] = [];
+    let logoEnabled = false;
+    let logoAssetId: string | null = null;
+
+    if (rvcDescriptor?.overrideHeader && rvcDescriptor.headerLines) {
+      headerLines = rvcDescriptor.headerLines as string[];
+    } else if (propertyDescriptor?.overrideHeader && propertyDescriptor.headerLines) {
+      headerLines = propertyDescriptor.headerLines as string[];
+    } else if (enterpriseDescriptor?.headerLines) {
+      headerLines = enterpriseDescriptor.headerLines as string[];
+    }
+
+    if (rvcDescriptor?.overrideTrailer && rvcDescriptor.trailerLines) {
+      trailerLines = rvcDescriptor.trailerLines as string[];
+    } else if (propertyDescriptor?.overrideTrailer && propertyDescriptor.trailerLines) {
+      trailerLines = propertyDescriptor.trailerLines as string[];
+    } else if (enterpriseDescriptor?.trailerLines) {
+      trailerLines = enterpriseDescriptor.trailerLines as string[];
+    }
+
+    if (rvcDescriptor?.overrideLogo) {
+      logoEnabled = rvcDescriptor.logoEnabled ?? false;
+      logoAssetId = rvcDescriptor.logoAssetId;
+    } else if (propertyDescriptor?.overrideLogo) {
+      logoEnabled = propertyDescriptor.logoEnabled ?? false;
+      logoAssetId = propertyDescriptor.logoAssetId;
+    } else if (enterpriseDescriptor) {
+      logoEnabled = enterpriseDescriptor.logoEnabled ?? false;
+      logoAssetId = enterpriseDescriptor.logoAssetId;
+    }
+
+    return { headerLines, trailerLines, logoEnabled, logoAssetId };
+  }
+
+  // Logo Assets
+  async getDescriptorLogoAsset(id: string): Promise<DescriptorLogoAsset | undefined> {
+    const [result] = await db.select().from(descriptorLogoAssets).where(eq(descriptorLogoAssets.id, id));
+    return result;
+  }
+
+  async getDescriptorLogoAssets(enterpriseId: string): Promise<DescriptorLogoAsset[]> {
+    return db.select().from(descriptorLogoAssets).where(eq(descriptorLogoAssets.enterpriseId, enterpriseId));
+  }
+
+  async createDescriptorLogoAsset(data: InsertDescriptorLogoAsset): Promise<DescriptorLogoAsset> {
+    const [result] = await db.insert(descriptorLogoAssets).values(data).returning();
+    return result;
+  }
+
+  async deleteDescriptorLogoAsset(id: string): Promise<boolean> {
+    const result = await db.delete(descriptorLogoAssets).where(eq(descriptorLogoAssets.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 }
 
