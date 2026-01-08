@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertPrintAgentSchema, type PrintAgent, type InsertPrintAgent, type Property } from "@shared/schema";
-import { Copy, Download, RefreshCw, KeyRound, Wifi, WifiOff } from "lucide-react";
+import { Copy, Download, RefreshCw, KeyRound, Wifi, WifiOff, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -292,6 +292,13 @@ export default function PrintAgentsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={handleAdd} data-testid="button-create-agent">
+          <Plus className="w-4 h-4 mr-2" />
+          Create Agent
+        </Button>
+      </div>
 
       <DataTable
         columns={columns}
