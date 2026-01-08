@@ -135,7 +135,7 @@ echo.
 echo [*] Creating configuration file...
 
 :: Use PowerShell to create proper JSON
-powershell -Command "& { $config = @{ cloudPosUrl = '!CLOUD_URL!'; agentToken = '!AGENT_TOKEN!'; printerPort = 9100; logLevel = 'info'; reconnectDelayMs = 5000; maxReconnectDelayMs = 60000; heartbeatIntervalMs = 30000 }; $config | ConvertTo-Json | Set-Content -Path '%CONFIG_FILE%' }"
+powershell -Command "& { $config = @{ server = '!CLOUD_URL!'; token = '!AGENT_TOKEN!'; defaultPrinterPort = 9100; reconnectInterval = 5000; maxReconnectInterval = 60000; heartbeatInterval = 30000 }; $config | ConvertTo-Json | Set-Content -Path '%CONFIG_FILE%' }"
 if %errorlevel% neq 0 (
     echo [!] Failed to create configuration file
     pause
