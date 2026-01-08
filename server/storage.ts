@@ -1146,6 +1146,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePrinter(id: string): Promise<boolean> {
+    // First, clear the printer reference from any print jobs to avoid FK constraint violation
+    await db.update(printJobs).set({ printerId: null }).where(eq(printJobs.printerId, id));
     const result = await db.delete(printers).where(eq(printers.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
