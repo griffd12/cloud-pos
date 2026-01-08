@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { insertModifierGroupSchema, type ModifierGroup, type InsertModifierGroup, type Modifier, type ModifierGroupModifier } from "@shared/schema";
 import { Link2 } from "lucide-react";
 
@@ -31,7 +31,10 @@ export default function ModifierGroupsPage() {
     queryKey: ["/api/modifier-groups", linkingGroup?.id, "modifiers"],
     queryFn: async () => {
       if (!linkingGroup) return [];
-      const res = await fetch(`/api/modifier-groups/${linkingGroup.id}/modifiers`);
+      const res = await fetch(`/api/modifier-groups/${linkingGroup.id}/modifiers`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
