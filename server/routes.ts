@@ -1050,6 +1050,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       timestamp: new Date().toISOString()
     });
   });
+  
+  // Get client's IP address for device troubleshooting
+  app.get("/api/client-ip", (req, res) => {
+    // Extract client IP from request headers or connection
+    const forwarded = req.headers["x-forwarded-for"];
+    const ip = forwarded 
+      ? (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : forwarded[0])
+      : req.socket.remoteAddress;
+    res.json({ ip: ip || null });
+  });
 
   // ============================================================================
   // SYSTEM STATUS - Detailed connectivity status for POS terminals

@@ -1104,6 +1104,9 @@ export default function PosPage() {
             <div className="flex flex-col">
               <span className="text-sm font-semibold leading-tight" data-testid="text-rvc-name">
                 {currentRvc.name}
+                {wsContext?.workstation?.name && (
+                  <span className="text-muted-foreground font-normal"> - {wsContext.workstation.name}</span>
+                )}
               </span>
               <span className="text-xs text-muted-foreground leading-tight" data-testid="text-pos-title">
                 Cloud POS
@@ -1742,6 +1745,10 @@ export default function PosPage() {
           canPriceOverride: hasPrivilege("modify_price"),
         }}
         propertyId={currentRvc?.propertyId}
+        workstation={wsContext?.workstation ? {
+          name: wsContext.workstation.name,
+          ipAddress: wsContext.workstation.ipAddress,
+        } : null}
       />
 
       {currentCheck && currentEmployee && currentRvc && (

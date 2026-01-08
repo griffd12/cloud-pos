@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +13,20 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Circle
+  Circle,
+  Monitor
 } from "lucide-react";
+
+interface WorkstationInfo {
+  name: string;
+  ipAddress?: string | null;
+}
 
 interface SystemStatusModalProps {
   open: boolean;
   onClose: () => void;
   propertyId?: string;
+  workstation?: WorkstationInfo | null;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -97,15 +105,45 @@ function ServiceRow({ icon, name, status, message, extra }: ServiceRowProps) {
   );
 }
 
-export function SystemStatusModal({ open, onClose, propertyId }: SystemStatusModalProps) {
+export function SystemStatusModal({ open, onClose, propertyId, workstation }: SystemStatusModalProps) {
   const { status, isLoading, isFetching, refetch } = useSystemStatus({ 
     propertyId, 
     enabled: open 
   });
+  
+  const [actualIp, setActualIp] = useState<string | null>(null);
+  const [ipLoading, setIpLoading] = useState(false);
+  
+  // Fetch the actual IP address when modal opens
+  useEffect(() => {
+    if (open && !actualIp) {
+      setIpLoading(true);
+      fetch("/api/client-ip")
+        .then(res => res.json())
+        .then(data => {
+          setActualIp(data.ip || "Unable to detect");
+        })
+        .catch(() => {
+          setActualIp("Unable to detect");
+        })
+        .finally(() => setIpLoading(false));
+    }
+  }, [open]);
 
   const handleRefresh = () => {
     refetch();
+    // Also refresh IP
+    setIpLoading(true);
+    fetch("/api/client-ip")
+      .then(res => res.json())
+      .then(data => setActualIp(data.ip || "Unable to detect"))
+      .catch(() => setActualIp("Unable to detect"))
+      .finally(() => setIpLoading(false));
   };
+  
+  // Note: Configured IP is the local LAN address (e.g., 192.168.x.x)
+  // Actual IP is the external/public IP seen by the server - these will naturally differ
+  const configuredIp = workstation?.ipAddress;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -143,6 +181,40 @@ export function SystemStatusModal({ open, onClose, propertyId }: SystemStatusMod
                   <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
                 </Button>
               </div>
+
+              {/* Device Info Section */}
+              {workstation && (
+                <div className="flex items-start gap-3 p-3 rounded-md bg-muted/30">
+                  <div className="mt-0.5">
+                    <Monitor className="w-5 h-5 text-cyan-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-medium">This Device</span>
+                      <Badge variant="default">Registered</Badge>
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Device Name:</span>
+                        <span className="font-mono" data-testid="text-device-name">{workstation.name}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">LAN IP (Configured):</span>
+                        <span className="font-mono" data-testid="text-configured-ip">{configuredIp || "Not set"}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">External IP:</span>
+                        <span className="font-mono" data-testid="text-actual-ip">
+                          {ipLoading ? "..." : (actualIp || "Unknown")}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      LAN IP is from EMC config. External IP is the server-observed connection address (may reflect NAT/proxy).
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <ServiceRow
                 icon={<Database className="w-5 h-5 text-blue-500" />}

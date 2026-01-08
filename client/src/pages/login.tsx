@@ -450,16 +450,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setWorkstationId(null)}
-          data-testid="button-change-workstation"
-          title="Change Workstation"
-        >
-          <Monitor className="w-4 h-4 mr-1" />
-          {wsContext?.workstation?.name || "Change"}
-        </Button>
         <ThemeToggle />
       </div>
 

@@ -15,6 +15,11 @@ import {
 } from "lucide-react";
 import { SystemStatusModal } from "./system-status-modal";
 
+interface WorkstationInfo {
+  name: string;
+  ipAddress?: string | null;
+}
+
 interface FunctionsModalProps {
   open: boolean;
   onClose: () => void;
@@ -33,6 +38,7 @@ interface FunctionsModalProps {
     canPriceOverride: boolean;
   };
   propertyId?: string;
+  workstation?: WorkstationInfo | null;
 }
 
 interface FunctionButtonProps {
@@ -88,6 +94,7 @@ export function FunctionsModal({
   onAssignTable,
   privileges,
   propertyId,
+  workstation,
 }: FunctionsModalProps) {
   const [showSystemStatus, setShowSystemStatus] = useState(false);
 
@@ -97,6 +104,7 @@ export function FunctionsModal({
       open={showSystemStatus} 
       onClose={() => setShowSystemStatus(false)} 
       propertyId={propertyId}
+      workstation={workstation}
     />
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
