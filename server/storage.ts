@@ -68,6 +68,7 @@ import {
   type RefundItem, type InsertRefundItem,
   type RefundPayment, type InsertRefundPayment,
   type PrintJob, type InsertPrintJob, printJobs,
+  type PrintAgent, type InsertPrintAgent, printAgents,
   // T&A imports
   type JobCode, type InsertJobCode,
   type EmployeeJobCode, type InsertEmployeeJobCode,
@@ -416,6 +417,16 @@ export interface IStorage {
   getPendingPrintJobs(workstationId?: string, propertyId?: string): Promise<PrintJob[]>;
   updatePrintJob(id: string, data: Partial<PrintJob>): Promise<PrintJob | undefined>;
   findReceiptPrinter(propertyId: string): Promise<Printer | undefined>;
+
+  // Print Agents
+  getPrintAgents(propertyId?: string): Promise<PrintAgent[]>;
+  getPrintAgent(id: string): Promise<PrintAgent | undefined>;
+  getPrintAgentByToken(agentTokenHash: string): Promise<PrintAgent | undefined>;
+  createPrintAgent(data: InsertPrintAgent): Promise<PrintAgent>;
+  updatePrintAgent(id: string, data: Partial<PrintAgent>): Promise<PrintAgent | undefined>;
+  deletePrintAgent(id: string): Promise<boolean>;
+  getAgentPendingPrintJobs(agentId: string): Promise<PrintJob[]>;
+  getAgentPrintingJobs(agentId: string): Promise<PrintJob[]>;
 
   // KDS Tickets
   getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]>;
@@ -2048,6 +2059,58 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return result;
+  }
+
+  // Print Agents
+  async getPrintAgents(propertyId?: string): Promise<PrintAgent[]> {
+    if (propertyId) {
+      return db.select().from(printAgents).where(eq(printAgents.propertyId, propertyId)).orderBy(printAgents.name);
+    }
+    return db.select().from(printAgents).orderBy(printAgents.name);
+  }
+
+  async getPrintAgent(id: string): Promise<PrintAgent | undefined> {
+    const [result] = await db.select().from(printAgents).where(eq(printAgents.id, id));
+    return result;
+  }
+
+  async getPrintAgentByToken(agentTokenHash: string): Promise<PrintAgent | undefined> {
+    const [result] = await db.select().from(printAgents).where(eq(printAgents.agentTokenHash, agentTokenHash));
+    return result;
+  }
+
+  async createPrintAgent(data: InsertPrintAgent): Promise<PrintAgent> {
+    const [result] = await db.insert(printAgents).values(data).returning();
+    return result;
+  }
+
+  async updatePrintAgent(id: string, data: Partial<PrintAgent>): Promise<PrintAgent | undefined> {
+    const [result] = await db.update(printAgents).set(data).where(eq(printAgents.id, id)).returning();
+    return result;
+  }
+
+  async deletePrintAgent(id: string): Promise<boolean> {
+    const result = await db.delete(printAgents).where(eq(printAgents.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAgentPendingPrintJobs(agentId: string): Promise<PrintJob[]> {
+    // Get jobs assigned to this agent that are pending
+    return db.select().from(printJobs)
+      .where(and(
+        eq(printJobs.agentId, agentId),
+        eq(printJobs.status, "pending")
+      ))
+      .orderBy(printJobs.priority, printJobs.createdAt);
+  }
+
+  async getAgentPrintingJobs(agentId: string): Promise<PrintJob[]> {
+    // Get jobs assigned to this agent that are in "printing" status (for reset on disconnect)
+    return db.select().from(printJobs)
+      .where(and(
+        eq(printJobs.agentId, agentId),
+        eq(printJobs.status, "printing")
+      ));
   }
 
   // KDS Tickets

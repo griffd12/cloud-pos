@@ -1,0 +1,26 @@
+{
+  "name": "cloud-pos-print-agent",
+  "version": "1.0.0",
+  "description": "Local print agent for Cloud POS - relays print jobs from cloud to local network printers",
+  "main": "print-agent.js",
+  "bin": {
+    "print-agent": "./print-agent.js"
+  },
+  "scripts": {
+    "start": "node print-agent.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "pos",
+    "print",
+    "thermal-printer",
+    "escpos",
+    "restaurant"
+  ],
+  "license": "MIT"
+}

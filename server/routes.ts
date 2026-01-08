@@ -676,6 +676,191 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // PRINT AGENT WEBSOCKET SERVER - Dedicated endpoint for local print agents
+  // Agents authenticate with pre-issued tokens and receive print jobs
+  // Protocol: HELLO (auth), JOB (print request), ACK, DONE, ERROR, HEARTBEAT
+  // ============================================================================
+  const printAgentWss = new WebSocketServer({ server: httpServer, path: "/ws/print-agents" });
+  const connectedAgents: Map<string, WebSocket> = new Map(); // agentId -> WebSocket
+
+  // Function to send print job to connected agent
+  async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
+    const agentWs = connectedAgents.get(agentId);
+    if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      agentWs.send(JSON.stringify({
+        type: "JOB",
+        jobId: job.id,
+        printerIp: job.printerIp,
+        printerPort: job.printerPort || 9100,
+        data: job.data, // Base64 encoded ESC/POS data (correct field name)
+        jobType: job.jobType,
+      }));
+      return true;
+    } catch (e) {
+      console.error("Failed to send job to agent:", e);
+      return false;
+    }
+  }
+
+  // Reset stuck "printing" jobs back to pending for an agent
+  async function resetStuckPrintingJobs(agentId: string) {
+    // Get all jobs in "printing" status for this agent and reset them to pending
+    const printingJobs = await storage.getAgentPrintingJobs(agentId);
+    for (const job of printingJobs) {
+      await storage.updatePrintJob(job.id, { status: "pending" });
+    }
+  }
+
+  // Drain pending jobs for a connected agent
+  async function drainAgentJobs(agentId: string) {
+    // First, reset any stuck "printing" jobs from previous sessions
+    await resetStuckPrintingJobs(agentId);
+    
+    const jobs = await storage.getAgentPendingPrintJobs(agentId);
+    for (const job of jobs) {
+      const sent = await sendJobToAgent(agentId, job);
+      if (sent) {
+        await storage.updatePrintJob(job.id, {
+          status: "printing",
+          attempts: (job.attempts || 0) + 1,
+        });
+      }
+    }
+  }
+
+  printAgentWss.on("connection", async (ws, req) => {
+    let authenticatedAgentId: string | null = null;
+
+    ws.on("message", async (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+
+        // Handle HELLO - authentication handshake
+        if (data.type === "HELLO" && data.token) {
+          const tokenHash = crypto.createHash("sha256").update(data.token).digest("hex");
+          const agent = await storage.getPrintAgentByToken(tokenHash);
+
+          // Reject if agent not found or explicitly disabled
+          // Valid statuses for connection: "offline", "online", "error" (not "disabled")
+          if (!agent) {
+            ws.send(JSON.stringify({ type: "AUTH_FAIL", message: "Invalid agent token" }));
+            ws.close(4001, "Authentication failed");
+            return;
+          }
+          
+          if (agent.status === "disabled") {
+            ws.send(JSON.stringify({ type: "AUTH_FAIL", message: "Agent is disabled. Contact administrator." }));
+            ws.close(4001, "Agent disabled");
+            return;
+          }
+
+          authenticatedAgentId = agent.id;
+          connectedAgents.set(agent.id, ws);
+
+          // Update agent status
+          await storage.updatePrintAgent(agent.id, {
+            status: "online",
+            lastHeartbeat: new Date(),
+          });
+
+          ws.send(JSON.stringify({
+            type: "AUTH_OK",
+            agentId: agent.id,
+            agentName: agent.name,
+            propertyId: agent.propertyId,
+          }));
+
+          console.log(`Print agent connected: ${agent.name} (${agent.id})`);
+
+          // Drain any pending jobs for this agent
+          await drainAgentJobs(agent.id);
+          return;
+        }
+
+        // All other messages require authentication
+        if (!authenticatedAgentId) {
+          ws.send(JSON.stringify({ type: "ERROR", message: "Not authenticated" }));
+          return;
+        }
+
+        // Handle ACK - agent received job
+        if (data.type === "ACK" && data.jobId) {
+          // Job is being printed, already marked as "printing" when sent
+          console.log(`Agent ${authenticatedAgentId} ACK'd job ${data.jobId}`);
+        }
+
+        // Handle DONE - job completed successfully
+        if (data.type === "DONE" && data.jobId) {
+          await storage.updatePrintJob(data.jobId, {
+            status: "completed",
+            printedAt: new Date(),
+          });
+          console.log(`Print job ${data.jobId} completed`);
+        }
+
+        // Handle ERROR - job failed
+        if (data.type === "ERROR" && data.jobId) {
+          const job = await storage.getPrintJob(data.jobId);
+          if (job) {
+            const attempts = (job.attempts || 0);
+            const maxAttempts = job.maxAttempts || 3;
+            await storage.updatePrintJob(data.jobId, {
+              status: attempts >= maxAttempts ? "failed" : "pending",
+              lastError: data.error || "Agent reported error",
+            });
+          }
+          console.log(`Print job ${data.jobId} failed: ${data.error}`);
+        }
+
+        // Handle HEARTBEAT - agent status ping
+        if (data.type === "HEARTBEAT") {
+          await storage.updatePrintAgent(authenticatedAgentId, {
+            lastHeartbeat: new Date(),
+          });
+          ws.send(JSON.stringify({ type: "HEARTBEAT_ACK" }));
+        }
+
+      } catch (e) {
+        console.error("Print agent message error:", e);
+        ws.send(JSON.stringify({ type: "ERROR", message: "Invalid message format" }));
+      }
+    });
+
+    ws.on("close", async () => {
+      if (authenticatedAgentId) {
+        connectedAgents.delete(authenticatedAgentId);
+        
+        // Reset any "printing" jobs back to pending for retry on reconnect
+        await resetStuckPrintingJobs(authenticatedAgentId);
+        
+        await storage.updatePrintAgent(authenticatedAgentId, {
+          status: "offline",
+        });
+        console.log(`Print agent disconnected: ${authenticatedAgentId}`);
+      }
+    });
+
+    ws.on("error", (error) => {
+      console.error("Print agent WebSocket error:", error);
+    });
+
+    // Set timeout for authentication - close if no HELLO within 10 seconds
+    setTimeout(() => {
+      if (!authenticatedAgentId && ws.readyState === WebSocket.OPEN) {
+        ws.close(4002, "Authentication timeout");
+      }
+    }, 10000);
+  });
+
+  // Export function for routes to queue jobs to agents
+  (app as any).sendPrintJobToAgent = sendJobToAgent;
+  (app as any).drainAgentJobs = drainAgentJobs;
+  (app as any).connectedAgents = connectedAgents;
+
+  // ============================================================================
   // DEVICE TOKEN MIDDLEWARE - Protects POS/KDS routes from unenrolled browsers
   // Routes exempt from device token validation:
   // - /emc/* (EMC uses session-based auth)
@@ -10792,6 +10977,192 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Replace registered device error:", error);
       res.status(500).json({ message: "Failed to replace registered device" });
+    }
+  });
+
+  // ============================================================================
+  // PRINT AGENTS - Local print agent management
+  // Agents run on-premises and connect via WebSocket to receive print jobs
+  // ============================================================================
+
+  // Get all print agents (optionally filtered by property)
+  app.get("/api/print-agents", async (req, res) => {
+    try {
+      const propertyId = req.query.propertyId as string | undefined;
+      const agents = await storage.getPrintAgents(propertyId);
+      
+      // Add connection status from connectedAgents map
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      const agentsWithStatus = agents.map(agent => ({
+        ...agent,
+        isConnected: connectedAgentsMap?.has(agent.id) || false,
+      }));
+      
+      res.json(agentsWithStatus);
+    } catch (error) {
+      console.error("Get print agents error:", error);
+      res.status(500).json({ message: "Failed to get print agents" });
+    }
+  });
+
+  // Get single print agent
+  app.get("/api/print-agents/:id", async (req, res) => {
+    try {
+      const agent = await storage.getPrintAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+      
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      res.json({
+        ...agent,
+        isConnected: connectedAgentsMap?.has(agent.id) || false,
+      });
+    } catch (error) {
+      console.error("Get print agent error:", error);
+      res.status(500).json({ message: "Failed to get print agent" });
+    }
+  });
+
+  // Create new print agent
+  app.post("/api/print-agents", async (req, res) => {
+    try {
+      const { propertyId, name, description } = req.body;
+      
+      if (!propertyId || !name) {
+        return res.status(400).json({ message: "Property ID and name are required" });
+      }
+      
+      // Generate secure agent token
+      const agentToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
+      const agentTokenHash = crypto.createHash("sha256").update(agentToken).digest("hex");
+      
+      const agent = await storage.createPrintAgent({
+        propertyId,
+        name,
+        description: description || null,
+        agentTokenHash,
+        status: "offline",
+      });
+      
+      // Return agent with the plain token (only shown once!)
+      res.status(201).json({
+        ...agent,
+        agentToken, // Only returned on creation - store securely!
+        message: "Save the agent token securely - it will not be shown again!",
+      });
+    } catch (error) {
+      console.error("Create print agent error:", error);
+      res.status(500).json({ message: "Failed to create print agent" });
+    }
+  });
+
+  // Regenerate agent token
+  app.post("/api/print-agents/:id/regenerate-token", async (req, res) => {
+    try {
+      const agent = await storage.getPrintAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+      
+      // Disconnect current agent if connected
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      const existingWs = connectedAgentsMap?.get(agent.id);
+      if (existingWs) {
+        existingWs.close(4003, "Token regenerated");
+        connectedAgentsMap.delete(agent.id);
+      }
+      
+      // Generate new token
+      const agentToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
+      const agentTokenHash = crypto.createHash("sha256").update(agentToken).digest("hex");
+      
+      const updated = await storage.updatePrintAgent(agent.id, {
+        agentTokenHash,
+        status: "offline",
+      });
+      
+      res.json({
+        ...updated,
+        agentToken, // Only returned on regeneration - store securely!
+        message: "Save the new agent token securely - it will not be shown again!",
+      });
+    } catch (error) {
+      console.error("Regenerate print agent token error:", error);
+      res.status(500).json({ message: "Failed to regenerate token" });
+    }
+  });
+
+  // Update print agent
+  app.patch("/api/print-agents/:id", async (req, res) => {
+    try {
+      const agent = await storage.getPrintAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+      
+      const { name, description, status } = req.body;
+      const updateData: any = {};
+      
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (status !== undefined) {
+        updateData.status = status;
+        
+        // If disabling, disconnect the agent
+        if (status === "disabled") {
+          const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+          const existingWs = connectedAgentsMap?.get(agent.id);
+          if (existingWs) {
+            existingWs.close(4004, "Agent disabled");
+            connectedAgentsMap.delete(agent.id);
+          }
+        }
+      }
+      
+      const updated = await storage.updatePrintAgent(agent.id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update print agent error:", error);
+      res.status(500).json({ message: "Failed to update print agent" });
+    }
+  });
+
+  // Delete print agent
+  app.delete("/api/print-agents/:id", async (req, res) => {
+    try {
+      // Disconnect if connected
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      const existingWs = connectedAgentsMap?.get(req.params.id);
+      if (existingWs) {
+        existingWs.close(4005, "Agent deleted");
+        connectedAgentsMap.delete(req.params.id);
+      }
+      
+      const success = await storage.deletePrintAgent(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete print agent error:", error);
+      res.status(500).json({ message: "Failed to delete print agent" });
+    }
+  });
+
+  // Get pending jobs for an agent
+  app.get("/api/print-agents/:id/jobs", async (req, res) => {
+    try {
+      const agent = await storage.getPrintAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+      
+      const jobs = await storage.getAgentPendingPrintJobs(agent.id);
+      res.json(jobs);
+    } catch (error) {
+      console.error("Get agent jobs error:", error);
+      res.status(500).json({ message: "Failed to get agent jobs" });
     }
   });
 

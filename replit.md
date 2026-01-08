@@ -67,13 +67,24 @@ PCI-compliant, gateway-agnostic framework supporting Stripe and Elavon Converge.
 ### Printing System
 Comprehensive receipt and report printing system supporting both network and local printers:
 - **Network Printing**: Direct TCP/IP printing to port 9100 for network-connected thermal printers (Epson, Star)
-- **Local Print Agent**: WebSocket-based print agent support for serial/USB connected printers
 - **ESC/POS Support**: Built-in ESC/POS command builder for Epson-compatible thermal printers
 - **Print Job Queue**: Database-backed print job queue with retry handling and status tracking
 - **Print Classes**: Simphony-style print class routing for kitchen ticket distribution
 - **Supported Features**: Check receipts, kitchen tickets, sales reports, employee reports, test prints
 - **Hardware Support**: Epson TM-T88V/VI series, Star TSP series, and other ESC/POS compatible printers
 - **Print Service Location**: `server/printService.ts` for ESC/POS building and network printing
+
+### Print Agent System (Cloud-to-Local Bridge)
+Since the cloud-hosted POS cannot directly access local network printers (192.168.x.x addresses), a Print Agent system bridges this gap:
+- **Architecture**: Standalone Node.js agent runs on-premises, connects to cloud via WebSocket
+- **WebSocket Endpoint**: `/ws/print-agents` - dedicated endpoint separate from KDS WebSocket
+- **Authentication**: SHA-256 hashed agent tokens, only shown once on creation
+- **Protocol**: HELLO (auth), JOB (print request), ACK, DONE, ERROR, HEARTBEAT
+- **Agent Statuses**: `offline` (not connected), `online` (connected), `disabled` (admin blocked)
+- **Resilience**: Auto-reconnect with exponential backoff, stuck job recovery on reconnect
+- **Agent Location**: `print-agent/` folder contains distributable Node.js agent
+- **API Routes**: `/api/print-agents` for CRUD operations, token regeneration
+- **Job State Machine**: pending → printing (on send) → completed/failed (on agent response)
 
 ### Enterprise Features
 Includes robust features for enterprise management:
