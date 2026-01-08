@@ -2075,7 +2075,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPrintAgentByToken(agentTokenHash: string): Promise<PrintAgent | undefined> {
-    const [result] = await db.select().from(printAgents).where(eq(printAgents.agentTokenHash, agentTokenHash));
+    const [result] = await db.select().from(printAgents).where(eq(printAgents.agentToken, agentTokenHash));
     return result;
   }
 

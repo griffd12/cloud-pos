@@ -21,9 +21,7 @@ The Cloud POS runs on the internet, but your thermal printers are on your local 
 
 ---
 
-## Windows - One-Click Installer (Recommended)
-
-The easiest way to install on Windows:
+## Quick Start - One-Click Installers (Recommended)
 
 ### Step 1: Get Your Agent Token First
 
@@ -32,33 +30,54 @@ The easiest way to install on Windows:
 3. Click **Create Agent**
 4. Give your agent a name (e.g., "Kitchen Print Agent")
 5. **Important:** Copy the generated token immediately - it's only shown once!
-6. Also note your WebSocket URL (shown in agent details)
+6. Also note your Server URL (e.g., `wss://your-app.replit.app`)
 
-### Step 2: Download and Run the Installer
+### Step 2: Run the Installer
+
+#### Windows
 
 1. Download `install-windows.bat` from the Cloud POS admin panel
 2. Right-click the file and select **Run as administrator**
 3. The installer will:
    - Check for Node.js (and help you install it if needed)
    - Download the print agent files
-   - Ask for your WebSocket URL and Agent Token
+   - Ask for your Server URL and Agent Token
    - Configure everything automatically
    - Optionally set up auto-start on Windows boot
    - Start the agent
+
+#### Linux / macOS
+
+1. Download `install.sh` from the Cloud POS admin panel
+2. Open a terminal and run:
+   ```bash
+   chmod +x install.sh
+   ./install.sh
+   ```
+3. The installer will guide you through the same steps
 
 That's it! The agent will now run and relay print jobs to your local printers.
 
 ### Helper Scripts Created by Installer
 
-After installation, you'll find these in `C:\ProgramData\CloudPOS\PrintAgent`:
-- `start-agent.bat` - Start the Print Agent manually
+**Windows** (in `C:\ProgramData\CloudPOS\PrintAgent`):
+- `start-agent.bat` - Start the Print Agent (visible console)
+- `start-agent-hidden.bat` - Start in background
 - `stop-agent.bat` - Stop the Print Agent
+- `view-logs.bat` - View agent logs
+- `test-connection.bat` - Test server connection
+
+**Linux/macOS** (in installation directory):
+- `start-agent.sh` - Start the Print Agent (foreground)
+- `start-agent-background.sh` - Start in background
+- `stop-agent.sh` - Stop the Print Agent
+- `view-logs.sh` - View agent logs
 
 ---
 
 ## Manual Installation (All Platforms)
 
-If you prefer manual installation or are using macOS/Linux:
+If you prefer manual installation:
 
 ### Step 1: Install Node.js
 
@@ -110,15 +129,17 @@ Create a file named `config.json` in the same folder as the agent:
 
 ```json
 {
-  "cloudPosUrl": "wss://your-cloud-pos-url.replit.dev/ws/print-agents",
-  "agentToken": "paste-your-agent-token-here",
-  "printerPort": 9100,
-  "logLevel": "info"
+  "server": "wss://your-cloud-pos-url.replit.app/ws/print-agents",
+  "token": "paste-your-agent-token-here",
+  "defaultPrinterPort": 9100,
+  "reconnectInterval": 5000,
+  "maxReconnectInterval": 60000,
+  "heartbeatInterval": 30000
 }
 ```
 
 Replace:
-- `your-cloud-pos-url.replit.dev` with your actual Cloud POS URL
+- `your-cloud-pos-url.replit.app` with your actual Cloud POS URL
 - `paste-your-agent-token-here` with the token you copied
 
 ### Step 6: Test the Agent
@@ -126,13 +147,13 @@ Replace:
 Run the agent to test the connection:
 
 ```bash
-npm start
+node print-agent.js
 ```
 
 You should see output like:
 ```
 Cloud POS Print Agent v1.0.0
-Connecting to: wss://your-cloud-pos-url.replit.dev/ws/print-agents
+Connecting to: wss://your-cloud-pos-url.replit.app/ws/print-agents
 Connected! Authenticating...
 Authenticated successfully. Ready for print jobs.
 ```
@@ -147,13 +168,21 @@ Press Ctrl+C to stop the agent.
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| cloudPosUrl | Yes | - | WebSocket URL (wss://your-url/ws/print-agents) |
-| agentToken | Yes | - | Agent authentication token from EMC |
-| printerPort | No | 9100 | Default TCP port for printers |
-| reconnectDelayMs | No | 5000 | Initial reconnect delay in milliseconds |
-| maxReconnectDelayMs | No | 60000 | Maximum reconnect delay in milliseconds |
-| heartbeatIntervalMs | No | 30000 | Heartbeat frequency in milliseconds |
-| logLevel | No | info | Log level (debug, info, warn, error) |
+| server | Yes | - | WebSocket URL (wss://your-url/ws/print-agents) |
+| token | Yes | - | Agent authentication token from EMC |
+| defaultPrinterPort | No | 9100 | Default TCP port for printers |
+| reconnectInterval | No | 5000 | Initial reconnect delay in milliseconds |
+| maxReconnectInterval | No | 60000 | Maximum reconnect delay in milliseconds |
+| heartbeatInterval | No | 30000 | Heartbeat frequency in milliseconds |
+| printTimeout | No | 10000 | Print job timeout in milliseconds |
+
+### Command Line Arguments
+
+You can also pass configuration via command line:
+
+```bash
+node print-agent.js --server wss://your-url/ws/print-agents --token your-token
+```
 
 ---
 
@@ -165,7 +194,19 @@ For production use, you'll want the agent to start automatically and run in the 
 
 If you used the one-click installer and selected "Yes" for auto-start, it's already configured!
 
-### Windows - Using PM2
+### Linux - Using systemd (via Installer)
+
+If you used `install.sh` and selected "Yes" for systemd service, it's already configured!
+
+Service commands:
+```bash
+sudo systemctl start cloudpos-print-agent   # Start service
+sudo systemctl stop cloudpos-print-agent    # Stop service
+sudo systemctl status cloudpos-print-agent  # Check status
+sudo journalctl -u cloudpos-print-agent -f  # View logs
+```
+
+### Using PM2 (All Platforms)
 
 1. Install PM2 globally:
    ```bash
@@ -174,7 +215,7 @@ If you used the one-click installer and selected "Yes" for auto-start, it's alre
 
 2. Start the agent with PM2:
    ```bash
-   pm2 start index.js --name "POS Print Agent"
+   pm2 start print-agent.js --name "POS Print Agent"
    ```
 
 3. Save the configuration:
@@ -187,45 +228,6 @@ If you used the one-click installer and selected "Yes" for auto-start, it's alre
    pm2 startup
    ```
    Follow the instructions provided.
-
-### Linux - Using systemd
-
-Create a service file at `/etc/systemd/system/pos-print-agent.service`:
-
-```ini
-[Unit]
-Description=Cloud POS Print Agent
-After=network.target
-
-[Service]
-Type=simple
-User=your-username
-WorkingDirectory=/path/to/print-agent
-ExecStart=/usr/bin/node index.js
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable pos-print-agent
-sudo systemctl start pos-print-agent
-```
-
-### macOS - Using PM2
-
-```bash
-npm install -g pm2
-pm2 start index.js --name "pos-print-agent"
-pm2 save
-pm2 startup
-```
 
 ---
 
@@ -268,7 +270,7 @@ Common locations for the IP:
 - Ensure port 9100 is accessible (test with telnet/nc as shown above)
 - Some printers use a different port - check your printer manual
 
-### "Authentication failed"
+### "Authentication failed" or "Invalid agent token"
 
 - Verify your agent token is correct (no extra spaces)
 - Check if the agent was disabled in EMC
@@ -277,7 +279,7 @@ Common locations for the IP:
 ### "WebSocket connection failed"
 
 - Check your internet connection
-- Verify the server URL is correct
+- Verify the server URL is correct (should include `/ws/print-agents`)
 - Ensure firewalls allow outbound WebSocket connections (port 443)
 
 ### Agent keeps disconnecting
@@ -297,11 +299,13 @@ Common locations for the IP:
 
 ## Logs and Monitoring
 
-The agent outputs logs to the console. When running with PM2:
+When running in foreground, logs output to the console.
 
-```bash
-pm2 logs "POS Print Agent"
-```
+When running in background:
+- **Windows**: Check `agent.log` in the installation directory, or use `view-logs.bat`
+- **Linux/macOS**: Check `agent.log` in the installation directory, or use `view-logs.sh`
+- **systemd**: Use `journalctl -u cloudpos-print-agent -f`
+- **PM2**: Use `pm2 logs "POS Print Agent"`
 
 You can also monitor agent status in the EMC under Print Agents.
 
@@ -326,5 +330,6 @@ If you encounter issues:
 
 ## Version History
 
+- **2.0.0** - Added Linux/macOS installer, improved Windows installer, fixed WebSocket connection
 - **1.1.0** - Added Windows one-click installer
 - **1.0.0** - Initial release with basic print relay functionality

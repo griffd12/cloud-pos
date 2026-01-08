@@ -650,7 +650,26 @@ async function finalizePreviewTicket(
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  // Use noServer: true for both WebSocket servers and handle upgrade manually
+  const wss = new WebSocketServer({ noServer: true });
+  const printAgentWss = new WebSocketServer({ noServer: true });
+
+  // Handle WebSocket upgrade requests manually to route to correct server
+  httpServer.on("upgrade", (request, socket, head) => {
+    const pathname = request.url?.split("?")[0];
+    
+    if (pathname === "/ws/kds") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } else if (pathname === "/ws/print-agents") {
+      printAgentWss.handleUpgrade(request, socket, head, (ws) => {
+        printAgentWss.emit("connection", ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
 
   wss.on("connection", (ws) => {
     let subscribedChannel: string | null = null;
@@ -683,7 +702,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Agents authenticate with pre-issued tokens and receive print jobs
   // Protocol: HELLO (auth), JOB (print request), ACK, DONE, ERROR, HEARTBEAT
   // ============================================================================
-  const printAgentWss = new WebSocketServer({ server: httpServer, path: "/ws/print-agents" });
   const connectedAgents: Map<string, WebSocket> = new Map(); // agentId -> WebSocket
 
   // Function to send print job to connected agent

@@ -34,7 +34,7 @@ export function usePosWebSocket() {
       if (isUnmountedRef.current) return;
       
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const wsUrl = `${protocol}//${window.location.host}/ws/kds`;
       
       try {
         const ws = new WebSocket(wsUrl);
