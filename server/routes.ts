@@ -11106,6 +11106,23 @@ connect();
     }
   });
 
+  // Download Windows installer for print agent
+  app.get("/api/print-agents/download-installer", async (req, res) => {
+    try {
+      const installerPath = path.join(process.cwd(), "print-agent", "install-windows.bat");
+      if (!fs.existsSync(installerPath)) {
+        return res.status(404).json({ message: "Installer not found" });
+      }
+      
+      res.setHeader("Content-Type", "application/x-batch");
+      res.setHeader("Content-Disposition", "attachment; filename=install-print-agent.bat");
+      res.sendFile(installerPath);
+    } catch (error) {
+      console.error("Download installer error:", error);
+      res.status(500).json({ message: "Failed to download installer" });
+    }
+  });
+
   // Get single print agent
   app.get("/api/print-agents/:id", async (req, res) => {
     try {

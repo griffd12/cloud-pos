@@ -2,14 +2,6 @@
 
 This is a local print agent that runs on-premises at your property. It connects to the Cloud POS system and relays print jobs to local network printers.
 
-## Quick Start
-
-1. Install Node.js (version 16 or later) from https://nodejs.org
-2. Open a terminal/command prompt in this folder
-3. Run `npm install` to install dependencies
-4. Create a `config.json` file with your settings (see Configuration below)
-5. Run `npm start` to start the agent
-
 ## Why Do I Need This?
 
 The Cloud POS runs on the internet, but your thermal printers are on your local network (192.168.x.x addresses). The cloud cannot directly reach local network printers. This agent bridges that gap by:
@@ -27,7 +19,46 @@ The Cloud POS runs on the internet, but your thermal printers are on your local 
 - **Printers**: Network printers accessible via TCP/IP on port 9100 (most thermal receipt printers)
 - **Internet**: Stable internet connection for cloud communication
 
-## Installation
+---
+
+## Windows - One-Click Installer (Recommended)
+
+The easiest way to install on Windows:
+
+### Step 1: Get Your Agent Token First
+
+1. Log into the EMC (Enterprise Management Console) at your Cloud POS URL
+2. Navigate to **Property Settings** > **Print Agents**
+3. Click **Create Agent**
+4. Give your agent a name (e.g., "Kitchen Print Agent")
+5. **Important:** Copy the generated token immediately - it's only shown once!
+6. Also note your WebSocket URL (shown in agent details)
+
+### Step 2: Download and Run the Installer
+
+1. Download `install-windows.bat` from the Cloud POS admin panel
+2. Right-click the file and select **Run as administrator**
+3. The installer will:
+   - Check for Node.js (and help you install it if needed)
+   - Download the print agent files
+   - Ask for your WebSocket URL and Agent Token
+   - Configure everything automatically
+   - Optionally set up auto-start on Windows boot
+   - Start the agent
+
+That's it! The agent will now run and relay print jobs to your local printers.
+
+### Helper Scripts Created by Installer
+
+After installation, you'll find these in `C:\ProgramData\CloudPOS\PrintAgent`:
+- `start-agent.bat` - Start the Print Agent manually
+- `stop-agent.bat` - Stop the Print Agent
+
+---
+
+## Manual Installation (All Platforms)
+
+If you prefer manual installation or are using macOS/Linux:
 
 ### Step 1: Install Node.js
 
@@ -47,7 +78,16 @@ curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-### Step 2: Install Dependencies
+### Step 2: Download Print Agent
+
+Download the print-agent.zip from:
+- EMC > Property Settings > Print Agents > Download Agent
+
+Or directly from: `https://your-cloud-pos-url/api/print-agents/download`
+
+Extract the ZIP to a folder (e.g., `C:\PrintAgent` or `/opt/print-agent`)
+
+### Step 3: Install Dependencies
 
 Open a terminal/command prompt, navigate to the print-agent folder, and run:
 
@@ -55,31 +95,33 @@ Open a terminal/command prompt, navigate to the print-agent folder, and run:
 npm install
 ```
 
-### Step 3: Get Your Agent Token
+### Step 4: Get Your Agent Token
 
-1. Log into the EMC (Enterprise Management Console) at your Cloud POS URL
+1. Log into the EMC at your Cloud POS URL
 2. Navigate to **Property Settings** > **Print Agents**
-3. Click **Add Print Agent**
+3. Click **Create Agent**
 4. Give your agent a name (e.g., "Kitchen Print Agent")
 5. **Important:** Copy the generated token immediately - it's only shown once!
 6. Save this token for the next step
 
-### Step 4: Configure the Agent
+### Step 5: Configure the Agent
 
 Create a file named `config.json` in the same folder as the agent:
 
 ```json
 {
-  "server": "https://your-cloud-pos-url.replit.app",
-  "token": "paste-your-agent-token-here"
+  "cloudPosUrl": "wss://your-cloud-pos-url.replit.dev/ws/print-agents",
+  "agentToken": "paste-your-agent-token-here",
+  "printerPort": 9100,
+  "logLevel": "info"
 }
 ```
 
 Replace:
-- `your-cloud-pos-url.replit.app` with your actual Cloud POS URL
-- `paste-your-agent-token-here` with the token you copied in Step 3
+- `your-cloud-pos-url.replit.dev` with your actual Cloud POS URL
+- `paste-your-agent-token-here` with the token you copied
 
-### Step 5: Test the Agent
+### Step 6: Test the Agent
 
 Run the agent to test the connection:
 
@@ -90,12 +132,14 @@ npm start
 You should see output like:
 ```
 Cloud POS Print Agent v1.0.0
-Connecting to: wss://your-cloud-pos-url.replit.app/ws/print-agents
+Connecting to: wss://your-cloud-pos-url.replit.dev/ws/print-agents
 Connected! Authenticating...
 Authenticated successfully. Ready for print jobs.
 ```
 
 Press Ctrl+C to stop the agent.
+
+---
 
 ## Configuration Options
 
@@ -103,25 +147,23 @@ Press Ctrl+C to stop the agent.
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| server | Yes | - | Your Cloud POS server URL (without /ws path) |
-| token | Yes | - | Agent authentication token from EMC |
-| reconnectInterval | No | 5000 | Initial reconnect delay in milliseconds |
-| maxReconnectInterval | No | 60000 | Maximum reconnect delay in milliseconds |
-| heartbeatInterval | No | 30000 | Heartbeat frequency in milliseconds |
-| defaultPrinterPort | No | 9100 | Default TCP port for printers |
-| printTimeout | No | 10000 | Printer connection timeout in milliseconds |
+| cloudPosUrl | Yes | - | WebSocket URL (wss://your-url/ws/print-agents) |
+| agentToken | Yes | - | Agent authentication token from EMC |
+| printerPort | No | 9100 | Default TCP port for printers |
+| reconnectDelayMs | No | 5000 | Initial reconnect delay in milliseconds |
+| maxReconnectDelayMs | No | 60000 | Maximum reconnect delay in milliseconds |
+| heartbeatIntervalMs | No | 30000 | Heartbeat frequency in milliseconds |
+| logLevel | No | info | Log level (debug, info, warn, error) |
 
-### Command Line Options
-
-You can also pass configuration via command line:
-
-```bash
-node print-agent.js --server https://your-pos-app.replit.app --token your-agent-token
-```
+---
 
 ## Running as a Background Service
 
 For production use, you'll want the agent to start automatically and run in the background.
+
+### Windows - Automatic (via Installer)
+
+If you used the one-click installer and selected "Yes" for auto-start, it's already configured!
 
 ### Windows - Using PM2
 
@@ -132,7 +174,7 @@ For production use, you'll want the agent to start automatically and run in the 
 
 2. Start the agent with PM2:
    ```bash
-   pm2 start print-agent.js --name "POS Print Agent"
+   pm2 start index.js --name "POS Print Agent"
    ```
 
 3. Save the configuration:
@@ -145,22 +187,6 @@ For production use, you'll want the agent to start automatically and run in the 
    pm2 startup
    ```
    Follow the instructions provided.
-
-### Windows - Using NSSM (Alternative)
-
-1. Download NSSM from https://nssm.cc/
-2. Run: `nssm install "POS Print Agent"`
-3. Set the path to node.exe and print-agent.js
-4. Start the service from Windows Services
-
-### Linux - Using PM2
-
-```bash
-npm install -g pm2
-pm2 start print-agent.js --name "pos-print-agent"
-pm2 save
-pm2 startup
-```
 
 ### Linux - Using systemd
 
@@ -175,7 +201,7 @@ After=network.target
 Type=simple
 User=your-username
 WorkingDirectory=/path/to/print-agent
-ExecStart=/usr/bin/node print-agent.js
+ExecStart=/usr/bin/node index.js
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
@@ -196,10 +222,12 @@ sudo systemctl start pos-print-agent
 
 ```bash
 npm install -g pm2
-pm2 start print-agent.js --name "pos-print-agent"
+pm2 start index.js --name "pos-print-agent"
 pm2 save
 pm2 startup
 ```
+
+---
 
 ## Testing Your Printer Connection
 
@@ -228,6 +256,8 @@ Common locations for the IP:
 - Epson TM-T88: Hold Feed button while powering on
 - Star TSP: Self-test button or menu
 - Check your router's DHCP client list
+
+---
 
 ## Troubleshooting
 
@@ -263,6 +293,8 @@ Common locations for the IP:
 - Test the printer connection manually (telnet/nc)
 - Check the agent logs for specific error messages
 
+---
+
 ## Logs and Monitoring
 
 The agent outputs logs to the console. When running with PM2:
@@ -273,12 +305,16 @@ pm2 logs "POS Print Agent"
 
 You can also monitor agent status in the EMC under Print Agents.
 
+---
+
 ## Security Notes
 
 - The agent token is sensitive - don't share it or commit it to version control
 - The agent only connects outbound (no inbound ports need to be opened)
 - All communication is encrypted via WSS (WebSocket Secure)
 - Consider running the agent on a dedicated computer or VM
+
+---
 
 ## Support
 
@@ -290,4 +326,5 @@ If you encounter issues:
 
 ## Version History
 
+- **1.1.0** - Added Windows one-click installer
 - **1.0.0** - Initial release with basic print relay functionality
