@@ -13739,5 +13739,141 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // GET /api/pos/status - Health check for Manager app
+  app.get("/api/pos/status", validateApiKey, async (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  // GET /api/pos/sales/daily - Returns daily sales data (query param format)
+  app.get("/api/pos/sales/daily", validateApiKey, async (req, res) => {
+    try {
+      const { date, propertyId } = req.query;
+
+      if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ 
+          error: "Invalid or missing date. Use ?date=YYYY-MM-DD" 
+        });
+      }
+
+      const allChecks = await storage.getChecks();
+      const checksForDate = allChecks.filter(check => 
+        check.businessDate === date && check.status === "closed"
+      );
+
+      let filteredChecks = checksForDate;
+      if (propertyId && typeof propertyId === "string") {
+        const propertyChecks = [];
+        for (const check of checksForDate) {
+          if (check.rvcId) {
+            const rvc = await storage.getRvc(check.rvcId);
+            if (rvc?.propertyId === propertyId) {
+              propertyChecks.push(check);
+            }
+          }
+        }
+        filteredChecks = propertyChecks;
+      }
+
+      const totalSales = filteredChecks.reduce((sum, check) => 
+        sum + parseFloat(check.total || "0"), 0);
+      const transactionCount = filteredChecks.length;
+      const averageTicket = transactionCount > 0 ? totalSales / transactionCount : 0;
+
+      res.json({
+        date,
+        totalSales: Math.round(totalSales * 100) / 100,
+        transactionCount,
+        averageTicket: Math.round(averageTicket * 100) / 100,
+        propertyId: propertyId || null,
+      });
+
+    } catch (error: any) {
+      console.error("Daily sales API error:", error);
+      res.status(500).json({ error: "Failed to retrieve daily sales data" });
+    }
+  });
+
+  // GET /api/pos/sales/range - Returns sales data for a date range
+  app.get("/api/pos/sales/range", validateApiKey, async (req, res) => {
+    try {
+      const { startDate, endDate, propertyId } = req.query;
+
+      if (!startDate || typeof startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+        return res.status(400).json({ 
+          error: "Invalid or missing startDate. Use ?startDate=YYYY-MM-DD" 
+        });
+      }
+      if (!endDate || typeof endDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        return res.status(400).json({ 
+          error: "Invalid or missing endDate. Use ?endDate=YYYY-MM-DD" 
+        });
+      }
+
+      const allChecks = await storage.getChecks();
+      const checksInRange = allChecks.filter(check => {
+        if (!check.businessDate || check.status !== "closed") return false;
+        return check.businessDate >= startDate && check.businessDate <= endDate;
+      });
+
+      let filteredChecks = checksInRange;
+      if (propertyId && typeof propertyId === "string") {
+        const propertyChecks = [];
+        for (const check of checksInRange) {
+          if (check.rvcId) {
+            const rvc = await storage.getRvc(check.rvcId);
+            if (rvc?.propertyId === propertyId) {
+              propertyChecks.push(check);
+            }
+          }
+        }
+        filteredChecks = propertyChecks;
+      }
+
+      // Aggregate by date
+      const salesByDate: Record<string, { totalSales: number; transactionCount: number }> = {};
+      for (const check of filteredChecks) {
+        const d = check.businessDate!;
+        if (!salesByDate[d]) {
+          salesByDate[d] = { totalSales: 0, transactionCount: 0 };
+        }
+        salesByDate[d].totalSales += parseFloat(check.total || "0");
+        salesByDate[d].transactionCount += 1;
+      }
+
+      const dailySales = Object.entries(salesByDate)
+        .map(([date, data]) => ({
+          date,
+          totalSales: Math.round(data.totalSales * 100) / 100,
+          transactionCount: data.transactionCount,
+          averageTicket: data.transactionCount > 0 
+            ? Math.round((data.totalSales / data.transactionCount) * 100) / 100 
+            : 0,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      const grandTotal = filteredChecks.reduce((sum, check) => 
+        sum + parseFloat(check.total || "0"), 0);
+      const totalTransactions = filteredChecks.length;
+
+      res.json({
+        startDate,
+        endDate,
+        propertyId: propertyId || null,
+        dailySales,
+        summary: {
+          totalSales: Math.round(grandTotal * 100) / 100,
+          transactionCount: totalTransactions,
+          averageTicket: totalTransactions > 0 
+            ? Math.round((grandTotal / totalTransactions) * 100) / 100 
+            : 0,
+        },
+      });
+
+    } catch (error: any) {
+      console.error("Sales range API error:", error);
+      res.status(500).json({ error: "Failed to retrieve sales range data" });
+    }
+  });
+
   return httpServer;
 }
