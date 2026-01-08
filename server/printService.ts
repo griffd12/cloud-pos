@@ -2,6 +2,7 @@ import * as net from "net";
 import { db } from "./db";
 import { printers, printJobs, checks, checkItems, checkPayments, employees, properties, rvcs } from "@shared/schema";
 import { eq, and, or, isNull, desc } from "drizzle-orm";
+import { storage } from "./storage";
 
 // ESC/POS Commands
 const ESC = 0x1B;
@@ -214,15 +215,43 @@ export async function buildCheckReceipt(checkId: string, charWidth: number = 42)
     .from(checkPayments)
     .where(eq(checkPayments.checkId, checkId));
 
-  // Header
-  builder.align("center").bold().doubleSize();
-  if (property) {
-    builder.line(property.name);
+  // Get effective descriptors for this RVC (or use defaults)
+  let headerLines: string[] = [];
+  let trailerLines: string[] = [];
+  
+  if (check.rvcId) {
+    const descriptors = await storage.getEffectiveDescriptors(check.rvcId);
+    headerLines = descriptors.headerLines || [];
+    trailerLines = descriptors.trailerLines || [];
   }
-  builder.normalSize().bold(false);
 
-  if (property?.address) {
-    builder.line(property.address);
+  // Header - use custom descriptor lines if configured, otherwise fallback to property info
+  builder.align("center").bold().doubleSize();
+  
+  if (headerLines.length > 0) {
+    // Use configured header lines
+    for (let i = 0; i < headerLines.length; i++) {
+      const line = headerLines[i];
+      if (line && line.trim()) {
+        // First line is double size (business name), rest are normal
+        if (i === 0) {
+          builder.line(line);
+        } else {
+          if (i === 1) builder.normalSize().bold(false);
+          builder.line(line);
+        }
+      }
+    }
+    builder.normalSize().bold(false);
+  } else {
+    // Fallback to property name/address if no descriptors configured
+    if (property) {
+      builder.line(property.name);
+    }
+    builder.normalSize().bold(false);
+    if (property?.address) {
+      builder.line(property.address);
+    }
   }
 
   builder.newLine();
@@ -313,10 +342,22 @@ export async function buildCheckReceipt(checkId: string, charWidth: number = 42)
     }
   }
 
-  // Footer
+  // Footer / Trailer - use custom descriptor lines if configured
   builder.newLine();
   builder.align("center");
-  builder.line("Thank you for your visit!");
+  
+  if (trailerLines.length > 0) {
+    // Use configured trailer lines
+    for (const line of trailerLines) {
+      if (line && line.trim()) {
+        builder.line(line);
+      }
+    }
+  } else {
+    // Fallback to default message if no descriptors configured
+    builder.line("Thank you for your visit!");
+  }
+  
   builder.newLine();
   builder.line(formatDateTime(new Date()));
 
