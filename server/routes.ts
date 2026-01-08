@@ -35,6 +35,9 @@ import {
   TERMINAL_MODELS,
   TERMINAL_CONNECTION_TYPES,
   TERMINAL_DEVICE_STATUSES,
+  // Descriptor schemas
+  insertDescriptorSetSchema,
+  DESCRIPTOR_SCOPE_TYPES,
 } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -11190,6 +11193,254 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Replace registered device error:", error);
       res.status(500).json({ message: "Failed to replace registered device" });
+    }
+  });
+
+  // ============================================================================
+  // GUEST CHECK DESCRIPTORS (Headers & Trailers Configuration)
+  // Enterprise-wide settings with Property/RVC override capability
+  // ============================================================================
+
+  // Get all descriptor sets for an enterprise
+  app.get("/api/descriptors", async (req, res) => {
+    try {
+      const enterpriseId = req.query.enterpriseId as string;
+      if (!enterpriseId) {
+        return res.status(400).json({ message: "enterpriseId is required" });
+      }
+      const descriptors = await storage.getDescriptorSets(enterpriseId);
+      res.json(descriptors);
+    } catch (error) {
+      console.error("Get descriptors error:", error);
+      res.status(500).json({ message: "Failed to get descriptors" });
+    }
+  });
+
+  // Get a specific descriptor set by scope
+  app.get("/api/descriptors/:scopeType/:scopeId", async (req, res) => {
+    try {
+      const { scopeType, scopeId } = req.params;
+      if (!DESCRIPTOR_SCOPE_TYPES.includes(scopeType as any)) {
+        return res.status(400).json({ message: "Invalid scope type" });
+      }
+      const descriptor = await storage.getDescriptorSet(scopeType as any, scopeId);
+      if (!descriptor) {
+        return res.status(404).json({ message: "Descriptor set not found" });
+      }
+      res.json(descriptor);
+    } catch (error) {
+      console.error("Get descriptor error:", error);
+      res.status(500).json({ message: "Failed to get descriptor" });
+    }
+  });
+
+  // Get effective descriptors for an RVC (resolved from hierarchy)
+  app.get("/api/descriptors/effective/:rvcId", async (req, res) => {
+    try {
+      const { rvcId } = req.params;
+      const effective = await storage.getEffectiveDescriptors(rvcId);
+      res.json(effective);
+    } catch (error) {
+      console.error("Get effective descriptors error:", error);
+      res.status(500).json({ message: "Failed to get effective descriptors" });
+    }
+  });
+
+  // Create or update a descriptor set
+  app.put("/api/descriptors/:scopeType/:scopeId", async (req, res) => {
+    try {
+      const { scopeType, scopeId } = req.params;
+      if (!DESCRIPTOR_SCOPE_TYPES.includes(scopeType as any)) {
+        return res.status(400).json({ message: "Invalid scope type" });
+      }
+
+      const { enterpriseId, headerLines, trailerLines, logoEnabled, logoAssetId, overrideHeader, overrideTrailer, overrideLogo } = req.body;
+
+      if (!enterpriseId) {
+        return res.status(400).json({ message: "enterpriseId is required" });
+      }
+
+      // Validate header and trailer lines (max 16 each, max 48 chars per line for thermal printers)
+      if (headerLines && (!Array.isArray(headerLines) || headerLines.length > 16)) {
+        return res.status(400).json({ message: "headerLines must be an array with max 16 lines" });
+      }
+      if (trailerLines && (!Array.isArray(trailerLines) || trailerLines.length > 16)) {
+        return res.status(400).json({ message: "trailerLines must be an array with max 16 lines" });
+      }
+
+      // Check if descriptor already exists
+      const existing = await storage.getDescriptorSet(scopeType as any, scopeId);
+
+      if (existing) {
+        // Update existing
+        const updated = await storage.updateDescriptorSet(existing.id, {
+          headerLines: headerLines || [],
+          trailerLines: trailerLines || [],
+          logoEnabled: logoEnabled ?? false,
+          logoAssetId: logoAssetId || null,
+          overrideHeader: overrideHeader ?? false,
+          overrideTrailer: overrideTrailer ?? false,
+          overrideLogo: overrideLogo ?? false,
+        });
+        return res.json(updated);
+      } else {
+        // Create new
+        const created = await storage.createDescriptorSet({
+          scopeType,
+          scopeId,
+          enterpriseId,
+          headerLines: headerLines || [],
+          trailerLines: trailerLines || [],
+          logoEnabled: logoEnabled ?? false,
+          logoAssetId: logoAssetId || null,
+          overrideHeader: overrideHeader ?? (scopeType !== "enterprise"),
+          overrideTrailer: overrideTrailer ?? (scopeType !== "enterprise"),
+          overrideLogo: overrideLogo ?? (scopeType !== "enterprise"),
+        });
+        return res.status(201).json(created);
+      }
+    } catch (error) {
+      console.error("Create/update descriptor error:", error);
+      res.status(500).json({ message: "Failed to save descriptor" });
+    }
+  });
+
+  // Delete a descriptor set (reset to inherit from parent)
+  app.delete("/api/descriptors/:scopeType/:scopeId", async (req, res) => {
+    try {
+      const { scopeType, scopeId } = req.params;
+      const existing = await storage.getDescriptorSet(scopeType as any, scopeId);
+      if (!existing) {
+        return res.status(404).json({ message: "Descriptor set not found" });
+      }
+      await storage.deleteDescriptorSet(existing.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete descriptor error:", error);
+      res.status(500).json({ message: "Failed to delete descriptor" });
+    }
+  });
+
+  // ============================================================================
+  // DESCRIPTOR LOGO ASSETS
+  // ============================================================================
+
+  // Get all logo assets for an enterprise
+  app.get("/api/descriptor-logos", async (req, res) => {
+    try {
+      const enterpriseId = req.query.enterpriseId as string;
+      if (!enterpriseId) {
+        return res.status(400).json({ message: "enterpriseId is required" });
+      }
+      const logos = await storage.getDescriptorLogoAssets(enterpriseId);
+      res.json(logos);
+    } catch (error) {
+      console.error("Get descriptor logos error:", error);
+      res.status(500).json({ message: "Failed to get logos" });
+    }
+  });
+
+  // Get a specific logo asset
+  app.get("/api/descriptor-logos/:id", async (req, res) => {
+    try {
+      const logo = await storage.getDescriptorLogoAsset(req.params.id);
+      if (!logo) {
+        return res.status(404).json({ message: "Logo not found" });
+      }
+      res.json(logo);
+    } catch (error) {
+      console.error("Get descriptor logo error:", error);
+      res.status(500).json({ message: "Failed to get logo" });
+    }
+  });
+
+  // Upload a new logo (base64 encoded in request body for simplicity)
+  app.post("/api/descriptor-logos", async (req, res) => {
+    try {
+      const { enterpriseId, filename, mimeType, base64Data } = req.body;
+
+      if (!enterpriseId || !filename || !mimeType || !base64Data) {
+        return res.status(400).json({ message: "enterpriseId, filename, mimeType, and base64Data are required" });
+      }
+
+      // Validate mime type (only PNG for thermal printer compatibility)
+      if (!["image/png", "image/bmp"].includes(mimeType)) {
+        return res.status(400).json({ message: "Only PNG and BMP images are supported for thermal printer logos" });
+      }
+
+      // Decode base64 and check size (max 200KB)
+      const buffer = Buffer.from(base64Data, "base64");
+      if (buffer.length > 200 * 1024) {
+        return res.status(400).json({ message: "Logo file must be under 200KB" });
+      }
+
+      // Generate storage path and checksum
+      const storagePath = `logos/${enterpriseId}/${Date.now()}-${filename}`;
+      const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
+
+      // For now, store in file system (could be switched to object storage later)
+      const logoDir = path.join(process.cwd(), "uploads", "logos", enterpriseId);
+      if (!fs.existsSync(logoDir)) {
+        fs.mkdirSync(logoDir, { recursive: true });
+      }
+      const filePath = path.join(logoDir, `${Date.now()}-${filename}`);
+      fs.writeFileSync(filePath, buffer);
+
+      const logo = await storage.createDescriptorLogoAsset({
+        enterpriseId,
+        filename,
+        mimeType,
+        sizeBytes: buffer.length,
+        storagePath: filePath,
+        checksum,
+      });
+
+      res.status(201).json(logo);
+    } catch (error) {
+      console.error("Upload descriptor logo error:", error);
+      res.status(500).json({ message: "Failed to upload logo" });
+    }
+  });
+
+  // Serve logo file
+  app.get("/api/descriptor-logos/:id/file", async (req, res) => {
+    try {
+      const logo = await storage.getDescriptorLogoAsset(req.params.id);
+      if (!logo) {
+        return res.status(404).json({ message: "Logo not found" });
+      }
+
+      if (!fs.existsSync(logo.storagePath)) {
+        return res.status(404).json({ message: "Logo file not found on disk" });
+      }
+
+      res.setHeader("Content-Type", logo.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${logo.filename}"`);
+      res.sendFile(path.resolve(logo.storagePath));
+    } catch (error) {
+      console.error("Serve descriptor logo error:", error);
+      res.status(500).json({ message: "Failed to serve logo" });
+    }
+  });
+
+  // Delete a logo asset
+  app.delete("/api/descriptor-logos/:id", async (req, res) => {
+    try {
+      const logo = await storage.getDescriptorLogoAsset(req.params.id);
+      if (!logo) {
+        return res.status(404).json({ message: "Logo not found" });
+      }
+
+      // Delete file from disk
+      if (fs.existsSync(logo.storagePath)) {
+        fs.unlinkSync(logo.storagePath);
+      }
+
+      await storage.deleteDescriptorLogoAsset(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete descriptor logo error:", error);
+      res.status(500).json({ message: "Failed to delete logo" });
     }
   });
 
