@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -210,27 +209,19 @@ export default function ModifierGroupsPage() {
                       <div
                         key={modifier.id}
                         className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleToggleModifier(modifier.id);
-                        }}
+                        onClick={() => handleToggleModifier(modifier.id)}
+                        data-testid={`row-modifier-${modifier.id}`}
                       >
                         <Checkbox
-                          id={`mod-${modifier.id}`}
                           checked={isLinked}
-                          onCheckedChange={(checked) => {
-                            if (typeof checked === 'boolean') {
-                              handleToggleModifier(modifier.id);
-                            }
+                          onCheckedChange={() => {}}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleModifier(modifier.id);
                           }}
-                          onClick={(e) => e.stopPropagation()}
                           data-testid={`checkbox-modifier-${modifier.id}`}
                         />
-                        <Label
-                          htmlFor={`mod-${modifier.id}`}
-                          className="flex-1 cursor-pointer flex items-center justify-between"
-                        >
+                        <div className="flex-1 flex items-center justify-between">
                           <span>{modifier.name}</span>
                           {modifier.priceDelta && parseFloat(modifier.priceDelta) !== 0 && (
                             <span className="text-sm text-muted-foreground">
@@ -238,7 +229,7 @@ export default function ModifierGroupsPage() {
                               {parseFloat(modifier.priceDelta).toFixed(2)}
                             </span>
                           )}
-                        </Label>
+                        </div>
                       </div>
                     );
                   })}
