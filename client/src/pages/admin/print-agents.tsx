@@ -220,6 +220,7 @@ export default function PrintAgentsPage() {
   };
 
   const handleAdd = () => {
+    console.log("handleAdd called - opening form dialog");
     setEditingItem(null);
     form.reset({
       name: "",
@@ -227,6 +228,7 @@ export default function PrintAgentsPage() {
       description: "",
     });
     setFormOpen(true);
+    console.log("formOpen set to true");
   };
 
   const onSubmit = (data: FormData) => {
@@ -323,6 +325,9 @@ export default function PrintAgentsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Print Agent" : "Add Print Agent"}</DialogTitle>
+            <DialogDescription>
+              {editingItem ? "Update the print agent details below." : "Configure a new print agent to relay print jobs to your local printers."}
+            </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
