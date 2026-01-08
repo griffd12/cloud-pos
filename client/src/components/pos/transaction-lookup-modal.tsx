@@ -11,12 +11,14 @@ import { Separator } from "@/components/ui/separator";
 import { Search, Receipt, RefreshCw, ArrowRight } from "lucide-react";
 import type { Check } from "@shared/schema";
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 interface TransactionLookupModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rvcId: string;
   onSelectCheck: (check: Check) => void;
+  timezone?: string;
 }
 
 export function TransactionLookupModal({
@@ -24,7 +26,16 @@ export function TransactionLookupModal({
   onOpenChange,
   rvcId,
   onSelectCheck,
+  timezone = "America/New_York",
 }: TransactionLookupModalProps) {
+  const formatTime = (dateVal: string | Date | null) => {
+    if (!dateVal) return "-";
+    try {
+      return formatInTimeZone(new Date(dateVal), timezone, "h:mm a");
+    } catch {
+      return format(new Date(dateVal), "h:mm a");
+    }
+  };
   const [searchCheckNumber, setSearchCheckNumber] = useState("");
   const [searchDate, setSearchDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
@@ -119,7 +130,7 @@ export function TransactionLookupModal({
                         </Badge>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        <div>Closed: {check.closedAt ? format(new Date(check.closedAt), "h:mm a") : "-"}</div>
+                        <div>Closed: {formatTime(check.closedAt)}</div>
                         <div>Table: {check.tableNumber || "-"}</div>
                       </div>
                     </div>

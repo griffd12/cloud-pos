@@ -15,6 +15,7 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { RefreshCw, DollarSign, AlertTriangle, Check as CheckIcon } from "lucide-react";
 import type { Check, CheckItem, CheckPayment } from "@shared/schema";
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 interface RefundModalProps {
   open: boolean;
@@ -24,6 +25,7 @@ interface RefundModalProps {
   employeeId: string;
   managerApprovalId?: string;
   onComplete: () => void;
+  timezone?: string;
 }
 
 interface SelectedItem {
@@ -39,8 +41,18 @@ export function RefundModal({
   employeeId,
   managerApprovalId,
   onComplete,
+  timezone = "America/New_York",
 }: RefundModalProps) {
   const { toast } = useToast();
+  
+  const formatDateTime = (dateVal: string | Date | null) => {
+    if (!dateVal) return "-";
+    try {
+      return formatInTimeZone(new Date(dateVal), timezone, "MMM d, yyyy h:mm a");
+    } catch {
+      return format(new Date(dateVal), "MMM d, yyyy h:mm a");
+    }
+  };
   const [refundType, setRefundType] = useState<"full" | "partial">("full");
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [reason, setReason] = useState("");
@@ -164,7 +176,7 @@ export function RefundModal({
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Original Date: {check?.businessDate || "-"}</span>
               <span>
-                Closed: {check?.closedAt ? format(new Date(check.closedAt), "MMM d, yyyy h:mm a") : "-"}
+                Closed: {formatDateTime(check?.closedAt || null)}
               </span>
             </div>
 

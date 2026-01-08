@@ -1652,6 +1652,7 @@ export default function PosPage() {
         onOpenChange={setShowTransactionLookup}
         rvcId={currentRvc?.id || ""}
         onSelectCheck={handleSelectCheckForRefund}
+        timezone={wsContext?.property?.timezone || "America/New_York"}
       />
 
       <RefundModal
@@ -1662,6 +1663,7 @@ export default function PosPage() {
         employeeId={currentEmployee?.id || ""}
         managerApprovalId={refundManagerApprovalId}
         onComplete={handleRefundComplete}
+        timezone={wsContext?.property?.timezone || "America/New_York"}
       />
 
       <FunctionsModal
@@ -1792,6 +1794,7 @@ export default function PosPage() {
             reopenCheckMutation.mutate(checkId);
           }}
           isReopening={reopenCheckMutation.isPending}
+          timezone={wsContext?.property?.timezone || "America/New_York"}
         />
       )}
 

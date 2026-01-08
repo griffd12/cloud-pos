@@ -45,6 +45,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportData, commonFormatters } from "@/lib/export-utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { formatInTimeZone } from "date-fns-tz";
 import { type Property, type Rvc, type CheckItem } from "@shared/schema";
 
 interface SalesSummary {
@@ -337,15 +338,19 @@ function formatHour(hour: number): string {
   return `${displayHour}${ampm}`;
 }
 
-function formatDateTime(dateStr: string | null): string {
+function formatDateTimeWithTimezone(dateStr: string | null, timezone: string): string {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  try {
+    return formatInTimeZone(new Date(dateStr), timezone, "MMM d, h:mm a");
+  } catch {
+    return new Date(dateStr).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
 }
 
 function getTenderIcon(type: string) {
@@ -491,6 +496,18 @@ export default function ReportsPage() {
   const { data: rvcs = [] } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
   });
+
+  // Get timezone for the selected property (used for formatting times)
+  const selectedPropertyTimezone = useMemo(() => {
+    if (selectedPropertyId !== "all") {
+      const prop = properties.find(p => p.id === selectedPropertyId);
+      return prop?.timezone || "America/New_York";
+    }
+    return properties[0]?.timezone || "America/New_York";
+  }, [selectedPropertyId, properties]);
+
+  // Helper to format datetime in property timezone
+  const formatDateTime = (dateStr: string | null) => formatDateTimeWithTimezone(dateStr, selectedPropertyTimezone);
 
   // Determine which property to use for business date lookup
   const businessDatePropertyId = useMemo(() => {

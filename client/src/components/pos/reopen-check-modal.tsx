@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { RotateCcw, Search, Loader2 } from "lucide-react";
 import type { Check } from "@shared/schema";
+import { formatInTimeZone } from "date-fns-tz";
 
 interface ReopenCheckModalProps {
   open: boolean;
@@ -15,6 +16,7 @@ interface ReopenCheckModalProps {
   rvcId: string;
   onReopen: (checkId: string) => void;
   isReopening?: boolean;
+  timezone?: string;
 }
 
 export function ReopenCheckModal({
@@ -23,6 +25,7 @@ export function ReopenCheckModal({
   rvcId,
   onReopen,
   isReopening,
+  timezone = "America/New_York",
 }: ReopenCheckModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
@@ -52,10 +55,13 @@ export function ReopenCheckModal({
     return `$${numPrice.toFixed(2)}`;
   };
 
-  const formatTime = (dateStr: string | Date | null) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const formatTime = (dateVal: string | Date | null) => {
+    if (!dateVal) return "";
+    try {
+      return formatInTimeZone(new Date(dateVal), timezone, "h:mm a");
+    } catch {
+      return new Date(dateVal).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    }
   };
 
   const handleReopen = () => {
