@@ -119,6 +119,13 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: Move files from subdirectory if needed (ZIP contains print-agent folder)
+if exist "%INSTALL_DIR%\print-agent" (
+    echo [*] Reorganizing files...
+    xcopy /E /Y /Q "%INSTALL_DIR%\print-agent\*" "%INSTALL_DIR%\" >nul 2>&1
+    rmdir /S /Q "%INSTALL_DIR%\print-agent" >nul 2>&1
+)
+
 :: Clean up zip file
 del "%INSTALL_DIR%\print-agent.zip" >nul 2>&1
 echo [OK] Files extracted

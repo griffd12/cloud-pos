@@ -1,0 +1,79 @@
+============================================
+  Cloud POS Print Agent Installer
+============================================
+
+[OK] Node.js found
+    Version: v24.12.0
+
+Please enter the following configuration details:
+(You can find these in the Cloud POS admin panel under Print Agents)
+
+Enter Cloud POS WebSocket URL: wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/ws/print-agents
+Enter Agent Token: 98548b93-13ce-4565-b091-5b6d75379b47-e142fc606782bd325c98e7d21fc06085ef888898895ecc87c77066aa4f75a940
+
+Configuration:
+  URL:   wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/ws/print-agents
+  Token: 98548b93-13ce-4565-b...
+
+[*] Creating installation directory...
+[OK] Installation directory: C:\ProgramData\CloudPOS\PrintAgent
+
+[*] Downloading Print Agent files...
+    Download URL: https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/api/print-agents/download
+[OK] Downloaded successfully
+
+[*] Extracting files...
+[OK] Files extracted
+
+[*] Creating configuration file...
+[OK] Configuration saved to C:\ProgramData\CloudPOS\PrintAgent\config.json
+
+[*] Installing dependencies...
+[ npm install had issues, but continuing...
+[OK] Dependencies installed
+
+Start Print Agent automatically when Windows starts? (Y/N): y
+[OK] Auto-start configured
+
+[*] Creating helper scripts...
+[OK] Helper scripts created
+
+============================================
+  Installation Complete
+============================================
+
+Installation directory: C:\ProgramData\CloudPOS\PrintAgent
+
+Helper scripts:
+  - start-agent.bat : Start the Print Agent
+  - stop-agent.bat  : Stop the Print Agent
+
+Would you like to start the Print Agent now?
+Start now? (Y/N): y
+
+Starting Print Agent...
+(Press Ctrl+C to stop
+
+node:internal/modules/cjs/loader:1424
+  throw err;
+  ^
+
+Error: Cannot find module 'C:\ProgramData\CloudPOS\PrintAgent\index.js'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+    at Module._load (node:internal/modules/cjs/loader:1227:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.12.0
+
+To start the agent later, run:
+  C:\ProgramData\CloudPOS\PrintAgent\start-agent.bat
+
+Press any key to continue . . .
