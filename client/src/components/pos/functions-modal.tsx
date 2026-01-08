@@ -10,8 +10,10 @@ import {
   RotateCcw, 
   DollarSign, 
   Grid3X3,
-  Lock
+  Lock,
+  Activity
 } from "lucide-react";
+import { SystemStatusModal } from "./system-status-modal";
 
 interface FunctionsModalProps {
   open: boolean;
@@ -30,6 +32,7 @@ interface FunctionsModalProps {
     canReopen: boolean;
     canPriceOverride: boolean;
   };
+  propertyId?: string;
 }
 
 interface FunctionButtonProps {
@@ -84,8 +87,17 @@ export function FunctionsModal({
   onPriceOverride,
   onAssignTable,
   privileges,
+  propertyId,
 }: FunctionsModalProps) {
+  const [showSystemStatus, setShowSystemStatus] = useState(false);
+
   return (
+    <>
+    <SystemStatusModal 
+      open={showSystemStatus} 
+      onClose={() => setShowSystemStatus(false)} 
+      propertyId={propertyId}
+    />
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -153,6 +165,18 @@ export function FunctionsModal({
               />
             </div>
           </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">System</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <FunctionButton
+                icon={<Activity className="w-5 h-5" />}
+                label="System Status"
+                description="View connectivity status"
+                onClick={() => setShowSystemStatus(true)}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end pt-4 border-t">
@@ -162,5 +186,6 @@ export function FunctionsModal({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

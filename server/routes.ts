@@ -1020,6 +1020,128 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // SYSTEM STATUS - Detailed connectivity status for POS terminals
+  // ============================================================================
+
+  app.get("/api/pos/system-status", async (req, res) => {
+    try {
+      const propertyId = req.query.propertyId as string | undefined;
+      
+      // Database status - verify we can read from database
+      let databaseStatus: "online" | "offline" | "error" = "offline";
+      let databaseMessage = "";
+      try {
+        // Simple read query to verify database connectivity
+        const enterprises = await storage.getEnterprises();
+        databaseStatus = "online";
+        databaseMessage = "Connected";
+      } catch (dbError: any) {
+        databaseStatus = "error";
+        databaseMessage = dbError.message || "Database connection failed";
+      }
+
+      // EMC status - check if there are active EMC sessions (indicates EMC is available)
+      let emcStatus: "online" | "offline" | "unknown" = "unknown";
+      let emcMessage = "";
+      try {
+        // Check if EMC service is set up (any users exist)
+        const emcUserCount = await storage.getEmcUserCount();
+        if (emcUserCount > 0) {
+          emcStatus = "online";
+          emcMessage = "EMC configured and available";
+        } else {
+          emcStatus = "offline";
+          emcMessage = "EMC not configured";
+        }
+      } catch (emcError: any) {
+        emcStatus = "offline";
+        emcMessage = emcError.message || "EMC check failed";
+      }
+
+      // Print Agent status - check connected agents for property
+      let printAgentStatus: "online" | "offline" | "no_agents" = "no_agents";
+      let printAgentMessage = "";
+      let connectedAgentCount = 0;
+      let totalAgentCount = 0;
+      let agents: any[] = [];
+      
+      try {
+        const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+        
+        // Get all agents for property (or all if no propertyId)
+        const allAgents = await storage.getPrintAgents(propertyId);
+        totalAgentCount = allAgents.length;
+        
+        if (totalAgentCount === 0) {
+          printAgentStatus = "no_agents";
+          printAgentMessage = "No print agents configured";
+        } else {
+          // Count connected agents
+          for (const agent of allAgents) {
+            const isConnected = connectedAgentsMap?.has(agent.id) && 
+              connectedAgentsMap.get(agent.id)?.readyState === WebSocket.OPEN;
+            agents.push({
+              id: agent.id,
+              name: agent.name,
+              status: isConnected ? "online" : agent.status,
+              lastHeartbeat: agent.lastHeartbeat,
+            });
+            if (isConnected) connectedAgentCount++;
+          }
+          
+          if (connectedAgentCount > 0) {
+            printAgentStatus = "online";
+            printAgentMessage = `${connectedAgentCount} of ${totalAgentCount} agent(s) connected`;
+          } else {
+            printAgentStatus = "offline";
+            printAgentMessage = "No agents connected";
+          }
+        }
+      } catch (agentError: any) {
+        printAgentStatus = "offline";
+        printAgentMessage = agentError.message || "Agent check failed";
+      }
+
+      // Overall system status
+      let overallStatus: "healthy" | "degraded" | "critical" = "healthy";
+      if (databaseStatus !== "online") {
+        overallStatus = "critical";
+      } else if (printAgentStatus === "offline" && totalAgentCount > 0) {
+        overallStatus = "degraded";
+      }
+
+      res.json({
+        timestamp: new Date().toISOString(),
+        overallStatus,
+        services: {
+          database: {
+            status: databaseStatus,
+            message: databaseMessage,
+          },
+          emc: {
+            status: emcStatus,
+            message: emcMessage,
+          },
+          printAgent: {
+            status: printAgentStatus,
+            message: printAgentMessage,
+            connectedCount: connectedAgentCount,
+            totalCount: totalAgentCount,
+            agents,
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error("System status check error:", error);
+      res.status(500).json({ 
+        timestamp: new Date().toISOString(),
+        overallStatus: "critical",
+        error: error.message || "Failed to check system status" 
+      });
+    }
+  });
+
+  // ============================================================================
   // ENTERPRISE ROUTES
   // ============================================================================
 

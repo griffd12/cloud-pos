@@ -1739,6 +1739,7 @@ export default function PosPage() {
           canReopen: hasPrivilege("reopen_check"),
           canPriceOverride: hasPrivilege("modify_price"),
         }}
+        propertyId={currentRvc?.propertyId}
       />
 
       {currentCheck && currentEmployee && currentRvc && (
