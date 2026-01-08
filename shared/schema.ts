@@ -978,6 +978,37 @@ export const kdsTicketItems = pgTable("kds_ticket_items", {
 });
 
 // ============================================================================
+// PRINT AGENTS (Local network print relay agents - like Oracle Simphony Controllers)
+// ============================================================================
+
+export const PRINT_AGENT_STATUSES = ["online", "offline", "disconnected"] as const;
+export type PrintAgentStatus = (typeof PRINT_AGENT_STATUSES)[number];
+
+export const printAgents = pgTable("print_agents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Authentication
+  agentToken: text("agent_token").notNull().unique(), // Token for agent authentication
+  // Status
+  status: text("status").notNull().default("offline"), // online, offline, disconnected
+  lastHeartbeat: timestamp("last_heartbeat"),
+  lastConnectedAt: timestamp("last_connected_at"),
+  lastDisconnectedAt: timestamp("last_disconnected_at"),
+  // Agent info (reported by agent)
+  agentVersion: text("agent_version"),
+  hostname: text("hostname"),
+  ipAddress: text("ip_address"),
+  osInfo: text("os_info"),
+  // Configuration
+  autoReconnect: boolean("auto_reconnect").default(true),
+  heartbeatIntervalMs: integer("heartbeat_interval_ms").default(30000),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================================================
 // PRINT JOBS (Queue for network/local printing)
 // ============================================================================
 
@@ -990,6 +1021,7 @@ export type PrintJobStatus = (typeof PRINT_JOB_STATUSES)[number];
 export const printJobs = pgTable("print_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
+  printAgentId: varchar("print_agent_id").references(() => printAgents.id), // Agent that will handle this job
   printerId: varchar("printer_id").references(() => printers.id),
   workstationId: varchar("workstation_id").references(() => workstations.id),
   jobType: text("job_type").notNull(), // check_receipt, kitchen_ticket, sales_report, employee_report, end_of_day
@@ -1002,12 +1034,17 @@ export const printJobs = pgTable("print_jobs", {
   // Print content
   escPosData: text("esc_pos_data"), // Base64 encoded ESC/POS commands
   plainTextData: text("plain_text_data"), // Plain text fallback for debugging
+  // Printer destination info (for agent)
+  printerIp: text("printer_ip"),
+  printerPort: integer("printer_port").default(9100),
+  printerName: text("printer_name"),
   // Retry handling
   attempts: integer("attempts").default(0),
   maxAttempts: integer("max_attempts").default(3),
   lastError: text("last_error"),
   // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
+  sentToAgentAt: timestamp("sent_to_agent_at"),
   printedAt: timestamp("printed_at"),
   expiresAt: timestamp("expires_at"),
 });
@@ -1071,7 +1108,8 @@ export const insertKdsTicketSchema = createInsertSchema(kdsTickets).omit({ id: t
 export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true });
 export const insertRefundItemSchema = createInsertSchema(refundItems).omit({ id: true });
 export const insertRefundPaymentSchema = createInsertSchema(refundPayments).omit({ id: true });
-export const insertPrintJobSchema = createInsertSchema(printJobs).omit({ id: true, createdAt: true });
+export const insertPrintAgentSchema = createInsertSchema(printAgents).omit({ id: true, createdAt: true, lastHeartbeat: true, lastConnectedAt: true, lastDisconnectedAt: true });
+export const insertPrintJobSchema = createInsertSchema(printJobs).omit({ id: true, createdAt: true, sentToAgentAt: true, printedAt: true });
 
 // Types
 export type Enterprise = typeof enterprises.$inferSelect;
@@ -1164,6 +1202,8 @@ export type RefundItem = typeof refundItems.$inferSelect;
 export type InsertRefundItem = z.infer<typeof insertRefundItemSchema>;
 export type RefundPayment = typeof refundPayments.$inferSelect;
 export type InsertRefundPayment = z.infer<typeof insertRefundPaymentSchema>;
+export type PrintAgent = typeof printAgents.$inferSelect;
+export type InsertPrintAgent = z.infer<typeof insertPrintAgentSchema>;
 export type PrintJob = typeof printJobs.$inferSelect;
 export type InsertPrintJob = z.infer<typeof insertPrintJobSchema>;
 
