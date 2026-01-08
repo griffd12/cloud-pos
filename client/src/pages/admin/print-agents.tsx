@@ -294,7 +294,15 @@ export default function PrintAgentsPage() {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleAdd} data-testid="button-create-agent">
+        <Button 
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAdd();
+          }} 
+          data-testid="button-create-agent"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Create Agent
         </Button>
