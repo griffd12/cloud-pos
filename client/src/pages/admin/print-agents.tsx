@@ -347,8 +347,8 @@ export default function PrintAgentsPage() {
                   <FormItem>
                     <FormLabel>Property (Optional)</FormLabel>
                     <Select
-                      value={field.value || ""}
-                      onValueChange={(val) => field.onChange(val || undefined)}
+                      value={field.value || "__global__"}
+                      onValueChange={(val) => field.onChange(val === "__global__" ? undefined : val)}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-property">
@@ -356,7 +356,7 @@ export default function PrintAgentsPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Global (all properties)</SelectItem>
+                        <SelectItem value="__global__">Global (all properties)</SelectItem>
                         {properties.map((prop) => (
                           <SelectItem key={prop.id} value={prop.id}>
                             {prop.name}
