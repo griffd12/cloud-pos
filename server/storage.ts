@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql, inArray, gte, lte, or, ilike, isNotNull } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte, or, ilike, isNotNull, isNull } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees, employeeAssignments,
   majorGroups, familyGroups,
@@ -2064,7 +2064,10 @@ export class DatabaseStorage implements IStorage {
   // Print Agents
   async getPrintAgents(propertyId?: string): Promise<PrintAgent[]> {
     if (propertyId) {
-      return db.select().from(printAgents).where(eq(printAgents.propertyId, propertyId)).orderBy(printAgents.name);
+      // Include agents for this property OR global agents (null propertyId)
+      return db.select().from(printAgents)
+        .where(or(eq(printAgents.propertyId, propertyId), isNull(printAgents.propertyId)))
+        .orderBy(printAgents.name);
     }
     return db.select().from(printAgents).orderBy(printAgents.name);
   }
