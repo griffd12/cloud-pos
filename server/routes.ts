@@ -877,6 +877,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/registered-devices\/enroll$/,       // Device enrollment
     /^\/registered-devices\/validate$/,     // Token validation
     /^\/health$/,                           // Health check endpoint
+    /^\/print-agents(\/.*)?$/,              // Print agent management (EMC feature)
   ];
 
   app.use("/api", async (req, res, next) => {
