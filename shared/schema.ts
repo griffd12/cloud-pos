@@ -986,7 +986,7 @@ export type PrintAgentStatus = (typeof PRINT_AGENT_STATUSES)[number];
 
 export const printAgents = pgTable("print_agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  propertyId: varchar("property_id").references(() => properties.id), // Optional - null means global (all properties)
   name: text("name").notNull(),
   description: text("description"),
   // Authentication
@@ -1108,7 +1108,9 @@ export const insertKdsTicketSchema = createInsertSchema(kdsTickets).omit({ id: t
 export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true });
 export const insertRefundItemSchema = createInsertSchema(refundItems).omit({ id: true });
 export const insertRefundPaymentSchema = createInsertSchema(refundPayments).omit({ id: true });
-export const insertPrintAgentSchema = createInsertSchema(printAgents).omit({ id: true, createdAt: true, lastHeartbeat: true, lastConnectedAt: true, lastDisconnectedAt: true });
+export const insertPrintAgentSchema = createInsertSchema(printAgents).omit({ id: true, createdAt: true, lastHeartbeat: true, lastConnectedAt: true, lastDisconnectedAt: true, agentToken: true, status: true, agentVersion: true, hostname: true, ipAddress: true }).extend({
+  propertyId: z.string().optional().nullable(),
+});
 export const insertPrintJobSchema = createInsertSchema(printJobs).omit({ id: true, createdAt: true, sentToAgentAt: true, printedAt: true });
 
 // Types
