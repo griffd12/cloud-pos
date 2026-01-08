@@ -3077,7 +3077,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         broadcastCheckUpdate(checkId, "closed", check?.rvcId);
         broadcastPaymentUpdate(checkId);
         
-        return res.json({ ...updatedCheck, paidAmount });
+        // Auto-print receipt on check close
+        let autoPrintStatus: { success: boolean; message?: string } = { success: false };
+        try {
+          const printResult = await printCheckReceipt(checkId, check?.rvcId);
+          if (printResult) {
+            autoPrintStatus = { success: true };
+          } else {
+            autoPrintStatus = { success: false, message: "No receipt printer configured" };
+          }
+        } catch (printError: any) {
+          console.error("Auto-print receipt error:", printError);
+          autoPrintStatus = { success: false, message: printError.message || "Print failed" };
+        }
+        
+        return res.json({ ...updatedCheck, paidAmount, autoPrintStatus });
       }
 
       // Broadcast real-time update for partial payment
@@ -3097,6 +3111,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .filter(p => p.paymentStatus === "completed")
       .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
     res.json({ payments, paidAmount });
+  });
+
+  // Helper function to print check receipt
+  async function printCheckReceipt(checkId: string, rvcId?: string | null) {
+    // Get RVC to find property
+    const rvc = rvcId ? await storage.getRvc(rvcId) : null;
+    if (!rvc?.propertyId) {
+      console.log("No property found for check, skipping print");
+      return null;
+    }
+
+    // Find receipt printer for this property
+    const printer = await findReceiptPrinter(rvc.propertyId);
+    if (!printer || printer.connectionType !== "network" || !printer.ipAddress) {
+      console.log("No network receipt printer configured for property");
+      return null;
+    }
+
+    // Build and send receipt
+    const builder = await buildCheckReceipt(checkId, printer.characterWidth || 42);
+    const buffer = builder.cut().build();
+    
+    await printToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
+    console.log("Receipt printed to", printer.name);
+    return { success: true, printer: printer.name };
+  }
+
+  // Print check endpoint
+  app.post("/api/checks/:id/print", async (req, res) => {
+    try {
+      const checkId = req.params.id;
+      const { employeeId } = req.body;
+
+      const check = await storage.getCheck(checkId);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+
+      const result = await printCheckReceipt(checkId, check.rvcId);
+      
+      if (!result) {
+        return res.status(400).json({ message: "No receipt printer available for this property" });
+      }
+
+      await storage.createAuditLog({
+        rvcId: check.rvcId,
+        employeeId,
+        action: "print_check",
+        targetType: "check",
+        targetId: checkId,
+        details: { printer: result.printer },
+      });
+
+      res.json({ message: "Receipt printed successfully", printer: result.printer });
+    } catch (error) {
+      console.error("Print check error:", error);
+      res.status(500).json({ message: "Failed to print receipt" });
+    }
   });
 
   // ============================================================================

@@ -33,7 +33,7 @@ import { useItemAvailability } from "@/hooks/use-item-availability";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer } from "lucide-react";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -563,13 +563,22 @@ export default function PosPage() {
       const result = await response.json();
       return { ...result, isCashOverTender: data.isCashOverTender, tenderedAmount: data.amount };
     },
-    onSuccess: async (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number }) => {
+    onSuccess: async (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number; autoPrintStatus?: { success: boolean; message?: string } }) => {
       console.log("Payment result:", result, "status:", result.status);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
       if (result.status === "closed") {
         console.log("Check is closed, clearing state");
+        
+        // Notify if auto-print failed
+        if (result.autoPrintStatus && !result.autoPrintStatus.success) {
+          toast({
+            title: "Receipt Print Failed",
+            description: result.autoPrintStatus.message || "Could not print receipt automatically. Use Print Check to reprint.",
+            variant: "destructive",
+          });
+        }
         
         // Earn loyalty points if customer is attached
         if (result.customerId) {
@@ -751,6 +760,40 @@ export default function PosPage() {
       toast({ title: "Failed to override price", description: error.message, variant: "destructive" });
     },
   });
+
+  const printCheckMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      const response = await apiRequest("POST", `/api/checks/${checkId}/print`, {
+        employeeId: currentEmployee?.id,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Receipt Printed", description: "Check has been sent to the printer" });
+    },
+    onError: (error: any) => {
+      // Parse the error message - apiRequest throws "status: text" format
+      let errorMessage = "Could not print receipt";
+      if (error.message) {
+        // Try to extract JSON message from error text
+        const match = error.message.match(/\{.*"message"\s*:\s*"([^"]+)".*\}/);
+        if (match) {
+          errorMessage = match[1];
+        } else if (error.message.includes(":")) {
+          errorMessage = error.message.split(":").slice(1).join(":").trim();
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      toast({ title: "Print Failed", description: errorMessage, variant: "destructive" });
+    },
+  });
+
+  const handlePrintCheck = () => {
+    if (currentCheck) {
+      printCheckMutation.mutate(currentCheck.id);
+    }
+  };
 
   const handlePickupCheck = async (checkId: string) => {
     try {
@@ -1334,6 +1377,19 @@ export default function PosPage() {
                       Gift Card
                     </Button>
                   </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => handlePrintCheck()}
+                      disabled={!currentCheck || printCheckMutation.isPending}
+                      data-testid="button-print-check-grid"
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      {printCheckMutation.isPending ? "Printing..." : "Print Check"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>
@@ -1462,6 +1518,19 @@ export default function PosPage() {
                     >
                       <CreditCard className="w-4 h-4 mr-2" />
                       Gift Card
+                    </Button>
+                  </div>
+                  <div className="h-14 flex-1 min-w-[100px]">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full h-full font-semibold"
+                      onClick={() => handlePrintCheck()}
+                      disabled={!currentCheck || printCheckMutation.isPending}
+                      data-testid="button-print-check"
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      {printCheckMutation.isPending ? "Printing..." : "Print Check"}
                     </Button>
                   </div>
                 </div>
