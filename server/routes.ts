@@ -1897,6 +1897,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  // Test print endpoint - sends a test page to verify printer connectivity
+  app.post("/api/printers/:id/test", async (req, res) => {
+    try {
+      const printer = await storage.getPrinter(req.params.id);
+      if (!printer) {
+        return res.status(404).json({ message: "Printer not found" });
+      }
+
+      if (printer.connectionType !== "network" || !printer.ipAddress) {
+        return res.status(400).json({ message: "Test print only supported for network printers with IP address configured" });
+      }
+
+      // Import print service
+      const { ESCPOSBuilder, printToNetworkPrinter } = await import("./printService");
+
+      // Build test receipt
+      const builder = new ESCPOSBuilder(printer.characterWidth || 42);
+      builder
+        .align("center")
+        .bold(true)
+        .doubleSize(true)
+        .line("TEST PRINT")
+        .normalSize()
+        .bold(false)
+        .feed(1)
+        .separator()
+        .align("left")
+        .line(`Printer: ${printer.name}`)
+        .line(`Model: ${printer.model || "Not specified"}`)
+        .line(`IP: ${printer.ipAddress}:${printer.port || 9100}`)
+        .line(`Protocol: ${printer.driverProtocol || "epson"}`)
+        .line(`Char Width: ${printer.characterWidth || 42}`)
+        .separator()
+        .align("center")
+        .line(new Date().toLocaleString())
+        .feed(1)
+        .line("If you can read this,")
+        .line("the printer is working!")
+        .separator()
+        .feed(3)
+        .cut();
+
+      const data = builder.build();
+      const result = await printToNetworkPrinter(
+        printer.ipAddress,
+        printer.port || 9100,
+        data,
+        10000 // 10 second timeout for test
+      );
+
+      if (result.success) {
+        // Update printer status to online
+        await storage.updatePrinter(printer.id, { isOnline: true, lastSeenAt: new Date() });
+        res.json({ success: true, message: "Test print sent successfully" });
+      } else {
+        // Update printer status to offline
+        await storage.updatePrinter(printer.id, { isOnline: false });
+        res.status(500).json({ success: false, message: result.error || "Failed to send test print" });
+      }
+    } catch (error) {
+      console.error("Test print error:", error);
+      res.status(500).json({ success: false, message: error instanceof Error ? error.message : "Test print failed" });
+    }
+  });
+
   // ============================================================================
   // KDS DEVICE ROUTES
   // ============================================================================

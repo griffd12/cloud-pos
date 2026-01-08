@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { DataTable, type Column } from "@/components/admin/data-table";
+import { DataTable, type Column, type CustomAction } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
+import { Printer as PrinterIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -192,6 +193,37 @@ export default function PrintersPage() {
     },
   });
 
+  const testPrintMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", "/api/printers/" + id + "/test");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/printers"] });
+      toast({ title: data.message || "Test print sent successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message || "Test print failed", variant: "destructive" });
+    },
+  });
+
+  const customActions: CustomAction<Printer>[] = [
+    {
+      label: "Test Print",
+      icon: PrinterIcon,
+      onClick: (printer) => {
+        if (printer.connectionType !== "network" || !printer.ipAddress) {
+          toast({ 
+            title: "Test print requires a network printer with IP address", 
+            variant: "destructive" 
+          });
+          return;
+        }
+        testPrintMutation.mutate(printer.id);
+      },
+    },
+  ];
+
   const handleOpenForm = (item: Printer | null) => {
     setEditingItem(item);
     setFormOpen(true);
@@ -211,6 +243,7 @@ export default function PrintersPage() {
         onAdd={() => handleOpenForm(null)}
         onEdit={(item) => handleOpenForm(item)}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={customActions}
         isLoading={isLoading}
         searchPlaceholder="Search printers..."
         emptyMessage="No printers configured"
