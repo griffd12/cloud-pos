@@ -162,7 +162,7 @@ if /i "!AUTO_START!"=="Y" (
     :: Create a VBS script to run the agent hidden
     echo Set WshShell = CreateObject("WScript.Shell") > "%INSTALL_DIR%\start-hidden.vbs"
     echo WshShell.CurrentDirectory = "%INSTALL_DIR%" >> "%INSTALL_DIR%\start-hidden.vbs"
-    echo WshShell.Run "cmd /c node index.js >> agent.log 2>&1", 0 >> "%INSTALL_DIR%\start-hidden.vbs"
+    echo WshShell.Run "cmd /c node print-agent.js >> agent.log 2>&1", 0 >> "%INSTALL_DIR%\start-hidden.vbs"
     
     :: Create shortcut in Startup folder
     set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
@@ -179,7 +179,7 @@ echo [*] Creating helper scripts...
 echo @echo off > "%INSTALL_DIR%\start-agent.bat"
 echo cd /d "%INSTALL_DIR%" >> "%INSTALL_DIR%\start-agent.bat"
 echo echo Starting Cloud POS Print Agent... >> "%INSTALL_DIR%\start-agent.bat"
-echo node index.js >> "%INSTALL_DIR%\start-agent.bat"
+echo node print-agent.js >> "%INSTALL_DIR%\start-agent.bat"
 
 :: Stop script  
 echo @echo off > "%INSTALL_DIR%\stop-agent.bat"
@@ -209,7 +209,7 @@ if /i "!START_NOW!"=="Y" (
     echo (Press Ctrl+C to stop)
     echo.
     cd /d "%INSTALL_DIR%"
-    node index.js
+    node print-agent.js
 ) else (
     echo.
     echo To start the agent later, run:
