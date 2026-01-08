@@ -163,11 +163,12 @@ function formatCurrency(amount: number | string): string {
   return `$${num.toFixed(2)}`;
 }
 
-// Format date/time for receipts
-function formatDateTime(date: Date | string | null): string {
+// Format date/time for receipts with timezone support
+function formatDateTime(date: Date | string | null, timezone?: string): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleString("en-US", {
+    timeZone: timezone || "America/Los_Angeles",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -268,9 +269,10 @@ export async function buildCheckReceipt(checkId: string, charWidth: number = 42)
 
   builder.newLine();
   builder.align("left");
-  builder.line(`Opened: ${formatDateTime(check.openedAt)}`);
+  const tz = property?.timezone || "America/Los_Angeles";
+  builder.line(`Opened: ${formatDateTime(check.openedAt, tz)}`);
   if (check.closedAt) {
-    builder.line(`Closed: ${formatDateTime(check.closedAt)}`);
+    builder.line(`Closed: ${formatDateTime(check.closedAt, tz)}`);
   }
   if (employee) {
     builder.line(`Server: ${employee.firstName} ${employee.lastName}`);
@@ -359,7 +361,7 @@ export async function buildCheckReceipt(checkId: string, charWidth: number = 42)
   }
   
   builder.newLine();
-  builder.line(formatDateTime(new Date()));
+  builder.line(formatDateTime(new Date(), tz));
 
   builder.cut();
 
@@ -372,7 +374,8 @@ export function buildKitchenTicket(
   items: Array<{ name: string; qty: number; modifiers?: string[] }>,
   orderType: string,
   tableNumber?: string,
-  charWidth: number = 42
+  charWidth: number = 42,
+  timezone?: string
 ): ESCPOSBuilder {
   const builder = new ESCPOSBuilder(charWidth);
 
@@ -385,7 +388,7 @@ export function buildKitchenTicket(
     builder.line(`TABLE: ${tableNumber}`);
   }
   builder.bold(false);
-  builder.line(formatDateTime(new Date()));
+  builder.line(formatDateTime(new Date(), timezone));
   builder.separator();
 
   // Items
