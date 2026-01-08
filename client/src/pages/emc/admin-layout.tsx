@@ -68,6 +68,7 @@ import ForecastingPage from "../admin/forecasting";
 import ManagerAlertsPage from "../admin/manager-alerts";
 import ItemAvailabilityPage from "../admin/item-availability";
 import AccountingExportPage from "../admin/accounting-export";
+import PrintAgentsPage from "../admin/print-agents";
 
 function EmcDashboard() {
   const { data: stats } = useQuery<{
@@ -338,6 +339,7 @@ export default function EmcAdminLayout() {
               <Route path="/emc/manager-alerts" component={ManagerAlertsPage} />
               <Route path="/emc/item-availability" component={ItemAvailabilityPage} />
               <Route path="/emc/accounting-export" component={AccountingExportPage} />
+              <Route path="/emc/print-agents" component={PrintAgentsPage} />
             </Switch>
           </main>
         </div>
