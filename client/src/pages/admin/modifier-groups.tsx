@@ -209,12 +209,22 @@ export default function ModifierGroupsPage() {
                     return (
                       <div
                         key={modifier.id}
-                        className="flex items-center gap-3 p-2 rounded-md hover-elevate"
+                        className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleToggleModifier(modifier.id);
+                        }}
                       >
                         <Checkbox
                           id={`mod-${modifier.id}`}
                           checked={isLinked}
-                          onCheckedChange={() => handleToggleModifier(modifier.id)}
+                          onCheckedChange={(checked) => {
+                            if (typeof checked === 'boolean') {
+                              handleToggleModifier(modifier.id);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
                           data-testid={`checkbox-modifier-${modifier.id}`}
                         />
                         <Label

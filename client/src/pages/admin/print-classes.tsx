@@ -350,12 +350,22 @@ function PrintClassFormDialog({
                         <div 
                           key={device.id} 
                           className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
-                          onClick={() => toggleOrderDevice(device.id)}
-                          data-testid={`checkbox-orderdevice-${device.id}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleOrderDevice(device.id);
+                          }}
+                          data-testid={`row-orderdevice-${device.id}`}
                         >
                           <Checkbox 
                             checked={selectedOrderDevices.includes(device.id)}
-                            onCheckedChange={() => toggleOrderDevice(device.id)}
+                            onCheckedChange={(checked) => {
+                              if (typeof checked === 'boolean') {
+                                toggleOrderDevice(device.id);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`checkbox-orderdevice-${device.id}`}
                           />
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
