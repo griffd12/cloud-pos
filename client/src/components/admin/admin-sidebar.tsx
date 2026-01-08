@@ -86,6 +86,7 @@ const menuGroupsTemplate = [
       { title: "KDS Devices", url: "/admin/kds-devices", icon: Tv2 },
       { title: "Order Devices", url: "/admin/order-devices", icon: Monitor },
       { title: "Print Classes", url: "/admin/print-classes", icon: LayoutGrid },
+      { title: "Descriptors", url: "/admin/descriptors", icon: Receipt },
       { title: "POS Layouts", url: "/admin/pos-layouts", icon: LayoutGrid },
     ],
   },
