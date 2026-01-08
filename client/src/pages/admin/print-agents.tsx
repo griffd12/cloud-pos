@@ -367,7 +367,7 @@ export default function PrintAgentsPage() {
                           <SelectValue placeholder="Global (all properties)" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent className="z-[10000]">
                         <SelectItem value="__global__">Global (all properties)</SelectItem>
                         {properties.map((prop) => (
                           <SelectItem key={prop.id} value={prop.id}>
