@@ -422,11 +422,13 @@ export interface IStorage {
   getPrintAgents(propertyId?: string): Promise<PrintAgent[]>;
   getPrintAgent(id: string): Promise<PrintAgent | undefined>;
   getPrintAgentByToken(agentTokenHash: string): Promise<PrintAgent | undefined>;
+  getOnlinePrintAgentForProperty(propertyId: string): Promise<PrintAgent | undefined>;
   createPrintAgent(data: InsertPrintAgent): Promise<PrintAgent>;
   updatePrintAgent(id: string, data: Partial<PrintAgent>): Promise<PrintAgent | undefined>;
   deletePrintAgent(id: string): Promise<boolean>;
   getAgentPendingPrintJobs(agentId: string): Promise<PrintJob[]>;
   getAgentPrintingJobs(agentId: string): Promise<PrintJob[]>;
+  getUnassignedPendingPrintJobsForProperty(propertyId: string): Promise<PrintJob[]>;
 
   // KDS Tickets
   getKdsTickets(filters?: { rvcId?: string; kdsDeviceId?: string; stationType?: string }): Promise<any[]>;
@@ -2082,6 +2084,19 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getOnlinePrintAgentForProperty(propertyId: string): Promise<PrintAgent | undefined> {
+    // Find an online, active print agent for this property (or global agent)
+    const [result] = await db.select().from(printAgents)
+      .where(and(
+        or(eq(printAgents.propertyId, propertyId), isNull(printAgents.propertyId)),
+        eq(printAgents.status, "online"),
+        eq(printAgents.active, true)
+      ))
+      .orderBy(printAgents.propertyId) // Prefer property-specific agents over global
+      .limit(1);
+    return result;
+  }
+
   async createPrintAgent(data: InsertPrintAgent): Promise<PrintAgent> {
     const [result] = await db.insert(printAgents).values(data).returning();
     return result;
@@ -2114,6 +2129,17 @@ export class DatabaseStorage implements IStorage {
         eq(printJobs.printAgentId, agentId),
         eq(printJobs.status, "printing")
       ));
+  }
+
+  async getUnassignedPendingPrintJobsForProperty(propertyId: string): Promise<PrintJob[]> {
+    // Get pending jobs for this property that have no agent assigned (null printAgentId)
+    return db.select().from(printJobs)
+      .where(and(
+        eq(printJobs.propertyId, propertyId),
+        isNull(printJobs.printAgentId),
+        eq(printJobs.status, "pending")
+      ))
+      .orderBy(printJobs.priority, printJobs.createdAt);
   }
 
   // KDS Tickets

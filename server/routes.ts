@@ -58,6 +58,41 @@ import {
 
 const clients: Map<string, Set<WebSocket>> = new Map();
 
+// Print agent connection tracking (module scope for access from printCheckReceipt)
+const connectedAgents: Map<string, WebSocket> = new Map(); // agentId -> WebSocket
+
+// Function to send print job to connected agent (module scope)
+async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
+  const agentWs = connectedAgents.get(agentId);
+  if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
+    console.log(`Cannot send job ${job.id} - agent ${agentId} not connected`);
+    return false;
+  }
+  
+  // Validate job has required data
+  if (!job.escPosData) {
+    console.error(`Job ${job.id} has no ESC/POS data - cannot send to agent`);
+    return false;
+  }
+  
+  try {
+    const message = {
+      type: "JOB",
+      jobId: job.id,
+      printerIp: job.printerIp,
+      printerPort: job.printerPort || 9100,
+      data: job.escPosData, // Base64 encoded ESC/POS data
+      jobType: job.jobType,
+    };
+    console.log(`Sending job ${job.id} to agent ${agentId}: printer=${job.printerIp}:${job.printerPort || 9100}, dataLen=${job.escPosData?.length || 0}`);
+    agentWs.send(JSON.stringify(message));
+    return true;
+  } catch (e) {
+    console.error("Failed to send job to agent:", e);
+    return false;
+  }
+}
+
 // Generic POS event broadcaster for real-time updates
 interface PosEvent {
   type: string;
@@ -701,30 +736,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // PRINT AGENT WEBSOCKET SERVER - Dedicated endpoint for local print agents
   // Agents authenticate with pre-issued tokens and receive print jobs
   // Protocol: HELLO (auth), JOB (print request), ACK, DONE, ERROR, HEARTBEAT
+  // Note: connectedAgents map and sendJobToAgent are at module scope for access from printCheckReceipt
   // ============================================================================
-  const connectedAgents: Map<string, WebSocket> = new Map(); // agentId -> WebSocket
-
-  // Function to send print job to connected agent
-  async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
-    const agentWs = connectedAgents.get(agentId);
-    if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
-      return false;
-    }
-    try {
-      agentWs.send(JSON.stringify({
-        type: "JOB",
-        jobId: job.id,
-        printerIp: job.printerIp,
-        printerPort: job.printerPort || 9100,
-        data: job.data, // Base64 encoded ESC/POS data (correct field name)
-        jobType: job.jobType,
-      }));
-      return true;
-    } catch (e) {
-      console.error("Failed to send job to agent:", e);
-      return false;
-    }
-  }
 
   // Reset stuck "printing" jobs back to pending for an agent
   async function resetStuckPrintingJobs(agentId: string) {
@@ -736,19 +749,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   // Drain pending jobs for a connected agent
-  async function drainAgentJobs(agentId: string) {
+  async function drainAgentJobs(agentId: string, propertyId?: string | null) {
     // First, reset any stuck "printing" jobs from previous sessions
     await resetStuckPrintingJobs(agentId);
     
-    const jobs = await storage.getAgentPendingPrintJobs(agentId);
-    for (const job of jobs) {
+    // Get jobs specifically assigned to this agent
+    const assignedJobs = await storage.getAgentPendingPrintJobs(agentId);
+    
+    // Also get unassigned pending jobs for this property (if agent has a property)
+    let unassignedJobs: any[] = [];
+    if (propertyId) {
+      unassignedJobs = await storage.getUnassignedPendingPrintJobsForProperty(propertyId);
+    }
+    
+    // Process all jobs
+    const allJobs = [...assignedJobs, ...unassignedJobs];
+    for (const job of allJobs) {
       const sent = await sendJobToAgent(agentId, job);
       if (sent) {
         await storage.updatePrintJob(job.id, {
+          printAgentId: agentId, // Assign this agent to the job
           status: "printing",
+          sentToAgentAt: new Date(),
           attempts: (job.attempts || 0) + 1,
         });
       }
+    }
+    
+    if (allJobs.length > 0) {
+      console.log(`Drained ${allJobs.length} pending jobs to agent ${agentId}`);
     }
   }
 
@@ -796,8 +825,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
           console.log(`Print agent connected: ${agent.name} (${agent.id})`);
 
-          // Drain any pending jobs for this agent
-          await drainAgentJobs(agent.id);
+          // Drain any pending jobs for this agent (including unassigned property jobs)
+          await drainAgentJobs(agent.id, agent.propertyId);
           return;
         }
 
@@ -3442,7 +3471,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ payments, paidAmount });
   });
 
-  // Helper function to print check receipt
+  // Helper function to print check receipt - routes through print agents for local network printing
   async function printCheckReceipt(checkId: string, rvcId?: string | null) {
     // Get RVC to find property
     const rvc = rvcId ? await storage.getRvc(rvcId) : null;
@@ -3458,13 +3487,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return null;
     }
 
-    // Build and send receipt
+    // Find online print agent for this property
+    const agent = await storage.getOnlinePrintAgentForProperty(rvc.propertyId);
+    if (!agent) {
+      console.log("No online print agent available for property - job will be queued");
+    }
+
+    // Build receipt ESC/POS data
     const builder = await buildCheckReceipt(checkId, printer.characterWidth || 42);
     const buffer = builder.cut().build();
-    
-    await printToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
-    console.log("Receipt printed to", printer.name);
-    return { success: true, printer: printer.name };
+    const escPosBase64 = buffer.toString("base64");
+
+    // Create print job in database
+    const job = await storage.createPrintJob({
+      propertyId: rvc.propertyId,
+      printAgentId: agent?.id || null,
+      printerId: printer.id,
+      jobType: "check_receipt",
+      status: "pending",
+      priority: 1, // High priority for receipts
+      checkId: checkId,
+      escPosData: escPosBase64,
+      plainTextData: `Check #${checkId} receipt`,
+      printerIp: printer.ipAddress,
+      printerPort: printer.port || 9100,
+      printerName: printer.name,
+      attempts: 0,
+      maxAttempts: 3,
+    });
+
+    console.log(`Created print job ${job.id} for check ${checkId}, agent: ${agent?.name || 'none (queued)'}`);
+
+    // If agent is connected, send job immediately
+    if (agent && connectedAgents.has(agent.id)) {
+      const sent = await sendJobToAgent(agent.id, job);
+      if (sent) {
+        await storage.updatePrintJob(job.id, {
+          status: "printing",
+          sentToAgentAt: new Date(),
+          attempts: 1,
+        });
+        console.log(`Print job ${job.id} sent to agent ${agent.name}`);
+        return { success: true, printer: printer.name, jobId: job.id, status: "printing" };
+      }
+    }
+
+    // Job is queued - will be picked up when agent connects
+    return { success: true, printer: printer.name, jobId: job.id, status: "queued" };
   }
 
   // Print check endpoint
