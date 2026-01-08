@@ -145,8 +145,8 @@ echo [OK] Files extracted
 echo.
 echo [*] Creating configuration file...
 
-:: Use PowerShell to create proper JSON (handles special characters in token)
-powershell -Command "& { $config = @{ server = '!CLOUD_URL!'; token = '!AGENT_TOKEN!'; defaultPrinterPort = 9100; reconnectInterval = 5000; maxReconnectInterval = 60000; heartbeatInterval = 30000; printTimeout = 10000 }; $config | ConvertTo-Json | Set-Content -Path '%CONFIG_FILE%' -Encoding UTF8 }"
+:: Use PowerShell to create proper JSON without BOM (handles special characters in token)
+powershell -Command "& { $config = @{ server = '!CLOUD_URL!'; token = '!AGENT_TOKEN!'; defaultPrinterPort = 9100; reconnectInterval = 5000; maxReconnectInterval = 60000; heartbeatInterval = 30000; printTimeout = 10000 }; $json = $config | ConvertTo-Json; [System.IO.File]::WriteAllText('%CONFIG_FILE%', $json) }"
 if %errorlevel% neq 0 (
     echo [!] Failed to create configuration file
     pause

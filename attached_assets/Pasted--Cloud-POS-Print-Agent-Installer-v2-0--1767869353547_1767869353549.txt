@@ -1,0 +1,83 @@
+============================================
+  Cloud POS Print Agent Installer v2.0
+============================================
+
+[OK] Node.js found
+    Version: v24.12.0
+
+Please enter the following configuration details:
+(You can find these in the Cloud POS admin panel under Print Agents)
+
+The server URL should be the full WebSocket URL, for example:
+  wss://your-pos-app.replit.app/ws/print-agents
+
+Enter Cloud POS Server URL (e.g., wss://yourapp.replit.app/ws/print-agents): wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/ws/print-agents
+
+Enter Agent Token: 98548b93-13ce-4565-b091-5b6d75379b47-e142fc606782bd325c98e7d21fc06085ef888898895ecc87c77066aa4f75a940
+
+Configuration:
+  URL:   wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/ws/print-agents
+  Token: 98548b93-13ce-4565-b...
+
+[*] Creating installation directory...
+[OK] Installation directory: C:\ProgramData\CloudPOS\PrintAgent
+
+[*] Downloading Print Agent files...
+    Download URL: https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/api/print-agents/download
+[OK] Downloaded successfully
+
+[*] Extracting files...
+[*] Reorganizing files...
+[OK] Files extracted
+
+[*] Creating configuration file...
+[OK] Configuration saved to C:\ProgramData\CloudPOS\PrintAgent\config.json
+
+[*] Installing dependencies...
+npm warn config production Use `--omit=dev` instead.
+
+added 1 package, and audited 2 packages in 823ms
+
+found 0 vulnerabilities
+[OK] Dependencies installed
+[OK] Print Agent files verified
+
+Start Print Agent automatically when Windows starts? (Y/N): y
+[*] Setting up auto-start...
+[OK] Auto-start configured
+
+[*] Creating helper scripts...
+[OK] Helper scripts created
+
+============================================
+  Installation Complete
+============================================
+
+Installation directory: C:\ProgramData\CloudPOS\PrintAgent
+
+Available scripts:
+  - start-agent.bat        : Start the agent (visible console)
+  - start-agent-hidden.bat : Start the agent in background
+  - stop-agent.bat         : Stop the agent
+  - view-logs.bat          : View agent logs
+  - test-connection.bat    : Test server connection
+
+Would you like to test the connection now?
+Test connection? (Y/N): y
+
+Starting Print Agent...
+(Press Ctrl+C to stop
+
+==================================================
+Cloud POS Print Agent
+==================================================
+Failed to read config.json: Unexpected token '﻿', "﻿{
+    "p"... is not valid JSON
+Error: Server URL is required
+Usage: node print-agent.js --server <url> --token <token>
+Or create a config.json file with server and token
+
+To start the agent later, run:
+  "C:\ProgramData\CloudPOS\PrintAgent\start-agent.bat"
+
+Press any key to continue . . .
