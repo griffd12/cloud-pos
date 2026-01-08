@@ -255,25 +255,25 @@ export default function PrintAgentsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-print-agents-title">Print Agents</h1>
-          <p className="text-muted-foreground">
-            Connect local printers to the cloud POS using print agents
-          </p>
-        </div>
-        <Button onClick={downloadAgentPackage} variant="outline" data-testid="button-download-agent">
-          <Download className="w-4 h-4 mr-2" />
-          Download Agent
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold" data-testid="text-print-agents-title">Print Agents</h1>
+        <p className="text-muted-foreground">
+          Connect local printers to the cloud POS using print agents
+        </p>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">How Print Agents Work</CardTitle>
-          <CardDescription>
-            Print agents bridge cloud POS to local network printers
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-base">How Print Agents Work</CardTitle>
+            <CardDescription>
+              Print agents bridge cloud POS to local network printers
+            </CardDescription>
+          </div>
+          <Button onClick={downloadAgentPackage} variant="outline" data-testid="button-download-agent">
+            <Download className="w-4 h-4 mr-2" />
+            Download Agent Software
+          </Button>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p>

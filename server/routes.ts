@@ -11009,6 +11009,103 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Download print agent package (must be before /:id route)
+  app.get("/api/print-agents/download", async (req, res) => {
+    try {
+      // Set up zip archive
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", "attachment; filename=print-agent.zip");
+      
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      archive.pipe(res);
+      
+      // Add print-agent files from the existing directory
+      const agentDir = path.join(process.cwd(), "print-agent");
+      if (fs.existsSync(agentDir)) {
+        archive.directory(agentDir, "print-agent");
+      } else {
+        // Create fallback agent code if directory doesn't exist
+        const agentCode = `#!/usr/bin/env node
+const WebSocket = require("ws");
+const net = require("net");
+
+const CLOUD_POS_URL = process.env.CLOUD_POS_URL || "wss://your-cloud-pos.replit.app/ws/print-agents";
+const AGENT_TOKEN = process.env.AGENT_TOKEN || "your-agent-token-here";
+const PRINTER_IP = process.env.PRINTER_IP || "192.168.1.100";
+const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || "9100", 10);
+
+let ws;
+let reconnectAttempts = 0;
+
+function connect() {
+  console.log("Connecting to cloud POS...");
+  ws = new WebSocket(CLOUD_POS_URL);
+
+  ws.on("open", () => {
+    console.log("Connected! Authenticating...");
+    ws.send(JSON.stringify({ type: "HELLO", token: AGENT_TOKEN }));
+  });
+
+  ws.on("message", async (data) => {
+    const msg = JSON.parse(data.toString());
+    
+    if (msg.type === "AUTH_OK") {
+      console.log("Authenticated successfully. Ready for print jobs.");
+      reconnectAttempts = 0;
+    } else if (msg.type === "AUTH_FAIL") {
+      console.error("Authentication failed:", msg.message);
+      process.exit(1);
+    } else if (msg.type === "JOB") {
+      console.log("Received print job:", msg.jobId);
+      ws.send(JSON.stringify({ type: "ACK", jobId: msg.jobId }));
+      
+      try {
+        const buffer = Buffer.from(msg.data, "base64");
+        const socket = net.createConnection(PRINTER_PORT, PRINTER_IP, () => {
+          socket.write(buffer, () => {
+            socket.end();
+            ws.send(JSON.stringify({ type: "DONE", jobId: msg.jobId }));
+            console.log("Print job completed:", msg.jobId);
+          });
+        });
+        socket.on("error", (err) => {
+          ws.send(JSON.stringify({ type: "ERROR", jobId: msg.jobId, error: err.message }));
+          console.error("Print job failed:", msg.jobId, err.message);
+        });
+      } catch (err) {
+        ws.send(JSON.stringify({ type: "ERROR", jobId: msg.jobId, error: err.message }));
+      }
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("Disconnected from cloud POS");
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts++), 30000);
+    setTimeout(connect, delay);
+  });
+
+  ws.on("error", (err) => console.error("WebSocket error:", err.message));
+}
+
+connect();
+`;
+        archive.append(agentCode, { name: "print-agent/print-agent.js" });
+        archive.append(JSON.stringify({
+          name: "print-agent",
+          version: "1.0.0",
+          main: "print-agent.js",
+          dependencies: { ws: "^8.0.0" }
+        }, null, 2), { name: "print-agent/package.json" });
+        archive.append("# Print Agent\n\n1. npm install\n2. Set env vars: CLOUD_POS_URL, AGENT_TOKEN, PRINTER_IP\n3. node print-agent.js", { name: "print-agent/README.md" });
+      }
+      
+      await archive.finalize();
+    } catch (error) {
+      console.error("Download print agent error:", error);
+      res.status(500).json({ message: "Failed to create download package" });
+    }
+  });
+
   // Get single print agent
   app.get("/api/print-agents/:id", async (req, res) => {
     try {
@@ -11166,103 +11263,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Get agent jobs error:", error);
       res.status(500).json({ message: "Failed to get agent jobs" });
-    }
-  });
-
-  // Download print agent package
-  app.get("/api/print-agents/download", async (req, res) => {
-    try {
-      // Set up zip archive
-      res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", "attachment; filename=print-agent.zip");
-      
-      const archive = archiver("zip", { zlib: { level: 9 } });
-      archive.pipe(res);
-      
-      // Add print-agent files from the existing directory
-      const agentDir = path.join(process.cwd(), "print-agent");
-      if (fs.existsSync(agentDir)) {
-        archive.directory(agentDir, "print-agent");
-      } else {
-        // Create fallback agent code if directory doesn't exist
-        const agentCode = `#!/usr/bin/env node
-const WebSocket = require("ws");
-const net = require("net");
-
-const CLOUD_POS_URL = process.env.CLOUD_POS_URL || "wss://your-cloud-pos.replit.app/ws/print-agents";
-const AGENT_TOKEN = process.env.AGENT_TOKEN || "your-agent-token-here";
-const PRINTER_IP = process.env.PRINTER_IP || "192.168.1.100";
-const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || "9100", 10);
-
-let ws;
-let reconnectAttempts = 0;
-
-function connect() {
-  console.log("Connecting to cloud POS...");
-  ws = new WebSocket(CLOUD_POS_URL);
-
-  ws.on("open", () => {
-    console.log("Connected! Authenticating...");
-    ws.send(JSON.stringify({ type: "HELLO", token: AGENT_TOKEN }));
-  });
-
-  ws.on("message", async (data) => {
-    const msg = JSON.parse(data.toString());
-    
-    if (msg.type === "AUTH_OK") {
-      console.log("Authenticated successfully. Ready for print jobs.");
-      reconnectAttempts = 0;
-    } else if (msg.type === "AUTH_FAIL") {
-      console.error("Authentication failed:", msg.message);
-      process.exit(1);
-    } else if (msg.type === "JOB") {
-      console.log("Received print job:", msg.jobId);
-      ws.send(JSON.stringify({ type: "ACK", jobId: msg.jobId }));
-      
-      try {
-        const buffer = Buffer.from(msg.data, "base64");
-        const socket = net.createConnection(PRINTER_PORT, PRINTER_IP, () => {
-          socket.write(buffer, () => {
-            socket.end();
-            ws.send(JSON.stringify({ type: "DONE", jobId: msg.jobId }));
-            console.log("Print job completed:", msg.jobId);
-          });
-        });
-        socket.on("error", (err) => {
-          ws.send(JSON.stringify({ type: "ERROR", jobId: msg.jobId, error: err.message }));
-          console.error("Print job failed:", msg.jobId, err.message);
-        });
-      } catch (err) {
-        ws.send(JSON.stringify({ type: "ERROR", jobId: msg.jobId, error: err.message }));
-      }
-    }
-  });
-
-  ws.on("close", () => {
-    console.log("Disconnected from cloud POS");
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts++), 30000);
-    setTimeout(connect, delay);
-  });
-
-  ws.on("error", (err) => console.error("WebSocket error:", err.message));
-}
-
-connect();
-`;
-        archive.append(agentCode, { name: "print-agent/print-agent.js" });
-        archive.append(JSON.stringify({
-          name: "print-agent",
-          version: "1.0.0",
-          main: "print-agent.js",
-          dependencies: { ws: "^8.0.0" }
-        }, null, 2), { name: "print-agent/package.json" });
-        archive.append("# Print Agent\n\n1. npm install\n2. Set env vars: CLOUD_POS_URL, AGENT_TOKEN, PRINTER_IP\n3. node print-agent.js", { name: "print-agent/README.md" });
-      }
-      
-      await archive.finalize();
-    } catch (error) {
-      console.error("Download print agent error:", error);
-      res.status(500).json({ message: "Failed to create download package" });
     }
   });
 
