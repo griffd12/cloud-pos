@@ -11301,6 +11301,92 @@ connect();
     }
   });
 
+  // Test print to agent - sends a test page to verify connectivity
+  app.post("/api/print-agents/:id/test-print", async (req, res) => {
+    try {
+      const agent = await storage.getPrintAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+
+      const { printerIp, printerPort = 9100 } = req.body;
+      if (!printerIp) {
+        return res.status(400).json({ message: "Printer IP address is required" });
+      }
+
+      // Check if agent is connected
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      const agentWs = connectedAgentsMap?.get(agent.id);
+      if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
+        return res.status(400).json({ 
+          message: "Agent is not connected. Please start the print agent and try again.",
+          agentStatus: agent.status 
+        });
+      }
+
+      // Build a simple ESC/POS test page
+      const ESC = 0x1B;
+      const GS = 0x1D;
+      const testCommands = Buffer.from([
+        ESC, 0x40,           // Initialize printer
+        ESC, 0x61, 0x01,     // Center align
+        ESC, 0x21, 0x30,     // Double width + height
+        ...Buffer.from("TEST PRINT\n"),
+        ESC, 0x21, 0x00,     // Normal text
+        ...Buffer.from("=".repeat(32) + "\n"),
+        ESC, 0x61, 0x00,     // Left align
+        ...Buffer.from("Agent: " + agent.name + "\n"),
+        ...Buffer.from("Property: " + (agent.propertyId || "Global") + "\n"),
+        ...Buffer.from("Target: " + printerIp + ":" + printerPort + "\n"),
+        ...Buffer.from("Time: " + new Date().toLocaleString() + "\n"),
+        ...Buffer.from("=".repeat(32) + "\n"),
+        ESC, 0x61, 0x01,     // Center align
+        ...Buffer.from("If you see this, printing works!\n"),
+        ...Buffer.from("\n\n\n"),
+        GS, 0x56, 0x00,      // Full cut
+      ]);
+
+      // Create print job in database
+      const job = await storage.createPrintJob({
+        propertyId: agent.propertyId || "test",
+        printAgentId: agent.id,
+        jobType: "test_print",
+        status: "pending",
+        priority: 1,
+        printerIp,
+        printerPort,
+        escPosData: testCommands.toString("base64"),
+        plainTextData: "TEST PRINT - Agent: " + agent.name,
+      });
+
+      // Send job to agent via WebSocket
+      const sendJobToAgent = (app as any).sendPrintJobToAgent;
+      const sent = await sendJobToAgent(agent.id, {
+        id: job.id,
+        printerIp,
+        printerPort,
+        data: testCommands.toString("base64"),
+        jobType: "test_print",
+      });
+
+      if (sent) {
+        await storage.updatePrintJob(job.id, { status: "printing" });
+        res.json({ 
+          message: "Test print sent to agent",
+          jobId: job.id,
+          agentName: agent.name,
+          targetPrinter: `${printerIp}:${printerPort}`
+        });
+      } else {
+        await storage.updatePrintJob(job.id, { status: "failed" });
+        res.status(500).json({ message: "Failed to send test print to agent" });
+      }
+    } catch (error: any) {
+      console.error("Test print error:", error);
+      res.status(500).json({ message: error.message || "Failed to send test print" });
+    }
+  });
+
   // ============================================================================
   // EMC (Enterprise Management Console) - Email/Password Authentication
   // Accessible from any browser worldwide for system configuration
