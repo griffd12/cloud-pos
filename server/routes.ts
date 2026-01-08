@@ -12191,12 +12191,31 @@ connect();
       const checkTotal = parseFloat(check.total || "0");
 
       let updatedCheck = check;
+      let autoPrintStatus: { success: boolean; message?: string } = { success: false };
+      
       if (totalPaid >= checkTotal) {
         const result = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),
         });
         if (result) updatedCheck = result;
+        
+        // Broadcast check closure
+        broadcastCheckUpdate(checkId, "closed", check.rvcId);
+        broadcastPaymentUpdate(checkId);
+        
+        // Auto-print receipt on check close
+        try {
+          const printResult = await printCheckReceipt(checkId, check.rvcId);
+          if (printResult) {
+            autoPrintStatus = { success: true };
+          } else {
+            autoPrintStatus = { success: false, message: "No receipt printer configured" };
+          }
+        } catch (printError: any) {
+          console.error("Auto-print receipt error:", printError);
+          autoPrintStatus = { success: false, message: printError.message || "Print failed" };
+        }
       }
 
       res.json({
@@ -12206,6 +12225,7 @@ connect();
         cardBrand,
         cardLast4,
         check: updatedCheck,
+        autoPrintStatus,
       });
     } catch (error) {
       console.error("Record Stripe payment error:", error);
