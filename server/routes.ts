@@ -11032,26 +11032,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { propertyId, name, description } = req.body;
       
-      if (!propertyId || !name) {
-        return res.status(400).json({ message: "Property ID and name are required" });
+      if (!name) {
+        return res.status(400).json({ message: "Name is required" });
       }
       
-      // Generate secure agent token
-      const agentToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
-      const agentTokenHash = crypto.createHash("sha256").update(agentToken).digest("hex");
+      // Generate secure agent token (we store the hash, return the plain token once)
+      const plainToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
       
       const agent = await storage.createPrintAgent({
-        propertyId,
+        propertyId: propertyId || null, // null means global agent
         name,
         description: description || null,
-        agentTokenHash,
-        status: "offline",
+        agentToken: tokenHash, // Store the hash in the database
       });
       
       // Return agent with the plain token (only shown once!)
       res.status(201).json({
         ...agent,
-        agentToken, // Only returned on creation - store securely!
+        agentToken: plainToken, // Only returned on creation - store securely!
         message: "Save the agent token securely - it will not be shown again!",
       });
     } catch (error) {
@@ -11076,18 +11075,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         connectedAgentsMap.delete(agent.id);
       }
       
-      // Generate new token
-      const agentToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
-      const agentTokenHash = crypto.createHash("sha256").update(agentToken).digest("hex");
+      // Generate new token (store hash, return plain token once)
+      const plainToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
       
       const updated = await storage.updatePrintAgent(agent.id, {
-        agentTokenHash,
+        agentToken: tokenHash,
         status: "offline",
       });
       
       res.json({
         ...updated,
-        agentToken, // Only returned on regeneration - store securely!
+        agentToken: plainToken, // Only returned on regeneration - store securely!
         message: "Save the new agent token securely - it will not be shown again!",
       });
     } catch (error) {
