@@ -698,6 +698,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return next();
     }
 
+    // Check for valid Manager App API key - external integrations bypass device token
+    const apiKey = req.headers["x-api-key"] as string;
+    const validApiKey = process.env.MANAGER_APP_API_KEY;
+    if (apiKey && validApiKey && apiKey === validApiKey) {
+      // Valid API key - allow access without device token
+      (req as any).apiKeyAuth = true;
+      return next();
+    }
+
     // Check for EMC session token - EMC users can access all APIs without device token
     const emcSessionToken = req.headers["x-emc-session"] as string;
     if (emcSessionToken) {
