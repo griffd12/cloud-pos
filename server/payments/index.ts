@@ -21,3 +21,4 @@ export {
 // Import adapters to register them
 import './adapters/stripe';
 import './adapters/elavon';
+import './adapters/square';

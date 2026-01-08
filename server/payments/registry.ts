@@ -92,6 +92,7 @@ export function getRequiredCredentialKeys(gatewayType: string): string[] {
   const keyMap: Record<string, string[]> = {
     'stripe': ['SECRET_KEY'],
     'elavon_converge': ['MERCHANT_ID', 'USER_ID', 'PIN'],
+    'square': ['ACCESS_TOKEN', 'LOCATION_ID'],
     'shift4': ['API_KEY', 'CLIENT_GUID'],
     'heartland': ['SECRET_API_KEY', 'DEVELOPER_ID', 'VERSION_NUMBER'],
     'freedompay': ['STORE_ID', 'TERMINAL_ID', 'API_KEY'],
