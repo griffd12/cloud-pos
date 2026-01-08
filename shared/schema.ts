@@ -2809,3 +2809,47 @@ export type ItemAvailability = typeof itemAvailability.$inferSelect;
 export type InsertItemAvailability = z.infer<typeof insertItemAvailabilitySchema>;
 export type PrepItem = typeof prepItems.$inferSelect;
 export type InsertPrepItem = z.infer<typeof insertPrepItemSchema>;
+
+// ============================================================================
+// GUEST CHECK DESCRIPTORS (Headers & Trailers with Logo Support)
+// ============================================================================
+
+export const DESCRIPTOR_SCOPE_TYPES = ["enterprise", "property", "rvc"] as const;
+export type DescriptorScopeType = typeof DESCRIPTOR_SCOPE_TYPES[number];
+
+export const descriptorLogoAssets = pgTable("descriptor_logo_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  filename: text("filename").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  storagePath: text("storage_path").notNull(),
+  checksum: text("checksum"),
+  escposData: text("escpos_data"),
+  createdAt: timestamp("created_at").defaultNow(),
+  createdById: varchar("created_by_id"),
+});
+
+export const descriptorSets = pgTable("descriptor_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scopeType: text("scope_type").notNull(),
+  scopeId: varchar("scope_id").notNull(),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  headerLines: jsonb("header_lines").$type<string[]>().default([]),
+  trailerLines: jsonb("trailer_lines").$type<string[]>().default([]),
+  logoEnabled: boolean("logo_enabled").default(false),
+  logoAssetId: varchar("logo_asset_id").references(() => descriptorLogoAssets.id),
+  overrideHeader: boolean("override_header").default(false),
+  overrideTrailer: boolean("override_trailer").default(false),
+  overrideLogo: boolean("override_logo").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedById: varchar("updated_by_id"),
+});
+
+export const insertDescriptorLogoAssetSchema = createInsertSchema(descriptorLogoAssets).omit({ id: true, createdAt: true });
+export const insertDescriptorSetSchema = createInsertSchema(descriptorSets).omit({ id: true, updatedAt: true });
+
+export type DescriptorLogoAsset = typeof descriptorLogoAssets.$inferSelect;
+export type InsertDescriptorLogoAsset = z.infer<typeof insertDescriptorLogoAssetSchema>;
+export type DescriptorSet = typeof descriptorSets.$inferSelect;
+export type InsertDescriptorSet = z.infer<typeof insertDescriptorSetSchema>;
