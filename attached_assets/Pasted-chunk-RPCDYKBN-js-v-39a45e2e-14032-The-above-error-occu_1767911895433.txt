@@ -1,0 +1,31 @@
+chunk-RPCDYKBN.js?v=39a45e2e:14032 The above error occurred in the <ModifierGroupsPage> component:
+
+    at ModifierGroupsPage (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/pages/admin/modifier-groups.tsx:33:21)
+    at Route (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=39a45e2e:323:16)
+    at Switch (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=39a45e2e:379:17)
+    at main
+    at div
+    at div
+    at div
+    at Provider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…unner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=39a45e2e:38:15)
+    at TooltipProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…rkspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=39a45e2e:63:5)
+    at SidebarProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/components/ui/sidebar.tsx:59:3)
+    at EmcAdminLayout (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/pages/emc/admin-layout.tsx:352:24)
+    at Route (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=39a45e2e:323:16)
+    at Switch (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=39a45e2e:379:17)
+    at EmcProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/lib/emc-context.tsx:21:31)
+    at Router (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/App.tsx?v=gIScaHkNTXBmxQcK9YKYn:92:40)
+    at PosProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/lib/pos-context.tsx:34:31)
+    at DeviceProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/lib/device-context.tsx:52:34)
+    at Provider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…unner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=39a45e2e:38:15)
+    at TooltipProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…rkspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=39a45e2e:63:5)
+    at QueryClientProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.d…rkspace/node_modules/.vite/deps/@tanstack_react-query.js?v=39a45e2e:2805:3)
+    at ThemeProvider (https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/src/components/theme-provider.tsx:21:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+chunk-RPCDYKBN.js?v=39a45e2e:9129 Uncaught TypeError: linkedModifiers.some is not a function
+    at modifier-groups.tsx:207:54
+    at Array.map (<anonymous>)
+    at ModifierGroupsPage (modifier-groups.tsx:206:33)

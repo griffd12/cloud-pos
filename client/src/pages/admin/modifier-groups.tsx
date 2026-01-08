@@ -27,15 +27,19 @@ export default function ModifierGroupsPage() {
     queryKey: ["/api/modifiers"],
   });
 
-  const { data: linkedModifiers = [], refetch: refetchLinked } = useQuery<ModifierGroupModifier[]>({
+  const { data: linkedModifiersData, refetch: refetchLinked } = useQuery<ModifierGroupModifier[]>({
     queryKey: ["/api/modifier-groups", linkingGroup?.id, "modifiers"],
     queryFn: async () => {
       if (!linkingGroup) return [];
       const res = await fetch(`/api/modifier-groups/${linkingGroup.id}/modifiers`);
-      return res.json();
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
     },
     enabled: !!linkingGroup,
   });
+  
+  // Ensure linkedModifiers is always an array
+  const linkedModifiers = Array.isArray(linkedModifiersData) ? linkedModifiersData : [];
 
   const columns: Column<ModifierGroup>[] = [
     { key: "name", header: "Name", sortable: true },
