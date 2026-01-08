@@ -2098,7 +2098,7 @@ export class DatabaseStorage implements IStorage {
     // Get jobs assigned to this agent that are pending
     return db.select().from(printJobs)
       .where(and(
-        eq(printJobs.agentId, agentId),
+        eq(printJobs.printAgentId, agentId),
         eq(printJobs.status, "pending")
       ))
       .orderBy(printJobs.priority, printJobs.createdAt);
@@ -2108,7 +2108,7 @@ export class DatabaseStorage implements IStorage {
     // Get jobs assigned to this agent that are in "printing" status (for reset on disconnect)
     return db.select().from(printJobs)
       .where(and(
-        eq(printJobs.agentId, agentId),
+        eq(printJobs.printAgentId, agentId),
         eq(printJobs.status, "printing")
       ));
   }
