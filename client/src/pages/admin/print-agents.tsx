@@ -328,8 +328,8 @@ export default function PrintAgentsPage() {
         ]}
       />
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+      <Dialog open={formOpen} onOpenChange={setFormOpen} modal={true}>
+        <DialogContent className="z-[9999]">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Print Agent" : "Add Print Agent"}</DialogTitle>
             <DialogDescription>
