@@ -49,6 +49,9 @@ async function processAutoClockOut(propertyId: string, businessDate: string): Pr
       const lastPunch = sorted[0];
       
       if (lastPunch && lastPunch.punchType === "clock_in") {
+        // Use the clock-in's business date, not the closing period's date
+        const clockInBusinessDate = lastPunch.businessDate;
+        
         await storage.createTimePunch({
           propertyId,
           employeeId,
@@ -56,10 +59,14 @@ async function processAutoClockOut(propertyId: string, businessDate: string): Pr
           punchType: "clock_out",
           actualTimestamp: now,
           roundedTimestamp: now,
-          businessDate,
+          businessDate: clockInBusinessDate,
           source: "auto_clock_out",
           notes: "Automatic clock-out at end of business day",
         });
+        
+        // Recalculate timecard to update clock_out_time
+        await storage.recalculateTimecard(employeeId, clockInBusinessDate);
+        
         clockedOutEmployees.push(employeeId);
       }
     }
