@@ -385,11 +385,13 @@ export default function DescriptorsPage() {
             <div className="space-y-2">
               <Label>Property (Optional Override)</Label>
               <Select
-                value={selectedPropertyId}
+                value={selectedPropertyId || "__none__"}
                 onValueChange={(v) => {
-                  setSelectedPropertyId(v);
+                  const actualValue = v === "__none__" ? "" : v;
+                  setSelectedPropertyId(actualValue);
                   setSelectedRvcId("");
-                  if (v) setActiveTab("property");
+                  if (actualValue) setActiveTab("property");
+                  else setActiveTab("enterprise");
                 }}
                 disabled={!selectedEnterpriseId}
               >
@@ -397,7 +399,7 @@ export default function DescriptorsPage() {
                   <SelectValue placeholder="Select property" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None (Use Enterprise)</SelectItem>
+                  <SelectItem value="__none__">None (Use Enterprise)</SelectItem>
                   {filteredProperties.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -408,10 +410,12 @@ export default function DescriptorsPage() {
             <div className="space-y-2">
               <Label>Revenue Center (Optional Override)</Label>
               <Select
-                value={selectedRvcId}
+                value={selectedRvcId || "__none__"}
                 onValueChange={(v) => {
-                  setSelectedRvcId(v);
-                  if (v) setActiveTab("rvc");
+                  const actualValue = v === "__none__" ? "" : v;
+                  setSelectedRvcId(actualValue);
+                  if (actualValue) setActiveTab("rvc");
+                  else setActiveTab("property");
                 }}
                 disabled={!selectedPropertyId}
               >
@@ -419,7 +423,7 @@ export default function DescriptorsPage() {
                   <SelectValue placeholder="Select RVC" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None (Use Property)</SelectItem>
+                  <SelectItem value="__none__">None (Use Property)</SelectItem>
                   {filteredRvcs.map(r => (
                     <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                   ))}

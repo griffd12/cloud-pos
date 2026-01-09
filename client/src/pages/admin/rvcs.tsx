@@ -4,15 +4,46 @@ import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { insertRvcSchema, type Rvc, type InsertRvc, type Property, ORDER_TYPES, DOM_SEND_MODES } from "@shared/schema";
+import { FileText, Save, Loader2 } from "lucide-react";
+
+const MAX_HEADER_LINES = 16;
+const MAX_TRAILER_LINES = 16;
+const MAX_CHARS_PER_LINE = 48;
+
+interface DescriptorSet {
+  id: string;
+  scopeType: "enterprise" | "property" | "rvc";
+  scopeId: string;
+  enterpriseId: string;
+  headerLines: string[];
+  trailerLines: string[];
+  logoEnabled: boolean;
+  logoAssetId: string | null;
+  overrideHeader: boolean;
+  overrideTrailer: boolean;
+  overrideLogo: boolean;
+}
 
 export default function RvcsPage() {
   const { toast } = useToast();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Rvc | null>(null);
+  const [descriptorsOpen, setDescriptorsOpen] = useState(false);
+  const [descriptorsRvc, setDescriptorsRvc] = useState<Rvc | null>(null);
+  const [headerLines, setHeaderLines] = useState<string[]>(Array(MAX_HEADER_LINES).fill(""));
+  const [trailerLines, setTrailerLines] = useState<string[]>(Array(MAX_TRAILER_LINES).fill(""));
+  const [overrideHeader, setOverrideHeader] = useState(false);
+  const [overrideTrailer, setOverrideTrailer] = useState(false);
 
   const { data: rvcs = [], isLoading } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
@@ -54,6 +85,21 @@ export default function RvcsPage() {
       },
     },
     { key: "defaultOrderType", header: "Default Order Type" },
+    {
+      key: "id",
+      header: "Descriptors",
+      render: (_, row) => (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={(e) => { e.stopPropagation(); openDescriptors(row); }}
+          data-testid={`button-descriptors-${row.id}`}
+        >
+          <FileText className="w-3 h-3 mr-1" />
+          Configure
+        </Button>
+      ),
+    },
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -146,6 +192,82 @@ export default function RvcsPage() {
     },
   });
 
+  const saveDescriptorsMutation = useMutation({
+    mutationFn: async () => {
+      if (!descriptorsRvc) throw new Error("No RVC selected");
+      const property = properties.find(p => p.id === descriptorsRvc.propertyId);
+      if (!property?.enterpriseId) throw new Error("Property or enterprise not found");
+      
+      const cleanHeader = headerLines.filter(l => l.trim()).map(l => l.substring(0, MAX_CHARS_PER_LINE));
+      const cleanTrailer = trailerLines.filter(l => l.trim()).map(l => l.substring(0, MAX_CHARS_PER_LINE));
+      
+      return apiRequest("PUT", `/api/descriptors/rvc/${descriptorsRvc.id}`, {
+        enterpriseId: property.enterpriseId,
+        headerLines: cleanHeader,
+        trailerLines: cleanTrailer,
+        logoEnabled: false,
+        logoAssetId: null,
+        overrideHeader,
+        overrideTrailer,
+        overrideLogo: false,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptors"] });
+      setDescriptorsOpen(false);
+      setDescriptorsRvc(null);
+      toast({ title: "Descriptors saved successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to save descriptors", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const openDescriptors = async (rvc: Rvc) => {
+    setDescriptorsRvc(rvc);
+    try {
+      const response = await fetch(`/api/descriptors/rvc/${rvc.id}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data: DescriptorSet = await response.json();
+        const newHeader = Array(MAX_HEADER_LINES).fill("");
+        const newTrailer = Array(MAX_TRAILER_LINES).fill("");
+        (data.headerLines || []).forEach((line, i) => { if (i < MAX_HEADER_LINES) newHeader[i] = line; });
+        (data.trailerLines || []).forEach((line, i) => { if (i < MAX_TRAILER_LINES) newTrailer[i] = line; });
+        setHeaderLines(newHeader);
+        setTrailerLines(newTrailer);
+        setOverrideHeader(data.overrideHeader ?? false);
+        setOverrideTrailer(data.overrideTrailer ?? false);
+      } else {
+        setHeaderLines(Array(MAX_HEADER_LINES).fill(""));
+        setTrailerLines(Array(MAX_TRAILER_LINES).fill(""));
+        setOverrideHeader(false);
+        setOverrideTrailer(false);
+      }
+    } catch {
+      setHeaderLines(Array(MAX_HEADER_LINES).fill(""));
+      setTrailerLines(Array(MAX_TRAILER_LINES).fill(""));
+      setOverrideHeader(false);
+      setOverrideTrailer(false);
+    }
+    setDescriptorsOpen(true);
+  };
+
+  const handleLineChange = (type: "header" | "trailer", index: number, value: string) => {
+    const truncated = value.substring(0, MAX_CHARS_PER_LINE);
+    if (type === "header") {
+      const newLines = [...headerLines];
+      newLines[index] = truncated;
+      setHeaderLines(newLines);
+    } else {
+      const newLines = [...trailerLines];
+      newLines[index] = truncated;
+      setTrailerLines(newLines);
+    }
+  };
+
   const handleSubmit = (data: InsertRvc) => {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
@@ -187,6 +309,113 @@ export default function RvcsPage() {
         initialData={editingItem || undefined}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
+
+      <Dialog open={descriptorsOpen} onOpenChange={(open) => { if (!open) { setDescriptorsOpen(false); setDescriptorsRvc(null); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Receipt Descriptors - {descriptorsRvc?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Configure receipt header and trailer lines for this RVC. These override property-level settings.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="flex flex-wrap gap-4 p-4 bg-muted/50 rounded-md">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={overrideHeader}
+                  onCheckedChange={setOverrideHeader}
+                  data-testid="switch-rvc-override-header"
+                />
+                <Label>Override Header</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={overrideTrailer}
+                  onCheckedChange={setOverrideTrailer}
+                  data-testid="switch-rvc-override-trailer"
+                />
+                <Label>Override Trailer</Label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-base font-medium">Header Lines</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {headerLines.filter(l => l.trim()).length} / {MAX_HEADER_LINES} used
+                  </span>
+                </div>
+                <ScrollArea className="h-[300px] border rounded-md p-3">
+                  <div className="space-y-2">
+                    {headerLines.map((line, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-6 text-right shrink-0">{i + 1}</span>
+                        <Input
+                          value={line}
+                          onChange={(e) => handleLineChange("header", i, e.target.value)}
+                          placeholder={i === 0 ? "Business Name" : ""}
+                          className="font-mono text-sm"
+                          maxLength={MAX_CHARS_PER_LINE}
+                          disabled={!overrideHeader}
+                          data-testid={`input-rvc-header-${i}`}
+                        />
+                        <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
+                          {line.length}/{MAX_CHARS_PER_LINE}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-base font-medium">Trailer Lines</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {trailerLines.filter(l => l.trim()).length} / {MAX_TRAILER_LINES} used
+                  </span>
+                </div>
+                <ScrollArea className="h-[300px] border rounded-md p-3">
+                  <div className="space-y-2">
+                    {trailerLines.map((line, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-6 text-right shrink-0">{i + 1}</span>
+                        <Input
+                          value={line}
+                          onChange={(e) => handleLineChange("trailer", i, e.target.value)}
+                          placeholder={i === 0 ? "Thank you message" : ""}
+                          className="font-mono text-sm"
+                          maxLength={MAX_CHARS_PER_LINE}
+                          disabled={!overrideTrailer}
+                          data-testid={`input-rvc-trailer-${i}`}
+                        />
+                        <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
+                          {line.length}/{MAX_CHARS_PER_LINE}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDescriptorsOpen(false); setDescriptorsRvc(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={() => saveDescriptorsMutation.mutate()} disabled={saveDescriptorsMutation.isPending}>
+              {saveDescriptorsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save Descriptors
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
