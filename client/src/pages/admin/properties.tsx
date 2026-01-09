@@ -40,6 +40,17 @@ export default function PropertiesPage() {
     { value: "06:00", label: "6:00 AM" },
   ];
 
+  const rolloverModeOptions = [
+    { value: "auto", label: "Automatic - System closes day at rollover time" },
+    { value: "manual", label: "Manual - Manager must close day manually" },
+  ];
+
+  const getRolloverModeLabel = (mode: string | null | undefined) => {
+    if (!mode) return "Automatic";
+    const option = rolloverModeOptions.find(o => o.value === mode);
+    return option?.label?.split(" - ")[0] || mode;
+  };
+
   const getTimezoneLabel = (tz: string | null | undefined) => {
     if (!tz) return "Not Set";
     const option = timezoneOptions.find(o => o.value === tz);
@@ -70,6 +81,11 @@ export default function PropertiesPage() {
       header: "Day Rollover",
       render: (value) => getRolloverLabel(value as string),
     },
+    { 
+      key: "businessDateMode", 
+      header: "Rollover Mode",
+      render: (value) => getRolloverModeLabel(value as string),
+    },
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -95,11 +111,18 @@ export default function PropertiesPage() {
       label: "Business Day Rollover Time",
       type: "select",
       options: rolloverTimeOptions,
-      description: "When the business day ends (e.g., 4 AM means sales until 3:59 AM count as previous day)",
+      description: "When the business day ends (e.g., 1 AM means sales until 12:59 AM count as previous day)",
+    },
+    {
+      name: "businessDateMode",
+      label: "Rollover Mode",
+      type: "select",
+      options: rolloverModeOptions,
+      description: "Auto: system closes day automatically. Manual: manager must close day via End of Day screen",
     },
     {
       name: "autoClockOutEnabled",
-      label: "Auto Clock-Out",
+      label: "Auto Clock-Out at Rollover",
       type: "switch",
       description: "Automatically clock out all employees when the business date changes",
     },
