@@ -136,7 +136,23 @@ export default function LoginPage() {
         return;
       }
 
-      // Normal hourly flow - check clock status
+      // Check if employee has job codes assigned
+      // Fail-safe: if we can't determine job status, assume they need to clock in
+      let hasJobs = true; // Default to true for safety - require clock-in unless proven otherwise
+      try {
+        const jobsRes = await fetch(`/api/employees/${data.employee.id}/job-codes/details`, { credentials: "include", headers: getAuthHeaders() });
+        if (jobsRes.ok) {
+          const jobDetails = await jobsRes.json();
+          hasJobs = jobDetails && jobDetails.length > 0;
+          setEmployeeJobs(jobDetails.map((detail: { jobCode: JobCode }) => detail.jobCode));
+        }
+        // If jobsRes is not ok, hasJobs stays true (fail-safe)
+      } catch {
+        // Network error - fail-safe, require clock-in
+        hasJobs = true;
+      }
+
+      // Check clock status
       const statusRes = await fetch(`/api/time-punches/status/${data.employee.id}`, { credentials: "include", headers: getAuthHeaders() });
       let isClockedIn = false;
       let todayTimecard = null;
@@ -146,6 +162,16 @@ export default function LoginPage() {
         todayTimecard = statusData.todayTimecard || null;
       }
       
+      // If employee has jobs but is not clocked in, require clock-in first
+      if (hasJobs && !isClockedIn) {
+        setClockEmployee(data.employee);
+        setClockStatus({ status: "clocked_out", lastPunch: null, activeBreak: null, clockedInAt: null, isClockedIn: false });
+        setLoginError("You must clock in before ringing sales. Tap 'Clock In / Out' below.");
+        setPin("");
+        return;
+      }
+      
+      // Employee either has no jobs (no labor tracking) or is already clocked in
       setCurrentEmployee(data.employee);
       setPrivileges(data.privileges);
       setIsClockedIn(isClockedIn);
