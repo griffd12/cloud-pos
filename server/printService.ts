@@ -227,29 +227,20 @@ export async function buildCheckReceipt(checkId: string, charWidth: number = 42)
   }
 
   // Header - use custom descriptor lines if configured, otherwise fallback to property info
-  builder.align("center").bold().doubleSize();
+  builder.align("center");
   
   if (headerLines.length > 0) {
-    // Use configured header lines
-    for (let i = 0; i < headerLines.length; i++) {
-      const line = headerLines[i];
+    // Use configured header lines - all lines uniform size
+    for (const line of headerLines) {
       if (line && line.trim()) {
-        // First line is double size (business name), rest are normal
-        if (i === 0) {
-          builder.line(line);
-        } else {
-          if (i === 1) builder.normalSize().bold(false);
-          builder.line(line);
-        }
+        builder.line(line);
       }
     }
-    builder.normalSize().bold(false);
   } else {
     // Fallback to property name/address if no descriptors configured
     if (property) {
       builder.line(property.name);
     }
-    builder.normalSize().bold(false);
     if (property?.address) {
       builder.line(property.address);
     }

@@ -622,7 +622,7 @@ export default function DescriptorsPage() {
                         />
                         <div>
                           <Label className="text-base font-medium">Print Logo</Label>
-                          <p className="text-xs text-muted-foreground">Display logo on receipts (PNG/BMP only, max 200KB)</p>
+                          <p className="text-xs text-muted-foreground">Black/white monochrome image, 75-120px wide, PNG/BMP, max 200KB</p>
                         </div>
                       </div>
                       
