@@ -69,7 +69,7 @@ export default function LoginPage() {
   const [clockStatus, setClockStatus] = useState<ClockStatusResponse | null>(null);
   const [clockError, setClockError] = useState<string | null>(null);
   const [employeeJobs, setEmployeeJobs] = useState<JobCode[]>([]);
-  const [clockStep, setClockStep] = useState<"pin" | "job_select" | "status" | "clock_out_type">("pin");
+  const [clockStep, setClockStep] = useState<"pin" | "job_select" | "status" | "clock_out_type" | "break_type">("pin");
 
   // Fetch workstation context (includes property and allowed RVCs) if workstation is set
   const { data: wsContext, isLoading: wsContextLoading, error: wsContextError } = useQuery<WorkstationContext>({
@@ -248,26 +248,70 @@ export default function LoginPage() {
   });
 
   const clockOutMutation = useMutation({
-    mutationFn: async (punchType: "break" | "end_shift") => {
+    mutationFn: async (punchType: "end_shift") => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
       const response = await apiRequest("POST", "/api/time-punches/clock-out", {
         employeeId: clockEmployee?.id,
         propertyId: selectedRvc?.propertyId,
-        punchType,
       });
       return response.json();
     },
-    onSuccess: (_data, punchType) => {
+    onSuccess: () => {
       toast({
-        title: punchType === "break" ? "On Break" : "Clocked Out",
-        description: punchType === "break" 
-          ? `${clockEmployee?.firstName} is now on break.`
-          : `${clockEmployee?.firstName} has ended their shift.`,
+        title: "Clocked Out",
+        description: `${clockEmployee?.firstName} has ended their shift.`,
       });
       handleCloseClockModal();
     },
     onError: () => {
       setClockError("Failed to clock out. Please try again.");
+    },
+  });
+
+  const breakStartMutation = useMutation({
+    mutationFn: async (breakType: "meal" | "rest") => {
+      const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
+      const response = await apiRequest("POST", "/api/time-punches/break-start", {
+        employeeId: clockEmployee?.id,
+        propertyId: selectedRvc?.propertyId,
+        breakType,
+      });
+      return response.json();
+    },
+    onSuccess: (_data, breakType) => {
+      toast({
+        title: "On Break",
+        description: `${clockEmployee?.firstName} is now on a ${breakType === "meal" ? "30 minute meal" : "15 minute rest"} break.`,
+      });
+      handleCloseClockModal();
+    },
+    onError: () => {
+      setClockError("Failed to start break. Please try again.");
+    },
+  });
+
+  const breakEndMutation = useMutation({
+    mutationFn: async () => {
+      const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
+      const response = await apiRequest("POST", "/api/time-punches/break-end", {
+        employeeId: clockEmployee?.id,
+        propertyId: selectedRvc?.propertyId,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Break Ended",
+        description: `${clockEmployee?.firstName} is back from break.`,
+      });
+      // Refresh status to show clocked_in state
+      if (clockEmployee) {
+        refreshClockStatus(clockEmployee.id);
+      }
+      handleCloseClockModal();
+    },
+    onError: () => {
+      setClockError("Failed to end break. Please try again.");
     },
   });
 
@@ -784,10 +828,17 @@ export default function LoginPage() {
                 </h3>
                 
                 <div className="mt-3 space-y-2">
-                  <Badge variant="default" className="bg-green-500">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    Clocked In
-                  </Badge>
+                  {clockStatus?.status === "on_break" ? (
+                    <Badge variant="secondary" className="bg-yellow-500 text-yellow-50">
+                      <Clock className="w-3 h-3 mr-1" />
+                      On Break
+                    </Badge>
+                  ) : (
+                    <Badge variant="default" className="bg-green-500">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      Clocked In
+                    </Badge>
+                  )}
                   {clockStatus?.clockedInAt && (
                     <p className="text-sm text-muted-foreground">
                       Since {format(new Date(clockStatus.clockedInAt), "h:mm a")}
@@ -803,15 +854,28 @@ export default function LoginPage() {
               )}
 
               <div className="flex flex-col gap-2">
-                <Button
-                  variant="secondary"
-                  className="w-full h-12"
-                  onClick={() => setClockStep("clock_out_type")}
-                  data-testid="button-clock-out"
-                >
-                  <LogOut className="w-5 h-5 mr-2" />
-                  Clock Out
-                </Button>
+                {clockStatus?.status === "on_break" ? (
+                  <Button
+                    variant="default"
+                    className="w-full h-12"
+                    onClick={() => breakEndMutation.mutate()}
+                    disabled={breakEndMutation.isPending}
+                    data-testid="button-end-break"
+                  >
+                    <CheckCircle2 className="w-5 h-5 mr-2" />
+                    End Break
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="w-full h-12"
+                    onClick={() => setClockStep("clock_out_type")}
+                    data-testid="button-clock-out"
+                  >
+                    <LogOut className="w-5 h-5 mr-2" />
+                    Clock Out
+                  </Button>
+                )}
 
                 <Button
                   variant="ghost"
@@ -845,8 +909,7 @@ export default function LoginPage() {
                 <Button
                   variant="outline"
                   className="w-full h-12"
-                  onClick={() => clockOutMutation.mutate("break")}
-                  disabled={clockOutMutation.isPending}
+                  onClick={() => setClockStep("break_type")}
                   data-testid="button-clock-out-break"
                 >
                   Going on Break
@@ -867,6 +930,61 @@ export default function LoginPage() {
                   variant="ghost"
                   onClick={() => setClockStep("status")}
                   data-testid="button-clock-out-back"
+                >
+                  Back
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {clockStep === "break_type" && clockEmployee && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">
+                  {clockEmployee.firstName} {clockEmployee.lastName}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Select your break type
+                </p>
+              </div>
+
+              {clockError && (
+                <div className="text-center text-destructive text-sm font-medium">
+                  {clockError}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="w-full h-14"
+                  onClick={() => breakStartMutation.mutate("meal")}
+                  disabled={breakStartMutation.isPending}
+                  data-testid="button-break-meal"
+                >
+                  <div className="text-left">
+                    <div className="font-medium">Meal Break</div>
+                    <div className="text-xs text-muted-foreground">30 minutes</div>
+                  </div>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full h-14"
+                  onClick={() => breakStartMutation.mutate("rest")}
+                  disabled={breakStartMutation.isPending}
+                  data-testid="button-break-rest"
+                >
+                  <div className="text-left">
+                    <div className="font-medium">Rest Break</div>
+                    <div className="text-xs text-muted-foreground">15 minutes</div>
+                  </div>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => setClockStep("clock_out_type")}
+                  data-testid="button-break-back"
                 >
                   Back
                 </Button>

@@ -7406,6 +7406,128 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Start Break
+  app.post("/api/time-punches/break-start", async (req, res) => {
+    try {
+      const { employeeId, propertyId, breakType } = req.body;
+      
+      if (!employeeId || !propertyId) {
+        return res.status(400).json({ message: "Employee ID and Property ID are required" });
+      }
+
+      // Check if employee is clocked in (not already on break)
+      const lastPunch = await storage.getLastPunch(employeeId);
+      if (!lastPunch || (lastPunch.punchType !== "clock_in" && lastPunch.punchType !== "break_end")) {
+        return res.status(400).json({ message: "Employee is not clocked in or already on break" });
+      }
+
+      // Check for active break
+      const activeBreak = await storage.getActiveBreak(employeeId);
+      if (activeBreak) {
+        return res.status(400).json({ message: "Employee is already on break" });
+      }
+
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(400).json({ message: "Property not found" });
+      }
+
+      const now = new Date();
+      const businessDate = resolveBusinessDate(now, property);
+      const scheduledMinutes = breakType === "meal" ? 30 : 15;
+
+      // Create break_start punch
+      const punch = await storage.createTimePunch({
+        propertyId,
+        employeeId,
+        jobCodeId: lastPunch.jobCodeId,
+        punchType: "break_start",
+        actualTimestamp: now,
+        businessDate,
+        source: "pos",
+        notes: `${breakType === "meal" ? "Meal" : "Rest"} break (${scheduledMinutes} min)`,
+      });
+
+      // Create break session record
+      await storage.createBreakSession({
+        propertyId,
+        employeeId,
+        businessDate,
+        breakType: breakType || "unpaid",
+        startPunchId: punch.id,
+        startTime: now,
+        scheduledMinutes,
+        isPaid: breakType === "rest", // Rest breaks are typically paid
+      });
+
+      // Recalculate timecard
+      await storage.recalculateTimecard(employeeId, businessDate);
+
+      // Broadcast updates
+      broadcastTimePunchUpdate(propertyId, employeeId);
+      broadcastTimecardUpdate(propertyId, employeeId);
+
+      res.status(201).json(punch);
+    } catch (error) {
+      console.error("Break start error:", error);
+      res.status(500).json({ message: "Failed to start break" });
+    }
+  });
+
+  // End Break
+  app.post("/api/time-punches/break-end", async (req, res) => {
+    try {
+      const { employeeId, propertyId } = req.body;
+      
+      if (!employeeId || !propertyId) {
+        return res.status(400).json({ message: "Employee ID and Property ID are required" });
+      }
+
+      // Check for active break
+      const activeBreak = await storage.getActiveBreak(employeeId);
+      if (!activeBreak) {
+        return res.status(400).json({ message: "Employee is not on break" });
+      }
+
+      const now = new Date();
+      const breakMinutes = Math.round((now.getTime() - new Date(activeBreak.startTime).getTime()) / 60000);
+
+      // Use the break session's business date to keep shift together (handles overnight breaks)
+      const businessDate = activeBreak.businessDate;
+
+      // Create break_end punch
+      const punch = await storage.createTimePunch({
+        propertyId,
+        employeeId,
+        punchType: "break_end",
+        actualTimestamp: now,
+        businessDate,
+        source: "pos",
+        notes: `Break ended after ${breakMinutes} minutes`,
+      });
+
+      // Update break session
+      await storage.updateBreakSession(activeBreak.id, {
+        endPunchId: punch.id,
+        endTime: now,
+        actualMinutes: breakMinutes,
+        isViolation: activeBreak.scheduledMinutes ? breakMinutes > activeBreak.scheduledMinutes + 5 : false,
+      });
+
+      // Recalculate timecard using the break session's business date
+      await storage.recalculateTimecard(employeeId, businessDate);
+
+      // Broadcast updates
+      broadcastTimePunchUpdate(propertyId, employeeId);
+      broadcastTimecardUpdate(propertyId, employeeId);
+
+      res.status(201).json(punch);
+    } catch (error) {
+      console.error("Break end error:", error);
+      res.status(500).json({ message: "Failed to end break" });
+    }
+  });
+
   // Get employee clock status
   app.get("/api/time-punches/status/:employeeId", async (req, res) => {
     try {
