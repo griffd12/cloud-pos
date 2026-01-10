@@ -47,10 +47,14 @@ interface PosContextType {
 
 const PosContext = createContext<PosContextType | null>(null);
 
-// Helper to get workstation ID from URL param or localStorage
+// Device context localStorage keys (for reading device enrollment data)
+const DEVICE_LINKED_ID_KEY = "pos_device_linked_id";
+const DEVICE_TYPE_KEY = "pos_device_type";
+
+// Helper to get workstation ID from URL param, localStorage, or device enrollment
 function getInitialWorkstationId(): string | null {
-  // First check URL param (for testing multiple workstations)
   if (typeof window !== 'undefined') {
+    // First check URL param (for testing multiple workstations)
     const urlParams = new URLSearchParams(window.location.search);
     const urlWorkstation = urlParams.get('workstation');
     if (urlWorkstation) {
@@ -58,8 +62,21 @@ function getInitialWorkstationId(): string | null {
       localStorage.setItem(WORKSTATION_STORAGE_KEY, urlWorkstation);
       return urlWorkstation;
     }
-    // Fall back to localStorage
-    return localStorage.getItem(WORKSTATION_STORAGE_KEY);
+    
+    // Then check localStorage for previously selected workstation
+    const storedWorkstation = localStorage.getItem(WORKSTATION_STORAGE_KEY);
+    if (storedWorkstation) {
+      return storedWorkstation;
+    }
+    
+    // Finally check device enrollment - if device is enrolled as POS, use its linked workstation
+    const deviceType = localStorage.getItem(DEVICE_TYPE_KEY);
+    const deviceLinkedId = localStorage.getItem(DEVICE_LINKED_ID_KEY);
+    if (deviceType === "pos" && deviceLinkedId) {
+      // Auto-use the enrolled workstation
+      localStorage.setItem(WORKSTATION_STORAGE_KEY, deviceLinkedId);
+      return deviceLinkedId;
+    }
   }
   return null;
 }
