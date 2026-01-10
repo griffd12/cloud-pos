@@ -11288,7 +11288,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Replace device - deletes old device and creates new one with same settings and fresh enrollment code
+  // Replace device - revokes old device and creates new one with same settings and fresh enrollment code
   app.post("/api/registered-devices/:id/replace", async (req, res) => {
     try {
       // Get the existing device to copy its settings
@@ -11297,25 +11297,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Registered device not found" });
       }
 
-      // Delete the old device
-      await storage.deleteRegisteredDevice(req.params.id);
+      // Revoke the old device in a single update (keep for audit trail)
+      await storage.updateRegisteredDevice(req.params.id, {
+        name: existingDevice.name + " (Replaced)",
+        status: "revoked",
+        enrollmentCode: null,
+        enrollmentCodeExpiresAt: null,
+        deviceToken: null, // Clear token so old device can't reconnect
+        disabledReason: `Replaced on ${new Date().toISOString()}`,
+      });
 
-      // Generate a fresh enrollment code
-      const enrollmentCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+      // Generate a fresh 6-digit enrollment code using modulo for consistent padding
+      const randomNum = crypto.randomBytes(4).readUInt32BE(0) % 1000000;
+      const enrollmentCode = randomNum.toString().padStart(6, "0");
       const enrollmentCodeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      // Create new device with same settings
+      // Create new device with same settings but new ID
       const newDevice = await storage.createRegisteredDevice({
         enterpriseId: existingDevice.enterpriseId,
         propertyId: existingDevice.propertyId,
-        name: existingDevice.name + " (Replacement)",
+        name: existingDevice.name.replace(" (Replaced)", ""), // Remove any existing replacement suffix
         deviceType: existingDevice.deviceType,
         workstationId: existingDevice.workstationId,
         kdsDeviceId: existingDevice.kdsDeviceId,
         serialNumber: null, // Clear since it's new hardware
         assetTag: null,
         macAddress: null,
-        notes: `Replacement for previous device. Original notes: ${existingDevice.notes || "None"}`,
+        notes: `Replacement for device ${existingDevice.id}. Original notes: ${existingDevice.notes || "None"}`,
         enrollmentCode,
         enrollmentCodeExpiresAt,
         status: "pending",
