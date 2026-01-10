@@ -51,6 +51,7 @@ interface DataTableProps<T extends { id: string }> {
   onDelete?: (item: T) => void;
   onDuplicate?: (item: T) => void;
   customActions?: CustomAction<T>[];
+  actionButtons?: (item: T) => React.ReactNode;
   isLoading?: boolean;
   title?: string;
   searchPlaceholder?: string;
@@ -67,6 +68,7 @@ export function DataTable<T extends { id: string }>({
   onDelete,
   onDuplicate,
   customActions = [],
+  actionButtons,
   isLoading = false,
   title,
   searchPlaceholder = "Search...",
@@ -164,6 +166,7 @@ export function DataTable<T extends { id: string }>({
                     </div>
                   </TableHead>
                 ))}
+                {actionButtons && <TableHead>Actions</TableHead>}
                 {(onEdit || onDelete || onDuplicate || customActions.length > 0) && (
                   <TableHead className="w-12" />
                 )}
@@ -178,6 +181,7 @@ export function DataTable<T extends { id: string }>({
                         <div className="h-4 bg-muted animate-pulse rounded" />
                       </TableCell>
                     ))}
+                    {actionButtons && <TableCell />}
                     {(onEdit || onDelete || onDuplicate || customActions.length > 0) && <TableCell />}
                   </TableRow>
                 ))
@@ -200,6 +204,9 @@ export function DataTable<T extends { id: string }>({
                           : String(getNestedValue(item, col.key as string) ?? "")}
                       </TableCell>
                     ))}
+                    {actionButtons && (
+                      <TableCell>{actionButtons(item)}</TableCell>
+                    )}
                     {(onEdit || onDelete || onDuplicate || customActions.length > 0) && (
                       <TableCell>
                         <DropdownMenu>
