@@ -324,70 +324,59 @@ export default function RegisteredDevicesPage() {
 
   const actionButtons = (device: RegisteredDevice) => (
     <div className="flex items-center gap-1">
-      {device.status === "pending" && (
+      {/* Replace button - available for all statuses except revoked */}
+      {device.status !== "revoked" && (
         <Button
           size="sm"
           variant="outline"
-          onClick={() => handleCopyCode(device.enrollmentCode || "")}
-          disabled={!device.enrollmentCode}
-          data-testid={`button-copy-code-${device.id}`}
+          onClick={() => replaceMutation.mutate(device.id)}
+          disabled={replaceMutation.isPending}
+          data-testid={`button-replace-${device.id}`}
         >
-          <Copy className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4 mr-1" />
+          Replace
         </Button>
       )}
-      {device.status === "enrolled" && (
-        <>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => replaceMutation.mutate(device.id)}
-            disabled={replaceMutation.isPending}
-            data-testid={`button-replace-${device.id}`}
-          >
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Replace
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => disableMutation.mutate({ id: device.id, status: "disabled" })}
-            data-testid={`button-disable-${device.id}`}
-          >
-            Disable
-          </Button>
-        </>
-      )}
-      {device.status === "disabled" && (
-        <>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => replaceMutation.mutate(device.id)}
-            disabled={replaceMutation.isPending}
-            data-testid={`button-replace-disabled-${device.id}`}
-          >
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Replace
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => generateCodeMutation.mutate(device.id)}
-            data-testid={`button-reenable-${device.id}`}
-          >
-            Re-enroll
-          </Button>
-        </>
-      )}
       {device.status === "pending" && (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleCopyCode(device.enrollmentCode || "")}
+            disabled={!device.enrollmentCode}
+            data-testid={`button-copy-code-${device.id}`}
+          >
+            <Copy className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => generateCodeMutation.mutate(device.id)}
+            disabled={generateCodeMutation.isPending}
+            data-testid={`button-regenerate-${device.id}`}
+          >
+            <Key className="w-4 h-4" />
+          </Button>
+        </>
+      )}
+      {device.status === "enrolled" && (
         <Button
           size="sm"
-          variant="ghost"
-          onClick={() => generateCodeMutation.mutate(device.id)}
-          disabled={generateCodeMutation.isPending}
-          data-testid={`button-regenerate-${device.id}`}
+          variant="outline"
+          onClick={() => disableMutation.mutate({ id: device.id, status: "disabled" })}
+          data-testid={`button-disable-${device.id}`}
         >
-          <Key className="w-4 h-4" />
+          Disable
+        </Button>
+      )}
+      {device.status === "disabled" && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => generateCodeMutation.mutate(device.id)}
+          data-testid={`button-reenable-${device.id}`}
+        >
+          Re-enroll
         </Button>
       )}
     </div>
