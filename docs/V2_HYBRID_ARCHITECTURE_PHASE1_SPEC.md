@@ -133,25 +133,80 @@ Transform the Cloud POS system from a pure cloud architecture to a hybrid cloud/
 - Handle check sharing between workstations
 - Queue transactions for cloud sync
 
-**Check State Machine:**
+**Check State Machine (Complete Lifecycle):**
 ```
-┌─────────┐    Open     ┌─────────┐    Add Items   ┌─────────┐
-│  New    │ ──────────► │  Open   │ ──────────────►│  Open   │
-└─────────┘             └─────────┘                └─────────┘
-                             │                          │
-                             │ Payment                  │ Payment
-                             ▼                          ▼
-                        ┌─────────┐              ┌─────────┐
-                        │ Partial │              │ Closed  │
-                        │  Paid   │              └─────────┘
-                        └─────────┘                    │
-                             │                         │
-                             │ Full Payment            │ Sync to Cloud
-                             ▼                         ▼
-                        ┌─────────┐              ┌─────────┐
-                        │ Closed  │              │ Synced  │
-                        └─────────┘              └─────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        CHECK LIFECYCLE IN CAPS                              │
+│                                                                             │
+│  ┌─────────┐                                                                │
+│  │  NEW    │  Employee starts new check                                     │
+│  └────┬────┘                                                                │
+│       │ Begin Check                                                         │
+│       ▼                                                                     │
+│  ┌─────────┐  ←──────────────────────────────────────────────────┐         │
+│  │  OPEN   │  Check is active, owned by a workstation            │         │
+│  │ (Locked)│                                                     │         │
+│  └────┬────┘                                                     │         │
+│       │                                                          │         │
+│       ├──► Add Items ──► Items added to check ──────────────────┘         │
+│       │                                                                     │
+│       ├──► Send ──► Items sent to KDS (via KDS Controller)                 │
+│       │             Print kitchen tickets (via Print Controller)            │
+│       │                                                                     │
+│       ├──► Park ──► Release lock, check becomes "Available"                │
+│       │             ┌──────────┐                                           │
+│       │             │ AVAILABLE│  (No WS owns it, can be picked up)        │
+│       │             │ (Unlocked)│                                          │
+│       │             └────┬─────┘                                           │
+│       │                  │                                                  │
+│       │                  ▼ Pickup by any WS                                │
+│       │             ┌──────────┐                                           │
+│       │             │  OPEN    │  (Now locked to new WS)                   │
+│       │             │ (Locked) │                                           │
+│       │             └────┬─────┘                                           │
+│       │                  │                                                  │
+│       ◄──────────────────┘  (Continue editing)                             │
+│       │                                                                     │
+│       ├──► Apply Payment (Partial) ──► Check remains open                  │
+│       │                                                                     │
+│       ├──► Apply Payment (Full) ──────────────────────────┐                │
+│       │                                                    │                │
+│       ▼                                                    ▼                │
+│  ┌─────────┐                                         ┌─────────┐           │
+│  │ PARTIAL │  Some balance remains                   │ CLOSED  │           │
+│  │  PAID   │                                         └────┬────┘           │
+│  └────┬────┘                                              │                │
+│       │ Additional Payment                                │                │
+│       └──────────────────────────────────────────────────►│                │
+│                                                           │                │
+│                                                           ▼                │
+│                                                    ┌─────────────┐         │
+│                                                    │   POSTED    │         │
+│                                                    │ (In Replay  │         │
+│                                                    │   Queue)    │         │
+│                                                    └──────┬──────┘         │
+│                                                           │                │
+│                                                           ▼ Synced to Cloud│
+│                                                    ┌─────────────┐         │
+│                                                    │   SYNCED    │         │
+│                                                    │  (In Cloud  │         │
+│                                                    │   Reports)  │         │
+│                                                    └─────────────┘         │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Check Operations Detail:**
+
+| Operation | CAPS Action | Print Controller | KDS Controller |
+|-----------|-------------|------------------|----------------|
+| Begin Check | Create check record, lock to WS | - | - |
+| Add Items | Update check_items, recalculate totals | - | - |
+| Send | Mark items as "sent", update round | Print kitchen tickets | Send tickets to KDS displays |
+| Park | Release lock, set status = available | - | - |
+| Pickup | Acquire lock, assign to requesting WS | - | - |
+| Payment | Create payment record, update balance | Print receipt (if configured) | - |
+| Close | Set status = closed, release lock | Print final receipt | Remove from KDS (if configured) |
+| Post | Add to replay queue for cloud sync | - | - |
 
 **Check Lock Management:**
 
@@ -196,11 +251,73 @@ WS sends print request
 ### 3.3 KDS Controller Service
 
 **Responsibilities:**
-- Receive order tickets from CAPS
-- Route to appropriate KDS displays
-- Track bump status
-- Manage expo routing
-- All via LAN WebSocket
+- Receive order tickets from CAPS (when items are "Sent")
+- Route to appropriate KDS displays based on Order Device configuration
+- Track bump status per item/ticket
+- Manage expo routing for multi-station flows
+- All communication via LAN WebSocket (no internet required)
+
+**KDS Flow (Parallel to Print Controller):**
+```
+WS sends items (Send button)
+           │
+           ▼
+┌─────────────────────────┐
+│   CAPS (Check Service)  │
+│                         │
+│  1. Mark items as sent  │
+│  2. Create round        │
+│  3. Notify services     │
+└───────────┬─────────────┘
+            │
+     ┌──────┴──────┐
+     ▼             ▼
+┌──────────┐  ┌──────────────┐
+│  Print   │  │     KDS      │
+│Controller│  │  Controller  │
+└────┬─────┘  └──────┬───────┘
+     │               │
+     ▼               ▼
+┌──────────┐  ┌──────────────┐
+│ Printer  │  │ KDS Display  │
+│ (TCP/IP) │  │ (WebSocket)  │
+└──────────┘  └──────────────┘
+```
+
+**KDS Routing Logic (Same as Print Class):**
+```typescript
+function routeToKDS(items: CheckItem[], rvcId: string): KDSTicket[] {
+  const tickets: Map<string, KDSTicket> = new Map();
+  
+  for (const item of items) {
+    // Get Order Device from menu item configuration
+    const orderDevice = getOrderDevice(item.menuItemId);
+    
+    // Get KDS devices for this order device in this RVC
+    const kdsDevices = getKDSDevicesForOrderDevice(orderDevice.id, rvcId);
+    
+    for (const kds of kdsDevices) {
+      if (!tickets.has(kds.id)) {
+        tickets.set(kds.id, { kdsDeviceId: kds.id, items: [] });
+      }
+      tickets.get(kds.id)!.items.push(item);
+    }
+  }
+  
+  return Array.from(tickets.values());
+}
+```
+
+**KDS Controller vs Print Controller Comparison:**
+
+| Aspect | Print Controller | KDS Controller |
+|--------|------------------|----------------|
+| Routing Config | Print Class → Printer | Order Device → KDS Display |
+| Protocol | TCP/IP Port 9100 | WebSocket (LAN) |
+| Data Format | ESC/POS commands | JSON ticket data |
+| Acknowledgment | Job status | Bump status |
+| Retry | Yes (queue-based) | Yes (until bumped) |
+| Expo Flow | N/A | Yes (multi-station routing) |
 
 ---
 
@@ -322,6 +439,78 @@ export const checkLocks = sqliteTable("check_locks", {
 │     - Data re-synced from cloud                             │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### 4.5 Key Rotation Flow (What Happens When Keys Rotate)
+
+When an admin rotates the encryption key in EMC (cloud), here's what happens:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          KEY ROTATION PROCESS                               │
+│                                                                             │
+│  STEP 1: Admin clicks [Rotate Key] in EMC                                  │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ Cloud:                                                                │  │
+│  │ - Generates new encryption key                                        │  │
+│  │ - Stores hash of new key in database                                  │  │
+│  │ - Invalidates old key                                                 │  │
+│  │ - Sends KEY_ROTATED message to connected Service Hosts                │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 2: Service Host receives notification                                │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ Service Host:                                                         │  │
+│  │ - Receives KEY_ROTATED message                                        │  │
+│  │ - Displays warning: "Key rotated - reinstall required"                │  │
+│  │ - Continues operating with OLD key (grace period)                     │  │
+│  │ - System tray icon changes to ORANGE                                  │  │
+│  │ - Manager notification in EMC                                         │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 3: Admin downloads NEW CAL package                                   │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ EMC:                                                                  │  │
+│  │ - Admin goes to Service Host tab                                      │  │
+│  │ - Clicks [Download CAL Package]                                       │  │
+│  │ - New package contains NEW encryption key                             │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 4: Run new installer on Service Host PC                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ Installer:                                                            │  │
+│  │ - Detects existing installation                                       │  │
+│  │ - Stops running Service Host                                          │  │
+│  │ - Backs up replay queue (pending transactions)                        │  │
+│  │ - DELETES old encrypted database (can't read it anymore)              │  │
+│  │ - Installs new key in Windows DPAPI                                   │  │
+│  │ - Creates fresh SQLite database with NEW key                          │  │
+│  │ - Starts Service Host                                                 │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 5: Service Host re-syncs from cloud                                  │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ Service Host:                                                         │  │
+│  │ - Connects to cloud with NEW key                                      │  │
+│  │ - Downloads FULL configuration (not delta)                            │  │
+│  │ - Replays backed-up transactions to cloud                             │  │
+│  │ - Syncs any open checks from cloud                                    │  │
+│  │ - System tray icon returns to GREEN                                   │  │
+│  │ - Ready for normal operation                                          │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+1. **No data loss** - Pending transactions are backed up before database wipe
+2. **Grace period** - Service Host continues working briefly with old key
+3. **Full resync** - After new key, all config redownloaded from cloud
+4. **Open checks** - Preserved in cloud, synced back to new local DB
+5. **Minimal downtime** - Usually 5-10 minutes for the upgrade process
 
 ---
 
@@ -731,16 +920,59 @@ export const printQueue = sqliteTable("print_queue", {
 ### 9.1 Package Contents
 
 ```
-ServiceHost-Windows-v1.0.0.zip
-├── ServiceHost.exe           # Main application
-├── node_modules/             # Dependencies (bundled)
-├── config/
-│   ├── property.json         # Property ID, cloud URL, encrypted key
-│   └── services.json         # Which services to run
-├── db/
-│   └── (empty - created on first run)
-└── install.bat               # Installation script
+ServiceHost-Windows-v1.0.0.exe     # Self-extracting installer
+│
+└── Contains:
+    ├── ServiceHost.exe            # Main application (Node.js bundled with pkg)
+    ├── runtime/                   # Bundled Node.js runtime
+    ├── config/
+    │   ├── property.json          # Property ID, cloud URL, encrypted config
+    │   └── services.json          # Which services to run (CAPS, Print, KDS)
+    ├── db/
+    │   └── (created on first run) # SQLite database location
+    └── logs/
+        └── (runtime logs)
 ```
+
+### 9.2 Silent Installer (Minimal Interaction)
+
+The CAL package is a self-extracting executable that runs with minimal user interaction:
+
+**Installation Steps (User Experience):**
+```
+1. Double-click ServiceHost-Windows-v1.0.0.exe
+2. UAC prompt: "Allow this app to make changes?" → [Yes]
+3. Single dialog appears:
+
+   ┌────────────────────────────────────────────────────┐
+   │  Cloud POS Service Host Installer                  │
+   │                                                    │
+   │  Property: SNS-Newport Beach                       │
+   │  Services: CAPS, Print Controller, KDS Controller  │
+   │                                                    │
+   │  Install Location:                                 │
+   │  [C:\Program Files\CloudPOS\ServiceHost]  [Browse] │
+   │                                                    │
+   │  ☑️ Start Service Host after installation          │
+   │  ☑️ Run at Windows startup                         │
+   │                                                    │
+   │            [Install]  [Cancel]                     │
+   └────────────────────────────────────────────────────┘
+
+4. Progress bar shows installation
+5. Service Host starts automatically
+6. System tray icon appears (green = connected, yellow = offline)
+```
+
+**Silent Install (No UI):**
+```cmd
+ServiceHost-Windows-v1.0.0.exe /silent /install-path="C:\CloudPOS"
+```
+
+**Post-Install Verification:**
+- Service Host connects to cloud
+- Downloads latest configuration
+- Displays system tray notification: "Service Host connected to SNS-Newport Beach"
 
 ### 9.2 EMC Configuration for CAL
 
@@ -906,31 +1138,48 @@ Phase 1 is complete when:
 
 ---
 
-## 12. Open Questions
+## 12. Resolved Design Decisions
 
-### For Discussion:
+### Decision 1: Workstation Client
+**Choice:** Browser with device token authentication
+- Workstations use browser connecting to local Service Host
+- Device must present enrollment token to access POS
+- Faster to build, same UI as current system
+- Service Host validates token before allowing access
 
-1. **Workstation Client Changes**
-   - Should workstations continue using the web app (browser)?
-   - Or should we build native Windows/Android POS clients?
-   - Hybrid: Browser connects to local Service Host instead of cloud?
+### Decision 2: Service Host Deployment
+**Choice:** Flexible - dedicated PC OR workstation dual-use
+- Can run on dedicated hardware for high-volume properties
+- Can run alongside POS client on same PC for smaller properties
+- EMC configuration determines which WS hosts which services
 
-2. **Service Host Hardware**
-   - Minimum specs for Service Host PC?
-   - Can it run on same PC as a workstation (dual use)?
-   - Dedicated device recommendation?
+### Decision 3: Failover Strategy
+**Choice:** Primary/Secondary Service Host with automatic failover
+- Property can have 2 Service Hosts (Primary + Backup)
+- Backup monitors Primary via heartbeat
+- If Primary fails, Backup promotes itself
+- Workstations automatically reconnect to Backup
+- When Primary recovers, it syncs from Backup and can resume
 
-3. **Multi-Service-Host**
-   - Should a property support multiple Service Hosts (failover)?
-   - Primary/secondary relationship?
-   - How does failover work?
+### Decision 4: Open Checks at Business Date Rollover
+**Choice:** Checks remain open, outstanding balance carries forward
+- Open checks are NOT auto-closed at rollover
+- Outstanding totals carry into next business date
+- Report shows "Outstanding Checks" separately
+- Only closed checks contribute to daily sales totals
 
-4. **Check Number Assignment**
-   - Cloud assigns check number ranges to Service Hosts?
-   - Each WS gets its own offline range?
-   - How to prevent duplicates?
+### Decision 5: Admin Navigation (EMC)
+**Confirmed:** All existing modules remain unchanged
+- Employees, Schedules, Roles - stay as-is
+- Menu Items, SLUs, Modifiers - stay as-is
+- Service Host is an ADDITIONAL tab, not a replacement
+- No functionality is removed
 
-5. **Time Synchronization**
+---
+
+## 13. Open Questions (Remaining)
+
+1. **Time Synchronization**
    - All devices must have synced clocks
    - NTP server requirement?
    - What if Service Host clock drifts?
