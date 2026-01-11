@@ -15656,73 +15656,94 @@ connect();
 
   // WebSocket endpoint for Service Hosts
   // Handle upgrade on path /ws/service-host
-  wss.on("connection", (ws, request) => {
+  wss.on("connection", async (ws, request) => {
     const url = request.url || "";
     
     if (url.startsWith("/ws/service-host")) {
-      const serviceHostId = new URL(url, "http://localhost").searchParams.get("serviceHostId");
+      const urlParams = new URL(url, "http://localhost").searchParams;
+      const serviceHostId = urlParams.get("serviceHostId");
+      const token = urlParams.get("token");
       
-      if (serviceHostId) {
-        serviceHostConnections.set(serviceHostId, ws);
-        console.log(`Service Host ${serviceHostId} connected via WebSocket`);
-        
-        // Send welcome message
-        ws.send(JSON.stringify({
-          type: "connected",
-          timestamp: new Date().toISOString(),
-          message: "Service Host WebSocket connected",
-        }));
-
-        ws.on("message", async (data) => {
-          try {
-            const msg = JSON.parse(data.toString());
-            
-            switch (msg.type) {
-              case "heartbeat":
-                // Update service host status
-                await storage.updateServiceHost(serviceHostId, {
-                  status: msg.payload?.status || "online",
-                  lastHeartbeatAt: new Date(),
-                  activeChecks: msg.payload?.activeChecks ?? 0,
-                  pendingTransactions: msg.payload?.pendingTransactions ?? 0,
-                  localConfigVersion: msg.payload?.configVersion ?? 0,
-                });
-                
-                // Send acknowledgment
-                ws.send(JSON.stringify({
-                  type: "heartbeat_ack",
-                  id: msg.id,
-                  timestamp: new Date().toISOString(),
-                }));
-                break;
-                
-              case "pong":
-                // Pong received, connection is alive
-                break;
-                
-              case "transaction":
-                // Process incoming transaction
-                console.log(`Received transaction from ${serviceHostId}:`, msg.payload);
-                break;
-                
-              default:
-                console.log(`Unknown message type from ${serviceHostId}:`, msg.type);
-            }
-          } catch (e) {
-            console.error("Service Host WebSocket message error:", e);
-          }
-        });
-
-        ws.on("close", () => {
-          serviceHostConnections.delete(serviceHostId);
-          console.log(`Service Host ${serviceHostId} disconnected`);
-          
-          // Update status to offline
-          storage.updateServiceHost(serviceHostId, {
-            status: "offline",
-          }).catch(console.error);
-        });
+      // Validate token before allowing connection
+      if (!serviceHostId || !token) {
+        ws.send(JSON.stringify({ type: "error", error: "Missing serviceHostId or token" }));
+        ws.close(4001, "Unauthorized");
+        return;
       }
+      
+      // Verify the token matches the Service Host
+      const serviceHost = await storage.getServiceHost(serviceHostId);
+      if (!serviceHost || serviceHost.authToken !== token) {
+        ws.send(JSON.stringify({ type: "error", error: "Invalid service host credentials" }));
+        ws.close(4001, "Unauthorized");
+        return;
+      }
+      
+      if (serviceHost.status === "disabled") {
+        ws.send(JSON.stringify({ type: "error", error: "Service host is disabled" }));
+        ws.close(4003, "Forbidden");
+        return;
+      }
+      
+      serviceHostConnections.set(serviceHostId, ws);
+      console.log(`Service Host ${serviceHostId} connected via WebSocket`);
+      
+      // Send welcome message
+      ws.send(JSON.stringify({
+        type: "connected",
+        timestamp: new Date().toISOString(),
+        message: "Service Host WebSocket connected",
+      }));
+
+      ws.on("message", async (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          
+          switch (msg.type) {
+            case "heartbeat":
+              // Update service host status
+              await storage.updateServiceHost(serviceHostId, {
+                status: msg.payload?.status || "online",
+                lastHeartbeatAt: new Date(),
+                activeChecks: msg.payload?.activeChecks ?? 0,
+                pendingTransactions: msg.payload?.pendingTransactions ?? 0,
+                localConfigVersion: msg.payload?.configVersion ?? 0,
+              });
+              
+              // Send acknowledgment
+              ws.send(JSON.stringify({
+                type: "heartbeat_ack",
+                id: msg.id,
+                timestamp: new Date().toISOString(),
+              }));
+              break;
+              
+            case "pong":
+              // Pong received, connection is alive
+              break;
+              
+            case "transaction":
+              // Process incoming transaction
+              console.log(`Received transaction from ${serviceHostId}:`, msg.payload);
+              break;
+              
+            default:
+              console.log(`Unknown message type from ${serviceHostId}:`, msg.type);
+          }
+        } catch (e) {
+          console.error("Service Host WebSocket message error:", e);
+        }
+      });
+
+      ws.on("close", () => {
+        serviceHostConnections.delete(serviceHostId);
+        console.log(`Service Host ${serviceHostId} disconnected`);
+        
+        // Update status to offline
+        storage.updateServiceHost(serviceHostId, {
+          status: "offline",
+        }).catch(console.error);
+      });
     }
   });
 

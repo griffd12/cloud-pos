@@ -146,3 +146,26 @@ V2 adds an optional on-premise Service Host for offline resilience, inspired by 
 
 ### V1 System Status
 This current Replit project remains the V1 cloud-only system. It continues to work independently and can be tested anytime. V2 is additive, not a replacement.
+
+### Cloud Sync Infrastructure (Implemented)
+The cloud system now includes sync endpoints for Service Host communication:
+
+**Database Tables:**
+- `service_hosts`: Registry of on-premise Service Hosts with auth tokens, status, and sync state
+- `config_versions`: Incremental configuration changes for delta sync
+- `service_host_transactions`: Transaction log for offline-originated transactions
+
+**API Endpoints:**
+- `POST /api/service-hosts/authenticate` - Service Host token authentication
+- `GET /api/sync/config/full` - Full configuration sync (all property data)
+- `GET /api/sync/config/delta?since={version}` - Incremental config changes since version
+- `POST /api/sync/transactions` - Post offline transactions to cloud
+- `POST /api/service-hosts/:id/heartbeat` - Update Service Host status/metrics
+- `GET/POST/DELETE /api/service-hosts` - Service Host CRUD management
+
+**WebSocket:**
+- `/ws/service-host` - Real-time sync channel for push notifications
+
+**Authentication:**
+- Service Hosts authenticate via token stored in `service_hosts.authToken`
+- Token sent via `Authorization: Bearer {token}` header or `x-service-host-token` header
