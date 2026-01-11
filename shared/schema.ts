@@ -2915,3 +2915,168 @@ export type ConfigVersion = typeof configVersions.$inferSelect;
 export type InsertConfigVersion = z.infer<typeof insertConfigVersionSchema>;
 export type ServiceHostTransaction = typeof serviceHostTransactions.$inferSelect;
 export type InsertServiceHostTransaction = z.infer<typeof insertServiceHostTransactionSchema>;
+
+// ============================================================================
+// WORKSTATION SERVICE BINDINGS - Exclusive service assignment to workstations
+// ============================================================================
+
+export const SERVICE_CONTROLLER_TYPES = ["caps", "print_controller", "kds_controller", "payment_controller"] as const;
+export type ServiceControllerType = typeof SERVICE_CONTROLLER_TYPES[number];
+
+export const workstationServiceBindings = pgTable("workstation_service_bindings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  workstationId: varchar("workstation_id").notNull().references(() => workstations.id),
+  serviceType: text("service_type").notNull(), // caps, print_controller, kds_controller, payment_controller
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  // Ensure each service type can only be assigned to ONE workstation per property
+  sql`CREATE UNIQUE INDEX IF NOT EXISTS wsb_property_service_unique ON workstation_service_bindings (property_id, service_type) WHERE active = true`
+]);
+
+export const workstationServiceBindingsRelations = relations(workstationServiceBindings, ({ one }) => ({
+  property: one(properties, { fields: [workstationServiceBindings.propertyId], references: [properties.id] }),
+  workstation: one(workstations, { fields: [workstationServiceBindings.workstationId], references: [workstations.id] }),
+}));
+
+export const insertWorkstationServiceBindingSchema = createInsertSchema(workstationServiceBindings).omit({ id: true, createdAt: true, updatedAt: true });
+export type WorkstationServiceBinding = typeof workstationServiceBindings.$inferSelect;
+export type InsertWorkstationServiceBinding = z.infer<typeof insertWorkstationServiceBindingSchema>;
+
+// ============================================================================
+// CAL PACKAGES - Configuration Application Loader
+// ============================================================================
+
+export const CAL_PACKAGE_TYPES = [
+  "service_host",
+  "service_host_prereqs", 
+  "caps",
+  "print_controller",
+  "kds_controller",
+  "kds_handler",
+  "kds_client",
+  "payment_controller",
+  "cal_client",
+  "custom"
+] as const;
+export type CalPackageType = typeof CAL_PACKAGE_TYPES[number];
+
+export const CAL_DEPLOYMENT_ACTIONS = ["install", "update", "remove", "reinstall"] as const;
+export type CalDeploymentAction = typeof CAL_DEPLOYMENT_ACTIONS[number];
+
+export const CAL_DEPLOYMENT_STATUSES = ["pending", "scheduled", "downloading", "installing", "completed", "failed", "cancelled"] as const;
+export type CalDeploymentStatus = typeof CAL_DEPLOYMENT_STATUSES[number];
+
+export const CAL_DEPLOYMENT_SCOPES = ["enterprise", "property", "workstation"] as const;
+export type CalDeploymentScope = typeof CAL_DEPLOYMENT_SCOPES[number];
+
+export const calPackages = pgTable("cal_packages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  name: text("name").notNull(),
+  packageType: text("package_type").notNull(), // service_host, caps, print_controller, etc.
+  description: text("description"),
+  isSystem: boolean("is_system").default(false), // System packages vs custom
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const calPackageVersions = pgTable("cal_package_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  packageId: varchar("package_id").notNull().references(() => calPackages.id),
+  version: text("version").notNull(), // e.g., "3.3", "3.5", "1.0.0"
+  releaseNotes: text("release_notes"),
+  downloadUrl: text("download_url"), // URL to package installer/files
+  checksum: text("checksum"), // SHA-256 for integrity verification
+  fileSize: integer("file_size"), // Size in bytes
+  minOsVersion: text("min_os_version"), // Minimum OS version required
+  isLatest: boolean("is_latest").default(false),
+  active: boolean("active").default(true),
+  releasedAt: timestamp("released_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const calPackagePrerequisites = pgTable("cal_package_prerequisites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  packageVersionId: varchar("package_version_id").notNull().references(() => calPackageVersions.id),
+  prerequisitePackageId: varchar("prerequisite_package_id").notNull().references(() => calPackages.id),
+  minVersion: text("min_version"), // Minimum required version of prerequisite
+  installOrder: integer("install_order").default(0), // Order in which prerequisites should be installed
+});
+
+export const calDeployments = pgTable("cal_deployments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  packageVersionId: varchar("package_version_id").notNull().references(() => calPackageVersions.id),
+  deploymentScope: text("deployment_scope").notNull(), // enterprise, property, workstation
+  action: text("action").notNull().default("install"), // install, update, remove, reinstall
+  scheduledAt: timestamp("scheduled_at"), // When to deploy (null = immediate)
+  expiresAt: timestamp("expires_at"), // Deployment expires after this time
+  createdById: varchar("created_by_id").references(() => employees.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const calDeploymentTargets = pgTable("cal_deployment_targets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deploymentId: varchar("deployment_id").notNull().references(() => calDeployments.id),
+  propertyId: varchar("property_id").references(() => properties.id), // null if enterprise-wide
+  workstationId: varchar("workstation_id").references(() => workstations.id), // null if property-wide
+  serviceHostId: varchar("service_host_id").references(() => serviceHosts.id), // Target service host
+  status: text("status").default("pending"), // pending, downloading, installing, completed, failed
+  statusMessage: text("status_message"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  retryCount: integer("retry_count").default(0),
+});
+
+export const calPackagesRelations = relations(calPackages, ({ one, many }) => ({
+  enterprise: one(enterprises, { fields: [calPackages.enterpriseId], references: [enterprises.id] }),
+  versions: many(calPackageVersions),
+}));
+
+export const calPackageVersionsRelations = relations(calPackageVersions, ({ one, many }) => ({
+  package: one(calPackages, { fields: [calPackageVersions.packageId], references: [calPackages.id] }),
+  prerequisites: many(calPackagePrerequisites),
+  deployments: many(calDeployments),
+}));
+
+export const calPackagePrerequisitesRelations = relations(calPackagePrerequisites, ({ one }) => ({
+  packageVersion: one(calPackageVersions, { fields: [calPackagePrerequisites.packageVersionId], references: [calPackageVersions.id] }),
+  prerequisitePackage: one(calPackages, { fields: [calPackagePrerequisites.prerequisitePackageId], references: [calPackages.id] }),
+}));
+
+export const calDeploymentsRelations = relations(calDeployments, ({ one, many }) => ({
+  enterprise: one(enterprises, { fields: [calDeployments.enterpriseId], references: [enterprises.id] }),
+  packageVersion: one(calPackageVersions, { fields: [calDeployments.packageVersionId], references: [calPackageVersions.id] }),
+  createdBy: one(employees, { fields: [calDeployments.createdById], references: [employees.id] }),
+  targets: many(calDeploymentTargets),
+}));
+
+export const calDeploymentTargetsRelations = relations(calDeploymentTargets, ({ one }) => ({
+  deployment: one(calDeployments, { fields: [calDeploymentTargets.deploymentId], references: [calDeployments.id] }),
+  property: one(properties, { fields: [calDeploymentTargets.propertyId], references: [properties.id] }),
+  workstation: one(workstations, { fields: [calDeploymentTargets.workstationId], references: [workstations.id] }),
+  serviceHost: one(serviceHosts, { fields: [calDeploymentTargets.serviceHostId], references: [serviceHosts.id] }),
+}));
+
+export const insertCalPackageSchema = createInsertSchema(calPackages).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCalPackageVersionSchema = createInsertSchema(calPackageVersions).omit({ id: true, createdAt: true });
+export const insertCalPackagePrerequisiteSchema = createInsertSchema(calPackagePrerequisites).omit({ id: true });
+export const insertCalDeploymentSchema = createInsertSchema(calDeployments).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCalDeploymentTargetSchema = createInsertSchema(calDeploymentTargets).omit({ id: true });
+
+export type CalPackage = typeof calPackages.$inferSelect;
+export type InsertCalPackage = z.infer<typeof insertCalPackageSchema>;
+export type CalPackageVersion = typeof calPackageVersions.$inferSelect;
+export type InsertCalPackageVersion = z.infer<typeof insertCalPackageVersionSchema>;
+export type CalPackagePrerequisite = typeof calPackagePrerequisites.$inferSelect;
+export type InsertCalPackagePrerequisite = z.infer<typeof insertCalPackagePrerequisiteSchema>;
+export type CalDeployment = typeof calDeployments.$inferSelect;
+export type InsertCalDeployment = z.infer<typeof insertCalDeploymentSchema>;
+export type CalDeploymentTarget = typeof calDeploymentTargets.$inferSelect;
+export type InsertCalDeploymentTarget = z.infer<typeof insertCalDeploymentTargetSchema>;
