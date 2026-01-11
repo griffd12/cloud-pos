@@ -124,3 +124,25 @@ The system provides API endpoints for integration with external management appli
 ### Development Tools
 - Replit-specific Vite plugins
 - Google Fonts (Inter, DM Sans, Fira Code, Geist Mono)
+
+## Version 2 Planning (Hybrid Cloud/On-Prem)
+
+### Status: Specification Complete
+Full specification document: `docs/V2_HYBRID_ARCHITECTURE_PHASE1_SPEC.md`
+
+### Overview
+V2 adds an optional on-premise Service Host for offline resilience, inspired by Oracle Simphony CAPS architecture:
+- **Service Host**: Node.js application running at property with local SQLite database
+- **Offline Modes**: Yellow (no internet, LAN works) and Red (complete isolation)
+- **Services**: CAPS (Check & Posting), Print Controller, KDS Controller, Payment Service
+- **Sync**: Cloud ↔ Service Host via WebSocket, automatic replay when connection restored
+
+### Key Decisions Made
+1. **Browser with device token auth** for workstations (not native apps initially)
+2. **Configurable check number ranges** per workstation for offline operation
+3. **3-minute failover** for Primary → Backup Service Host transition
+4. **Separate Replit project** for V2 Service Host (V1 cloud system unchanged)
+5. **CAL Package versioning** with selective deployment per workstation/property
+
+### V1 System Status
+This current Replit project remains the V1 cloud-only system. It continues to work independently and can be tested anytime. V2 is additive, not a replacement.

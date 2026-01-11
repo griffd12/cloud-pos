@@ -1420,6 +1420,27 @@ Phase 1 is complete when:
 - Service Host is an ADDITIONAL tab, not a replacement
 - No functionality is removed
 
+### Decision 6: Check Number Ranges
+**Choice:** Configurable per workstation in EMC
+- Each workstation has min/max check number fields
+- Example: WS01 (1-999), WS02 (1000-1999), WS03 (2000-2999)
+- Prevents duplicate check numbers during offline operation
+- System warns if ranges overlap
+
+### Decision 7: Failover Timing
+**Choice:** 3 minutes maximum
+- Primary Service Host monitored via heartbeat every 15 seconds
+- After 12 consecutive missed heartbeats (~3 min), Backup promotes itself
+- Workstations automatically redirect to Backup
+- Avoids false positives from brief network hiccups
+
+### Decision 8: Project Structure
+**Choice:** Separate Replit project
+- V2 Service Host is a NEW Replit project (not a subfolder)
+- Keeps V1 cloud system completely independent
+- Easier to manage, version, and deploy separately
+- Both projects can run simultaneously
+
 ---
 
 ## 13. Open Questions (Remaining)
