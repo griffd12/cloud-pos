@@ -26,6 +26,15 @@
 
 ## 1. Executive Summary
 
+### Terminology Clarification
+
+| Term | Definition |
+|------|------------|
+| **Service Host** | The PC (workstation) designated to run on-premise services (CAPS, Print, KDS, Payment). This IS the workstation you configure in EMC as "Check and Posting Service Host". Can be a dedicated PC or a workstation that also runs the POS client. |
+| **CAPS** | Check and Posting Service - the core service running on the Service Host that manages checks, transactions, and local database. |
+| **CAL Package** | Client Application Loader package - the installer that deploys the Service Host software and version updates. |
+| **PED** | PIN Entry Device - the credit card terminal that handles card swipes/dips and encrypts card data. |
+
 ### Purpose
 Transform the Cloud POS system from a pure cloud architecture to a hybrid cloud/on-premise solution inspired by Oracle Simphony's CAPS (Check and Posting Service) model.
 
@@ -248,7 +257,99 @@ WS sends print request
 └─────────────────────────┘
 ```
 
-### 3.3 KDS Controller Service
+### 3.3 Payment Service (Credit Card Controller)
+
+**Based on Oracle Simphony SPI (Simphony Payment Interface) Architecture**
+
+The Payment Service handles credit card processing locally, ensuring PCI compliance by never storing card data:
+
+**Architecture: SPI-Style (Recommended)**
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                     PAYMENT FLOW (PCI COMPLIANT)                              │
+│                                                                               │
+│  ┌──────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐ │
+│  │   POS    │────>│   Payment    │────>│     PED     │────>│  Processor   │ │
+│  │Workstation│     │   Service    │     │  (Terminal) │     │   Gateway    │ │
+│  └──────────┘     └──────────────┘     └─────────────┘     └──────────────┘ │
+│       ↑                                       │                    │         │
+│       │                                       │                    │         │
+│       │         Token + Approval              │    Card Data       │         │
+│       └───────────────────────────────────────┘    (encrypted)     │         │
+│                                                         └──────────┘         │
+│                                                                               │
+│  ✓ Card data NEVER touches POS or Service Host                               │
+│  ✓ Only tokens stored in local/cloud database                                │
+│  ✓ PED communicates directly with processor                                  │
+│  ✓ Works in offline mode (PED → Gateway is independent path)                 │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Principles (PCI Compliance):**
+1. **No card data storage** - POS and Service Host never see full card numbers
+2. **Tokenization** - Only payment tokens stored in database
+3. **PED handles encryption** - PIN Entry Device encrypts all card data
+4. **Direct gateway connection** - PED talks directly to processor gateway
+5. **Offline resilient** - Payment can work even if Service Host is offline (PED → Gateway is separate)
+
+**Payment Driver Configuration (EMC):**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Property: SNS-Newport Beach → Payment Configuration             │
+│                                                                 │
+│ ┌─────────────────────────────────────────────────────────────┐│
+│ │ Payment Driver Settings                                     ││
+│ │                                                             ││
+│ │ Driver Type: [▼ Simphony Payment Interface (SPI)]          ││
+│ │                                                             ││
+│ │ Connection Mode:                                            ││
+│ │ ○ Terminal Mode (POS → PED direct)                          ││
+│ │ ● Middleware Mode (POS → Payment Service → PED)             ││
+│ │                                                             ││
+│ │ Middleware Settings (if Middleware Mode):                   ││
+│ │ Payment Service Host: [▼ WS01 - Service Host]              ││
+│ │ Middleware IP: [Auto-assigned from Service Host]            ││
+│ │ Port: [5023]                                                ││
+│ │                                                             ││
+│ │ Processor Gateway:                                          ││
+│ │ Processor: [▼ Stripe / Elavon / FreedomPay / ...]          ││
+│ │ Gateway URL: [https://api.stripe.com/...]                   ││
+│ │ Merchant ID: [●●●●●●●●●●●●] (stored in secrets)             ││
+│ │                                                             ││
+│ │ PED Configuration:                                          ││
+│ │ ┌─────────────┬─────────────┬────────────────┐              ││
+│ │ │ Workstation │ PED IP      │ PED Type       │              ││
+│ │ ├─────────────┼─────────────┼────────────────┤              ││
+│ │ │ WS01        │ 192.168.1.50│ Verifone VX520 │              ││
+│ │ │ WS02        │ 192.168.1.51│ Ingenico Lane  │              ││
+│ │ └─────────────┴─────────────┴────────────────┘              ││
+│ └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Offline Payment Handling:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Internet down, LAN up | PED → Gateway works IF gateway accessible. If not, payment declined. |
+| Service Host down | Terminal Mode: PED still works. Middleware Mode: No payment. |
+| Both down | No electronic payment. Cash only. |
+
+**Important:** Modern payment processing does NOT support "store and forward" offline authorizations for security reasons. If the PED cannot reach the processor gateway, the payment is declined. This is industry standard for PCI compliance.
+
+**Supported Functions:**
+- Authorization (pre-auth)
+- Sale (auth + capture)
+- Void
+- Refund
+- Tip adjustment
+- Manual entry (MOTO - phone orders)
+- Signature capture
+- Settlement (EOD batch close)
+
+---
+
+### 3.4 KDS Controller Service
 
 **Responsibilities:**
 - Receive order tickets from CAPS (when items are "Sent")
@@ -974,7 +1075,151 @@ ServiceHost-Windows-v1.0.0.exe /silent /install-path="C:\CloudPOS"
 - Downloads latest configuration
 - Displays system tray notification: "Service Host connected to SNS-Newport Beach"
 
-### 9.2 EMC Configuration for CAL
+### 9.3 CAL Versioning System
+
+**How Version Updates Work (Simphony-Style):**
+
+The cloud environment and local Service Hosts maintain version alignment through CAL packages:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        VERSION MANAGEMENT FLOW                              │
+│                                                                             │
+│  STEP 1: Cloud Update                                                       │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ Cloud Environment upgraded to Version 1.2.0                           │ │
+│  │ - New features added (e.g., new payment options)                       │ │
+│  │ - Database schema updated                                              │ │
+│  │ - API changes deployed                                                 │ │
+│  │ - Cloud tested and verified                                            │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 2: CAL Package Created                                               │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ New CAL Package: ServiceHost-1.2.0.exe                                │ │
+│  │ - Contains updated Service Host application                            │ │
+│  │ - Database migration scripts                                           │ │
+│  │ - Compatible with Cloud 1.2.0                                          │ │
+│  │ - Available for download in EMC                                        │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 3: Selective Deployment                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ Admin chooses WHERE to deploy:                                         │ │
+│  │                                                                        │ │
+│  │ ☑️ Newport Beach (WS01) → Deploy 1.2.0 (test first)                    │ │
+│  │ ☐ Newport Beach (WS02) → Stay on 1.1.0                                 │ │
+│  │ ☐ Laguna Beach (WS01) → Stay on 1.1.0                                  │ │
+│  │ ☐ Laguna Beach (WS02) → Stay on 1.1.0                                  │ │
+│  │                                                                        │ │
+│  │ Test on one workstation, then roll out to others                       │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                    │                                        │
+│                                    ▼                                        │
+│  STEP 4: Service Host Updates                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ When CAL Package deployed:                                             │ │
+│  │ 1. Service Host downloads package from cloud                           │ │
+│  │ 2. Stops services gracefully                                           │ │
+│  │ 3. Backs up current database                                           │ │
+│  │ 4. Runs database migrations                                            │ │
+│  │ 5. Updates application files                                           │ │
+│  │ 6. Restarts services                                                   │ │
+│  │ 7. Reports success/failure to cloud                                    │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Version Compatibility Rules:**
+
+| Cloud Version | CAL Version | Compatible? | Notes |
+|---------------|-------------|-------------|-------|
+| 1.2.0 | 1.2.0 | ✅ Yes | Exact match |
+| 1.2.0 | 1.1.0 | ⚠️ Degraded | Old features work, new features unavailable |
+| 1.2.0 | 1.0.0 | ❌ No | Too old, sync will fail |
+| 1.1.0 | 1.2.0 | ❌ No | CAL ahead of cloud (shouldn't happen) |
+
+**EMC CAL Package Management:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ EMC → Setup → CAL Packages                                                 │
+│                                                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────┐│
+│ │ Available CAL Packages                                                  ││
+│ │                                                                         ││
+│ │ ┌────────────┬───────────┬─────────────┬────────────────┐              ││
+│ │ │ Version    │ Released  │ Status      │ Actions        │              ││
+│ │ ├────────────┼───────────┼─────────────┼────────────────┤              ││
+│ │ │ 1.2.0      │ Jan 15    │ Latest      │ [Deploy] [Notes]│             ││
+│ │ │ 1.1.1      │ Jan 10    │ Stable      │ [Deploy] [Notes]│             ││
+│ │ │ 1.1.0      │ Jan 1     │ Previous    │ [Deploy] [Notes]│             ││
+│ │ │ 1.0.0      │ Dec 15    │ Deprecated  │ [Notes]         │             ││
+│ │ └────────────┴───────────┴─────────────┴────────────────┘              ││
+│ └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────┐│
+│ │ Deployment Targets (Version 1.2.0)                                      ││
+│ │                                                                         ││
+│ │ Select where to deploy:                                                 ││
+│ │                                                                         ││
+│ │ ☐ All Properties (Enterprise-wide)                                     ││
+│ │                                                                         ││
+│ │ Properties:                                                             ││
+│ │ ├─ ☑️ SNS-Newport Beach                                                 ││
+│ │ │    ├─ ☑️ WS01 (Service Host) - Currently: 1.1.0                       ││
+│ │ │    ├─ ☐ WS02 - Currently: 1.1.0                                       ││
+│ │ │    └─ ☐ KDS01 - Currently: 1.1.0                                      ││
+│ │ │                                                                       ││
+│ │ └─ ☐ SNS-Laguna Beach                                                   ││
+│ │      ├─ ☐ WS01 (Service Host) - Currently: 1.1.0                        ││
+│ │      └─ ☐ WS02 - Currently: 1.1.0                                       ││
+│ │                                                                         ││
+│ │ Deployment Schedule:                                                    ││
+│ │ ○ Immediate                                                             ││
+│ │ ● Scheduled: [2026-01-15] [02:00 AM] (during low traffic)              ││
+│ │                                                                         ││
+│ │ [Deploy Selected] [Cancel]                                              ││
+│ └─────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Deployment Status Monitoring:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CAL Deployment Status                                                       │
+│                                                                             │
+│ Deployment: Version 1.2.0 → SNS-Newport Beach                              │
+│ Started: Jan 15, 2026 2:00 AM                                              │
+│                                                                             │
+│ ┌─────────────────┬───────────┬─────────────────────────────┐              │
+│ │ Device          │ Status    │ Details                     │              │
+│ ├─────────────────┼───────────┼─────────────────────────────┤              │
+│ │ WS01 (SH)       │ ✅ Success │ Updated 2:05 AM             │              │
+│ │ WS02            │ ⏳ Pending │ Scheduled for 2:10 AM       │              │
+│ │ KDS01           │ ⏳ Pending │ Scheduled for 2:15 AM       │              │
+│ └─────────────────┴───────────┴─────────────────────────────┘              │
+│                                                                             │
+│ [View Logs] [Retry Failed] [Cancel Pending]                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Use Cases:**
+
+1. **Test before rollout**: Deploy 1.2.0 to one workstation at Newport Beach. Test for a week. If stable, deploy to all others.
+
+2. **Property-by-property**: Upgrade Newport Beach to 1.2.0 while Laguna Beach stays on 1.1.0.
+
+3. **Emergency rollback**: If 1.2.0 has issues, deploy 1.1.1 to affected devices.
+
+4. **Scheduled maintenance**: Deploy during night hours (2 AM) when restaurant is closed.
+
+---
+
+### 9.4 EMC Configuration for CAL
 
 **New "Service Host" tab in Property configuration:**
 
