@@ -1407,11 +1407,38 @@ Phase 1 is complete when:
 - When Primary recovers, it syncs from Backup and can resume
 
 ### Decision 4: Open Checks at Business Date Rollover
-**Choice:** Checks remain open, outstanding balance carries forward
-- Open checks are NOT auto-closed at rollover
-- Outstanding totals carry into next business date
-- Report shows "Outstanding Checks" separately
-- Only closed checks contribute to daily sales totals
+**Choice:** Sales post when rung, outstanding balance carries forward
+
+**How It Works (Industry Standard):**
+- **Sales post when items are RUNG/SENT** - not when check closes
+- **Outstanding BALANCE carries forward** - what's still owed on the check
+- **New items on carried-forward check → post to CURRENT business day**
+- **Tenders on carried-forward check → post to CURRENT business day**
+
+**Example:**
+```
+Monday:
+  - Open check, ring $50 of items → $50 posts to Monday sales
+  - Check left open at rollover → $50 balance carries forward
+
+Tuesday:
+  - Pick up carried-forward check
+  - Add $10 more items → $10 posts to Tuesday sales (NOT Monday)
+  - Collect $60 payment → $60 tender posts to Tuesday
+
+Reports:
+  - Monday Sales: $50 (items rung that day)
+  - Tuesday Sales: $10 (new items rung that day)
+  - Monday Outstanding: $50 (unpaid at EOD)
+  - Tuesday Tenders: $60
+```
+
+**Database Implications:**
+- `check_items.businessDatePosted` - set when item is sent, immutable
+- `payments.businessDatePosted` - set when tender is applied
+- `checks.businessDateOpened` - when check was first created
+- `checks.businessDateClosed` - when check was fully paid (null if still open)
+- Daily sales report = SUM of check_items WHERE businessDatePosted = target date
 
 ### Decision 5: Admin Navigation (EMC)
 **Confirmed:** All existing modules remain unchanged
