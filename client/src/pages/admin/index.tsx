@@ -66,6 +66,8 @@ import ForecastingPage from "./forecasting";
 import ManagerAlertsPage from "./manager-alerts";
 import ItemAvailabilityPage from "./item-availability";
 import AccountingExportPage from "./accounting-export";
+import CalPackagesPage from "./cal-packages";
+import ServiceHostsPage from "./service-hosts";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -291,6 +293,8 @@ export default function AdminLayout() {
               <Route path="/admin/reports" component={ReportsPage} />
               <Route path="/admin/devices" component={DevicesPage} />
               <Route path="/admin/devices-hub" component={DevicesHubPage} />
+              <Route path="/admin/cal-packages" component={CalPackagesPage} />
+              <Route path="/admin/service-hosts" component={ServiceHostsPage} />
               <Route path="/admin/timecards" component={TimecardsPage} />
               <Route path="/admin/scheduling" component={SchedulingPage} />
               <Route path="/admin/line-up" component={LineUpPage} />

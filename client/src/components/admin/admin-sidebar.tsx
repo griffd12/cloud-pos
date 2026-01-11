@@ -50,6 +50,7 @@ import {
   FileText,
   Cpu,
   Wifi,
+  Server,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -151,6 +152,8 @@ const menuGroupsTemplate = [
     label: "System",
     items: [
       { title: "Devices Hub", url: "/admin/devices-hub", icon: Cpu },
+      { title: "CAL Packages", url: "/admin/cal-packages", icon: Package },
+      { title: "Service Hosts", url: "/admin/service-hosts", icon: Server },
       { title: "Utilities", url: "/admin/utilities", icon: Wrench },
       { title: "Onboarding Checklist", url: "/admin/onboarding", icon: ClipboardCheck },
     ],

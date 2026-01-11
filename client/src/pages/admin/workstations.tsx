@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
+import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer, type WorkstationServiceBinding, SERVICE_CONTROLLER_TYPES } from "@shared/schema";
+import { Server, Printer as PrinterIcon, Monitor, CreditCard, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -173,6 +174,7 @@ export default function WorkstationsPage() {
         properties={properties}
         rvcs={rvcs}
         printers={printers}
+        workstations={workstations}
         onSubmit={(data) => {
           if (editingItem) {
             updateMutation.mutate({ ...editingItem, ...data } as Workstation);
@@ -193,8 +195,159 @@ interface WorkstationFormDialogProps {
   properties: Property[];
   rvcs: Rvc[];
   printers: Printer[];
+  workstations: Workstation[];
   onSubmit: (data: InsertWorkstation) => void;
   isLoading: boolean;
+}
+
+const SERVICE_CONTROLLER_LABELS: Record<string, { label: string; icon: React.ComponentType<any>; description: string }> = {
+  caps: { label: "CAPS (Check & Posting)", icon: Server, description: "Handles check processing and posting" },
+  print_controller: { label: "Print Controller", icon: PrinterIcon, description: "Manages kitchen and receipt printing" },
+  kds_controller: { label: "KDS Controller", icon: Monitor, description: "Controls Kitchen Display Systems" },
+  payment_controller: { label: "Payment Controller", icon: CreditCard, description: "Processes payment transactions" },
+};
+
+interface ServiceControllersSectionProps {
+  workstationId: string;
+  workstationName: string;
+  propertyId: string;
+  workstations: Workstation[];
+}
+
+function ServiceControllersSection({ workstationId, workstationName, propertyId, workstations }: ServiceControllersSectionProps) {
+  const { toast } = useToast();
+  
+  const { data: bindings = [], isLoading } = useQuery<WorkstationServiceBinding[]>({
+    queryKey: ["/api/workstation-service-bindings", propertyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstation-service-bindings?propertyId=${propertyId}`);
+      if (!res.ok) throw new Error("Failed to fetch service bindings");
+      return res.json();
+    },
+  });
+
+  const createBindingMutation = useMutation({
+    mutationFn: async (serviceType: string) => {
+      const res = await apiRequest("POST", "/api/workstation-service-bindings", {
+        propertyId,
+        workstationId,
+        serviceType,
+        active: true,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to assign service");
+      }
+      return res.json();
+    },
+    onSuccess: (_, serviceType) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workstation-service-bindings", propertyId] });
+      toast({ title: `${SERVICE_CONTROLLER_LABELS[serviceType]?.label || serviceType} assigned to this workstation` });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteBindingMutation = useMutation({
+    mutationFn: async (bindingId: string) => {
+      await apiRequest("DELETE", `/api/workstation-service-bindings/${bindingId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workstation-service-bindings", propertyId] });
+      toast({ title: "Service unassigned from workstation" });
+    },
+    onError: () => {
+      toast({ title: "Failed to unassign service", variant: "destructive" });
+    },
+  });
+
+  const getBindingForService = (serviceType: string) => {
+    return bindings.find(b => b.serviceType === serviceType && b.active);
+  };
+
+  const getWorkstationName = (wsId: string) => {
+    return workstations.find(ws => ws.id === wsId)?.name || "Unknown";
+  };
+
+  const handleToggle = (serviceType: string, currentBinding?: WorkstationServiceBinding) => {
+    if (currentBinding) {
+      if (currentBinding.workstationId === workstationId) {
+        deleteBindingMutation.mutate(currentBinding.id);
+      } else {
+        toast({
+          title: "Service already assigned",
+          description: `${SERVICE_CONTROLLER_LABELS[serviceType]?.label} is currently assigned to ${getWorkstationName(currentBinding.workstationId)}. Unassign it there first.`,
+          variant: "destructive",
+        });
+      }
+    } else {
+      createBindingMutation.mutate(serviceType);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="border rounded-md p-4">
+        <h4 className="font-medium text-sm mb-3">Service Controllers</h4>
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-md p-4 space-y-3">
+      <div>
+        <h4 className="font-medium text-sm">Service Controllers</h4>
+        <p className="text-xs text-muted-foreground mt-1">
+          Assign CAPS, Print, KDS, or Payment services to this workstation. Each service can only be assigned to one workstation per property.
+        </p>
+      </div>
+      
+      <div className="space-y-2">
+        {SERVICE_CONTROLLER_TYPES.map((serviceType) => {
+          const config = SERVICE_CONTROLLER_LABELS[serviceType];
+          const Icon = config?.icon || Server;
+          const binding = getBindingForService(serviceType);
+          const isAssignedHere = binding?.workstationId === workstationId;
+          const isAssignedElsewhere = binding && !isAssignedHere;
+          
+          return (
+            <div 
+              key={serviceType}
+              className={`flex items-center justify-between p-3 rounded-md border ${
+                isAssignedHere ? "bg-primary/5 border-primary/30" : 
+                isAssignedElsewhere ? "bg-muted/50 border-muted" : "bg-background"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Icon className={`h-5 w-5 ${isAssignedHere ? "text-primary" : "text-muted-foreground"}`} />
+                <div>
+                  <div className="text-sm font-medium">{config?.label || serviceType}</div>
+                  {isAssignedElsewhere && (
+                    <div className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Assigned to: {getWorkstationName(binding.workstationId)}
+                    </div>
+                  )}
+                  {!binding && (
+                    <div className="text-xs text-muted-foreground">{config?.description}</div>
+                  )}
+                </div>
+              </div>
+              
+              <Switch
+                checked={isAssignedHere}
+                onCheckedChange={() => handleToggle(serviceType, binding)}
+                disabled={createBindingMutation.isPending || deleteBindingMutation.isPending || isAssignedElsewhere}
+                data-testid={`switch-service-${serviceType}`}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 const PRINTER_FIELDS = [
@@ -215,6 +368,7 @@ function WorkstationFormDialog({
   properties, 
   rvcs, 
   printers,
+  workstations,
   onSubmit, 
   isLoading 
 }: WorkstationFormDialogProps) {
@@ -664,6 +818,16 @@ function WorkstationFormDialog({
                     )}
                   />
                 </div>
+
+                {/* Service Controllers Section - only shown when editing */}
+                {editingItem && (
+                  <ServiceControllersSection 
+                    workstationId={editingItem.id}
+                    workstationName={editingItem.name}
+                    propertyId={editingItem.propertyId}
+                    workstations={workstations}
+                  />
+                )}
 
                 <div className="border rounded-md p-4 space-y-4">
                   <h4 className="font-medium text-sm">Printer Assignments</h4>
