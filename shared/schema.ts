@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2853,3 +2853,65 @@ export type DescriptorLogoAsset = typeof descriptorLogoAssets.$inferSelect;
 export type InsertDescriptorLogoAsset = z.infer<typeof insertDescriptorLogoAssetSchema>;
 export type DescriptorSet = typeof descriptorSets.$inferSelect;
 export type InsertDescriptorSet = z.infer<typeof insertDescriptorSetSchema>;
+
+// ============================================================================
+// V2 SERVICE HOST - CLOUD SYNC INFRASTRUCTURE
+// ============================================================================
+
+export const SERVICE_HOST_STATUSES = ["offline", "online", "syncing", "error"] as const;
+export type ServiceHostStatus = typeof SERVICE_HOST_STATUSES[number];
+
+export const serviceHosts = pgTable("service_hosts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull(),
+  workstationId: varchar("workstation_id").references(() => workstations.id),
+  status: text("status").default("offline"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  version: varchar("version", { length: 20 }),
+  services: jsonb("services").$type<string[]>().default([]),
+  registrationToken: varchar("registration_token", { length: 128 }),
+  registrationTokenUsed: boolean("registration_token_used").default(false),
+  encryptionKeyHash: varchar("encryption_key_hash", { length: 64 }),
+  hostname: text("hostname"),
+  ipAddress: text("ip_address"),
+  activeChecks: integer("active_checks").default(0),
+  pendingTransactions: integer("pending_transactions").default(0),
+  localConfigVersion: integer("local_config_version").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const configVersions = pgTable("config_versions", {
+  id: serial("id").primaryKey(),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  version: integer("version").notNull(),
+  tableName: varchar("table_name", { length: 50 }).notNull(),
+  entityId: varchar("entity_id").notNull(),
+  operation: varchar("operation", { length: 10 }).notNull(),
+  data: jsonb("data"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const serviceHostTransactions = pgTable("service_host_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  serviceHostId: varchar("service_host_id").notNull().references(() => serviceHosts.id),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  localId: varchar("local_id").notNull(),
+  transactionType: varchar("transaction_type", { length: 50 }).notNull(),
+  businessDate: text("business_date").notNull(),
+  data: jsonb("data").notNull(),
+  processedAt: timestamp("processed_at").defaultNow(),
+  cloudEntityId: varchar("cloud_entity_id"),
+});
+
+export const insertServiceHostSchema = createInsertSchema(serviceHosts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertConfigVersionSchema = createInsertSchema(configVersions).omit({ id: true, createdAt: true });
+export const insertServiceHostTransactionSchema = createInsertSchema(serviceHostTransactions).omit({ id: true, processedAt: true });
+
+export type ServiceHost = typeof serviceHosts.$inferSelect;
+export type InsertServiceHost = z.infer<typeof insertServiceHostSchema>;
+export type ConfigVersion = typeof configVersions.$inferSelect;
+export type InsertConfigVersion = z.infer<typeof insertConfigVersionSchema>;
+export type ServiceHostTransaction = typeof serviceHostTransactions.$inferSelect;
+export type InsertServiceHostTransaction = z.infer<typeof insertServiceHostTransactionSchema>;
