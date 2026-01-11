@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, sql, inArray, gte, lte, or, ilike, isNotNull, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, lte, gt, or, ilike, isNotNull, isNull } from "drizzle-orm";
 import {
   enterprises, properties, rvcs, roles, privileges, rolePrivileges, employees, employeeAssignments,
   majorGroups, familyGroups,
@@ -134,6 +134,10 @@ import {
   type DescriptorLogoAsset, type InsertDescriptorLogoAsset,
   type DescriptorSet, type InsertDescriptorSet,
   type DescriptorScopeType,
+  serviceHosts, configVersions, serviceHostTransactions,
+  type ServiceHost, type InsertServiceHost,
+  type ConfigVersion, type InsertConfigVersion,
+  type ServiceHostTransaction, type InsertServiceHostTransaction,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -739,6 +743,26 @@ export interface IStorage {
   getDescriptorLogoAssets(enterpriseId: string): Promise<DescriptorLogoAsset[]>;
   createDescriptorLogoAsset(data: InsertDescriptorLogoAsset): Promise<DescriptorLogoAsset>;
   deleteDescriptorLogoAsset(id: string): Promise<boolean>;
+
+  // ============================================================================
+  // V2 SERVICE HOST SYNC INFRASTRUCTURE
+  // ============================================================================
+  
+  // Service Hosts
+  getServiceHosts(propertyId?: string): Promise<ServiceHost[]>;
+  getServiceHost(id: string): Promise<ServiceHost | undefined>;
+  createServiceHost(data: InsertServiceHost): Promise<ServiceHost>;
+  updateServiceHost(id: string, data: Partial<InsertServiceHost>): Promise<ServiceHost | undefined>;
+  deleteServiceHost(id: string): Promise<boolean>;
+  
+  // Config Versions
+  getLatestConfigVersion(propertyId: string): Promise<number>;
+  getConfigChanges(propertyId: string, sinceVersion: number): Promise<ConfigVersion[]>;
+  createConfigVersion(data: InsertConfigVersion): Promise<ConfigVersion>;
+  
+  // Service Host Transactions
+  createServiceHostTransaction(data: InsertServiceHostTransaction): Promise<ServiceHostTransaction>;
+  getServiceHostTransactions(serviceHostId: string): Promise<ServiceHostTransaction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5140,6 +5164,74 @@ export class DatabaseStorage implements IStorage {
   async deleteDescriptorLogoAsset(id: string): Promise<boolean> {
     const result = await db.delete(descriptorLogoAssets).where(eq(descriptorLogoAssets.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // ============================================================================
+  // V2 SERVICE HOST SYNC INFRASTRUCTURE
+  // ============================================================================
+
+  async getServiceHosts(propertyId?: string): Promise<ServiceHost[]> {
+    if (propertyId) {
+      return db.select().from(serviceHosts).where(eq(serviceHosts.propertyId, propertyId));
+    }
+    return db.select().from(serviceHosts);
+  }
+
+  async getServiceHost(id: string): Promise<ServiceHost | undefined> {
+    const [result] = await db.select().from(serviceHosts).where(eq(serviceHosts.id, id));
+    return result;
+  }
+
+  async createServiceHost(data: InsertServiceHost): Promise<ServiceHost> {
+    const [result] = await db.insert(serviceHosts).values(data).returning();
+    return result;
+  }
+
+  async updateServiceHost(id: string, data: Partial<InsertServiceHost>): Promise<ServiceHost | undefined> {
+    const [result] = await db.update(serviceHosts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(serviceHosts.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteServiceHost(id: string): Promise<boolean> {
+    const result = await db.delete(serviceHosts).where(eq(serviceHosts.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getLatestConfigVersion(propertyId: string): Promise<number> {
+    const [result] = await db.select({ maxVersion: sql<number>`COALESCE(MAX(${configVersions.version}), 0)` })
+      .from(configVersions)
+      .where(eq(configVersions.propertyId, propertyId));
+    return result?.maxVersion || 0;
+  }
+
+  async getConfigChanges(propertyId: string, sinceVersion: number): Promise<ConfigVersion[]> {
+    return db.select()
+      .from(configVersions)
+      .where(and(
+        eq(configVersions.propertyId, propertyId),
+        gt(configVersions.version, sinceVersion)
+      ))
+      .orderBy(configVersions.version);
+  }
+
+  async createConfigVersion(data: InsertConfigVersion): Promise<ConfigVersion> {
+    const [result] = await db.insert(configVersions).values(data).returning();
+    return result;
+  }
+
+  async createServiceHostTransaction(data: InsertServiceHostTransaction): Promise<ServiceHostTransaction> {
+    const [result] = await db.insert(serviceHostTransactions).values(data).returning();
+    return result;
+  }
+
+  async getServiceHostTransactions(serviceHostId: string): Promise<ServiceHostTransaction[]> {
+    return db.select()
+      .from(serviceHostTransactions)
+      .where(eq(serviceHostTransactions.serviceHostId, serviceHostId))
+      .orderBy(desc(serviceHostTransactions.processedAt));
   }
 }
 

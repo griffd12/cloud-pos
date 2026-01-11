@@ -15215,5 +15215,531 @@ connect();
     }
   });
 
+  // ============================================================================
+  // V2 SERVICE HOST SYNC INFRASTRUCTURE
+  // ============================================================================
+
+  // Service Host WebSocket connections (separate from POS/KDS WebSocket)
+  const serviceHostConnections: Map<string, WebSocket> = new Map();
+
+  // POST /api/service-hosts - Create a new service host
+  app.post("/api/service-hosts", async (req, res) => {
+    try {
+      const { propertyId, name, workstationId, services } = req.body;
+      
+      if (!propertyId || !name) {
+        return res.status(400).json({ error: "propertyId and name are required" });
+      }
+
+      // Generate registration token (one-time use)
+      const registrationToken = crypto.randomBytes(32).toString("hex");
+      const encryptionKey = crypto.randomBytes(16).toString("hex");
+      
+      const serviceHost = await storage.createServiceHost({
+        propertyId,
+        name,
+        workstationId: workstationId || null,
+        services: services || ["caps", "print", "kds"],
+        registrationToken,
+        encryptionKeyHash: crypto.createHash("sha256").update(encryptionKey).digest("hex"),
+        status: "offline",
+      });
+
+      res.status(201).json({
+        ...serviceHost,
+        registrationToken, // Only returned once on creation
+        encryptionKey, // Only returned once on creation
+      });
+    } catch (error: any) {
+      console.error("Create service host error:", error);
+      res.status(500).json({ error: "Failed to create service host" });
+    }
+  });
+
+  // GET /api/service-hosts - List service hosts
+  app.get("/api/service-hosts", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      const serviceHosts = await storage.getServiceHosts(propertyId as string | undefined);
+      res.json(serviceHosts);
+    } catch (error: any) {
+      console.error("Get service hosts error:", error);
+      res.status(500).json({ error: "Failed to get service hosts" });
+    }
+  });
+
+  // GET /api/service-hosts/:id - Get a service host
+  app.get("/api/service-hosts/:id", async (req, res) => {
+    try {
+      const serviceHost = await storage.getServiceHost(req.params.id);
+      if (!serviceHost) {
+        return res.status(404).json({ error: "Service host not found" });
+      }
+      res.json(serviceHost);
+    } catch (error: any) {
+      console.error("Get service host error:", error);
+      res.status(500).json({ error: "Failed to get service host" });
+    }
+  });
+
+  // PATCH /api/service-hosts/:id - Update a service host
+  app.patch("/api/service-hosts/:id", async (req, res) => {
+    try {
+      const serviceHost = await storage.updateServiceHost(req.params.id, req.body);
+      if (!serviceHost) {
+        return res.status(404).json({ error: "Service host not found" });
+      }
+      res.json(serviceHost);
+    } catch (error: any) {
+      console.error("Update service host error:", error);
+      res.status(500).json({ error: "Failed to update service host" });
+    }
+  });
+
+  // DELETE /api/service-hosts/:id - Delete a service host
+  app.delete("/api/service-hosts/:id", async (req, res) => {
+    try {
+      await storage.deleteServiceHost(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error("Delete service host error:", error);
+      res.status(500).json({ error: "Failed to delete service host" });
+    }
+  });
+
+  // POST /api/service-hosts/authenticate - Service Host authentication
+  app.post("/api/service-hosts/authenticate", async (req, res) => {
+    try {
+      const { serviceHostId, registrationToken, version, hostname } = req.body;
+
+      if (!serviceHostId || !registrationToken) {
+        return res.status(400).json({ error: "serviceHostId and registrationToken are required" });
+      }
+
+      const serviceHost = await storage.getServiceHost(serviceHostId);
+      if (!serviceHost) {
+        return res.status(401).json({ error: "Invalid service host ID" });
+      }
+
+      // Verify registration token
+      if (serviceHost.registrationToken !== registrationToken) {
+        return res.status(401).json({ error: "Invalid registration token" });
+      }
+
+      // Mark token as used (but keep it for re-auth)
+      await storage.updateServiceHost(serviceHostId, {
+        registrationTokenUsed: true,
+        version: version || null,
+        hostname: hostname || null,
+        status: "online",
+        lastHeartbeatAt: new Date(),
+      });
+
+      // Get property info
+      const property = await storage.getProperty(serviceHost.propertyId);
+      const enterprise = property ? await storage.getEnterprise(property.enterpriseId) : null;
+
+      // Get current config version
+      const configVersion = await storage.getLatestConfigVersion(serviceHost.propertyId);
+
+      // Generate JWT-like access token (simplified - in production use proper JWT)
+      const accessToken = crypto.randomBytes(32).toString("hex");
+      const refreshToken = crypto.randomBytes(32).toString("hex");
+
+      // Store tokens (in production, use Redis or similar)
+      await storage.updateServiceHost(serviceHostId, {
+        status: "online",
+      });
+
+      res.json({
+        success: true,
+        accessToken,
+        refreshToken,
+        property: property ? {
+          id: property.id,
+          name: property.name,
+          enterpriseId: property.enterpriseId,
+          timezone: property.timezone,
+        } : null,
+        enterprise: enterprise ? {
+          id: enterprise.id,
+          name: enterprise.name,
+        } : null,
+        configVersion: configVersion || 0,
+      });
+    } catch (error: any) {
+      console.error("Service host authenticate error:", error);
+      res.status(500).json({ error: "Authentication failed" });
+    }
+  });
+
+  // POST /api/service-hosts/:id/heartbeat - Heartbeat from Service Host
+  app.post("/api/service-hosts/:id/heartbeat", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, activeChecks, pendingTransactions, localConfigVersion, memoryUsage, uptime } = req.body;
+
+      const serviceHost = await storage.getServiceHost(id);
+      if (!serviceHost) {
+        return res.status(404).json({ error: "Service host not found" });
+      }
+
+      await storage.updateServiceHost(id, {
+        status: status || "online",
+        lastHeartbeatAt: new Date(),
+        activeChecks: activeChecks ?? 0,
+        pendingTransactions: pendingTransactions ?? 0,
+        localConfigVersion: localConfigVersion ?? 0,
+      });
+
+      // Get current cloud config version
+      const cloudConfigVersion = await storage.getLatestConfigVersion(serviceHost.propertyId);
+
+      res.json({
+        acknowledged: true,
+        cloudConfigVersion: cloudConfigVersion || 0,
+        pendingCommands: [],
+      });
+    } catch (error: any) {
+      console.error("Service host heartbeat error:", error);
+      res.status(500).json({ error: "Heartbeat failed" });
+    }
+  });
+
+  // GET /api/sync/config/full - Full configuration sync
+  app.get("/api/sync/config/full", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+
+      if (!propertyId || typeof propertyId !== "string") {
+        return res.status(400).json({ error: "propertyId is required" });
+      }
+
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found" });
+      }
+
+      const enterprise = await storage.getEnterprise(property.enterpriseId);
+
+      // Get all configuration data for this property
+      const [
+        revenueCenters,
+        employees,
+        roles,
+        menuItems,
+        modifierGroups,
+        modifiers,
+        modifierGroupModifiers,
+        menuItemModifierGroups,
+        slus,
+        taxGroups,
+        tenders,
+        discounts,
+        serviceCharges,
+        printers,
+        kdsDevices,
+        workstations,
+        printClasses,
+        orderDevices,
+        orderDevicePrinters,
+        orderDeviceKds,
+        printClassRouting,
+        jobCodes,
+      ] = await Promise.all([
+        storage.getRvcs().then(all => all.filter(r => r.propertyId === propertyId)),
+        storage.getEmployees().then(all => all.filter(e => e.propertyId === propertyId)),
+        storage.getRoles().then(all => all.filter(r => r.propertyId === propertyId)),
+        storage.getMenuItems(),
+        storage.getModifierGroups(),
+        storage.getModifiers(),
+        storage.getModifierGroupModifiers(),
+        storage.getMenuItemModifierGroups(),
+        storage.getSlus(),
+        storage.getTaxGroups(),
+        storage.getTenders(),
+        storage.getDiscounts(),
+        storage.getServiceCharges(),
+        storage.getPrinters().then(all => all.filter(p => p.propertyId === propertyId)),
+        storage.getKdsDevices().then(all => all.filter(k => k.propertyId === propertyId)),
+        storage.getWorkstations().then(all => all.filter(w => w.propertyId === propertyId)),
+        storage.getPrintClasses(),
+        storage.getOrderDevices(),
+        storage.getOrderDevicePrinters(),
+        storage.getOrderDeviceKds(),
+        storage.getPrintClassRouting(),
+        storage.getJobCodes(),
+      ]);
+
+      // Filter menu items and related to this property's RVCs
+      const rvcIds = revenueCenters.map(r => r.id);
+
+      const configVersion = await storage.getLatestConfigVersion(propertyId);
+
+      res.json({
+        configVersion: configVersion || 1,
+        timestamp: new Date().toISOString(),
+        data: {
+          enterprise,
+          property,
+          revenueCenters,
+          employees: employees.map(e => ({ ...e, pinHash: undefined })), // Don't send pin hashes
+          roles,
+          menuItems,
+          modifierGroups,
+          modifiers,
+          modifierGroupModifiers,
+          menuItemModifierGroups,
+          slus,
+          taxGroups,
+          tenders,
+          discounts,
+          serviceCharges,
+          printers,
+          kdsDevices,
+          workstations,
+          printClasses,
+          orderDevices,
+          orderDevicePrinters,
+          orderDeviceKds,
+          printClassRouting,
+          jobCodes,
+        },
+      });
+    } catch (error: any) {
+      console.error("Full config sync error:", error);
+      res.status(500).json({ error: "Failed to get full configuration" });
+    }
+  });
+
+  // GET /api/sync/config/delta - Delta configuration sync (changes since version)
+  app.get("/api/sync/config/delta", async (req, res) => {
+    try {
+      const { propertyId, sinceVersion } = req.query;
+
+      if (!propertyId || typeof propertyId !== "string") {
+        return res.status(400).json({ error: "propertyId is required" });
+      }
+
+      const fromVersion = parseInt(sinceVersion as string) || 0;
+      const changes = await storage.getConfigChanges(propertyId, fromVersion);
+      const toVersion = await storage.getLatestConfigVersion(propertyId);
+
+      res.json({
+        fromVersion,
+        toVersion: toVersion || fromVersion,
+        timestamp: new Date().toISOString(),
+        changes,
+      });
+    } catch (error: any) {
+      console.error("Delta config sync error:", error);
+      res.status(500).json({ error: "Failed to get configuration changes" });
+    }
+  });
+
+  // POST /api/sync/transactions - Receive transactions from Service Host
+  app.post("/api/sync/transactions", async (req, res) => {
+    try {
+      const { serviceHostId, propertyId, businessDate, transactions } = req.body;
+
+      if (!serviceHostId || !propertyId || !transactions) {
+        return res.status(400).json({ error: "serviceHostId, propertyId, and transactions are required" });
+      }
+
+      const cloudIds: Record<string, string> = {};
+      let processed = 0;
+
+      for (const tx of transactions) {
+        try {
+          // Store the transaction record
+          const storedTx = await storage.createServiceHostTransaction({
+            serviceHostId,
+            propertyId,
+            localId: tx.localId,
+            transactionType: tx.type,
+            businessDate: businessDate || tx.data?.businessDate || new Date().toISOString().split("T")[0],
+            data: tx.data,
+          });
+
+          // Process based on transaction type
+          if (tx.type === "check_closed" && tx.data) {
+            // Create check in cloud database
+            const cloudCheck = await storage.createCheck({
+              checkNumber: tx.data.checkNumber,
+              employeeId: tx.data.employeeId,
+              rvcId: tx.data.rvcId,
+              tableNumber: tx.data.tableNumber,
+              coverCount: tx.data.coverCount,
+              subtotal: tx.data.subtotal?.toString(),
+              tax: tx.data.tax?.toString(),
+              total: tx.data.total?.toString(),
+              status: "closed",
+              businessDate: tx.data.businessDate,
+              closedAt: tx.data.closedAt ? new Date(tx.data.closedAt) : new Date(),
+            });
+
+            cloudIds[tx.localId] = cloudCheck.id;
+          } else if (tx.type === "time_punch" && tx.data) {
+            // Create time punch in cloud database
+            const cloudPunch = await storage.createTimePunch({
+              employeeId: tx.data.employeeId,
+              propertyId,
+              punchType: tx.data.punchType,
+              punchTime: new Date(tx.data.punchTime),
+              workstationId: tx.data.workstationId,
+              jobCodeId: tx.data.jobCodeId,
+              source: "service_host",
+            });
+
+            cloudIds[tx.localId] = cloudPunch.id;
+          }
+
+          processed++;
+        } catch (txError: any) {
+          console.error(`Error processing transaction ${tx.localId}:`, txError);
+        }
+      }
+
+      res.json({
+        success: true,
+        processed,
+        cloudIds,
+      });
+    } catch (error: any) {
+      console.error("Post transactions error:", error);
+      res.status(500).json({ error: "Failed to process transactions" });
+    }
+  });
+
+  // POST /api/sync/time-punches - Receive time punches from Service Host
+  app.post("/api/sync/time-punches", async (req, res) => {
+    try {
+      const { serviceHostId, propertyId, punches } = req.body;
+
+      if (!serviceHostId || !propertyId || !punches) {
+        return res.status(400).json({ error: "serviceHostId, propertyId, and punches are required" });
+      }
+
+      const cloudIds: Record<string, string> = {};
+      let processed = 0;
+
+      for (const punch of punches) {
+        try {
+          const cloudPunch = await storage.createTimePunch({
+            employeeId: punch.employeeId,
+            propertyId,
+            punchType: punch.punchType,
+            breakType: punch.breakType || null,
+            punchTime: new Date(punch.punchTime),
+            workstationId: punch.workstationId,
+            jobCodeId: punch.jobCodeId,
+            source: "service_host",
+          });
+
+          cloudIds[punch.localId] = cloudPunch.id;
+          processed++;
+        } catch (punchError: any) {
+          console.error(`Error processing punch ${punch.localId}:`, punchError);
+        }
+      }
+
+      res.json({
+        success: true,
+        processed,
+        cloudIds,
+      });
+    } catch (error: any) {
+      console.error("Post time punches error:", error);
+      res.status(500).json({ error: "Failed to process time punches" });
+    }
+  });
+
+  // WebSocket endpoint for Service Hosts
+  // Handle upgrade on path /ws/service-host
+  wss.on("connection", (ws, request) => {
+    const url = request.url || "";
+    
+    if (url.startsWith("/ws/service-host")) {
+      const serviceHostId = new URL(url, "http://localhost").searchParams.get("serviceHostId");
+      
+      if (serviceHostId) {
+        serviceHostConnections.set(serviceHostId, ws);
+        console.log(`Service Host ${serviceHostId} connected via WebSocket`);
+        
+        // Send welcome message
+        ws.send(JSON.stringify({
+          type: "connected",
+          timestamp: new Date().toISOString(),
+          message: "Service Host WebSocket connected",
+        }));
+
+        ws.on("message", async (data) => {
+          try {
+            const msg = JSON.parse(data.toString());
+            
+            switch (msg.type) {
+              case "heartbeat":
+                // Update service host status
+                await storage.updateServiceHost(serviceHostId, {
+                  status: msg.payload?.status || "online",
+                  lastHeartbeatAt: new Date(),
+                  activeChecks: msg.payload?.activeChecks ?? 0,
+                  pendingTransactions: msg.payload?.pendingTransactions ?? 0,
+                  localConfigVersion: msg.payload?.configVersion ?? 0,
+                });
+                
+                // Send acknowledgment
+                ws.send(JSON.stringify({
+                  type: "heartbeat_ack",
+                  id: msg.id,
+                  timestamp: new Date().toISOString(),
+                }));
+                break;
+                
+              case "pong":
+                // Pong received, connection is alive
+                break;
+                
+              case "transaction":
+                // Process incoming transaction
+                console.log(`Received transaction from ${serviceHostId}:`, msg.payload);
+                break;
+                
+              default:
+                console.log(`Unknown message type from ${serviceHostId}:`, msg.type);
+            }
+          } catch (e) {
+            console.error("Service Host WebSocket message error:", e);
+          }
+        });
+
+        ws.on("close", () => {
+          serviceHostConnections.delete(serviceHostId);
+          console.log(`Service Host ${serviceHostId} disconnected`);
+          
+          // Update status to offline
+          storage.updateServiceHost(serviceHostId, {
+            status: "offline",
+          }).catch(console.error);
+        });
+      }
+    }
+  });
+
+  // Function to broadcast config updates to connected Service Hosts
+  function broadcastConfigUpdate(propertyId: string, update: any) {
+    serviceHostConnections.forEach((ws, serviceHostId) => {
+      storage.getServiceHost(serviceHostId).then(sh => {
+        if (sh?.propertyId === propertyId && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "config_update",
+            timestamp: new Date().toISOString(),
+            payload: update,
+          }));
+        }
+      });
+    });
+  }
+
   return httpServer;
 }
