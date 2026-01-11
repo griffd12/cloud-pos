@@ -20,7 +20,9 @@
 9. [CAL Package Deployment](#9-cal-package-deployment)
 10. [EMC Configuration Changes](#10-emc-configuration-changes)
 11. [Phase 1 Deliverables](#11-phase-1-deliverables)
-12. [Open Questions](#12-open-questions)
+12. [Resolved Design Decisions](#12-resolved-design-decisions)
+13. [Cloud Sync Infrastructure - Implementation Guide](#13-cloud-sync-infrastructure---implementation-guide) ← **NEW: For Service Host developers**
+14. [Open Questions](#14-open-questions)
 
 ---
 
@@ -1470,7 +1472,708 @@ Reports:
 
 ---
 
-## 13. Open Questions (Remaining)
+## 13. Cloud Sync Infrastructure - Implementation Guide
+
+> **IMPORTANT FOR SERVICE HOST DEVELOPERS**: This section contains everything the Service Host application needs to connect to the Cloud POS system. When building the Service Host in a new Replit project, use this as your reference for all cloud communication.
+
+### 13.1 Cloud App Connection Details
+
+**Cloud App URL:**
+The cloud POS system runs on Replit and is accessible via HTTPS. The Service Host will connect to:
+
+```
+Production URL: https://<your-replit-app-name>.replit.app
+Development URL: https://<your-replit-app-name>.replit.dev
+
+Example: https://cloud-pos-system.replit.app
+```
+
+**Connection Flow:**
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                   SERVICE HOST STARTUP SEQUENCE                             │
+│                                                                             │
+│  1. Read config/property.json (contains cloud URL, property ID)            │
+│  2. Connect to cloud via HTTPS                                              │
+│  3. POST /api/service-hosts/authenticate with registration token           │
+│  4. Receive JWT access token (valid 24 hours)                              │
+│  5. Establish WebSocket connection to /ws/service-host                      │
+│  6. Request full config sync                                                │
+│  7. Store config in local SQLite                                            │
+│  8. Start services (CAPS, Print, KDS)                                       │
+│  9. Begin heartbeat loop (every 15 seconds)                                 │
+│ 10. Ready to accept workstation connections                                 │
+│                                                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 13.2 Service Host Registration & Authentication
+
+**Initial Registration (Done Once in EMC):**
+When a property admin creates a Service Host in EMC, the cloud generates:
+- `serviceHostId` (UUID)
+- `registrationToken` (one-time use, 64-char hex string)
+- `encryptionKey` (for SQLite encryption)
+
+These are embedded in the CAL package's `config/property.json`.
+
+**property.json Structure:**
+```json
+{
+  "cloudUrl": "https://cloud-pos-system.replit.app",
+  "propertyId": "uuid-of-property",
+  "serviceHostId": "uuid-of-service-host",
+  "registrationToken": "64-char-hex-registration-token",
+  "encryptionKey": "32-char-hex-encryption-key",
+  "services": ["caps", "print", "kds"]
+}
+```
+
+**Authentication Endpoint:**
+
+```
+POST /api/service-hosts/authenticate
+Content-Type: application/json
+
+Request Body:
+{
+  "serviceHostId": "uuid",
+  "registrationToken": "64-char-hex",
+  "version": "1.0.0",
+  "hostname": "PROPERTY-SH01"
+}
+
+Response (Success - 200):
+{
+  "success": true,
+  "accessToken": "jwt-token-valid-24h",
+  "refreshToken": "refresh-token-valid-7d",
+  "property": {
+    "id": "uuid",
+    "name": "SNS-Newport Beach",
+    "enterpriseId": "uuid",
+    "timezone": "America/Los_Angeles"
+  },
+  "configVersion": 1234
+}
+
+Response (Error - 401):
+{
+  "success": false,
+  "error": "Invalid or expired registration token"
+}
+```
+
+**Token Refresh:**
+```
+POST /api/service-hosts/refresh-token
+Authorization: Bearer <refresh-token>
+
+Response:
+{
+  "accessToken": "new-jwt-token",
+  "refreshToken": "new-refresh-token"
+}
+```
+
+### 13.3 REST API Endpoints
+
+All endpoints require `Authorization: Bearer <access-token>` header.
+
+#### 13.3.1 Configuration Sync (Cloud → Service Host)
+
+**Get Full Configuration:**
+```
+GET /api/sync/config/full?propertyId={uuid}
+Authorization: Bearer <token>
+
+Response:
+{
+  "configVersion": 1234,
+  "timestamp": "2026-01-11T10:00:00Z",
+  "data": {
+    "enterprise": { /* enterprise record */ },
+    "property": { /* property record */ },
+    "revenueCenters": [ /* array of RVCs */ ],
+    "menuItems": [ /* array of menu items */ ],
+    "modifierGroups": [ /* array of modifier groups */ ],
+    "modifiers": [ /* array of modifiers */ ],
+    "employees": [ /* array of employees */ ],
+    "roles": [ /* array of roles */ ],
+    "tenders": [ /* array of tenders */ ],
+    "taxGroups": [ /* array of tax groups */ ],
+    "discounts": [ /* array of discounts */ ],
+    "printers": [ /* array of printers */ ],
+    "kdsDevices": [ /* array of KDS devices */ ],
+    "workstations": [ /* array of workstations */ ],
+    "printClasses": [ /* array of print classes */ ],
+    "orderDevices": [ /* array of order devices */ ],
+    "printClassRoutings": [ /* array of routings */ ],
+    "sluGroups": [ /* SLU groups (categories) */ ],
+    "guestCheckDescriptors": [ /* check descriptors */ ]
+  }
+}
+```
+
+**Get Delta Configuration (Changes Since Version):**
+```
+GET /api/sync/config/delta?propertyId={uuid}&sinceVersion={number}
+Authorization: Bearer <token>
+
+Response:
+{
+  "fromVersion": 1200,
+  "toVersion": 1234,
+  "timestamp": "2026-01-11T10:00:00Z",
+  "changes": [
+    {
+      "table": "menuItems",
+      "operation": "insert",
+      "entityId": "uuid",
+      "data": { /* full record */ }
+    },
+    {
+      "table": "menuItems",
+      "operation": "update",
+      "entityId": "uuid",
+      "data": { /* full record */ }
+    },
+    {
+      "table": "employees",
+      "operation": "delete",
+      "entityId": "uuid",
+      "data": null
+    }
+  ]
+}
+```
+
+#### 13.3.2 Transaction Posting (Service Host → Cloud)
+
+**Post Transactions:**
+```
+POST /api/sync/transactions
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request Body:
+{
+  "serviceHostId": "uuid",
+  "propertyId": "uuid",
+  "businessDate": "2026-01-11",
+  "transactions": [
+    {
+      "type": "check_closed",
+      "localId": "local-uuid",
+      "timestamp": "2026-01-11T14:30:00Z",
+      "data": {
+        "checkNumber": 1001,
+        "employeeId": "uuid",
+        "rvcId": "uuid",
+        "subtotal": 45.99,
+        "tax": 3.68,
+        "total": 49.67,
+        "items": [ /* check items */ ],
+        "payments": [ /* payments */ ]
+      }
+    },
+    {
+      "type": "time_punch",
+      "localId": "local-uuid",
+      "timestamp": "2026-01-11T08:00:00Z",
+      "data": {
+        "employeeId": "uuid",
+        "punchType": "clock_in",
+        "jobCode": "server"
+      }
+    }
+  ]
+}
+
+Response (Success):
+{
+  "success": true,
+  "processed": 2,
+  "cloudIds": {
+    "local-uuid-1": "cloud-uuid-1",
+    "local-uuid-2": "cloud-uuid-2"
+  }
+}
+```
+
+**Post Time Punches:**
+```
+POST /api/sync/time-punches
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request Body:
+{
+  "serviceHostId": "uuid",
+  "propertyId": "uuid",
+  "punches": [
+    {
+      "localId": "local-uuid",
+      "employeeId": "uuid",
+      "punchType": "clock_in",  // clock_in, clock_out, break_start, break_end
+      "breakType": null,         // "meal" or "rest" if punchType is break_start
+      "punchTime": "2026-01-11T08:00:00Z",
+      "workstationId": "uuid",
+      "jobCode": "server"
+    }
+  ]
+}
+```
+
+#### 13.3.3 Service Host Status
+
+**Heartbeat:**
+```
+POST /api/service-hosts/{id}/heartbeat
+Authorization: Bearer <token>
+
+Request Body:
+{
+  "status": "online",
+  "activeChecks": 5,
+  "pendingTransactions": 12,
+  "localConfigVersion": 1234,
+  "memoryUsage": 256,
+  "uptime": 86400
+}
+
+Response:
+{
+  "acknowledged": true,
+  "cloudConfigVersion": 1234,
+  "pendingCommands": []
+}
+```
+
+### 13.4 WebSocket Protocol
+
+**Connection URL:**
+```
+wss://<cloud-app-url>/ws/service-host
+```
+
+**Connection Headers:**
+```
+Authorization: Bearer <access-token>
+X-Service-Host-Id: <service-host-uuid>
+X-Property-Id: <property-uuid>
+```
+
+**Message Format:**
+All messages are JSON with this structure:
+```json
+{
+  "type": "message_type",
+  "id": "unique-message-id",
+  "timestamp": "2026-01-11T10:00:00Z",
+  "payload": { /* message-specific data */ }
+}
+```
+
+**Message Types (Cloud → Service Host):**
+
+| Type | Purpose | Payload |
+|------|---------|---------|
+| `config_update` | Config changed in EMC | `{ table, operation, entityId, data }` |
+| `force_sync` | Admin requested full sync | `{}` |
+| `command` | Remote command | `{ command, args }` |
+| `ping` | Keep-alive | `{}` |
+
+**Message Types (Service Host → Cloud):**
+
+| Type | Purpose | Payload |
+|------|---------|---------|
+| `heartbeat` | Status update | `{ activeChecks, pendingTx }` |
+| `transaction` | New transaction | `{ type, data }` |
+| `check_update` | Check state change | `{ checkId, status }` |
+| `pong` | Keep-alive response | `{}` |
+| `error` | Error report | `{ code, message }` |
+
+**Example WebSocket Session:**
+```javascript
+// Service Host connecting
+const ws = new WebSocket('wss://cloud-pos.replit.app/ws/service-host', {
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+    'X-Service-Host-Id': serviceHostId,
+    'X-Property-Id': propertyId
+  }
+});
+
+ws.on('open', () => {
+  // Send initial heartbeat
+  ws.send(JSON.stringify({
+    type: 'heartbeat',
+    id: generateUUID(),
+    timestamp: new Date().toISOString(),
+    payload: {
+      status: 'online',
+      activeChecks: 0,
+      pendingTransactions: 0,
+      configVersion: localConfigVersion
+    }
+  }));
+});
+
+ws.on('message', (data) => {
+  const msg = JSON.parse(data);
+  
+  switch (msg.type) {
+    case 'config_update':
+      // Apply config change to local SQLite
+      applyConfigUpdate(msg.payload);
+      break;
+      
+    case 'ping':
+      // Respond with pong
+      ws.send(JSON.stringify({ type: 'pong', id: msg.id }));
+      break;
+      
+    case 'force_sync':
+      // Trigger full config sync
+      performFullSync();
+      break;
+  }
+});
+```
+
+### 13.5 Local SQLite Database Schema
+
+The Service Host maintains a local SQLite database that mirrors the cloud PostgreSQL schema. Tables use the same column names but SQLite-compatible types.
+
+**Type Mappings:**
+
+| PostgreSQL | SQLite |
+|------------|--------|
+| `uuid` | `text` (store as string) |
+| `timestamp` | `text` (ISO 8601 format) |
+| `jsonb` | `text` (JSON string) |
+| `varchar` | `text` |
+| `integer` | `integer` |
+| `numeric(10,2)` | `real` |
+| `boolean` | `integer` (0/1) |
+
+**Core Tables to Mirror:**
+
+```sql
+-- Configuration tables (synced from cloud)
+CREATE TABLE enterprises (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT,
+  updated_at TEXT
+);
+
+CREATE TABLE properties (
+  id TEXT PRIMARY KEY,
+  enterprise_id TEXT,
+  name TEXT NOT NULL,
+  timezone TEXT,
+  address TEXT,
+  phone TEXT,
+  created_at TEXT,
+  updated_at TEXT
+);
+
+CREATE TABLE revenue_centers (
+  id TEXT PRIMARY KEY,
+  property_id TEXT,
+  name TEXT NOT NULL,
+  rvc_number INTEGER,
+  is_active INTEGER DEFAULT 1
+);
+
+CREATE TABLE employees (
+  id TEXT PRIMARY KEY,
+  property_id TEXT,
+  employee_number TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  pin_hash TEXT,
+  role_id TEXT,
+  is_active INTEGER DEFAULT 1
+);
+
+CREATE TABLE menu_items (
+  id TEXT PRIMARY KEY,
+  property_id TEXT,
+  slu_id TEXT,
+  name TEXT NOT NULL,
+  price REAL,
+  tax_group_id TEXT,
+  print_class_id TEXT,
+  is_active INTEGER DEFAULT 1
+);
+
+-- Add all other tables following same pattern
+```
+
+**Local-Only Tables:**
+
+```sql
+-- Replay queue for pending cloud sync
+CREATE TABLE replay_queue (
+  id TEXT PRIMARY KEY,
+  transaction_type TEXT NOT NULL,
+  payload TEXT NOT NULL,  -- JSON
+  status TEXT DEFAULT 'pending',  -- pending, sending, failed
+  attempts INTEGER DEFAULT 0,
+  created_at TEXT,
+  last_attempt_at TEXT,
+  error_message TEXT
+);
+
+-- Active checks (managed locally)
+CREATE TABLE checks (
+  id TEXT PRIMARY KEY,
+  check_number INTEGER NOT NULL,
+  employee_id TEXT,
+  rvc_id TEXT,
+  table_number TEXT,
+  cover_count INTEGER DEFAULT 1,
+  status TEXT DEFAULT 'open',  -- open, closed, void
+  subtotal REAL DEFAULT 0,
+  tax REAL DEFAULT 0,
+  total REAL DEFAULT 0,
+  lock_workstation_id TEXT,
+  lock_acquired_at TEXT,
+  opened_at TEXT,
+  closed_at TEXT,
+  business_date TEXT,
+  cloud_synced INTEGER DEFAULT 0
+);
+
+CREATE TABLE check_items (
+  id TEXT PRIMARY KEY,
+  check_id TEXT,
+  menu_item_id TEXT,
+  name TEXT,
+  price REAL,
+  quantity INTEGER DEFAULT 1,
+  round_number INTEGER DEFAULT 1,
+  sent_at TEXT,
+  void_reason TEXT,
+  parent_item_id TEXT
+);
+
+-- Sync metadata
+CREATE TABLE sync_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+-- Store: config_version, last_full_sync, last_delta_sync
+```
+
+### 13.6 Offline Detection & Mode Transitions
+
+**Connectivity Check Logic:**
+```javascript
+class ConnectivityMonitor {
+  private cloudConnected = true;
+  private lastSuccessfulHeartbeat = Date.now();
+  private missedHeartbeats = 0;
+  
+  async checkConnectivity() {
+    try {
+      await this.sendHeartbeat();
+      this.missedHeartbeats = 0;
+      this.lastSuccessfulHeartbeat = Date.now();
+      
+      if (!this.cloudConnected) {
+        this.cloudConnected = true;
+        this.emit('mode_change', 'online');
+        this.startReplayQueue(); // Sync pending transactions
+      }
+    } catch (error) {
+      this.missedHeartbeats++;
+      
+      // After 12 missed heartbeats (~3 min at 15s interval)
+      if (this.missedHeartbeats >= 12 && this.cloudConnected) {
+        this.cloudConnected = false;
+        this.emit('mode_change', 'yellow'); // Offline mode
+      }
+    }
+  }
+  
+  startHeartbeatLoop() {
+    setInterval(() => this.checkConnectivity(), 15000);
+  }
+}
+```
+
+**Mode Behavior:**
+
+| Mode | Cloud | LAN | Behavior |
+|------|-------|-----|----------|
+| Online (Green) | ✅ | ✅ | Normal operation, real-time sync |
+| Yellow | ❌ | ✅ | Queue transactions, sync when restored |
+| Red | ❌ | ❌ | Workstation standalone (Phase 3) |
+
+### 13.7 Code Examples for Service Host
+
+**Main Entry Point (index.ts):**
+```typescript
+import { loadConfig } from './config';
+import { initDatabase } from './database';
+import { CloudSync } from './sync/cloudSync';
+import { CAPSService } from './services/caps';
+import { PrintController } from './services/print';
+import { startHttpServer } from './server';
+
+async function main() {
+  console.log('Starting Cloud POS Service Host...');
+  
+  // 1. Load configuration
+  const config = await loadConfig('./config/property.json');
+  
+  // 2. Initialize encrypted SQLite database
+  await initDatabase(config.encryptionKey);
+  
+  // 3. Authenticate with cloud
+  const cloudSync = new CloudSync(config);
+  await cloudSync.authenticate();
+  
+  // 4. Perform initial config sync
+  await cloudSync.performFullSync();
+  
+  // 5. Start services
+  const caps = new CAPSService();
+  const print = new PrintController();
+  
+  // 6. Start HTTP server for workstation connections
+  const server = startHttpServer({
+    port: 8080,
+    caps,
+    print
+  });
+  
+  // 7. Start WebSocket connection to cloud
+  await cloudSync.connectWebSocket();
+  
+  // 8. Start heartbeat loop
+  cloudSync.startHeartbeatLoop();
+  
+  console.log('Service Host ready on port 8080');
+}
+
+main().catch(console.error);
+```
+
+**Cloud Sync Module (sync/cloudSync.ts):**
+```typescript
+import axios from 'axios';
+import WebSocket from 'ws';
+import { db } from '../database';
+
+export class CloudSync {
+  private config: PropertyConfig;
+  private accessToken: string | null = null;
+  private ws: WebSocket | null = null;
+  
+  constructor(config: PropertyConfig) {
+    this.config = config;
+  }
+  
+  async authenticate(): Promise<void> {
+    const response = await axios.post(
+      `${this.config.cloudUrl}/api/service-hosts/authenticate`,
+      {
+        serviceHostId: this.config.serviceHostId,
+        registrationToken: this.config.registrationToken,
+        version: process.env.APP_VERSION || '1.0.0',
+        hostname: require('os').hostname()
+      }
+    );
+    
+    this.accessToken = response.data.accessToken;
+    console.log(`Authenticated with property: ${response.data.property.name}`);
+  }
+  
+  async performFullSync(): Promise<void> {
+    const response = await axios.get(
+      `${this.config.cloudUrl}/api/sync/config/full`,
+      {
+        params: { propertyId: this.config.propertyId },
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      }
+    );
+    
+    const { configVersion, data } = response.data;
+    
+    // Store each table in SQLite
+    await db.transaction(async (tx) => {
+      await tx.delete('menu_items');
+      for (const item of data.menuItems) {
+        await tx.insert('menu_items', item);
+      }
+      // Repeat for all tables...
+      
+      // Store config version
+      await tx.upsert('sync_metadata', {
+        key: 'config_version',
+        value: configVersion.toString()
+      });
+    });
+    
+    console.log(`Synced configuration version ${configVersion}`);
+  }
+  
+  async postTransactions(transactions: Transaction[]): Promise<void> {
+    try {
+      await axios.post(
+        `${this.config.cloudUrl}/api/sync/transactions`,
+        {
+          serviceHostId: this.config.serviceHostId,
+          propertyId: this.config.propertyId,
+          businessDate: new Date().toISOString().split('T')[0],
+          transactions
+        },
+        { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      );
+    } catch (error) {
+      // Queue for later if offline
+      for (const tx of transactions) {
+        await db.insert('replay_queue', {
+          id: generateUUID(),
+          transaction_type: tx.type,
+          payload: JSON.stringify(tx),
+          status: 'pending',
+          created_at: new Date().toISOString()
+        });
+      }
+    }
+  }
+}
+```
+
+### 13.8 Workstation → Service Host API
+
+Workstations connect to the Service Host on the LAN, not the cloud. The Service Host exposes these endpoints:
+
+**Base URL:** `http://<service-host-ip>:8080`
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/checks` | GET | List open checks |
+| `/api/checks` | POST | Create new check |
+| `/api/checks/:id` | GET | Get check details |
+| `/api/checks/:id` | PATCH | Update check |
+| `/api/checks/:id/items` | POST | Add items to check |
+| `/api/checks/:id/send` | POST | Send items to KDS/kitchen |
+| `/api/checks/:id/payments` | POST | Apply payment |
+| `/api/checks/:id/close` | POST | Close check |
+| `/api/menu` | GET | Get menu (from local cache) |
+| `/api/employees/verify-pin` | POST | Verify employee PIN |
+| `/api/time-clock/punch` | POST | Clock in/out |
+
+---
+
+## 14. Open Questions (Remaining)
 
 1. **Time Synchronization**
    - All devices must have synced clocks
