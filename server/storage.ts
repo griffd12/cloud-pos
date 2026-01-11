@@ -138,6 +138,14 @@ import {
   type ServiceHost, type InsertServiceHost,
   type ConfigVersion, type InsertConfigVersion,
   type ServiceHostTransaction, type InsertServiceHostTransaction,
+  workstationServiceBindings,
+  type WorkstationServiceBinding, type InsertWorkstationServiceBinding,
+  calPackages, calPackageVersions, calPackagePrerequisites, calDeployments, calDeploymentTargets,
+  type CalPackage, type InsertCalPackage,
+  type CalPackageVersion, type InsertCalPackageVersion,
+  type CalPackagePrerequisite, type InsertCalPackagePrerequisite,
+  type CalDeployment, type InsertCalDeployment,
+  type CalDeploymentTarget, type InsertCalDeploymentTarget,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -763,6 +771,52 @@ export interface IStorage {
   // Service Host Transactions
   createServiceHostTransaction(data: InsertServiceHostTransaction): Promise<ServiceHostTransaction>;
   getServiceHostTransactions(serviceHostId: string): Promise<ServiceHostTransaction[]>;
+
+  // ============================================================================
+  // WORKSTATION SERVICE BINDINGS
+  // ============================================================================
+  
+  getWorkstationServiceBindings(propertyId: string): Promise<WorkstationServiceBinding[]>;
+  getWorkstationServiceBinding(id: string): Promise<WorkstationServiceBinding | undefined>;
+  getServiceBindingByType(propertyId: string, serviceType: string): Promise<WorkstationServiceBinding | undefined>;
+  createWorkstationServiceBinding(data: InsertWorkstationServiceBinding): Promise<WorkstationServiceBinding>;
+  updateWorkstationServiceBinding(id: string, data: Partial<InsertWorkstationServiceBinding>): Promise<WorkstationServiceBinding | undefined>;
+  deleteWorkstationServiceBinding(id: string): Promise<boolean>;
+
+  // ============================================================================
+  // CAL PACKAGES
+  // ============================================================================
+  
+  getCalPackages(enterpriseId: string): Promise<CalPackage[]>;
+  getCalPackage(id: string): Promise<CalPackage | undefined>;
+  createCalPackage(data: InsertCalPackage): Promise<CalPackage>;
+  updateCalPackage(id: string, data: Partial<InsertCalPackage>): Promise<CalPackage | undefined>;
+  deleteCalPackage(id: string): Promise<boolean>;
+
+  // CAL Package Versions
+  getCalPackageVersions(packageId: string): Promise<CalPackageVersion[]>;
+  getCalPackageVersion(id: string): Promise<CalPackageVersion | undefined>;
+  createCalPackageVersion(data: InsertCalPackageVersion): Promise<CalPackageVersion>;
+  updateCalPackageVersion(id: string, data: Partial<InsertCalPackageVersion>): Promise<CalPackageVersion | undefined>;
+  deleteCalPackageVersion(id: string): Promise<boolean>;
+
+  // CAL Package Prerequisites
+  getCalPackagePrerequisites(packageVersionId: string): Promise<CalPackagePrerequisite[]>;
+  createCalPackagePrerequisite(data: InsertCalPackagePrerequisite): Promise<CalPackagePrerequisite>;
+  deleteCalPackagePrerequisite(id: string): Promise<boolean>;
+
+  // CAL Deployments
+  getCalDeployments(enterpriseId: string): Promise<CalDeployment[]>;
+  getCalDeployment(id: string): Promise<CalDeployment | undefined>;
+  createCalDeployment(data: InsertCalDeployment): Promise<CalDeployment>;
+  updateCalDeployment(id: string, data: Partial<InsertCalDeployment>): Promise<CalDeployment | undefined>;
+  deleteCalDeployment(id: string): Promise<boolean>;
+
+  // CAL Deployment Targets
+  getCalDeploymentTargets(deploymentId: string): Promise<CalDeploymentTarget[]>;
+  getCalDeploymentTarget(id: string): Promise<CalDeploymentTarget | undefined>;
+  createCalDeploymentTarget(data: InsertCalDeploymentTarget): Promise<CalDeploymentTarget>;
+  updateCalDeploymentTarget(id: string, data: Partial<InsertCalDeploymentTarget>): Promise<CalDeploymentTarget | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5232,6 +5286,189 @@ export class DatabaseStorage implements IStorage {
       .from(serviceHostTransactions)
       .where(eq(serviceHostTransactions.serviceHostId, serviceHostId))
       .orderBy(desc(serviceHostTransactions.processedAt));
+  }
+
+  // ============================================================================
+  // WORKSTATION SERVICE BINDINGS
+  // ============================================================================
+
+  async getWorkstationServiceBindings(propertyId: string): Promise<WorkstationServiceBinding[]> {
+    return db.select()
+      .from(workstationServiceBindings)
+      .where(eq(workstationServiceBindings.propertyId, propertyId));
+  }
+
+  async getWorkstationServiceBinding(id: string): Promise<WorkstationServiceBinding | undefined> {
+    const [result] = await db.select().from(workstationServiceBindings).where(eq(workstationServiceBindings.id, id));
+    return result;
+  }
+
+  async getServiceBindingByType(propertyId: string, serviceType: string): Promise<WorkstationServiceBinding | undefined> {
+    const [result] = await db.select()
+      .from(workstationServiceBindings)
+      .where(and(
+        eq(workstationServiceBindings.propertyId, propertyId),
+        eq(workstationServiceBindings.serviceType, serviceType),
+        eq(workstationServiceBindings.active, true)
+      ));
+    return result;
+  }
+
+  async createWorkstationServiceBinding(data: InsertWorkstationServiceBinding): Promise<WorkstationServiceBinding> {
+    const [result] = await db.insert(workstationServiceBindings).values(data).returning();
+    return result;
+  }
+
+  async updateWorkstationServiceBinding(id: string, data: Partial<InsertWorkstationServiceBinding>): Promise<WorkstationServiceBinding | undefined> {
+    const [result] = await db.update(workstationServiceBindings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(workstationServiceBindings.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteWorkstationServiceBinding(id: string): Promise<boolean> {
+    const result = await db.delete(workstationServiceBindings).where(eq(workstationServiceBindings.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // ============================================================================
+  // CAL PACKAGES
+  // ============================================================================
+
+  async getCalPackages(enterpriseId: string): Promise<CalPackage[]> {
+    return db.select()
+      .from(calPackages)
+      .where(eq(calPackages.enterpriseId, enterpriseId))
+      .orderBy(calPackages.packageType, calPackages.name);
+  }
+
+  async getCalPackage(id: string): Promise<CalPackage | undefined> {
+    const [result] = await db.select().from(calPackages).where(eq(calPackages.id, id));
+    return result;
+  }
+
+  async createCalPackage(data: InsertCalPackage): Promise<CalPackage> {
+    const [result] = await db.insert(calPackages).values(data).returning();
+    return result;
+  }
+
+  async updateCalPackage(id: string, data: Partial<InsertCalPackage>): Promise<CalPackage | undefined> {
+    const [result] = await db.update(calPackages)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(calPackages.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCalPackage(id: string): Promise<boolean> {
+    const result = await db.delete(calPackages).where(eq(calPackages.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // CAL Package Versions
+  async getCalPackageVersions(packageId: string): Promise<CalPackageVersion[]> {
+    return db.select()
+      .from(calPackageVersions)
+      .where(eq(calPackageVersions.packageId, packageId))
+      .orderBy(desc(calPackageVersions.releasedAt));
+  }
+
+  async getCalPackageVersion(id: string): Promise<CalPackageVersion | undefined> {
+    const [result] = await db.select().from(calPackageVersions).where(eq(calPackageVersions.id, id));
+    return result;
+  }
+
+  async createCalPackageVersion(data: InsertCalPackageVersion): Promise<CalPackageVersion> {
+    const [result] = await db.insert(calPackageVersions).values(data).returning();
+    return result;
+  }
+
+  async updateCalPackageVersion(id: string, data: Partial<InsertCalPackageVersion>): Promise<CalPackageVersion | undefined> {
+    const [result] = await db.update(calPackageVersions)
+      .set(data)
+      .where(eq(calPackageVersions.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCalPackageVersion(id: string): Promise<boolean> {
+    const result = await db.delete(calPackageVersions).where(eq(calPackageVersions.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // CAL Package Prerequisites
+  async getCalPackagePrerequisites(packageVersionId: string): Promise<CalPackagePrerequisite[]> {
+    return db.select()
+      .from(calPackagePrerequisites)
+      .where(eq(calPackagePrerequisites.packageVersionId, packageVersionId))
+      .orderBy(calPackagePrerequisites.installOrder);
+  }
+
+  async createCalPackagePrerequisite(data: InsertCalPackagePrerequisite): Promise<CalPackagePrerequisite> {
+    const [result] = await db.insert(calPackagePrerequisites).values(data).returning();
+    return result;
+  }
+
+  async deleteCalPackagePrerequisite(id: string): Promise<boolean> {
+    const result = await db.delete(calPackagePrerequisites).where(eq(calPackagePrerequisites.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // CAL Deployments
+  async getCalDeployments(enterpriseId: string): Promise<CalDeployment[]> {
+    return db.select()
+      .from(calDeployments)
+      .where(eq(calDeployments.enterpriseId, enterpriseId))
+      .orderBy(desc(calDeployments.createdAt));
+  }
+
+  async getCalDeployment(id: string): Promise<CalDeployment | undefined> {
+    const [result] = await db.select().from(calDeployments).where(eq(calDeployments.id, id));
+    return result;
+  }
+
+  async createCalDeployment(data: InsertCalDeployment): Promise<CalDeployment> {
+    const [result] = await db.insert(calDeployments).values(data).returning();
+    return result;
+  }
+
+  async updateCalDeployment(id: string, data: Partial<InsertCalDeployment>): Promise<CalDeployment | undefined> {
+    const [result] = await db.update(calDeployments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(calDeployments.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCalDeployment(id: string): Promise<boolean> {
+    const result = await db.delete(calDeployments).where(eq(calDeployments.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // CAL Deployment Targets
+  async getCalDeploymentTargets(deploymentId: string): Promise<CalDeploymentTarget[]> {
+    return db.select()
+      .from(calDeploymentTargets)
+      .where(eq(calDeploymentTargets.deploymentId, deploymentId));
+  }
+
+  async getCalDeploymentTarget(id: string): Promise<CalDeploymentTarget | undefined> {
+    const [result] = await db.select().from(calDeploymentTargets).where(eq(calDeploymentTargets.id, id));
+    return result;
+  }
+
+  async createCalDeploymentTarget(data: InsertCalDeploymentTarget): Promise<CalDeploymentTarget> {
+    const [result] = await db.insert(calDeploymentTargets).values(data).returning();
+    return result;
+  }
+
+  async updateCalDeploymentTarget(id: string, data: Partial<InsertCalDeploymentTarget>): Promise<CalDeploymentTarget | undefined> {
+    const [result] = await db.update(calDeploymentTargets)
+      .set(data)
+      .where(eq(calDeploymentTargets.id, id))
+      .returning();
+    return result;
   }
 }
 
