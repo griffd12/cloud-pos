@@ -15762,5 +15762,332 @@ connect();
     });
   }
 
+  // ============================================================================
+  // WORKSTATION SERVICE BINDINGS API
+  // ============================================================================
+
+  app.get("/api/workstation-service-bindings", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ error: "propertyId is required" });
+      }
+      const bindings = await storage.getWorkstationServiceBindings(propertyId as string);
+      res.json(bindings);
+    } catch (error) {
+      console.error("Error fetching service bindings:", error);
+      res.status(500).json({ error: "Failed to fetch service bindings" });
+    }
+  });
+
+  app.get("/api/workstation-service-bindings/:id", async (req, res) => {
+    try {
+      const binding = await storage.getWorkstationServiceBinding(req.params.id);
+      if (!binding) {
+        return res.status(404).json({ error: "Service binding not found" });
+      }
+      res.json(binding);
+    } catch (error) {
+      console.error("Error fetching service binding:", error);
+      res.status(500).json({ error: "Failed to fetch service binding" });
+    }
+  });
+
+  app.post("/api/workstation-service-bindings", async (req, res) => {
+    try {
+      const { propertyId, workstationId, serviceType } = req.body;
+      
+      // Check if this service type is already assigned to another workstation in this property
+      const existingBinding = await storage.getServiceBindingByType(propertyId, serviceType);
+      if (existingBinding && existingBinding.workstationId !== workstationId) {
+        // Get workstation name for better error message
+        const existingWs = await storage.getWorkstation(existingBinding.workstationId);
+        return res.status(409).json({ 
+          error: `${serviceType} is already assigned to workstation: ${existingWs?.name || existingBinding.workstationId}`,
+          conflictingWorkstationId: existingBinding.workstationId,
+          conflictingWorkstationName: existingWs?.name
+        });
+      }
+      
+      const binding = await storage.createWorkstationServiceBinding(req.body);
+      res.status(201).json(binding);
+    } catch (error) {
+      console.error("Error creating service binding:", error);
+      res.status(500).json({ error: "Failed to create service binding" });
+    }
+  });
+
+  app.patch("/api/workstation-service-bindings/:id", async (req, res) => {
+    try {
+      const binding = await storage.updateWorkstationServiceBinding(req.params.id, req.body);
+      if (!binding) {
+        return res.status(404).json({ error: "Service binding not found" });
+      }
+      res.json(binding);
+    } catch (error) {
+      console.error("Error updating service binding:", error);
+      res.status(500).json({ error: "Failed to update service binding" });
+    }
+  });
+
+  app.delete("/api/workstation-service-bindings/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteWorkstationServiceBinding(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Service binding not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting service binding:", error);
+      res.status(500).json({ error: "Failed to delete service binding" });
+    }
+  });
+
+  // ============================================================================
+  // CAL PACKAGES API
+  // ============================================================================
+
+  app.get("/api/cal-packages", async (req, res) => {
+    try {
+      const { enterpriseId } = req.query;
+      if (!enterpriseId) {
+        return res.status(400).json({ error: "enterpriseId is required" });
+      }
+      const packages = await storage.getCalPackages(enterpriseId as string);
+      res.json(packages);
+    } catch (error) {
+      console.error("Error fetching CAL packages:", error);
+      res.status(500).json({ error: "Failed to fetch CAL packages" });
+    }
+  });
+
+  app.get("/api/cal-packages/:id", async (req, res) => {
+    try {
+      const pkg = await storage.getCalPackage(req.params.id);
+      if (!pkg) {
+        return res.status(404).json({ error: "CAL package not found" });
+      }
+      res.json(pkg);
+    } catch (error) {
+      console.error("Error fetching CAL package:", error);
+      res.status(500).json({ error: "Failed to fetch CAL package" });
+    }
+  });
+
+  app.post("/api/cal-packages", async (req, res) => {
+    try {
+      const pkg = await storage.createCalPackage(req.body);
+      res.status(201).json(pkg);
+    } catch (error) {
+      console.error("Error creating CAL package:", error);
+      res.status(500).json({ error: "Failed to create CAL package" });
+    }
+  });
+
+  app.patch("/api/cal-packages/:id", async (req, res) => {
+    try {
+      const pkg = await storage.updateCalPackage(req.params.id, req.body);
+      if (!pkg) {
+        return res.status(404).json({ error: "CAL package not found" });
+      }
+      res.json(pkg);
+    } catch (error) {
+      console.error("Error updating CAL package:", error);
+      res.status(500).json({ error: "Failed to update CAL package" });
+    }
+  });
+
+  app.delete("/api/cal-packages/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteCalPackage(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "CAL package not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting CAL package:", error);
+      res.status(500).json({ error: "Failed to delete CAL package" });
+    }
+  });
+
+  // CAL Package Versions
+  app.get("/api/cal-packages/:packageId/versions", async (req, res) => {
+    try {
+      const versions = await storage.getCalPackageVersions(req.params.packageId);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error fetching CAL package versions:", error);
+      res.status(500).json({ error: "Failed to fetch CAL package versions" });
+    }
+  });
+
+  app.post("/api/cal-package-versions", async (req, res) => {
+    try {
+      const version = await storage.createCalPackageVersion(req.body);
+      res.status(201).json(version);
+    } catch (error) {
+      console.error("Error creating CAL package version:", error);
+      res.status(500).json({ error: "Failed to create CAL package version" });
+    }
+  });
+
+  app.patch("/api/cal-package-versions/:id", async (req, res) => {
+    try {
+      const version = await storage.updateCalPackageVersion(req.params.id, req.body);
+      if (!version) {
+        return res.status(404).json({ error: "CAL package version not found" });
+      }
+      res.json(version);
+    } catch (error) {
+      console.error("Error updating CAL package version:", error);
+      res.status(500).json({ error: "Failed to update CAL package version" });
+    }
+  });
+
+  app.delete("/api/cal-package-versions/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteCalPackageVersion(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "CAL package version not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting CAL package version:", error);
+      res.status(500).json({ error: "Failed to delete CAL package version" });
+    }
+  });
+
+  // CAL Package Prerequisites
+  app.get("/api/cal-package-versions/:versionId/prerequisites", async (req, res) => {
+    try {
+      const prerequisites = await storage.getCalPackagePrerequisites(req.params.versionId);
+      res.json(prerequisites);
+    } catch (error) {
+      console.error("Error fetching CAL package prerequisites:", error);
+      res.status(500).json({ error: "Failed to fetch CAL package prerequisites" });
+    }
+  });
+
+  app.post("/api/cal-package-prerequisites", async (req, res) => {
+    try {
+      const prerequisite = await storage.createCalPackagePrerequisite(req.body);
+      res.status(201).json(prerequisite);
+    } catch (error) {
+      console.error("Error creating CAL package prerequisite:", error);
+      res.status(500).json({ error: "Failed to create CAL package prerequisite" });
+    }
+  });
+
+  app.delete("/api/cal-package-prerequisites/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteCalPackagePrerequisite(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "CAL package prerequisite not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting CAL package prerequisite:", error);
+      res.status(500).json({ error: "Failed to delete CAL package prerequisite" });
+    }
+  });
+
+  // CAL Deployments
+  app.get("/api/cal-deployments", async (req, res) => {
+    try {
+      const { enterpriseId } = req.query;
+      if (!enterpriseId) {
+        return res.status(400).json({ error: "enterpriseId is required" });
+      }
+      const deployments = await storage.getCalDeployments(enterpriseId as string);
+      res.json(deployments);
+    } catch (error) {
+      console.error("Error fetching CAL deployments:", error);
+      res.status(500).json({ error: "Failed to fetch CAL deployments" });
+    }
+  });
+
+  app.get("/api/cal-deployments/:id", async (req, res) => {
+    try {
+      const deployment = await storage.getCalDeployment(req.params.id);
+      if (!deployment) {
+        return res.status(404).json({ error: "CAL deployment not found" });
+      }
+      res.json(deployment);
+    } catch (error) {
+      console.error("Error fetching CAL deployment:", error);
+      res.status(500).json({ error: "Failed to fetch CAL deployment" });
+    }
+  });
+
+  app.post("/api/cal-deployments", async (req, res) => {
+    try {
+      const deployment = await storage.createCalDeployment(req.body);
+      res.status(201).json(deployment);
+    } catch (error) {
+      console.error("Error creating CAL deployment:", error);
+      res.status(500).json({ error: "Failed to create CAL deployment" });
+    }
+  });
+
+  app.patch("/api/cal-deployments/:id", async (req, res) => {
+    try {
+      const deployment = await storage.updateCalDeployment(req.params.id, req.body);
+      if (!deployment) {
+        return res.status(404).json({ error: "CAL deployment not found" });
+      }
+      res.json(deployment);
+    } catch (error) {
+      console.error("Error updating CAL deployment:", error);
+      res.status(500).json({ error: "Failed to update CAL deployment" });
+    }
+  });
+
+  app.delete("/api/cal-deployments/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteCalDeployment(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "CAL deployment not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting CAL deployment:", error);
+      res.status(500).json({ error: "Failed to delete CAL deployment" });
+    }
+  });
+
+  // CAL Deployment Targets
+  app.get("/api/cal-deployments/:deploymentId/targets", async (req, res) => {
+    try {
+      const targets = await storage.getCalDeploymentTargets(req.params.deploymentId);
+      res.json(targets);
+    } catch (error) {
+      console.error("Error fetching CAL deployment targets:", error);
+      res.status(500).json({ error: "Failed to fetch CAL deployment targets" });
+    }
+  });
+
+  app.post("/api/cal-deployment-targets", async (req, res) => {
+    try {
+      const target = await storage.createCalDeploymentTarget(req.body);
+      res.status(201).json(target);
+    } catch (error) {
+      console.error("Error creating CAL deployment target:", error);
+      res.status(500).json({ error: "Failed to create CAL deployment target" });
+    }
+  });
+
+  app.patch("/api/cal-deployment-targets/:id", async (req, res) => {
+    try {
+      const target = await storage.updateCalDeploymentTarget(req.params.id, req.body);
+      if (!target) {
+        return res.status(404).json({ error: "CAL deployment target not found" });
+      }
+      res.json(target);
+    } catch (error) {
+      console.error("Error updating CAL deployment target:", error);
+      res.status(500).json({ error: "Failed to update CAL deployment target" });
+    }
+  });
+
   return httpServer;
 }
