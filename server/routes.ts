@@ -16237,10 +16237,16 @@ connect();
     try {
       const { propertyId, workstationId, serviceType } = req.body;
       
-      // Check if this service type is already assigned to another workstation in this property
+      // Check if this service type is already assigned in this property
       const existingBinding = await storage.getServiceBindingByType(propertyId, serviceType);
-      if (existingBinding && existingBinding.workstationId !== workstationId) {
-        // Get workstation name for better error message
+      
+      if (existingBinding) {
+        // If already assigned to the same workstation, return the existing binding (idempotent)
+        if (existingBinding.workstationId === workstationId) {
+          return res.status(200).json(existingBinding);
+        }
+        
+        // If assigned to a different workstation, return conflict error
         const existingWs = await storage.getWorkstation(existingBinding.workstationId);
         return res.status(409).json({ 
           error: `${serviceType} is already assigned to workstation: ${existingWs?.name || existingBinding.workstationId}`,
