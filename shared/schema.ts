@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2926,6 +2926,94 @@ export type ConfigVersion = typeof configVersions.$inferSelect;
 export type InsertConfigVersion = z.infer<typeof insertConfigVersionSchema>;
 export type ServiceHostTransaction = typeof serviceHostTransactions.$inferSelect;
 export type InsertServiceHostTransaction = z.infer<typeof insertServiceHostTransactionSchema>;
+
+// Service Host Metrics - Heartbeat history for observability dashboard
+export const CONNECTION_MODES = ["green", "yellow", "orange", "red"] as const;
+export type ConnectionMode = typeof CONNECTION_MODES[number];
+
+export const serviceHostMetrics = pgTable("service_host_metrics", {
+  id: serial("id").primaryKey(),
+  serviceHostId: varchar("service_host_id").notNull().references(() => serviceHosts.id, { onDelete: "cascade" }),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+  connectionMode: text("connection_mode").default("green"),
+  connectedWorkstations: integer("connected_workstations").default(0),
+  pendingSyncItems: integer("pending_sync_items").default(0),
+  cpuUsagePercent: integer("cpu_usage_percent"),
+  memoryUsageMB: integer("memory_usage_mb"),
+  diskUsagePercent: integer("disk_usage_percent"),
+  diskFreeGB: real("disk_free_gb"),
+  uptime: integer("uptime"),
+});
+
+// Service Host Alerts - Alert rules and triggered alerts
+export const SERVICE_HOST_ALERT_TYPES = [
+  "service_host_offline",
+  "sync_queue_backup",
+  "disk_space_low",
+  "connection_mode_yellow",
+  "connection_mode_orange",
+  "connection_mode_red",
+  "failed_transaction",
+  "high_cpu",
+  "high_memory",
+] as const;
+export type ServiceHostAlertType = typeof SERVICE_HOST_ALERT_TYPES[number];
+
+export const serviceHostAlertRules = pgTable("service_host_alert_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").default("warning"),
+  enabled: boolean("enabled").default(true),
+  thresholdValue: integer("threshold_value"),
+  thresholdDurationMinutes: integer("threshold_duration_minutes"),
+  notifyEmail: boolean("notify_email").default(true),
+  notifySms: boolean("notify_sms").default(false),
+  emailRecipients: jsonb("email_recipients").$type<string[]>().default([]),
+  smsRecipients: jsonb("sms_recipients").$type<string[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const serviceHostAlerts = pgTable("service_host_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  serviceHostId: varchar("service_host_id").notNull().references(() => serviceHosts.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").default("warning"),
+  message: text("message").notNull(),
+  details: jsonb("details"),
+  triggeredAt: timestamp("triggered_at").defaultNow().notNull(),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  acknowledgedById: varchar("acknowledged_by_id").references(() => employees.id),
+  resolvedAt: timestamp("resolved_at"),
+  notificationsSent: boolean("notifications_sent").default(false),
+});
+
+export const serviceHostMetricsRelations = relations(serviceHostMetrics, ({ one }) => ({
+  serviceHost: one(serviceHosts, { fields: [serviceHostMetrics.serviceHostId], references: [serviceHosts.id] }),
+}));
+
+export const serviceHostAlertRulesRelations = relations(serviceHostAlertRules, ({ one }) => ({
+  enterprise: one(enterprises, { fields: [serviceHostAlertRules.enterpriseId], references: [enterprises.id] }),
+}));
+
+export const serviceHostAlertsRelations = relations(serviceHostAlerts, ({ one }) => ({
+  serviceHost: one(serviceHosts, { fields: [serviceHostAlerts.serviceHostId], references: [serviceHosts.id] }),
+  property: one(properties, { fields: [serviceHostAlerts.propertyId], references: [properties.id] }),
+  acknowledgedBy: one(employees, { fields: [serviceHostAlerts.acknowledgedById], references: [employees.id] }),
+}));
+
+export const insertServiceHostMetricsSchema = createInsertSchema(serviceHostMetrics).omit({ id: true });
+export const insertServiceHostAlertRuleSchema = createInsertSchema(serviceHostAlertRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertServiceHostAlertSchema = createInsertSchema(serviceHostAlerts).omit({ id: true });
+
+export type ServiceHostMetrics = typeof serviceHostMetrics.$inferSelect;
+export type InsertServiceHostMetrics = z.infer<typeof insertServiceHostMetricsSchema>;
+export type ServiceHostAlertRule = typeof serviceHostAlertRules.$inferSelect;
+export type InsertServiceHostAlertRule = z.infer<typeof insertServiceHostAlertRuleSchema>;
+export type ServiceHostAlert = typeof serviceHostAlerts.$inferSelect;
+export type InsertServiceHostAlert = z.infer<typeof insertServiceHostAlertSchema>;
 
 // ============================================================================
 // WORKSTATION SERVICE BINDINGS - Exclusive service assignment to workstations
