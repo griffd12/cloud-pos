@@ -15514,6 +15514,59 @@ connect();
     }
   });
 
+  // GET /api/service-hosts/status-dashboard - Aggregated status for EMC dashboard
+  // NOTE: This must come BEFORE /api/service-hosts/:id to avoid route matching issues
+  app.get("/api/service-hosts/status-dashboard", async (req, res) => {
+    try {
+      const serviceHosts = await storage.getServiceHosts();
+      const properties = await storage.getProperties();
+      
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      
+      const statusData = await Promise.all(serviceHosts.map(async (sh) => {
+        const property = properties.find(p => p.id === sh.propertyId);
+        const metrics = await storage.getServiceHostMetrics(sh.id, 1);
+        const latestMetrics = metrics[0];
+        
+        const isOnline = sh.lastHeartbeatAt && new Date(sh.lastHeartbeatAt) > fiveMinutesAgo;
+        
+        return {
+          id: sh.id,
+          name: sh.name,
+          propertyId: sh.propertyId,
+          propertyName: property?.name || 'Unknown',
+          status: isOnline ? 'online' : 'offline',
+          connectionMode: latestMetrics?.connectionMode || 'unknown',
+          connectedWorkstations: latestMetrics?.connectedWorkstations || 0,
+          pendingSyncItems: latestMetrics?.pendingSyncItems || sh.pendingTransactions || 0,
+          lastHeartbeat: sh.lastHeartbeatAt,
+          cpuUsagePercent: latestMetrics?.cpuUsagePercent,
+          memoryUsageMB: latestMetrics?.memoryUsageMB,
+          diskUsagePercent: latestMetrics?.diskUsagePercent,
+          diskFreeGB: latestMetrics?.diskFreeGB,
+          version: sh.version,
+        };
+      }));
+      
+      // Get recent alerts
+      const alerts = await storage.getServiceHostAlerts(undefined, false);
+      
+      res.json({
+        serviceHosts: statusData,
+        alerts: alerts.slice(0, 10),
+        summary: {
+          total: statusData.length,
+          online: statusData.filter(s => s.status === 'online').length,
+          offline: statusData.filter(s => s.status === 'offline').length,
+          activeAlerts: alerts.length,
+        }
+      });
+    } catch (error: any) {
+      console.error("Get status dashboard error:", error);
+      res.status(500).json({ error: "Failed to get status dashboard" });
+    }
+  });
+
   // GET /api/service-hosts/:id - Get a service host
   app.get("/api/service-hosts/:id", async (req, res) => {
     try {
@@ -15819,58 +15872,6 @@ connect();
     } catch (error: any) {
       console.error("Delete alert rule error:", error);
       res.status(500).json({ error: "Failed to delete alert rule" });
-    }
-  });
-
-  // GET /api/service-hosts/status-dashboard - Aggregated status for EMC dashboard
-  app.get("/api/service-hosts/status-dashboard", async (req, res) => {
-    try {
-      const serviceHosts = await storage.getServiceHosts();
-      const properties = await storage.getProperties();
-      
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      
-      const statusData = await Promise.all(serviceHosts.map(async (sh) => {
-        const property = properties.find(p => p.id === sh.propertyId);
-        const metrics = await storage.getServiceHostMetrics(sh.id, 1);
-        const latestMetrics = metrics[0];
-        
-        const isOnline = sh.lastHeartbeatAt && new Date(sh.lastHeartbeatAt) > fiveMinutesAgo;
-        
-        return {
-          id: sh.id,
-          name: sh.name,
-          propertyId: sh.propertyId,
-          propertyName: property?.name || 'Unknown',
-          status: isOnline ? 'online' : 'offline',
-          connectionMode: latestMetrics?.connectionMode || 'unknown',
-          connectedWorkstations: latestMetrics?.connectedWorkstations || 0,
-          pendingSyncItems: latestMetrics?.pendingSyncItems || sh.pendingTransactions || 0,
-          lastHeartbeat: sh.lastHeartbeatAt,
-          cpuUsagePercent: latestMetrics?.cpuUsagePercent,
-          memoryUsageMB: latestMetrics?.memoryUsageMB,
-          diskUsagePercent: latestMetrics?.diskUsagePercent,
-          diskFreeGB: latestMetrics?.diskFreeGB,
-          version: sh.version,
-        };
-      }));
-      
-      // Get recent alerts
-      const alerts = await storage.getServiceHostAlerts(undefined, false);
-      
-      res.json({
-        serviceHosts: statusData,
-        alerts: alerts.slice(0, 10),
-        summary: {
-          total: statusData.length,
-          online: statusData.filter(s => s.status === 'online').length,
-          offline: statusData.filter(s => s.status === 'offline').length,
-          activeAlerts: alerts.length,
-        }
-      });
-    } catch (error: any) {
-      console.error("Get status dashboard error:", error);
-      res.status(500).json({ error: "Failed to get status dashboard" });
     }
   });
 
