@@ -12,6 +12,11 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const BetterSqlite3 = require('better-sqlite3');
 
+interface RunResult {
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
 export class Database {
   private db: any;
   private dbPath: string;
@@ -206,7 +211,7 @@ export class Database {
   }
   
   // Generic query methods
-  run(sql: string, params: any[] = []): Database.RunResult {
+  run(sql: string, params: any[] = []): RunResult {
     return this.db.prepare(sql).run(...params);
   }
   

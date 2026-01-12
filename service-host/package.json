@@ -8,7 +8,14 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "package": "node scripts/package.js"
+    "setup": "node scripts/setup-wizard.js",
+    "package": "node scripts/package.js",
+    "test": "node scripts/test-all.js",
+    "test:verbose": "node scripts/test-all.js --verbose",
+    "service:install": "node scripts/service-wrappers/windows-service.js install",
+    "service:start": "node scripts/service-wrappers/windows-service.js start",
+    "service:stop": "node scripts/service-wrappers/windows-service.js stop",
+    "service:status": "node scripts/service-wrappers/windows-service.js status"
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",

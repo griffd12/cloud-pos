@@ -4,70 +4,116 @@ On-premise server providing offline operation capabilities for the Cloud POS sys
 
 ## Overview
 
-The Service Host runs locally at a restaurant property and provides:
+The Service Host runs at each restaurant property, providing local services when internet connectivity is lost. It enables seamless operation transitions between online (GREEN) and offline (YELLOW/ORANGE/RED) modes.
 
-- **CAPS** (Check And Posting Service) - Order management, payments
-- **Print Controller** - Kitchen/receipt printing via TCP/IP
-- **KDS Controller** - Kitchen display routing and real-time updates
-- **Payment Controller** - Card terminal integration
+## Features
+
+- **CAPS (Check And Posting Service)** - Local order management, check locking, payments
+- **Print Controller** - Kitchen ticket and receipt printing via TCP/IP
+- **KDS Controller** - Real-time kitchen display routing via WebSocket
+- **Payment Controller** - Local payment terminal integration
+- **Transaction Sync** - Automatic sync with cloud when connectivity restores
+- **Check Locking** - Prevents concurrent editing by multiple workstations
 
 ## Requirements
 
-- Node.js 18+ 
-- Windows 10/11 or Linux
-- Network access to printers (port 9100)
-- Internet access for cloud sync (optional for offline operation)
+- Node.js 18 or later
+- Network access to cloud (for initial setup and sync)
+- Local network access from POS workstations
 
-## Installation
+## Quick Start
 
-1. Copy the service-host folder to the property server
-2. Install dependencies:
+### Installation
+
+1. **Download the package** from your EMC or cloud portal
+
+2. **Extract and install dependencies**
    ```bash
-   cd service-host
-   npm install
-   ```
-3. Create configuration file:
-   ```bash
-   cp config.example.json config.json
-   # Edit config.json with your cloud URL and token
+   unzip ServiceHost-v1.0.0.zip
+   cd ServiceHost
+   npm install --production
    ```
 
-## Configuration
+3. **Run the setup wizard**
+   ```bash
+   npm run setup
+   ```
+   This interactive wizard will:
+   - Validate prerequisites
+   - Collect cloud URL and authentication token
+   - Test connectivity
+   - Create configuration file
+   - Optionally install as system service
 
-Create a `config.json` file:
+### Manual Configuration
 
-```json
-{
-  "cloudUrl": "https://your-cloud-pos.replit.app",
-  "token": "your-service-host-token",
-  "propertyId": "property-uuid",
-  "port": 3001,
-  "dataDir": "./data"
-}
-```
+If you prefer manual configuration:
 
-Or use command line arguments:
+1. Copy `config.example.json` to `config.json`
+2. Edit with your settings:
+   ```json
+   {
+     "cloudUrl": "https://your-pos.replit.app",
+     "token": "your-service-host-token",
+     "propertyId": "your-property-id",
+     "port": 3001,
+     "dataDir": "./data"
+   }
+   ```
+
+3. Start the service:
+   ```bash
+   npm start
+   ```
+
+## Service Installation
+
+### Windows
+
+Install as a Windows Service that starts automatically:
 
 ```bash
-node dist/index.js --cloud https://your-pos.replit.app --token YOUR_TOKEN --property PROP_ID
+npm run service:install
+npm run service:start
 ```
 
-## Running
-
-### Development
+Other commands:
 ```bash
-npm run dev
+npm run service:stop     # Stop the service
+npm run service:status   # Check service status
 ```
 
-### Production
+### Linux (systemd)
+
+1. Copy the service file:
+   ```bash
+   sudo cp cloud-pos-service-host.service /etc/systemd/system/
+   ```
+
+2. Edit paths if needed:
+   ```bash
+   sudo nano /etc/systemd/system/cloud-pos-service-host.service
+   ```
+
+3. Enable and start:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable cloud-pos-service-host
+   sudo systemctl start cloud-pos-service-host
+   ```
+
+### macOS
+
+The setup wizard creates a launchd plist file. To install:
+
 ```bash
-npm run build
-npm start
+sudo cp com.cloudpos.servicehost.plist /Library/LaunchDaemons/
+sudo launchctl load /Library/LaunchDaemons/com.cloudpos.servicehost.plist
 ```
 
 ## API Endpoints
 
-### Health Check
+### Health Check (Unauthenticated)
 ```
 GET /health
 ```
@@ -77,11 +123,21 @@ GET /health
 POST   /api/caps/checks              Create check
 GET    /api/caps/checks              List open checks
 GET    /api/caps/checks/:id          Get check
-POST   /api/caps/checks/:id/items    Add items
+POST   /api/caps/checks/:id/items    Add items (requires workstationId)
 POST   /api/caps/checks/:id/send     Send to kitchen
 POST   /api/caps/checks/:id/pay      Add payment
 POST   /api/caps/checks/:id/close    Close check
 POST   /api/caps/checks/:id/void     Void check
+```
+
+### Check Locking (Multi-Workstation)
+```
+POST   /api/caps/checks/:id/lock          Acquire lock
+POST   /api/caps/checks/:id/unlock        Release lock
+GET    /api/caps/checks/:id/lock          Get lock status
+POST   /api/caps/checks/:id/lock/refresh  Extend lock
+POST   /api/caps/workstation/:id/release-locks  Release all locks
+POST   /api/caps/workstation/:id/check-range    Set check number range
 ```
 
 ### Print Controller
@@ -114,6 +170,35 @@ GET    /api/config/tenders           Get tenders
 GET    /api/config/discounts         Get discounts
 ```
 
+## Check Locking
+
+The Service Host implements check locking to prevent multiple workstations from editing the same check simultaneously:
+
+1. **Acquire lock** before editing: `POST /api/caps/checks/:id/lock`
+   ```json
+   { "workstationId": "ws-001", "employeeId": "emp-123" }
+   ```
+
+2. **Locks expire** after 5 minutes (auto-refresh recommended)
+
+3. **Release lock** when done: `POST /api/caps/checks/:id/unlock`
+   ```json
+   { "workstationId": "ws-001" }
+   ```
+
+4. **Conflict returns 409** if another workstation holds the lock
+
+## Check Number Ranges
+
+Each workstation can be assigned a unique check number range for offline operation:
+
+```bash
+POST /api/caps/workstation/:id/check-range
+{ "start": 1000, "end": 1999 }
+```
+
+This prevents duplicate check numbers when multiple workstations operate offline.
+
 ## WebSocket
 
 Connect to `/ws` for real-time updates:
@@ -135,10 +220,23 @@ ws.onmessage = (event) => {
 
 | Mode | Cloud | Service Host | Description |
 |------|-------|--------------|-------------|
-| GREEN | ✅ | ✅ | Normal - cloud primary |
-| YELLOW | ❌ | ✅ | Offline - Service Host primary |
-| ORANGE | ❌ | ❌ | Service Host down, local agents only |
-| RED | ❌ | ❌ | Complete isolation |
+| GREEN | ✓ | ✓ | Normal - cloud primary |
+| YELLOW | ✗ | ✓ | Offline - Service Host primary |
+| ORANGE | ✗ | ✗ | Service Host down, local agents only |
+| RED | ✗ | ✗ | Complete isolation |
+
+## Testing
+
+Run the test suite to validate installation:
+
+```bash
+npm test
+```
+
+For verbose output:
+```bash
+npm run test:verbose
+```
 
 ## Data Storage
 
@@ -165,16 +263,72 @@ Database location: `./data/service-host.db`
 
 ## Troubleshooting
 
+### Service Host won't start
+- Check `config.json` exists and has valid settings
+- Ensure port 3001 is not in use
+- Check logs in the data directory
+
 ### Cannot connect to cloud
-- Check `cloudUrl` is correct
-- Verify token is valid
+- Verify cloud URL is correct
 - Check internet connectivity
+- Ensure token is valid (regenerate in EMC if needed)
+
+### Workstations can't connect
+- Verify Service Host is running: `curl http://localhost:3001/health`
+- Check firewall allows port 3001
+- Ensure workstations use correct Service Host IP address
 
 ### Print jobs failing
-- Verify printer IP is reachable
-- Check printer is on port 9100
-- Ensure ESC/POS compatibility
+- Verify printer IP address and port
+- Check printer is on same network
+- Test with: `telnet <printer-ip> 9100`
 
 ### KDS not updating
 - Verify WebSocket connection
 - Check deviceId matches configuration
+
+## Development
+
+```bash
+# Install dev dependencies
+npm install
+
+# Run in development mode (auto-restart on changes)
+npm run dev
+
+# Build for production
+npm run build
+
+# Create distributable package
+npm run package
+```
+
+## Directory Structure
+
+```
+service-host/
+├── dist/                    # Compiled JavaScript
+├── data/                    # SQLite database and logs
+├── scripts/
+│   ├── package.js          # Package creation script
+│   ├── setup-wizard.js     # Interactive setup
+│   ├── test-all.js         # Test suite
+│   └── service-wrappers/   # OS-specific service scripts
+├── src/
+│   ├── db/                 # SQLite database layer
+│   ├── middleware/         # Express middleware
+│   ├── routes/             # API routes
+│   ├── services/           # CAPS, Print, KDS, Payment
+│   └── sync/               # Cloud sync workers
+├── config.json             # Configuration (create from example)
+├── config.example.json     # Example configuration
+└── package.json
+```
+
+## Version History
+
+- **1.0.0** - Initial release with CAPS, Print, KDS, Payment controllers
+
+## License
+
+MIT
