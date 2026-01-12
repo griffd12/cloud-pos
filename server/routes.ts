@@ -15461,6 +15461,36 @@ connect();
         status: "offline",
       });
 
+      // If workstation is specified, sync workstation service bindings with selected services
+      if (workstationId && services && services.length > 0) {
+        // Get existing bindings for this workstation
+        const existingBindings = await storage.getBindingsForWorkstation(workstationId);
+        const existingServiceTypes = existingBindings.map(b => b.serviceType);
+        
+        // Add new bindings for services not already on this workstation
+        for (const serviceType of services) {
+          if (!existingServiceTypes.includes(serviceType)) {
+            // Remove this service type from any OTHER workstation in the property (each service = one workstation)
+            await storage.deleteOtherBindingsForServiceType(propertyId, serviceType, workstationId);
+            
+            // Create binding for this workstation
+            await storage.createWorkstationServiceBinding({
+              propertyId,
+              workstationId,
+              serviceType,
+              active: true,
+            });
+          }
+        }
+        
+        // Remove bindings for services no longer selected for this workstation
+        for (const binding of existingBindings) {
+          if (!services.includes(binding.serviceType)) {
+            await storage.deleteWorkstationServiceBinding(binding.id);
+          }
+        }
+      }
+
       res.status(201).json({
         ...serviceHost,
         registrationToken, // Only returned once on creation

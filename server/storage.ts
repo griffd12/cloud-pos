@@ -809,6 +809,9 @@ export interface IStorage {
   getAllWorkstationServiceBindings(): Promise<WorkstationServiceBinding[]>;
   getWorkstationServiceBinding(id: string): Promise<WorkstationServiceBinding | undefined>;
   getServiceBindingByType(propertyId: string, serviceType: string): Promise<WorkstationServiceBinding | undefined>;
+  getBindingsForWorkstation(workstationId: string): Promise<WorkstationServiceBinding[]>;
+  deleteBindingsForWorkstation(workstationId: string): Promise<number>;
+  deleteOtherBindingsForServiceType(propertyId: string, serviceType: string, keepWorkstationId: string): Promise<number>;
   createWorkstationServiceBinding(data: InsertWorkstationServiceBinding): Promise<WorkstationServiceBinding>;
   updateWorkstationServiceBinding(id: string, data: Partial<InsertWorkstationServiceBinding>): Promise<WorkstationServiceBinding | undefined>;
   deleteWorkstationServiceBinding(id: string): Promise<boolean>;
@@ -5468,6 +5471,28 @@ export class DatabaseStorage implements IStorage {
         eq(workstationServiceBindings.active, true)
       ));
     return result;
+  }
+
+  async getBindingsForWorkstation(workstationId: string): Promise<WorkstationServiceBinding[]> {
+    return db.select()
+      .from(workstationServiceBindings)
+      .where(eq(workstationServiceBindings.workstationId, workstationId));
+  }
+
+  async deleteBindingsForWorkstation(workstationId: string): Promise<number> {
+    const result = await db.delete(workstationServiceBindings)
+      .where(eq(workstationServiceBindings.workstationId, workstationId));
+    return result.rowCount ?? 0;
+  }
+
+  async deleteOtherBindingsForServiceType(propertyId: string, serviceType: string, keepWorkstationId: string): Promise<number> {
+    const result = await db.delete(workstationServiceBindings)
+      .where(and(
+        eq(workstationServiceBindings.propertyId, propertyId),
+        eq(workstationServiceBindings.serviceType, serviceType),
+        sql`${workstationServiceBindings.workstationId} != ${keepWorkstationId}`
+      ));
+    return result.rowCount ?? 0;
   }
 
   async createWorkstationServiceBinding(data: InsertWorkstationServiceBinding): Promise<WorkstationServiceBinding> {
