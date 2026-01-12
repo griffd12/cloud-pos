@@ -1,11 +1,41 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { type Property, type Workstation } from "@shared/schema";
+import { type Property, type Workstation, type ServiceHost } from "@shared/schema";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Copy, Plus, Key, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -82,9 +112,25 @@ interface DashboardData {
   };
 }
 
+const serviceHostFormSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  propertyId: z.string().min(1, "Property is required"),
+  services: z.array(z.string()).min(1, "Select at least one service"),
+});
+
+type ServiceHostFormData = z.infer<typeof serviceHostFormSchema>;
+
+interface CreatedServiceHost extends ServiceHost {
+  registrationToken: string;
+  encryptionKey: string;
+}
+
 export default function ServiceHostsPage() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createdHost, setCreatedHost] = useState<CreatedServiceHost | null>(null);
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -98,10 +144,55 @@ export default function ServiceHostsPage() {
     queryKey: ["/api/workstation-service-bindings"],
   });
 
+  const { data: serviceHosts = [] } = useQuery<ServiceHost[]>({
+    queryKey: ["/api/service-hosts"],
+  });
+
   const { data: dashboardData, isLoading: dashboardLoading, refetch } = useQuery<DashboardData>({
     queryKey: ["/api/service-hosts/status-dashboard"],
     refetchInterval: 30000,
   });
+
+  const createServiceHostMutation = useMutation({
+    mutationFn: async (data: ServiceHostFormData) => {
+      const res = await apiRequest("POST", "/api/service-hosts", data);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to create service host");
+      }
+      return res.json() as Promise<CreatedServiceHost>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard"] });
+      setCreateDialogOpen(false);
+      setCreatedHost(data);
+      setTokenDialogOpen(true);
+      toast({ title: "Service Host registered successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteServiceHostMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/service-hosts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard"] });
+      toast({ title: "Service Host deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete service host", variant: "destructive" });
+    },
+  });
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: `${label} copied to clipboard` });
+  };
 
   const workstationsWithServiceHost = workstations.filter(ws => {
     const bindings = allBindings.filter(b => b.workstationId === ws.id);
@@ -375,6 +466,90 @@ export default function ServiceHostsPage() {
         </TabsContent>
 
         <TabsContent value="configuration">
+          <Card className="mb-6">
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle>Registered Service Hosts</CardTitle>
+                <CardDescription>
+                  Service Hosts registered for on-premise deployment. Each host receives a unique token for authentication.
+                </CardDescription>
+              </div>
+              <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-add-service-host">
+                <Plus className="h-4 w-4 mr-2" />
+                Register Service Host
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {serviceHosts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Server className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground mb-2">No Service Hosts registered</p>
+                  <p className="text-sm text-muted-foreground">
+                    Click "Register Service Host" to add your first on-premise host.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Property</TableHead>
+                      <TableHead>Services</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {serviceHosts.map((host) => {
+                      const property = properties.find(p => p.id === host.propertyId);
+                      return (
+                        <TableRow key={host.id} data-testid={`row-registered-host-${host.id}`}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Server className="h-4 w-4 text-primary" />
+                              {host.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>{property?.name || "Unknown"}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1 flex-wrap">
+                              {(host.services as string[] || []).map((service: string) => (
+                                <Badge key={service} variant="secondary" className="text-xs">
+                                  {getServiceLabel(service)}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {host.status === 'online' ? (
+                              <Badge className="bg-green-600">Online</Badge>
+                            ) : (
+                              <Badge variant="outline">Offline</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                if (confirm(`Delete Service Host "${host.name}"? This cannot be undone.`)) {
+                                  deleteServiceHostMutation.mutate(host.id);
+                                }
+                              }}
+                              data-testid={`button-delete-host-${host.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Workstations with Service Controller Bindings</CardTitle>
@@ -517,6 +692,228 @@ export default function ServiceHostsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <CreateServiceHostDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        properties={properties}
+        onSubmit={(data) => createServiceHostMutation.mutate(data)}
+        isLoading={createServiceHostMutation.isPending}
+      />
+
+      <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-primary" />
+              Service Host Registered
+            </DialogTitle>
+            <DialogDescription>
+              Save these credentials securely. The token is only shown once and cannot be retrieved later.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {createdHost && (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-md">
+                <p className="text-sm text-amber-600 font-medium mb-2">
+                  Copy these credentials now - they will not be shown again!
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Service Host ID</label>
+                <div className="flex gap-2">
+                  <Input value={createdHost.id} readOnly className="font-mono text-xs" />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => copyToClipboard(createdHost.id, "Service Host ID")}
+                    data-testid="button-copy-host-id"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Registration Token</label>
+                <div className="flex gap-2">
+                  <Input value={createdHost.registrationToken} readOnly className="font-mono text-xs" />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => copyToClipboard(createdHost.registrationToken, "Registration Token")}
+                    data-testid="button-copy-token"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Encryption Key</label>
+                <div className="flex gap-2">
+                  <Input value={createdHost.encryptionKey} readOnly className="font-mono text-xs" />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => copyToClipboard(createdHost.encryptionKey, "Encryption Key")}
+                    data-testid="button-copy-encryption-key"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
+              I've Saved These Credentials
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+interface CreateServiceHostDialogProps {
+  open: boolean;
+  onClose: () => void;
+  properties: Property[];
+  onSubmit: (data: ServiceHostFormData) => void;
+  isLoading: boolean;
+}
+
+function CreateServiceHostDialog({ open, onClose, properties, onSubmit, isLoading }: CreateServiceHostDialogProps) {
+  const form = useForm<ServiceHostFormData>({
+    resolver: zodResolver(serviceHostFormSchema),
+    defaultValues: {
+      name: "",
+      propertyId: "",
+      services: ["caps"],
+    },
+  });
+
+  const handleSubmit = (data: ServiceHostFormData) => {
+    onSubmit(data);
+  };
+
+  const serviceOptions = [
+    { value: "caps", label: "CAPS (Check & Posting Service)" },
+    { value: "print_controller", label: "Print Controller" },
+    { value: "kds_controller", label: "KDS Controller" },
+    { value: "payment_controller", label: "Payment Controller" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Register Service Host</DialogTitle>
+          <DialogDescription>
+            Register a new on-premise Service Host. You'll receive authentication credentials to configure the host.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Host Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Store-001 Primary Host" {...field} data-testid="input-host-name" />
+                  </FormControl>
+                  <FormDescription>A descriptive name for this Service Host</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="propertyId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Property</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-property">
+                        <SelectValue placeholder="Select a property" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {properties.map((property) => (
+                        <SelectItem key={property.id} value={property.id}>
+                          {property.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>The property this Service Host will serve</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="services"
+              render={() => (
+                <FormItem>
+                  <FormLabel>Services</FormLabel>
+                  <FormDescription>Select which services this host will provide</FormDescription>
+                  <div className="space-y-2 mt-2">
+                    {serviceOptions.map((service) => (
+                      <FormField
+                        key={service.value}
+                        control={form.control}
+                        name="services"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(service.value)}
+                                onCheckedChange={(checked) => {
+                                  const current = field.value || [];
+                                  if (checked) {
+                                    field.onChange([...current, service.value]);
+                                  } else {
+                                    field.onChange(current.filter((v) => v !== service.value));
+                                  }
+                                }}
+                                data-testid={`checkbox-service-${service.value}`}
+                              />
+                            </FormControl>
+                            <FormLabel className="font-normal cursor-pointer">
+                              {service.label}
+                            </FormLabel>
+                          </FormItem>
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} data-testid="button-register">
+                {isLoading ? "Registering..." : "Register Host"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
