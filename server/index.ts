@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startFiscalScheduler } from "./fiscalScheduler";
+import { startAlertEngine } from "./alertEngine";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -96,6 +98,7 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       startFiscalScheduler();
+      startAlertEngine(storage);
     },
   );
 })();

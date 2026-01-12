@@ -15593,7 +15593,20 @@ connect();
   app.post("/api/service-hosts/:id/heartbeat", async (req, res) => {
     try {
       const { id } = req.params;
-      const { status, activeChecks, pendingTransactions, localConfigVersion, memoryUsage, uptime } = req.body;
+      const { 
+        status, 
+        activeChecks, 
+        pendingTransactions, 
+        localConfigVersion, 
+        connectionMode,
+        connectedWorkstations,
+        pendingSyncItems,
+        cpuUsagePercent,
+        memoryUsageMB,
+        diskUsagePercent,
+        diskFreeGB,
+        uptime 
+      } = req.body;
 
       const serviceHost = await storage.getServiceHost(id);
       if (!serviceHost) {
@@ -15609,6 +15622,19 @@ connect();
         activeChecks: activeChecks ?? 0,
         pendingTransactions: pendingTransactions ?? 0,
         localConfigVersion: localConfigVersion ?? 0,
+      });
+      
+      // Store metrics for observability dashboard
+      await storage.createServiceHostMetrics({
+        serviceHostId: id,
+        connectionMode: connectionMode || 'green',
+        connectedWorkstations: connectedWorkstations ?? 0,
+        pendingSyncItems: pendingSyncItems ?? pendingTransactions ?? 0,
+        cpuUsagePercent: cpuUsagePercent,
+        memoryUsageMB: memoryUsageMB,
+        diskUsagePercent: diskUsagePercent,
+        diskFreeGB: diskFreeGB,
+        uptime: uptime,
       });
       
       // Broadcast status update to connected clients
@@ -15637,6 +15663,184 @@ connect();
     } catch (error: any) {
       console.error("Service host heartbeat error:", error);
       res.status(500).json({ error: "Heartbeat failed" });
+    }
+  });
+
+  // GET /api/service-hosts/:id/metrics - Get Service Host metrics history
+  app.get("/api/service-hosts/:id/metrics", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = parseInt(req.query.limit as string) || 100;
+      
+      const metrics = await storage.getServiceHostMetrics(id, limit);
+      res.json(metrics);
+    } catch (error: any) {
+      console.error("Get service host metrics error:", error);
+      res.status(500).json({ error: "Failed to get metrics" });
+    }
+  });
+
+  // GET /api/service-host-alerts - Get Service Host alerts
+  app.get("/api/service-host-alerts", async (req, res) => {
+    try {
+      const { propertyId, acknowledged } = req.query;
+      const ack = acknowledged === 'true' ? true : acknowledged === 'false' ? false : undefined;
+      
+      const alerts = await storage.getServiceHostAlerts(
+        propertyId as string | undefined,
+        ack
+      );
+      res.json(alerts);
+    } catch (error: any) {
+      console.error("Get service host alerts error:", error);
+      res.status(500).json({ error: "Failed to get alerts" });
+    }
+  });
+
+  // POST /api/service-host-alerts/:id/acknowledge - Acknowledge an alert
+  app.post("/api/service-host-alerts/:id/acknowledge", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { acknowledgedById } = req.body;
+      
+      if (!acknowledgedById) {
+        return res.status(400).json({ error: "acknowledgedById is required" });
+      }
+      
+      const alert = await storage.acknowledgeServiceHostAlert(id, acknowledgedById);
+      if (!alert) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+      res.json(alert);
+    } catch (error: any) {
+      console.error("Acknowledge alert error:", error);
+      res.status(500).json({ error: "Failed to acknowledge alert" });
+    }
+  });
+
+  // POST /api/service-host-alerts/:id/resolve - Resolve an alert
+  app.post("/api/service-host-alerts/:id/resolve", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const alert = await storage.resolveServiceHostAlert(id);
+      if (!alert) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+      res.json(alert);
+    } catch (error: any) {
+      console.error("Resolve alert error:", error);
+      res.status(500).json({ error: "Failed to resolve alert" });
+    }
+  });
+
+  // GET /api/service-host-alert-rules - Get alert rules for enterprise
+  app.get("/api/service-host-alert-rules", async (req, res) => {
+    try {
+      const { enterpriseId } = req.query;
+      
+      if (!enterpriseId || typeof enterpriseId !== 'string') {
+        return res.status(400).json({ error: "enterpriseId is required" });
+      }
+      
+      const rules = await storage.getServiceHostAlertRules(enterpriseId);
+      res.json(rules);
+    } catch (error: any) {
+      console.error("Get alert rules error:", error);
+      res.status(500).json({ error: "Failed to get alert rules" });
+    }
+  });
+
+  // POST /api/service-host-alert-rules - Create alert rule
+  app.post("/api/service-host-alert-rules", async (req, res) => {
+    try {
+      const rule = await storage.createServiceHostAlertRule(req.body);
+      res.status(201).json(rule);
+    } catch (error: any) {
+      console.error("Create alert rule error:", error);
+      res.status(500).json({ error: "Failed to create alert rule" });
+    }
+  });
+
+  // PATCH /api/service-host-alert-rules/:id - Update alert rule
+  app.patch("/api/service-host-alert-rules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const rule = await storage.updateServiceHostAlertRule(id, req.body);
+      if (!rule) {
+        return res.status(404).json({ error: "Alert rule not found" });
+      }
+      res.json(rule);
+    } catch (error: any) {
+      console.error("Update alert rule error:", error);
+      res.status(500).json({ error: "Failed to update alert rule" });
+    }
+  });
+
+  // DELETE /api/service-host-alert-rules/:id - Delete alert rule
+  app.delete("/api/service-host-alert-rules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteServiceHostAlertRule(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Alert rule not found" });
+      }
+      res.status(204).send();
+    } catch (error: any) {
+      console.error("Delete alert rule error:", error);
+      res.status(500).json({ error: "Failed to delete alert rule" });
+    }
+  });
+
+  // GET /api/service-hosts/status-dashboard - Aggregated status for EMC dashboard
+  app.get("/api/service-hosts/status-dashboard", async (req, res) => {
+    try {
+      const serviceHosts = await storage.getServiceHosts();
+      const properties = await storage.getProperties();
+      
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      
+      const statusData = await Promise.all(serviceHosts.map(async (sh) => {
+        const property = properties.find(p => p.id === sh.propertyId);
+        const metrics = await storage.getServiceHostMetrics(sh.id, 1);
+        const latestMetrics = metrics[0];
+        
+        const isOnline = sh.lastHeartbeatAt && new Date(sh.lastHeartbeatAt) > fiveMinutesAgo;
+        
+        return {
+          id: sh.id,
+          name: sh.name,
+          propertyId: sh.propertyId,
+          propertyName: property?.name || 'Unknown',
+          status: isOnline ? 'online' : 'offline',
+          connectionMode: latestMetrics?.connectionMode || 'unknown',
+          connectedWorkstations: latestMetrics?.connectedWorkstations || 0,
+          pendingSyncItems: latestMetrics?.pendingSyncItems || sh.pendingTransactions || 0,
+          lastHeartbeat: sh.lastHeartbeatAt,
+          cpuUsagePercent: latestMetrics?.cpuUsagePercent,
+          memoryUsageMB: latestMetrics?.memoryUsageMB,
+          diskUsagePercent: latestMetrics?.diskUsagePercent,
+          diskFreeGB: latestMetrics?.diskFreeGB,
+          version: sh.version,
+        };
+      }));
+      
+      // Get recent alerts
+      const alerts = await storage.getServiceHostAlerts(undefined, false);
+      
+      res.json({
+        serviceHosts: statusData,
+        alerts: alerts.slice(0, 10),
+        summary: {
+          total: statusData.length,
+          online: statusData.filter(s => s.status === 'online').length,
+          offline: statusData.filter(s => s.status === 'offline').length,
+          activeAlerts: alerts.length,
+        }
+      });
+    } catch (error: any) {
+      console.error("Get status dashboard error:", error);
+      res.status(500).json({ error: "Failed to get status dashboard" });
     }
   });
 

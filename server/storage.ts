@@ -136,9 +136,13 @@ import {
   type DescriptorSet, type InsertDescriptorSet,
   type DescriptorScopeType,
   serviceHosts, configVersions, serviceHostTransactions,
+  serviceHostMetrics, serviceHostAlertRules, serviceHostAlerts,
   type ServiceHost, type InsertServiceHost,
   type ConfigVersion, type InsertConfigVersion,
   type ServiceHostTransaction, type InsertServiceHostTransaction,
+  type ServiceHostMetrics, type InsertServiceHostMetrics,
+  type ServiceHostAlertRule, type InsertServiceHostAlertRule,
+  type ServiceHostAlert, type InsertServiceHostAlert,
   workstationServiceBindings,
   type WorkstationServiceBinding, type InsertWorkstationServiceBinding,
   calPackages, calPackageVersions, calPackagePrerequisites, calDeployments, calDeploymentTargets,
@@ -779,6 +783,23 @@ export interface IStorage {
   // Service Host Transactions
   createServiceHostTransaction(data: InsertServiceHostTransaction): Promise<ServiceHostTransaction>;
   getServiceHostTransactions(serviceHostId: string): Promise<ServiceHostTransaction[]>;
+  
+  // Service Host Metrics
+  createServiceHostMetrics(data: InsertServiceHostMetrics): Promise<ServiceHostMetrics>;
+  getServiceHostMetrics(serviceHostId: string, limit?: number): Promise<ServiceHostMetrics[]>;
+  getServiceHostMetricsByProperty(propertyId: string, since?: Date): Promise<ServiceHostMetrics[]>;
+  
+  // Service Host Alerts
+  createServiceHostAlert(data: InsertServiceHostAlert): Promise<ServiceHostAlert>;
+  getServiceHostAlerts(propertyId?: string, acknowledged?: boolean): Promise<ServiceHostAlert[]>;
+  acknowledgeServiceHostAlert(id: string, acknowledgedById: string): Promise<ServiceHostAlert | undefined>;
+  resolveServiceHostAlert(id: string): Promise<ServiceHostAlert | undefined>;
+  
+  // Service Host Alert Rules
+  getServiceHostAlertRules(enterpriseId: string): Promise<ServiceHostAlertRule[]>;
+  createServiceHostAlertRule(data: InsertServiceHostAlertRule): Promise<ServiceHostAlertRule>;
+  updateServiceHostAlertRule(id: string, data: Partial<InsertServiceHostAlertRule>): Promise<ServiceHostAlertRule | undefined>;
+  deleteServiceHostAlertRule(id: string): Promise<boolean>;
 
   // ============================================================================
   // WORKSTATION SERVICE BINDINGS
@@ -5320,6 +5341,102 @@ export class DatabaseStorage implements IStorage {
       .from(serviceHostTransactions)
       .where(eq(serviceHostTransactions.serviceHostId, serviceHostId))
       .orderBy(desc(serviceHostTransactions.processedAt));
+  }
+
+  // Service Host Metrics
+  async createServiceHostMetrics(data: InsertServiceHostMetrics): Promise<ServiceHostMetrics> {
+    const [result] = await db.insert(serviceHostMetrics).values(data).returning();
+    return result;
+  }
+
+  async getServiceHostMetrics(serviceHostId: string, limit: number = 100): Promise<ServiceHostMetrics[]> {
+    return db.select()
+      .from(serviceHostMetrics)
+      .where(eq(serviceHostMetrics.serviceHostId, serviceHostId))
+      .orderBy(desc(serviceHostMetrics.recordedAt))
+      .limit(limit);
+  }
+
+  async getServiceHostMetricsByProperty(propertyId: string, since?: Date): Promise<ServiceHostMetrics[]> {
+    const hosts = await this.getServiceHosts(propertyId);
+    const hostIds = hosts.map(h => h.id);
+    if (hostIds.length === 0) return [];
+    
+    const conditions = [inArray(serviceHostMetrics.serviceHostId, hostIds)];
+    if (since) {
+      conditions.push(gt(serviceHostMetrics.recordedAt, since));
+    }
+    
+    return db.select()
+      .from(serviceHostMetrics)
+      .where(and(...conditions))
+      .orderBy(desc(serviceHostMetrics.recordedAt))
+      .limit(500);
+  }
+
+  // Service Host Alerts
+  async createServiceHostAlert(data: InsertServiceHostAlert): Promise<ServiceHostAlert> {
+    const [result] = await db.insert(serviceHostAlerts).values(data).returning();
+    return result;
+  }
+
+  async getServiceHostAlerts(propertyId?: string, acknowledged?: boolean): Promise<ServiceHostAlert[]> {
+    const conditions = [];
+    if (propertyId) {
+      conditions.push(eq(serviceHostAlerts.propertyId, propertyId));
+    }
+    if (acknowledged === false) {
+      conditions.push(sql`${serviceHostAlerts.acknowledgedAt} IS NULL`);
+    } else if (acknowledged === true) {
+      conditions.push(sql`${serviceHostAlerts.acknowledgedAt} IS NOT NULL`);
+    }
+    
+    return db.select()
+      .from(serviceHostAlerts)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(serviceHostAlerts.triggeredAt))
+      .limit(100);
+  }
+
+  async acknowledgeServiceHostAlert(id: string, acknowledgedById: string): Promise<ServiceHostAlert | undefined> {
+    const [result] = await db.update(serviceHostAlerts)
+      .set({ acknowledgedAt: new Date(), acknowledgedById })
+      .where(eq(serviceHostAlerts.id, id))
+      .returning();
+    return result;
+  }
+
+  async resolveServiceHostAlert(id: string): Promise<ServiceHostAlert | undefined> {
+    const [result] = await db.update(serviceHostAlerts)
+      .set({ resolvedAt: new Date() })
+      .where(eq(serviceHostAlerts.id, id))
+      .returning();
+    return result;
+  }
+
+  // Service Host Alert Rules
+  async getServiceHostAlertRules(enterpriseId: string): Promise<ServiceHostAlertRule[]> {
+    return db.select()
+      .from(serviceHostAlertRules)
+      .where(eq(serviceHostAlertRules.enterpriseId, enterpriseId));
+  }
+
+  async createServiceHostAlertRule(data: InsertServiceHostAlertRule): Promise<ServiceHostAlertRule> {
+    const [result] = await db.insert(serviceHostAlertRules).values(data).returning();
+    return result;
+  }
+
+  async updateServiceHostAlertRule(id: string, data: Partial<InsertServiceHostAlertRule>): Promise<ServiceHostAlertRule | undefined> {
+    const [result] = await db.update(serviceHostAlertRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(serviceHostAlertRules.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteServiceHostAlertRule(id: string): Promise<boolean> {
+    const result = await db.delete(serviceHostAlertRules).where(eq(serviceHostAlertRules.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   // ============================================================================

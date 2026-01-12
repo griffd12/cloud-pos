@@ -184,3 +184,12 @@ Service Host resilience and monitoring utilities:
 - **Rate Limiting**: `service-host/src/middleware/rate-limiter.ts` - Per-IP/workstation limits with burst allowance
 - **Request Validation**: `service-host/src/middleware/validation.ts` - Schema validation, input sanitization
 - **Self-Healing**: `service-host/src/utils/recovery.ts` - Auto-recovery, graceful degradation, service state tracking
+
+### Phase 7: Cloud Integration/Observability (Complete)
+Cloud-side monitoring and alerting for Service Hosts:
+- **Metrics Storage**: `service_host_metrics` table - Heartbeat history with CPU, memory, disk, connection mode
+- **Alert System**: `service_host_alerts` and `service_host_alert_rules` tables - Configurable alert conditions
+- **Alert Engine**: `server/alertEngine.ts` - Background process monitoring Service Host health
+- **EMC Dashboard**: `client/src/pages/admin/service-hosts.tsx` - Real-time status with GREEN/YELLOW/ORANGE/RED indicators
+- **Alert Conditions**: Offline detection, sync queue backup, disk space, connection mode degradation, high CPU/memory
+- **API Endpoints**: `/api/service-hosts/status-dashboard`, `/api/service-host-alerts`, `/api/service-host-alert-rules`
