@@ -4158,6 +4158,135 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ============================================================================
+  // Check Locking API (for multi-workstation operation)
+  // ============================================================================
+  const LOCK_EXPIRY_MINUTES = 5;
+
+  // Acquire lock on a check
+  app.post("/api/checks/:id/lock", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { workstationId, employeeId } = req.body;
+
+      if (!workstationId || !employeeId) {
+        return res.status(400).json({ message: "workstationId and employeeId required" });
+      }
+
+      const check = await storage.getCheck(id);
+      if (!check) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+
+      const existingLock = await storage.getCheckLock(id);
+      if (existingLock) {
+        if (existingLock.workstationId === workstationId) {
+          const newExpiry = new Date(Date.now() + LOCK_EXPIRY_MINUTES * 60 * 1000);
+          const refreshedLock = await storage.updateCheckLock(existingLock.id, { expiresAt: newExpiry });
+          return res.json({ success: true, lock: refreshedLock });
+        }
+        if (new Date(existingLock.expiresAt) > new Date()) {
+          return res.status(409).json({
+            error: "Check locked by another workstation",
+            lockedBy: existingLock.workstationId,
+            expiresAt: existingLock.expiresAt,
+          });
+        }
+        await storage.deleteCheckLock(existingLock.id);
+      }
+
+      const expiresAt = new Date(Date.now() + LOCK_EXPIRY_MINUTES * 60 * 1000);
+      const lock = await storage.createCheckLock({ checkId: id, workstationId, employeeId, expiresAt });
+
+      res.json({ success: true, lock });
+    } catch (error) {
+      console.error("Acquire check lock error:", error);
+      res.status(500).json({ message: "Failed to acquire lock" });
+    }
+  });
+
+  // Release lock on a check
+  app.post("/api/checks/:id/unlock", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { workstationId } = req.body;
+
+      const existingLock = await storage.getCheckLock(id);
+      if (!existingLock) {
+        return res.json({ success: true, message: "No lock exists" });
+      }
+
+      if (workstationId && existingLock.workstationId !== workstationId) {
+        return res.status(403).json({ message: "Cannot release lock held by another workstation" });
+      }
+
+      await storage.deleteCheckLock(existingLock.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Release check lock error:", error);
+      res.status(500).json({ message: "Failed to release lock" });
+    }
+  });
+
+  // Refresh lock on a check
+  app.post("/api/checks/:id/lock/refresh", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { workstationId } = req.body;
+
+      const existingLock = await storage.getCheckLock(id);
+      if (!existingLock) {
+        return res.status(404).json({ message: "No lock to refresh" });
+      }
+
+      if (existingLock.workstationId !== workstationId) {
+        return res.status(409).json({ error: "Lock held by another workstation" });
+      }
+
+      const newExpiry = new Date(Date.now() + LOCK_EXPIRY_MINUTES * 60 * 1000);
+      const refreshedLock = await storage.updateCheckLock(existingLock.id, { expiresAt: newExpiry });
+
+      res.json({ success: true, lock: refreshedLock });
+    } catch (error) {
+      console.error("Refresh check lock error:", error);
+      res.status(500).json({ message: "Failed to refresh lock" });
+    }
+  });
+
+  // Get lock status for a check
+  app.get("/api/checks/:id/lock", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lock = await storage.getCheckLock(id);
+      
+      if (!lock) {
+        return res.status(404).json({ lock: null });
+      }
+
+      if (new Date(lock.expiresAt) <= new Date()) {
+        await storage.deleteCheckLock(lock.id);
+        return res.status(404).json({ lock: null });
+      }
+
+      res.json({ lock });
+    } catch (error) {
+      console.error("Get check lock error:", error);
+      res.status(500).json({ message: "Failed to get lock status" });
+    }
+  });
+
+  // Release all locks for a workstation
+  app.post("/api/workstations/:workstationId/release-locks", async (req, res) => {
+    try {
+      const { workstationId } = req.params;
+      const count = await storage.deleteCheckLocksByWorkstation(workstationId);
+      res.json({ success: true, releasedCount: count });
+    } catch (error) {
+      console.error("Release workstation locks error:", error);
+      res.status(500).json({ message: "Failed to release locks" });
+    }
+  });
+
   // Get refunds for an RVC
   app.get("/api/rvcs/:rvcId/refunds", async (req, res) => {
     try {

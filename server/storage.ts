@@ -6,7 +6,7 @@ import {
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
   tenders, discounts, serviceCharges,
-  checks, rounds, checkItems, checkPayments, checkDiscounts, auditLogs, kdsTickets, kdsTicketItems,
+  checks, rounds, checkItems, checkPayments, checkDiscounts, checkLocks, auditLogs, kdsTickets, kdsTicketItems,
   paymentProcessors, paymentTransactions, terminalDevices, terminalSessions,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
@@ -56,6 +56,7 @@ import {
   type CheckItem, type InsertCheckItem,
   type CheckPayment, type InsertCheckPayment,
   type CheckDiscount, type InsertCheckDiscount,
+  type CheckLock,
   type AuditLog, type InsertAuditLog,
   type KdsTicket, type InsertKdsTicket, type KdsTicketItem,
   type PosLayout, type InsertPosLayout,
@@ -359,6 +360,13 @@ export interface IStorage {
   // Rounds
   createRound(data: InsertRound): Promise<Round>;
   getRounds(checkId: string): Promise<Round[]>;
+
+  // Check Locks (for multi-workstation operation)
+  getCheckLock(checkId: string): Promise<CheckLock | undefined>;
+  createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; expiresAt: Date }): Promise<CheckLock>;
+  updateCheckLock(id: string, data: Partial<{ expiresAt: Date }>): Promise<CheckLock | undefined>;
+  deleteCheckLock(id: string): Promise<boolean>;
+  deleteCheckLocksByWorkstation(workstationId: string): Promise<number>;
 
   // Payments
   createPayment(data: InsertCheckPayment): Promise<CheckPayment>;
@@ -1819,6 +1827,32 @@ export class DatabaseStorage implements IStorage {
 
   async getRounds(checkId: string): Promise<Round[]> {
     return db.select().from(rounds).where(eq(rounds.checkId, checkId));
+  }
+
+  // Check Locks (for multi-workstation operation)
+  async getCheckLock(checkId: string): Promise<CheckLock | undefined> {
+    const [result] = await db.select().from(checkLocks).where(eq(checkLocks.checkId, checkId));
+    return result;
+  }
+
+  async createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; expiresAt: Date }): Promise<CheckLock> {
+    const [result] = await db.insert(checkLocks).values(data).returning();
+    return result;
+  }
+
+  async updateCheckLock(id: string, data: Partial<{ expiresAt: Date }>): Promise<CheckLock | undefined> {
+    const [result] = await db.update(checkLocks).set(data).where(eq(checkLocks.id, id)).returning();
+    return result;
+  }
+
+  async deleteCheckLock(id: string): Promise<boolean> {
+    const result = await db.delete(checkLocks).where(eq(checkLocks.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteCheckLocksByWorkstation(workstationId: string): Promise<number> {
+    const result = await db.delete(checkLocks).where(eq(checkLocks.workstationId, workstationId));
+    return result.rowCount ?? 0;
   }
 
   // Payments

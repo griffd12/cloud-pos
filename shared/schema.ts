@@ -797,6 +797,16 @@ export const rounds = pgTable("rounds", {
   sentByEmployeeId: varchar("sent_by_employee_id").references(() => employees.id),
 });
 
+// Check Locks (for multi-workstation operation)
+export const checkLocks = pgTable("check_locks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  checkId: varchar("check_id").notNull().references(() => checks.id).unique(),
+  workstationId: varchar("workstation_id").notNull().references(() => workstations.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  acquiredAt: timestamp("acquired_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
 // Check Items (line items on a check)
 export const checkItems = pgTable("check_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1199,6 +1209,7 @@ export type Check = typeof checks.$inferSelect;
 export type InsertCheck = z.infer<typeof insertCheckSchema>;
 export type Round = typeof rounds.$inferSelect;
 export type InsertRound = z.infer<typeof insertRoundSchema>;
+export type CheckLock = typeof checkLocks.$inferSelect;
 export type CheckItem = typeof checkItems.$inferSelect;
 export type InsertCheckItem = z.infer<typeof insertCheckItemSchema>;
 export type CheckPayment = typeof checkPayments.$inferSelect;
