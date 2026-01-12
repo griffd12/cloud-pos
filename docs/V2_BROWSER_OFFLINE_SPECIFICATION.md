@@ -1,7 +1,8 @@
 # Cloud POS V2: Browser-Based Full Offline Specification
 
-## Document Version: 1.0
+## Document Version: 1.1
 ## Date: January 12, 2026
+## Revision: Added Distributed Controller Architecture for enhanced RED mode resilience
 
 ---
 
@@ -13,45 +14,55 @@ This specification defines how the Cloud POS system will operate as a **browser-
 
 1. **Browser-first**: The POS UI runs in Chrome/Edge on workstations
 2. **Service Host backend**: A local Node.js server provides offline services
-3. **Automatic failover**: Seamless switching between cloud and local modes
-4. **Zero data loss**: All transactions sync when connectivity restores
-5. **No manual intervention**: Staff should not notice connectivity changes
+3. **Distributed controllers**: Print and Payment agents run on each workstation for maximum resilience
+4. **Automatic failover**: Seamless switching between cloud and local modes
+5. **Zero data loss**: All transactions sync when connectivity restores
+6. **No manual intervention**: Staff should not notice connectivity changes
 
 ---
 
 ## 2. Architecture Overview
 
-### 2.1 System Components
+### 2.1 System Components (Distributed Architecture)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        PROPERTY NETWORK                                     │
 │                                                                             │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │  Workstation 1  │  │  Workstation 2  │  │  Workstation 3  │             │
-│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │             │
-│  │  │  Browser  │  │  │  │  Browser  │  │  │  │  Browser  │  │             │
-│  │  │  (POS UI) │  │  │  │  (POS UI) │  │  │  │  (POS UI) │  │             │
-│  │  └─────┬─────┘  │  │  └─────┬─────┘  │  │  └─────┬─────┘  │             │
-│  └────────┼────────┘  └────────┼────────┘  └────────┼────────┘             │
-│           │                    │                    │                       │
-│           └────────────────────┼────────────────────┘                       │
-│                                │ LAN                                        │
-│                                ▼                                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                      SERVICE HOST                                     │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐    │  │
-│  │  │    CAPS     │ │    Print    │ │     KDS     │ │   Payment   │    │  │
-│  │  │   Service   │ │  Controller │ │  Controller │ │  Controller │    │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘    │  │
-│  │                                                                       │  │
-│  │  ┌─────────────────────────────────────────────────────────────┐    │  │
-│  │  │                    SQLite Database                           │    │  │
-│  │  │  (Encrypted local copy of property config + transactions)    │    │  │
-│  │  └─────────────────────────────────────────────────────────────┘    │  │
-│  └───────────────────────────────┬──────────────────────────────────────┘  │
-│                                  │                                          │
-└──────────────────────────────────┼──────────────────────────────────────────┘
+│  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐ │
+│  │   Workstation 1     │  │   Workstation 2     │  │   Workstation 3     │ │
+│  │  ┌───────────────┐  │  │  ┌───────────────┐  │  │  ┌───────────────┐  │ │
+│  │  │    Browser    │  │  │  │    Browser    │  │  │  │    Browser    │  │ │
+│  │  │    (POS UI)   │  │  │  │    (POS UI)   │  │  │  │    (POS UI)   │  │ │
+│  │  └───────────────┘  │  │  └───────────────┘  │  │  └───────────────┘  │ │
+│  │                     │  │                     │  │                     │ │
+│  │  LOCAL AGENTS:      │  │  LOCAL AGENTS:      │  │  LOCAL AGENTS:      │ │
+│  │  ┌─────────────┐   │  │  ┌─────────────┐   │  │  ┌─────────────┐   │ │
+│  │  │ Print Agent │   │  │  │ Print Agent │   │  │  │ Print Agent │   │ │
+│  │  └─────────────┘   │  │  └─────────────┘   │  │  └─────────────┘   │ │
+│  │  ┌─────────────┐   │  │                     │  │  ┌─────────────┐   │ │
+│  │  │ Payment App │   │  │                     │  │  │ Payment App │   │ │
+│  │  └─────────────┘   │  │                     │  │  └─────────────┘   │ │
+│  └──────────┬──────────┘  └──────────┬──────────┘  └──────────┬──────────┘ │
+│             │                        │                        │            │
+│             └────────────────────────┼────────────────────────┘            │
+│                                      │ LAN                                 │
+│                                      ▼                                     │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │                    SERVICE HOST (Primary)                             │ │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐    │ │
+│  │  │    CAPS     │ │    Print    │ │     KDS     │ │   Payment   │    │ │
+│  │  │   Service   │ │  Controller │ │  Controller │ │  Controller │    │ │
+│  │  │  (Primary)  │ │  (Primary)  │ │  (Primary)  │ │  (Primary)  │    │ │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘    │ │
+│  │                                                                       │ │
+│  │  ┌─────────────────────────────────────────────────────────────┐    │ │
+│  │  │                    SQLite Database                           │    │ │
+│  │  │  (Encrypted local copy of property config + transactions)    │    │ │
+│  │  └─────────────────────────────────────────────────────────────┘    │ │
+│  └───────────────────────────────┬──────────────────────────────────────┘ │
+│                                  │                                         │
+└──────────────────────────────────┼─────────────────────────────────────────┘
                                    │ Internet (when available)
                                    ▼
                     ┌──────────────────────────────┐
@@ -68,16 +79,31 @@ This specification defines how the Cloud POS system will operate as a **browser-
                     └──────────────────────────────┘
 ```
 
-### 2.2 Component Descriptions
+### 2.2 Distributed Controller Philosophy
+
+The system uses a **distributed architecture** where critical functions can run at multiple levels:
+
+| Function | Primary Location | Fallback Location | Purpose |
+|----------|------------------|-------------------|---------|
+| **Check Management** | Service Host (CAPS) | Browser (IndexedDB) | Order state and transactions |
+| **Printing** | Service Host Print Controller | Workstation Print Agent | Receipt and kitchen tickets |
+| **Payment Processing** | Service Host Payment Controller | Workstation Payment App | Card transactions |
+| **KDS Routing** | Service Host KDS Controller | Peer-to-peer WebSocket | Kitchen display tickets |
+
+This ensures that even if the Service Host fails, individual workstations can continue operating with printing and card payments.
+
+### 2.3 Component Descriptions
 
 | Component | Location | Technology | Purpose |
 |-----------|----------|------------|---------|
 | **POS UI** | Workstation Browser | React + TypeScript | User interface for order entry, payments, reports |
-| **Service Host** | Designated PC at property | Node.js + Express | Local backend services for offline operation |
+| **Service Host** | Designated PC at property | Node.js + Express | Primary local backend services |
 | **CAPS** | Service Host | Node.js service | Check And Posting - manages orders, payments, check state |
-| **Print Controller** | Service Host | Node.js service | Routes print jobs to network printers |
+| **Print Controller** | Service Host (Primary) | Node.js service | Routes print jobs to network printers |
+| **Print Agent** | Each Workstation | Lightweight Node.js app | Direct printing when Service Host unavailable |
 | **KDS Controller** | Service Host | Node.js service | Manages kitchen display screens |
-| **Payment Controller** | Service Host | Node.js service | Handles payment terminal communication |
+| **Payment Controller** | Service Host (Primary) | Node.js service | Coordinates payment terminal communication |
+| **Payment App** | Select Workstations | Gateway software | Direct card processing when Service Host unavailable |
 | **Local Database** | Service Host | SQLite + SQLCipher | Encrypted local data storage |
 | **Cloud** | Replit/AWS | Node.js + PostgreSQL | Master database, EMC, reporting |
 
@@ -87,11 +113,49 @@ This specification defines how the Cloud POS system will operate as a **browser-
 
 ### 3.1 Mode Definitions
 
-| Mode | Internet | LAN | Service Host | Description |
-|------|----------|-----|--------------|-------------|
+| Mode | Cloud | Service Host | Local Agents | Description |
+|------|-------|--------------|--------------|-------------|
 | **GREEN** | ✅ | ✅ | ✅ | Normal operation - cloud is primary |
-| **YELLOW** | ❌ | ✅ | ✅ | Offline - Service Host is primary |
-| **RED** | ❌ | ❌ | ❌ | Isolated - browser local storage only |
+| **YELLOW** | ❌ | ✅ | ✅ | Internet down - Service Host is primary |
+| **ORANGE** | ❌ | ❌ | ✅ | Service Host down - local agents active |
+| **RED** | ❌ | ❌ | ❌ | Complete isolation - browser only |
+
+### 3.1.1 ORANGE Mode (New)
+
+ORANGE mode is a critical addition that handles the scenario where the Service Host is down but workstations are still on the network:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ORANGE MODE OPERATION                               │
+│                     (Service Host Down, LAN Active)                         │
+│                                                                             │
+│   ┌─────────────────────┐      ┌─────────────────────┐                     │
+│   │   Workstation 1     │      │   Workstation 2     │                     │
+│   │  ┌───────────────┐  │      │  ┌───────────────┐  │                     │
+│   │  │    Browser    │  │      │  │    Browser    │  │                     │
+│   │  │  (Orders in   │  │      │  │  (Orders in   │  │                     │
+│   │  │   IndexedDB)  │  │      │  │   IndexedDB)  │  │                     │
+│   │  └───────┬───────┘  │      │  └───────────────┘  │                     │
+│   │          │          │      │                     │                     │
+│   │  ┌───────▼───────┐  │      │                     │                     │
+│   │  │  Print Agent  │──┼──────┼─────────────────────┼──► Network Printer  │
+│   │  └───────────────┘  │      │                     │                     │
+│   │  ┌───────────────┐  │      │                     │                     │
+│   │  │  Payment App  │──┼──────┼─────────────────────┼──► Payment Gateway  │
+│   │  └───────────────┘  │      │                     │     (Internet)      │
+│   └─────────────────────┘      └─────────────────────┘                     │
+│                                                                             │
+│   SERVICE HOST: ❌ OFFLINE                                                  │
+│                                                                             │
+│   CAPABILITIES:                                                             │
+│   ✅ Order entry (queued in browser)                                       │
+│   ✅ Printing (via local Print Agent)                                      │
+│   ✅ Card payments (if workstation has Payment App + internet)             │
+│   ✅ Cash payments                                                          │
+│   ❌ Check sharing between workstations                                     │
+│   ❌ Central KDS routing                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### 3.2 Mode Detection Logic
 
@@ -387,9 +451,283 @@ CREATE TABLE print_queue (
 
 ---
 
-## 5. Browser Application Changes
+## 5. Distributed Local Agents
 
-### 5.1 Service Discovery
+### 5.1 Print Agent (Per-Workstation)
+
+The Print Agent is a lightweight application that runs on each workstation, providing direct printing capability when the Service Host is unavailable.
+
+#### 5.1.1 Print Agent Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PRINT AGENT OPERATION                               │
+│                                                                             │
+│   ┌─────────────────────────────────────────────────────────────────────┐  │
+│   │                        WORKSTATION                                   │  │
+│   │                                                                      │  │
+│   │   ┌───────────────┐       ┌───────────────────────────────────┐    │  │
+│   │   │    Browser    │       │         PRINT AGENT               │    │  │
+│   │   │    (POS UI)   │       │                                   │    │  │
+│   │   │               │       │  ┌─────────────────────────────┐ │    │  │
+│   │   │   Print Job   │──────►│  │   HTTP Server (port 3003)   │ │    │  │
+│   │   │   Request     │       │  └─────────────────────────────┘ │    │  │
+│   │   │               │       │                │                 │    │  │
+│   │   └───────────────┘       │                ▼                 │    │  │
+│   │                           │  ┌─────────────────────────────┐ │    │  │
+│   │                           │  │   ESC/POS Command Builder   │ │    │  │
+│   │                           │  └─────────────────────────────┘ │    │  │
+│   │                           │                │                 │    │  │
+│   │                           │                ▼                 │    │  │
+│   │                           │  ┌─────────────────────────────┐ │    │  │
+│   │                           │  │   TCP/IP Sender (port 9100) │ │    │  │
+│   │                           │  └─────────────────────────────┘ │    │  │
+│   │                           │                                   │    │  │
+│   │                           └───────────────────────────────────┘    │  │
+│   │                                            │                        │  │
+│   └────────────────────────────────────────────┼────────────────────────┘  │
+│                                                │                            │
+│                                                ▼                            │
+│                                   ┌──────────────────────┐                 │
+│                                   │   Network Printer    │                 │
+│                                   │   (192.168.1.50)     │                 │
+│                                   └──────────────────────┘                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 5.1.2 Print Agent Specification
+
+| Property | Value |
+|----------|-------|
+| **Technology** | Node.js (bundled with pkg) |
+| **Size** | ~15 MB |
+| **Port** | 3003 (HTTP API) |
+| **Startup** | Windows Service or System Tray app |
+| **Requirements** | Windows 10/11, 512MB RAM |
+
+#### 5.1.3 Print Agent API
+
+```
+POST /api/print
+Body: {
+  "printerId": "kitchen-printer-1",
+  "printerIp": "192.168.1.50",
+  "printerPort": 9100,
+  "jobType": "receipt" | "kitchen" | "report",
+  "content": {
+    "header": "Check #1234",
+    "items": [...],
+    "totals": {...}
+  }
+}
+
+Response: {
+  "success": true,
+  "jobId": "abc123"
+}
+```
+
+#### 5.1.4 Print Agent Failover Logic
+
+```typescript
+// Browser print request flow
+async function printReceipt(check: Check) {
+  try {
+    // Try 1: Service Host Print Controller
+    await fetch(`${serviceHostUrl}/api/print/jobs`, {
+      method: 'POST',
+      body: JSON.stringify({ check, jobType: 'receipt' })
+    });
+  } catch (serviceHostError) {
+    try {
+      // Try 2: Local Print Agent
+      await fetch('http://localhost:3003/api/print', {
+        method: 'POST',
+        body: JSON.stringify({
+          printerId: check.receiptPrinterId,
+          printerIp: printerConfig[check.receiptPrinterId].ip,
+          printerPort: 9100,
+          jobType: 'receipt',
+          content: formatReceiptContent(check)
+        })
+      });
+    } catch (localAgentError) {
+      // Both failed - queue for later or show error
+      throw new Error('Printing unavailable');
+    }
+  }
+}
+```
+
+#### 5.1.5 Print Agent CAL Package
+
+The Print Agent is distributed via CAL as a separate lightweight package:
+
+```
+PrintAgent-v1.0.0.exe (Self-extracting installer)
+│
+├── print-agent.exe       (Node.js bundled, ~15MB)
+├── config/
+│   └── printers.json     (Cached printer config)
+└── logs/
+    └── print-agent.log
+```
+
+---
+
+### 5.2 Payment App (Per-Workstation)
+
+The Payment App handles card transactions when the Service Host Payment Controller is unavailable.
+
+#### 5.2.1 Payment App Options
+
+| Option | Description | Use Case |
+|--------|-------------|----------|
+| **Stripe Terminal Local** | Stripe's local SDK | Stripe Terminal hardware |
+| **Elavon Converge** | Elavon's Windows app | Elavon payment terminals |
+| **Verifone Connect** | Verifone's middleware | Verifone terminals |
+| **PAX Store** | PAX's device manager | PAX terminals |
+
+#### 5.2.2 Payment App Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       PAYMENT APP OPERATION                                 │
+│                                                                             │
+│   ┌───────────────┐       ┌───────────────┐       ┌───────────────┐        │
+│   │    Browser    │       │  Payment App  │       │   Payment     │        │
+│   │    (POS UI)   │──────►│  (localhost)  │──────►│   Terminal    │        │
+│   │               │ HTTP  │               │ USB/  │               │        │
+│   │   Amount:     │       │  - Validate   │ LAN   │  Chip/Tap/    │        │
+│   │   $25.99      │       │  - Route      │       │  Swipe        │        │
+│   │               │       │  - Respond    │       │               │        │
+│   └───────────────┘       └───────┬───────┘       └───────────────┘        │
+│                                   │                                         │
+│                                   │ HTTPS (if terminal has internet)        │
+│                                   ▼                                         │
+│                          ┌───────────────┐                                  │
+│                          │   Payment     │                                  │
+│                          │   Gateway     │                                  │
+│                          │ (Stripe/etc)  │                                  │
+│                          └───────────────┘                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 5.2.3 Payment App API
+
+```
+POST /api/payment/authorize
+Body: {
+  "amount": 2599,
+  "currency": "USD",
+  "terminalId": "terminal-1",
+  "checkId": "check-abc123"
+}
+
+Response: {
+  "success": true,
+  "transactionId": "txn_xyz789",
+  "authCode": "123456",
+  "cardLast4": "4242",
+  "cardBrand": "visa"
+}
+```
+
+#### 5.2.4 Payment Failover Logic
+
+```typescript
+// Browser payment request flow
+async function processPayment(amount: number, tenderId: string) {
+  try {
+    // Try 1: Service Host Payment Controller
+    return await fetch(`${serviceHostUrl}/api/payment/authorize`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, tenderId })
+    });
+  } catch (serviceHostError) {
+    // Service Host unavailable
+    if (hasLocalPaymentApp()) {
+      try {
+        // Try 2: Local Payment App
+        return await fetch('http://localhost:3004/api/payment/authorize', {
+          method: 'POST',
+          body: JSON.stringify({ amount, terminalId: getDefaultTerminal() })
+        });
+      } catch (localAppError) {
+        throw new Error('Payment processing unavailable');
+      }
+    } else {
+      throw new Error('No payment app installed on this workstation');
+    }
+  }
+}
+
+function hasLocalPaymentApp(): boolean {
+  // Check if Payment App is running locally
+  return localStorage.getItem('paymentAppInstalled') === 'true';
+}
+```
+
+#### 5.2.5 Offline Authorization (Store-and-Forward)
+
+Some payment terminals support offline authorization with later settlement:
+
+```
+1. Terminal collects card data
+2. Terminal performs offline risk checks
+3. Transaction approved locally with offline auth code
+4. Transaction stored in terminal memory
+5. When internet restored, terminal sends batch to processor
+6. If any transaction declined, POS notified for reconciliation
+```
+
+**Note**: Offline authorization limits vary by processor (typically $50-$200 max).
+
+---
+
+### 5.3 Agent Discovery
+
+The browser needs to discover which local agents are available:
+
+```typescript
+// client/src/lib/agent-discovery.ts
+
+interface AgentStatus {
+  printAgent: boolean;
+  paymentApp: boolean;
+}
+
+async function discoverLocalAgents(): Promise<AgentStatus> {
+  const status: AgentStatus = {
+    printAgent: false,
+    paymentApp: false
+  };
+  
+  // Check Print Agent
+  try {
+    const res = await fetch('http://localhost:3003/health', { 
+      signal: AbortSignal.timeout(1000) 
+    });
+    status.printAgent = res.ok;
+  } catch {}
+  
+  // Check Payment App
+  try {
+    const res = await fetch('http://localhost:3004/health', { 
+      signal: AbortSignal.timeout(1000) 
+    });
+    status.paymentApp = res.ok;
+  } catch {}
+  
+  return status;
+}
+```
+
+---
+
+## 6. Browser Application Changes
+
+### 6.1 Service Discovery
 
 The browser must know how to find the Service Host on the local network.
 
@@ -538,37 +876,80 @@ function ConnectionStatus() {
 
 ## 6. Operational Capabilities by Mode
 
-### 6.1 Feature Matrix
+### 6.1 Feature Matrix (Updated with ORANGE Mode)
 
-| Feature | GREEN | YELLOW | RED |
-|---------|-------|--------|-----|
-| **Order Entry** | ✅ | ✅ | ✅ (limited menu) |
-| **Modifiers** | ✅ | ✅ | ✅ |
-| **Discounts** | ✅ | ✅ | ❌ (manager approval) |
-| **Split Checks** | ✅ | ✅ | ❌ |
-| **Check Transfer** | ✅ | ✅ | ❌ |
-| **Cash Payment** | ✅ | ✅ | ✅ |
-| **Card Payment** | ✅ | ✅ (offline auth) | ❌ |
-| **Gift Card** | ✅ | ✅ (if cached) | ❌ |
-| **Receipt Printing** | ✅ | ✅ | ❌ |
-| **Kitchen Printing** | ✅ | ✅ | ❌ |
-| **KDS Display** | ✅ | ✅ | ❌ |
-| **Employee Clock In/Out** | ✅ | ✅ | ✅ (local) |
-| **Manager Functions** | ✅ | ✅ | ❌ (most) |
-| **Reports** | ✅ | ✅ (local only) | ❌ |
-| **Menu Changes** | ✅ | ❌ | ❌ |
-| **Configuration** | ✅ | ❌ | ❌ |
+| Feature | GREEN | YELLOW | ORANGE | RED |
+|---------|-------|--------|--------|-----|
+| **Order Entry** | ✅ | ✅ | ✅ | ✅ (cached menu) |
+| **Modifiers** | ✅ | ✅ | ✅ | ✅ |
+| **Discounts** | ✅ | ✅ | ✅ (cached) | ❌ |
+| **Split Checks** | ✅ | ✅ | ❌ | ❌ |
+| **Check Transfer** | ✅ | ✅ | ❌ | ❌ |
+| **Cash Payment** | ✅ | ✅ | ✅ | ✅ |
+| **Card Payment** | ✅ | ✅ | ✅ (local app) | ❌ |
+| **Gift Card** | ✅ | ✅ | ❌ | ❌ |
+| **Receipt Printing** | ✅ | ✅ | ✅ (Print Agent) | ❌ |
+| **Kitchen Printing** | ✅ | ✅ | ✅ (Print Agent) | ❌ |
+| **KDS Display** | ✅ | ✅ | ⚠️ (limited) | ❌ |
+| **Employee Clock In/Out** | ✅ | ✅ | ✅ (local) | ✅ (local) |
+| **Manager Functions** | ✅ | ✅ | ⚠️ (limited) | ❌ |
+| **Reports** | ✅ | ✅ | ❌ | ❌ |
+| **Menu Changes** | ✅ | ❌ | ❌ | ❌ |
+| **Configuration** | ✅ | ❌ | ❌ | ❌ |
 
-### 6.2 RED Mode Limitations
+### 6.2 ORANGE Mode Capabilities (Service Host Down, LAN Active)
 
-When in RED mode (complete isolation), the browser operates with these restrictions:
+When the Service Host is down but the local network is still functioning:
 
-1. **Menu**: Only items cached in browser storage are available
-2. **Payments**: Cash only (no card processing possible)
+**What Works:**
+1. **Printing**: Local Print Agent on each workstation sends directly to network printers via TCP/IP
+2. **Card Payments**: Workstations with Payment App installed can process cards (if they have internet access)
+3. **Order Entry**: Full menu available from browser cache, orders queued in IndexedDB
+4. **Cash Payments**: Fully functional
+5. **Time Clock**: Employees can clock in/out (stored locally)
+
+**What Doesn't Work:**
+1. **Check Sharing**: Each workstation operates independently (no central CAPS)
+2. **Central KDS**: No coordinated kitchen routing (but see 6.2.1 for peer-to-peer option)
+3. **Gift Cards**: Require central validation
+4. **Centralized Reports**: No aggregated data until sync
+
+### 6.2.1 Peer-to-Peer KDS in ORANGE Mode
+
+For kitchen display, workstations can communicate directly:
+
+```
+┌──────────────────┐         ┌──────────────────┐
+│   POS Browser    │◄───────►│   KDS Browser    │
+│   (Workstation)  │  WebRTC │   (Kitchen)      │
+└──────────────────┘         └──────────────────┘
+
+1. POS discovers KDS via mDNS/local broadcast
+2. WebRTC data channel established
+3. Orders sent directly to KDS
+4. Bump status returned to POS
+```
+
+This provides basic KDS functionality without the Service Host, though without central coordination for multi-station kitchens.
+
+### 6.3 RED Mode Limitations (True Isolation)
+
+RED mode only occurs when there is **complete network failure** (no LAN, no internet). This is rare but the system handles it:
+
+1. **Menu**: Only items cached in browser IndexedDB
+2. **Payments**: Cash only (no network to card terminals)
 3. **Printing**: Not available (no network to printers)
-4. **Multi-workstation**: Each workstation operates independently
-5. **Check Numbers**: Uses locally-generated temporary numbers
+4. **Multi-workstation**: Each workstation fully independent
+5. **Check Numbers**: Uses locally-generated temporary numbers (offline range)
 6. **Data Sync**: All transactions queued for later sync
+
+**When Does TRUE RED Happen?**
+- Complete network switch/router failure
+- Building-wide power outage (except workstation on UPS)
+- All network cables disconnected
+- Catastrophic infrastructure failure
+
+In practice, ORANGE mode (Service Host down, LAN up) is far more common than TRUE RED.
 
 ### 6.3 Recovery from RED Mode
 
@@ -835,8 +1216,11 @@ Every 30 seconds:
 | **CAPS** | Check And Posting Service - manages order/payment transactions |
 | **CAL** | Client Application Loader - software deployment system |
 | **Service Host** | Local server providing offline services |
+| **Print Agent** | Lightweight per-workstation app for direct printing |
+| **Payment App** | Per-workstation gateway software for card processing |
 | **GREEN Mode** | Normal operation with cloud connectivity |
 | **YELLOW Mode** | Offline operation via Service Host |
+| **ORANGE Mode** | Service Host down, local agents active |
 | **RED Mode** | Complete isolation, browser-only operation |
 | **Sync Queue** | Buffer of transactions waiting to sync to cloud |
 
@@ -855,3 +1239,4 @@ See separate document: `TROUBLESHOOTING.md`
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-12 | Cloud POS Team | Initial specification |
+| 1.1 | 2026-01-12 | Cloud POS Team | Added ORANGE mode, distributed Print Agents, Payment Apps, enhanced resilience |
