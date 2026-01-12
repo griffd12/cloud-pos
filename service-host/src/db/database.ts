@@ -175,6 +175,24 @@ export class Database {
         created_at TEXT DEFAULT (datetime('now'))
       );
       
+      -- Check locks (for multi-workstation concurrency)
+      CREATE TABLE IF NOT EXISTS check_locks (
+        check_id TEXT PRIMARY KEY REFERENCES checks(id),
+        workstation_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        locked_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT NOT NULL
+      );
+      
+      -- Workstation check number ranges (for offline operation)
+      CREATE TABLE IF NOT EXISTS workstation_config (
+        workstation_id TEXT PRIMARY KEY,
+        check_number_start INTEGER NOT NULL,
+        check_number_end INTEGER NOT NULL,
+        current_check_number INTEGER NOT NULL,
+        last_seen TEXT DEFAULT (datetime('now'))
+      );
+      
       -- Indexes for performance
       CREATE INDEX IF NOT EXISTS idx_checks_status ON checks(status);
       CREATE INDEX IF NOT EXISTS idx_checks_employee ON checks(employee_id);
@@ -183,6 +201,7 @@ export class Database {
       CREATE INDEX IF NOT EXISTS idx_print_queue_status ON print_queue(status);
       CREATE INDEX IF NOT EXISTS idx_kds_tickets_status ON kds_tickets(status);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_attempts ON sync_queue(attempts);
+      CREATE INDEX IF NOT EXISTS idx_check_locks_expires ON check_locks(expires_at);
     `);
   }
   
@@ -314,6 +333,103 @@ export class Database {
   
   removeSyncItem(id: number): void {
     this.run('DELETE FROM sync_queue WHERE id = ?', [id]);
+  }
+  
+  // Check locking methods
+  acquireLock(checkId: string, workstationId: string, employeeId: string, durationSeconds: number = 300): boolean {
+    // Clean up expired locks first
+    this.run(
+      `DELETE FROM check_locks WHERE expires_at < datetime('now')`
+    );
+    
+    // Check if already locked by another workstation
+    const existing = this.get<{ workstation_id: string }>(
+      'SELECT workstation_id FROM check_locks WHERE check_id = ?',
+      [checkId]
+    );
+    
+    if (existing && existing.workstation_id !== workstationId) {
+      return false; // Locked by another workstation
+    }
+    
+    // Acquire or refresh the lock
+    const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+    this.run(
+      `INSERT OR REPLACE INTO check_locks (check_id, workstation_id, employee_id, locked_at, expires_at)
+       VALUES (?, ?, ?, datetime('now'), ?)`,
+      [checkId, workstationId, employeeId, expiresAt]
+    );
+    
+    return true;
+  }
+  
+  releaseLock(checkId: string, workstationId: string): void {
+    this.run(
+      'DELETE FROM check_locks WHERE check_id = ? AND workstation_id = ?',
+      [checkId, workstationId]
+    );
+  }
+  
+  getLock(checkId: string): { workstationId: string; employeeId: string; expiresAt: string } | null {
+    const row = this.get<{ workstation_id: string; employee_id: string; expires_at: string }>(
+      `SELECT workstation_id, employee_id, expires_at FROM check_locks 
+       WHERE check_id = ? AND expires_at > datetime('now')`,
+      [checkId]
+    );
+    
+    if (!row) return null;
+    
+    return {
+      workstationId: row.workstation_id,
+      employeeId: row.employee_id,
+      expiresAt: row.expires_at,
+    };
+  }
+  
+  releaseAllLocks(workstationId: string): void {
+    this.run('DELETE FROM check_locks WHERE workstation_id = ?', [workstationId]);
+  }
+  
+  // Workstation check number range methods
+  getWorkstationConfig(workstationId: string): { checkNumberStart: number; checkNumberEnd: number; currentCheckNumber: number } | null {
+    const row = this.get<{ check_number_start: number; check_number_end: number; current_check_number: number }>(
+      'SELECT check_number_start, check_number_end, current_check_number FROM workstation_config WHERE workstation_id = ?',
+      [workstationId]
+    );
+    
+    if (!row) return null;
+    
+    return {
+      checkNumberStart: row.check_number_start,
+      checkNumberEnd: row.check_number_end,
+      currentCheckNumber: row.current_check_number,
+    };
+  }
+  
+  setWorkstationConfig(workstationId: string, start: number, end: number, current?: number): void {
+    this.run(
+      `INSERT OR REPLACE INTO workstation_config (workstation_id, check_number_start, check_number_end, current_check_number, last_seen)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [workstationId, start, end, current || start]
+    );
+  }
+  
+  getNextCheckNumber(workstationId: string): number | null {
+    const config = this.getWorkstationConfig(workstationId);
+    if (!config) return null;
+    
+    if (config.currentCheckNumber > config.checkNumberEnd) {
+      return null; // Range exhausted
+    }
+    
+    const checkNumber = config.currentCheckNumber;
+    
+    this.run(
+      'UPDATE workstation_config SET current_check_number = current_check_number + 1, last_seen = datetime(\'now\') WHERE workstation_id = ?',
+      [workstationId]
+    );
+    
+    return checkNumber;
   }
   
   close(): void {

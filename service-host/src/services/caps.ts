@@ -17,6 +17,7 @@ export class CapsService {
   private db: Database;
   private transactionSync: TransactionSync;
   private checkNumberSequence: number = 1;
+  private defaultLockDuration: number = 300; // 5 minutes
   
   constructor(db: Database, transactionSync: TransactionSync) {
     this.db = db;
@@ -31,10 +32,86 @@ export class CapsService {
     }
   }
   
+  // ============================================================================
+  // CHECK LOCKING - Prevents multiple workstations from editing same check
+  // ============================================================================
+  
+  // Acquire lock on a check (required before editing)
+  acquireLock(checkId: string, workstationId: string, employeeId: string): { success: boolean; lockedBy?: string } {
+    const success = this.db.acquireLock(checkId, workstationId, employeeId, this.defaultLockDuration);
+    
+    if (!success) {
+      const lock = this.db.getLock(checkId);
+      return { success: false, lockedBy: lock?.workstationId };
+    }
+    
+    return { success: true };
+  }
+  
+  // Release lock on a check
+  releaseLock(checkId: string, workstationId: string): void {
+    this.db.releaseLock(checkId, workstationId);
+  }
+  
+  // Get current lock info
+  getLockInfo(checkId: string): { locked: boolean; workstationId?: string; employeeId?: string; expiresAt?: string } {
+    const lock = this.db.getLock(checkId);
+    if (!lock) {
+      return { locked: false };
+    }
+    return {
+      locked: true,
+      workstationId: lock.workstationId,
+      employeeId: lock.employeeId,
+      expiresAt: lock.expiresAt,
+    };
+  }
+  
+  // Release all locks for a workstation (on disconnect/logout)
+  releaseAllLocks(workstationId: string): void {
+    this.db.releaseAllLocks(workstationId);
+  }
+  
+  // Refresh lock (extend expiration)
+  refreshLock(checkId: string, workstationId: string, employeeId: string): boolean {
+    return this.db.acquireLock(checkId, workstationId, employeeId, this.defaultLockDuration);
+  }
+  
+  // Validate that workstation has lock before editing
+  private validateLock(checkId: string, workstationId?: string): void {
+    if (!workstationId) return; // Skip validation if no workstation ID provided
+    
+    const lock = this.db.getLock(checkId);
+    if (lock && lock.workstationId !== workstationId) {
+      throw new Error(`Check is locked by another workstation: ${lock.workstationId}`);
+    }
+  }
+  
+  // ============================================================================
+  // CHECK NUMBER RANGES - For offline operation without duplicates
+  // ============================================================================
+  
+  // Get next check number for a workstation (uses assigned range)
+  getNextCheckNumber(workstationId?: string): number {
+    if (workstationId) {
+      const rangeNumber = this.db.getNextCheckNumber(workstationId);
+      if (rangeNumber !== null) {
+        return rangeNumber;
+      }
+    }
+    // Fall back to global sequence
+    return this.checkNumberSequence++;
+  }
+  
+  // Configure check number range for a workstation
+  setCheckNumberRange(workstationId: string, start: number, end: number): void {
+    this.db.setWorkstationConfig(workstationId, start, end);
+  }
+  
   // Create a new check
   createCheck(params: CreateCheckParams): Check {
     const id = randomUUID();
-    const checkNumber = this.checkNumberSequence++;
+    const checkNumber = this.getNextCheckNumber(params.workstationId);
     
     this.db.run(
       `INSERT INTO checks (id, check_number, rvc_id, employee_id, order_type, table_number, guest_count, status)
@@ -99,10 +176,11 @@ export class CapsService {
   }
   
   // Add items to check
-  addItems(checkId: string, items: AddItemParams[]): CheckItem[] {
+  addItems(checkId: string, items: AddItemParams[], workstationId?: string): CheckItem[] {
     const check = this.getCheck(checkId);
     if (!check) throw new Error('Check not found');
     if (check.status !== 'open') throw new Error('Check is not open');
+    this.validateLock(checkId, workstationId);
     
     const addedItems: CheckItem[] = [];
     
@@ -159,9 +237,10 @@ export class CapsService {
   }
   
   // Send items to kitchen (fire current round)
-  sendToKitchen(checkId: string): { roundNumber: number; itemsSent: number } {
+  sendToKitchen(checkId: string, workstationId?: string): { roundNumber: number; itemsSent: number } {
     const check = this.getCheck(checkId);
     if (!check) throw new Error('Check not found');
+    this.validateLock(checkId, workstationId);
     
     // Mark unsent items as sent
     const result = this.db.run(
@@ -183,10 +262,11 @@ export class CapsService {
   }
   
   // Void an item
-  voidItem(checkId: string, itemId: string, reason?: string): void {
+  voidItem(checkId: string, itemId: string, reason?: string, workstationId?: string): void {
     const check = this.getCheck(checkId);
     if (!check) throw new Error('Check not found');
     if (check.status !== 'open') throw new Error('Check is not open');
+    this.validateLock(checkId, workstationId);
     
     this.db.run(
       'UPDATE check_items SET voided = 1, void_reason = ? WHERE id = ? AND check_id = ?',
@@ -197,10 +277,11 @@ export class CapsService {
   }
   
   // Add payment to check
-  addPayment(checkId: string, params: AddPaymentParams): Payment {
+  addPayment(checkId: string, params: AddPaymentParams, workstationId?: string): Payment {
     const check = this.getCheck(checkId);
     if (!check) throw new Error('Check not found');
     if (check.status !== 'open') throw new Error('Check is not open');
+    this.validateLock(checkId, workstationId);
     
     const id = randomUUID();
     
@@ -234,7 +315,8 @@ export class CapsService {
   }
   
   // Close check
-  closeCheck(checkId: string): void {
+  closeCheck(checkId: string, workstationId?: string): void {
+    this.validateLock(checkId, workstationId);
     this.db.run(
       `UPDATE checks SET status = 'closed', closed_at = datetime('now') WHERE id = ?`,
       [checkId]
@@ -245,9 +327,10 @@ export class CapsService {
   }
   
   // Void entire check
-  voidCheck(checkId: string, reason?: string): void {
+  voidCheck(checkId: string, reason?: string, workstationId?: string): void {
     const check = this.getCheck(checkId);
     if (!check) throw new Error('Check not found');
+    this.validateLock(checkId, workstationId);
     
     this.db.run(
       `UPDATE checks SET status = 'voided', closed_at = datetime('now') WHERE id = ?`,
@@ -339,6 +422,7 @@ export class CapsService {
 interface CreateCheckParams {
   rvcId: string;
   employeeId: string;
+  workstationId?: string;
   orderType?: string;
   tableNumber?: string;
   guestCount?: number;

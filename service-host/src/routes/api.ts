@@ -66,17 +66,23 @@ export function createApiRoutes(
   // Add items to check
   router.post('/caps/checks/:id/items', (req, res) => {
     try {
-      const items = caps.addItems(req.params.id, req.body.items || [req.body]);
+      const { workstationId } = req.body;
+      const items = caps.addItems(req.params.id, req.body.items || [req.body], workstationId);
       res.json({ items });
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const error = e as Error;
+      if (error.message.includes('locked by another')) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(400).json({ error: error.message });
     }
   });
   
   // Send to kitchen
   router.post('/caps/checks/:id/send', (req, res) => {
     try {
-      const result = caps.sendToKitchen(req.params.id);
+      const { workstationId } = req.body;
+      const result = caps.sendToKitchen(req.params.id, workstationId);
       
       // Also create KDS ticket
       const check = caps.getCheck(req.params.id);
@@ -106,37 +112,146 @@ export function createApiRoutes(
   // Void an item
   router.post('/caps/checks/:id/items/:itemId/void', (req, res) => {
     try {
-      caps.voidItem(req.params.id, req.params.itemId, req.body.reason);
+      const { reason, workstationId } = req.body;
+      caps.voidItem(req.params.id, req.params.itemId, reason, workstationId);
       res.json({ success: true });
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const error = e as Error;
+      if (error.message.includes('locked by another')) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(400).json({ error: error.message });
     }
   });
   
   // Add payment
   router.post('/caps/checks/:id/pay', (req, res) => {
     try {
-      const payment = caps.addPayment(req.params.id, req.body);
+      const { workstationId, ...paymentParams } = req.body;
+      const payment = caps.addPayment(req.params.id, paymentParams, workstationId);
       res.json(payment);
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const error = e as Error;
+      if (error.message.includes('locked by another')) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(400).json({ error: error.message });
     }
   });
   
   // Close check
   router.post('/caps/checks/:id/close', (req, res) => {
     try {
-      caps.closeCheck(req.params.id);
+      const { workstationId } = req.body;
+      caps.closeCheck(req.params.id, workstationId);
       res.json({ success: true });
     } catch (e) {
-      res.status(400).json({ error: (e as Error).message });
+      const error = e as Error;
+      if (error.message.includes('locked by another')) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(400).json({ error: error.message });
     }
   });
   
   // Void check
   router.post('/caps/checks/:id/void', (req, res) => {
     try {
-      caps.voidCheck(req.params.id, req.body.reason);
+      const { reason, workstationId } = req.body;
+      caps.voidCheck(req.params.id, reason, workstationId);
+      res.json({ success: true });
+    } catch (e) {
+      const error = e as Error;
+      if (error.message.includes('locked by another')) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(400).json({ error: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // CHECK LOCKING - Multi-workstation concurrency control
+  // ============================================================================
+  
+  // Acquire lock on a check
+  router.post('/caps/checks/:id/lock', (req, res) => {
+    try {
+      const { workstationId, employeeId } = req.body;
+      if (!workstationId || !employeeId) {
+        return res.status(400).json({ error: 'workstationId and employeeId required' });
+      }
+      const result = caps.acquireLock(req.params.id, workstationId, employeeId);
+      if (!result.success) {
+        return res.status(409).json({ 
+          error: 'Check is locked by another workstation',
+          lockedBy: result.lockedBy 
+        });
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Release lock on a check
+  router.post('/caps/checks/:id/unlock', (req, res) => {
+    try {
+      const { workstationId } = req.body;
+      if (!workstationId) {
+        return res.status(400).json({ error: 'workstationId required' });
+      }
+      caps.releaseLock(req.params.id, workstationId);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get lock info for a check
+  router.get('/caps/checks/:id/lock', (req, res) => {
+    try {
+      const info = caps.getLockInfo(req.params.id);
+      res.json(info);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Refresh lock (extend expiration)
+  router.post('/caps/checks/:id/lock/refresh', (req, res) => {
+    try {
+      const { workstationId, employeeId } = req.body;
+      if (!workstationId || !employeeId) {
+        return res.status(400).json({ error: 'workstationId and employeeId required' });
+      }
+      const success = caps.refreshLock(req.params.id, workstationId, employeeId);
+      if (!success) {
+        return res.status(409).json({ error: 'Could not refresh lock' });
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Release all locks for a workstation (on disconnect)
+  router.post('/caps/workstation/:workstationId/release-locks', (req, res) => {
+    try {
+      caps.releaseAllLocks(req.params.workstationId);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Configure check number range for a workstation
+  router.post('/caps/workstation/:workstationId/check-range', (req, res) => {
+    try {
+      const { start, end } = req.body;
+      if (typeof start !== 'number' || typeof end !== 'number') {
+        return res.status(400).json({ error: 'start and end numbers required' });
+      }
+      caps.setCheckNumberRange(req.params.workstationId, start, end);
       res.json({ success: true });
     } catch (e) {
       res.status(400).json({ error: (e as Error).message });
