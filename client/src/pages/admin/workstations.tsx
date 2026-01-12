@@ -117,11 +117,9 @@ export default function WorkstationsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: Workstation) => {
-      console.log("Sending update request with data:", data);
       const response = await apiRequest("PUT", "/api/workstations/" + data.id, data);
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Update failed:", response.status, errorText);
         throw new Error(errorText);
       }
       return response.json();
@@ -133,7 +131,6 @@ export default function WorkstationsPage() {
       toast({ title: "Workstation updated" });
     },
     onError: (error) => {
-      console.error("Update mutation error:", error);
       toast({ title: "Failed to update workstation", description: error.message, variant: "destructive" });
     },
   });
@@ -227,10 +224,13 @@ function ServiceControllersSection({ workstationId, workstationName, propertyId,
   const { data: bindings = [], isLoading } = useQuery<WorkstationServiceBinding[]>({
     queryKey: ["/api/workstation-service-bindings", propertyId],
     queryFn: async () => {
-      const res = await fetch(`/api/workstation-service-bindings?propertyId=${propertyId}`);
+      const res = await fetch(`/api/workstation-service-bindings?propertyId=${propertyId}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch service bindings");
       return res.json();
     },
+    enabled: !!propertyId,
   });
 
   const createBindingMutation = useMutation({
@@ -513,7 +513,6 @@ function WorkstationFormDialog({
   };
 
   const handleSubmit = (data: InsertWorkstation) => {
-    console.log("Form submitted with data:", data);
     const cleanedData = {
       ...data,
       rvcId: cleanPrinterId(data.rvcId),
@@ -524,22 +523,8 @@ function WorkstationFormDialog({
       voidPrinterId: cleanPrinterId(data.voidPrinterId),
       backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
     };
-    console.log("Cleaned data:", cleanedData);
     onSubmit(cleanedData);
   };
-  
-  // Log form errors for debugging
-  useEffect(() => {
-    const errors = form.formState.errors;
-    if (Object.keys(errors).length > 0) {
-      console.log("Form validation errors:", errors);
-    }
-  }, [form.formState.errors]);
-  
-  // Debug: Log when form state changes
-  useEffect(() => {
-    console.log("Form isValid:", form.formState.isValid, "isSubmitting:", form.formState.isSubmitting, "isSubmitted:", form.formState.isSubmitted);
-  }, [form.formState.isValid, form.formState.isSubmitting, form.formState.isSubmitted]);
 
   const PrinterSelectField = ({ 
     name, 

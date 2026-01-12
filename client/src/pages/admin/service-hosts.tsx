@@ -161,11 +161,30 @@ export default function ServiceHostsPage() {
         const error = await res.json();
         throw new Error(error.error || "Failed to create service host");
       }
-      return res.json() as Promise<CreatedServiceHost>;
+      const createdHost = await res.json() as CreatedServiceHost;
+      
+      // If a workstation was selected, create service bindings for each service
+      if (data.workstationId && data.workstationId !== "__none__" && data.services.length > 0) {
+        for (const serviceType of data.services) {
+          try {
+            await apiRequest("POST", "/api/workstation-service-bindings", {
+              propertyId: data.propertyId,
+              workstationId: data.workstationId,
+              serviceType,
+              active: true,
+            });
+          } catch (e) {
+            console.log(`Could not assign ${serviceType} - may already be assigned`);
+          }
+        }
+      }
+      
+      return createdHost;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-hosts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstation-service-bindings"] });
       setCreateDialogOpen(false);
       setCreatedHost(data);
       setTokenDialogOpen(true);
@@ -698,6 +717,7 @@ export default function ServiceHostsPage() {
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
         properties={properties}
+        workstations={workstations}
         onSubmit={(data) => createServiceHostMutation.mutate(data)}
         isLoading={createServiceHostMutation.isPending}
       />
@@ -784,19 +804,25 @@ interface CreateServiceHostDialogProps {
   open: boolean;
   onClose: () => void;
   properties: Property[];
+  workstations: Workstation[];
   onSubmit: (data: ServiceHostFormData) => void;
   isLoading: boolean;
 }
 
-function CreateServiceHostDialog({ open, onClose, properties, onSubmit, isLoading }: CreateServiceHostDialogProps) {
+function CreateServiceHostDialog({ open, onClose, properties, workstations, onSubmit, isLoading }: CreateServiceHostDialogProps) {
   const form = useForm<ServiceHostFormData>({
     resolver: zodResolver(serviceHostFormSchema),
     defaultValues: {
       name: "",
       propertyId: "",
+      workstationId: "",
       services: ["caps"],
     },
   });
+
+  const selectedPropertyId = form.watch("propertyId");
+  
+  const filteredWorkstations = workstations.filter(ws => ws.propertyId === selectedPropertyId);
 
   const handleSubmit = (data: ServiceHostFormData) => {
     onSubmit(data);
@@ -811,11 +837,11 @@ function CreateServiceHostDialog({ open, onClose, properties, onSubmit, isLoadin
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Register Service Host</DialogTitle>
           <DialogDescription>
-            Register a new on-premise Service Host. You'll receive authentication credentials to configure the host.
+            Register a new on-premise Service Host. You'll receive authentication credentials and the selected services will be assigned to the workstation.
           </DialogDescription>
         </DialogHeader>
 
@@ -842,7 +868,10 @@ function CreateServiceHostDialog({ open, onClose, properties, onSubmit, isLoadin
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Property</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={(value) => {
+                    field.onChange(value);
+                    form.setValue("workstationId", "");
+                  }} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-property">
                         <SelectValue placeholder="Select a property" />
@@ -861,6 +890,37 @@ function CreateServiceHostDialog({ open, onClose, properties, onSubmit, isLoadin
                 </FormItem>
               )}
             />
+
+            {selectedPropertyId && (
+              <FormField
+                control={form.control}
+                name="workstationId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Controller Workstation (Optional)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-workstation">
+                          <SelectValue placeholder="Select a workstation" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">None - Configure later</SelectItem>
+                        {filteredWorkstations.map((ws) => (
+                          <SelectItem key={ws.id} value={ws.id}>
+                            {ws.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Select a workstation to automatically assign the services below, or configure later in Workstations.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
