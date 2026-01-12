@@ -169,3 +169,18 @@ The cloud system now includes sync endpoints for Service Host communication:
 **Authentication:**
 - Service Hosts authenticate via token stored in `service_hosts.authToken`
 - Token sent via `Authorization: Bearer {token}` header or `x-service-host-token` header
+
+### Phase 5: Testing Infrastructure (Complete)
+- **Test Plan**: `docs/V2_PHASE5_TEST_PLAN.md` - Multi-workstation topology and connection mode test matrix
+- **Connection Mode Context**: `client/src/contexts/connection-mode-context.tsx` - GREEN/YELLOW/ORANGE/RED mode tracking
+- **Check Locking**: Browser hook `client/src/hooks/use-check-lock.ts` with 5-minute expiration and auto-refresh
+- **Troubleshooting**: `docs/V2_TROUBLESHOOTING.md` - Comprehensive operations guide
+
+### Phase 6: Agent Hardening (Complete)
+Service Host resilience and monitoring utilities:
+- **Structured Logging**: `service-host/src/utils/logger.ts` - JSON logs, file rotation, cloud reporting
+- **Retry with Backoff**: `service-host/src/utils/retry.ts` - Exponential backoff, circuit breaker pattern
+- **Health Monitoring**: `service-host/src/utils/health.ts` - Service health checks, CPU/memory/disk metrics
+- **Rate Limiting**: `service-host/src/middleware/rate-limiter.ts` - Per-IP/workstation limits with burst allowance
+- **Request Validation**: `service-host/src/middleware/validation.ts` - Schema validation, input sanitization
+- **Self-Healing**: `service-host/src/utils/recovery.ts` - Auto-recovery, graceful degradation, service state tracking
