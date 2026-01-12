@@ -16207,10 +16207,12 @@ connect();
   app.get("/api/workstation-service-bindings", async (req, res) => {
     try {
       const { propertyId } = req.query;
-      if (!propertyId) {
-        return res.status(400).json({ error: "propertyId is required" });
+      let bindings;
+      if (propertyId) {
+        bindings = await storage.getWorkstationServiceBindings(propertyId as string);
+      } else {
+        bindings = await storage.getAllWorkstationServiceBindings();
       }
-      const bindings = await storage.getWorkstationServiceBindings(propertyId as string);
       res.json(bindings);
     } catch (error) {
       console.error("Error fetching service bindings:", error);

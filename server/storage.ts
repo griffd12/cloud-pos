@@ -806,6 +806,7 @@ export interface IStorage {
   // ============================================================================
   
   getWorkstationServiceBindings(propertyId: string): Promise<WorkstationServiceBinding[]>;
+  getAllWorkstationServiceBindings(): Promise<WorkstationServiceBinding[]>;
   getWorkstationServiceBinding(id: string): Promise<WorkstationServiceBinding | undefined>;
   getServiceBindingByType(propertyId: string, serviceType: string): Promise<WorkstationServiceBinding | undefined>;
   createWorkstationServiceBinding(data: InsertWorkstationServiceBinding): Promise<WorkstationServiceBinding>;
@@ -5447,6 +5448,10 @@ export class DatabaseStorage implements IStorage {
     return db.select()
       .from(workstationServiceBindings)
       .where(eq(workstationServiceBindings.propertyId, propertyId));
+  }
+
+  async getAllWorkstationServiceBindings(): Promise<WorkstationServiceBinding[]> {
+    return db.select().from(workstationServiceBindings);
   }
 
   async getWorkstationServiceBinding(id: string): Promise<WorkstationServiceBinding | undefined> {
