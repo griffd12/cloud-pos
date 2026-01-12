@@ -40,29 +40,47 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 > **Important**: Complete all EMC steps BEFORE installing the Service Host on-premise.
 
 ### 2.1 Register Service Host in EMC
+
+> **Note**: Service Host registration and Workstation Service Bindings are two separate but related steps:
+> - **Step 2.1** registers the on-premise Service Host software and generates authentication credentials
+> - **Step 2.2** configures which services (CAPS, Print, KDS, Payment) run on which workstations
+> Both steps must be completed for full functionality.
+
 1. [ ] Log into EMC as Enterprise Administrator
-2. [ ] Navigate to **Admin > Service Hosts**
-3. [ ] Click **Configuration** tab
-4. [ ] Click **Add Service Host** button
-5. [ ] Fill in Service Host details:
-   - Name: (e.g., "Store-001 Primary Host")
-   - Property: Select the pilot property
-   - Host Type: Primary
-   - IP Address: Local IP of on-premise server
-6. [ ] Click **Create**
-7. [ ] **IMPORTANT**: Copy and securely save the **Authentication Token**
-   - This token is shown only once!
-   - Token: ________________________________
+2. [ ] Navigate to **Admin > Service Hosts** (left sidebar under Admin section)
+3. [ ] Click the **Configuration** tab
+4. [ ] Click the **"Register Service Host"** button (top right of Registered Service Hosts card)
+5. [ ] Fill in the registration form:
+   - **Host Name**: e.g., "Store-001 Primary Host"
+   - **Property**: Select the pilot property from dropdown
+   - **Services**: Check the boxes for services this host will provide:
+     - [ ] CAPS (Check & Posting Service) - Required for offline transaction processing
+     - [ ] Print Controller - For local network printer routing
+     - [ ] KDS Controller - For local kitchen display management
+     - [ ] Payment Controller - For local payment device communication
+6. [ ] Click **"Register Host"**
+7. [ ] **CRITICAL**: A dialog will appear with credentials. Copy and save ALL three values:
+   - Service Host ID: ________________________________
+   - Registration Token: ________________________________
+   - Encryption Key: ________________________________
+   - **These credentials are shown ONLY ONCE and cannot be retrieved later!**
+8. [ ] Click "I've Saved These Credentials" to close the dialog
 
 ### 2.2 Configure Workstation Service Bindings
-1. [ ] Navigate to **Admin > Workstations**
-2. [ ] Select the workstation that will run Service Host
-3. [ ] In Service Bindings section, enable:
-   - [ ] CAPS (Check And Posting Service) - Required
-   - [ ] Print Controller - If using network printers
-   - [ ] KDS Controller - If using kitchen displays
-   - [ ] Payment Controller - If processing payments locally
-4. [ ] Click **Save**
+
+> **Required Step**: After registering the Service Host, you must also configure which workstation runs the services.
+
+1. [ ] Navigate to **Admin > Workstations** (left sidebar under Admin section)
+2. [ ] Click on an existing workstation to **Edit** it (or create a new workstation first)
+3. [ ] Scroll down to the **"Service Controllers"** section
+4. [ ] Toggle ON the services this workstation should provide:
+   - [ ] CAPS (Check & Posting) - Handles check processing
+   - [ ] Print Controller - Manages kitchen and receipt printing
+   - [ ] KDS Controller - Controls Kitchen Display Systems
+   - [ ] Payment Controller - Processes payment transactions
+5. [ ] Note: Each service can only be assigned to ONE workstation per property
+6. [ ] Click **Save**
+7. [ ] Verify the workstation now appears in the **Service Hosts > Configuration** tab under "Workstations with Service Controller Bindings"
 
 ### 2.3 Configure Print Agents (if using network printers)
 1. [ ] Navigate to **Admin > Print Agents**

@@ -115,6 +115,7 @@ interface DashboardData {
 const serviceHostFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   propertyId: z.string().min(1, "Property is required"),
+  workstationId: z.string().optional(),
   services: z.array(z.string()).min(1, "Select at least one service"),
 });
 
