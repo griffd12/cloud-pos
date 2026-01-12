@@ -65,8 +65,9 @@ import { formatDistanceToNow } from "date-fns";
 interface ServiceBinding {
   id: string;
   workstationId: string;
+  propertyId: string;
   serviceType: string;
-  isActive: boolean;
+  active: boolean;
 }
 
 interface WorkstationWithProperty extends Workstation {
@@ -215,21 +216,28 @@ export default function ServiceHostsPage() {
   };
 
   const workstationsWithServiceHost = workstations.filter(ws => {
-    const bindings = allBindings.filter(b => b.workstationId === ws.id);
+    const bindings = allBindings.filter(b => b.workstationId === ws.id && b.active);
     return bindings.some(b => b.serviceType === "caps" || b.serviceType === "print_controller" || 
                              b.serviceType === "kds_controller" || b.serviceType === "payment_controller");
   });
 
   const getServiceBindingsForWorkstation = (workstationId: string) => {
-    return allBindings.filter(b => b.workstationId === workstationId);
+    const bindings = allBindings.filter(b => b.workstationId === workstationId && b.active);
+    // Deduplicate by serviceType (keep first occurrence)
+    const uniqueBindings = bindings.reduce((acc, binding) => {
+      if (!acc.find(b => b.serviceType === binding.serviceType)) {
+        acc.push(binding);
+      }
+      return acc;
+    }, [] as ServiceBinding[]);
+    return uniqueBindings;
   };
 
   const getStatusBadge = (bindings: ServiceBinding[]) => {
-    const activeServices = bindings.filter(b => b.isActive);
-    if (activeServices.length === 0) {
+    if (bindings.length === 0) {
       return <Badge variant="outline" className="text-muted-foreground">No Services</Badge>;
     }
-    return <Badge className="bg-green-600">{activeServices.length} Active</Badge>;
+    return <Badge className="bg-green-600">{bindings.length} Active</Badge>;
   };
 
   const getServiceLabel = (serviceType: string) => {
