@@ -16089,6 +16089,374 @@ connect();
     }
   });
 
+  // ============================================================================
+  // System Status API - Device Management and Monitoring
+  // ============================================================================
+
+  // GET /api/system-status/property/:propertyId - Get full property system status
+  app.get("/api/system-status/property/:propertyId", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found" });
+      }
+
+      // Get all devices for this property
+      const [serviceHosts, workstations, printers, kdsDevices, printAgents] = await Promise.all([
+        storage.getServiceHosts(propertyId),
+        storage.getWorkstations().then(all => all.filter(w => w.propertyId === propertyId)),
+        storage.getPrinters().then(all => all.filter(p => p.propertyId === propertyId)),
+        storage.getKdsDevices().then(all => all.filter(k => k.propertyId === propertyId)),
+        storage.getPrintAgents ? storage.getPrintAgents(propertyId) : Promise.resolve([]),
+      ]);
+
+      // Calculate overall mode based on device statuses
+      const now = new Date();
+      const staleThreshold = 60000; // 60 seconds
+      
+      const serviceHostStatuses = serviceHosts.map(sh => {
+        const lastHeartbeat = sh.lastHeartbeatAt ? new Date(sh.lastHeartbeatAt) : null;
+        const isStale = !lastHeartbeat || (now.getTime() - lastHeartbeat.getTime()) > staleThreshold;
+        return {
+          id: sh.id,
+          name: sh.name,
+          type: 'service_host' as const,
+          status: isStale ? 'offline' : (sh.status === 'online' ? 'online' : 'degraded'),
+          propertyId: sh.propertyId,
+          version: sh.version || '1.0.0',
+          cloudConnected: !isStale,
+          uptime: 0,
+          workstationCount: workstations.length,
+          pendingTransactions: sh.pendingTransactions || 0,
+          lastSeen: sh.lastHeartbeatAt || sh.createdAt,
+          lastConfigSync: sh.lastSyncAt,
+        };
+      });
+
+      const workstationStatuses = workstations.map(ws => {
+        // Determine status based on lastSeenAt and isOnline
+        const lastSeen = ws.lastSeenAt ? new Date(ws.lastSeenAt) : null;
+        const isStale = !lastSeen || (now.getTime() - lastSeen.getTime()) > staleThreshold;
+        let status: 'online' | 'offline' | 'degraded' | 'unknown' = 'unknown';
+        
+        if (!ws.active) {
+          status = 'offline';
+        } else if (ws.isOnline && !isStale) {
+          status = 'online';
+        } else if (isStale && lastSeen) {
+          status = 'degraded';
+        } else {
+          status = 'offline';
+        }
+        
+        return {
+          id: ws.id,
+          name: ws.name,
+          type: 'workstation' as const,
+          status,
+          propertyId: ws.propertyId,
+          rvcId: ws.rvcId,
+          ipAddress: ws.ipAddress,
+          connectionMode: (ws.isOnline ? 'green' : 'yellow') as 'green' | 'yellow' | 'orange' | 'red',
+          checkCount: 0, // Would need to aggregate from checks table
+          pendingSyncCount: 0, // Would need workstation-specific sync tracking
+          lastSeen: ws.lastSeenAt?.toISOString() || null,
+        };
+      });
+
+      // Get print job stats for printers
+      const printJobStats = await storage.getPrintJobsByProperty ? 
+        await storage.getPrintJobsByProperty(propertyId) : [];
+      
+      const printerStatuses = printers.map(p => {
+        const lastSeen = p.lastSeenAt ? new Date(p.lastSeenAt) : null;
+        const isStale = !lastSeen || (now.getTime() - lastSeen.getTime()) > staleThreshold;
+        let status: 'online' | 'offline' | 'degraded' | 'unknown' = 'unknown';
+        
+        if (!p.active) {
+          status = 'offline';
+        } else if (p.isOnline && !isStale) {
+          status = 'online';
+        } else if (isStale && lastSeen) {
+          status = 'degraded';
+        } else {
+          status = 'offline';
+        }
+        
+        // Aggregate job counts for this printer
+        const printerJobs = Array.isArray(printJobStats) ? 
+          printJobStats.filter((job: any) => job.printerId === p.id) : [];
+        const queuedJobs = printerJobs.filter((j: any) => j.status === 'pending').length;
+        const completedJobs = printerJobs.filter((j: any) => j.status === 'completed').length;
+        const failedJobs = printerJobs.filter((j: any) => j.status === 'failed').length;
+        
+        return {
+          id: p.id,
+          name: p.name,
+          type: 'printer' as const,
+          status,
+          propertyId: p.propertyId,
+          ipAddress: p.ipAddress,
+          port: p.port || 9100,
+          printerType: p.printerType || 'receipt',
+          queuedJobs,
+          completedJobs,
+          failedJobs,
+          lastSeen: p.lastSeenAt?.toISOString() || null,
+        };
+      });
+
+      const kdsStatuses = kdsDevices.map(k => {
+        // KDS devices may have similar tracking fields
+        const kdsAny = k as any;
+        const lastSeen = kdsAny.lastSeenAt ? new Date(kdsAny.lastSeenAt) : null;
+        const isStale = !lastSeen || (now.getTime() - lastSeen.getTime()) > staleThreshold;
+        const isActive = kdsAny.active !== false;
+        
+        let status: 'online' | 'offline' | 'degraded' | 'unknown' = 'unknown';
+        if (!isActive) {
+          status = 'offline';
+        } else if (kdsAny.isOnline && !isStale) {
+          status = 'online';
+        } else if (lastSeen && !isStale) {
+          status = 'online';
+        } else if (isStale && lastSeen) {
+          status = 'degraded';
+        } else {
+          // If no tracking, assume online if active
+          status = isActive ? 'online' : 'offline';
+        }
+        
+        return {
+          id: k.id,
+          name: k.name,
+          type: 'kds' as const,
+          status,
+          propertyId: k.propertyId,
+          stationName: k.name,
+          activeTickets: 0, // Would need KDS ticket aggregation
+          lastSeen: kdsAny.lastSeenAt?.toISOString() || null,
+        };
+      });
+
+      // Determine overall mode
+      const hasOnlineServiceHost = serviceHostStatuses.some(sh => sh.status === 'online');
+      const allPrintersOnline = printerStatuses.every(p => p.status === 'online');
+      
+      let overallMode: 'green' | 'yellow' | 'orange' | 'red' = 'green';
+      if (!hasOnlineServiceHost && serviceHosts.length > 0) {
+        overallMode = 'red';
+      } else if (!allPrintersOnline) {
+        overallMode = 'yellow';
+      }
+
+      // Generate alerts
+      const alerts: any[] = [];
+      
+      serviceHostStatuses.forEach(sh => {
+        if (sh.status === 'offline') {
+          alerts.push({
+            id: `sh-offline-${sh.id}`,
+            severity: 'critical',
+            deviceId: sh.id,
+            deviceName: sh.name,
+            deviceType: 'service_host',
+            message: 'Service Host is offline - no heartbeat received',
+            timestamp: new Date().toISOString(),
+            acknowledged: false,
+          });
+        }
+      });
+
+      printerStatuses.forEach(p => {
+        if (p.status === 'offline') {
+          alerts.push({
+            id: `printer-offline-${p.id}`,
+            severity: 'warning',
+            deviceId: p.id,
+            deviceName: p.name,
+            deviceType: 'printer',
+            message: 'Printer is offline',
+            timestamp: new Date().toISOString(),
+            acknowledged: false,
+          });
+        } else if (p.status === 'degraded') {
+          alerts.push({
+            id: `printer-degraded-${p.id}`,
+            severity: 'info',
+            deviceId: p.id,
+            deviceName: p.name,
+            deviceType: 'printer',
+            message: 'Printer has not reported recently',
+            timestamp: new Date().toISOString(),
+            acknowledged: false,
+          });
+        }
+      });
+      
+      // Add workstation alerts
+      workstationStatuses.forEach(ws => {
+        if (ws.status === 'offline') {
+          alerts.push({
+            id: `ws-offline-${ws.id}`,
+            severity: 'warning',
+            deviceId: ws.id,
+            deviceName: ws.name,
+            deviceType: 'workstation',
+            message: 'Workstation is offline',
+            timestamp: new Date().toISOString(),
+            acknowledged: false,
+          });
+        } else if (ws.status === 'degraded') {
+          alerts.push({
+            id: `ws-degraded-${ws.id}`,
+            severity: 'info',
+            deviceId: ws.id,
+            deviceName: ws.name,
+            deviceType: 'workstation',
+            message: 'Workstation has not reported recently',
+            timestamp: new Date().toISOString(),
+            acknowledged: false,
+          });
+        }
+      });
+
+      res.json({
+        propertyId,
+        propertyName: property.name,
+        overallMode,
+        serviceHosts: serviceHostStatuses,
+        workstations: workstationStatuses,
+        printers: printerStatuses,
+        kdsDevices: kdsStatuses,
+        printAgents: [],
+        paymentTerminals: [],
+        lastUpdated: new Date().toISOString(),
+        alerts,
+      });
+    } catch (error: any) {
+      console.error("Error fetching property system status:", error);
+      res.status(500).json({ error: "Failed to fetch system status" });
+    }
+  });
+
+  // GET /api/system-status/enterprise/:enterpriseId - Get enterprise-wide system status
+  app.get("/api/system-status/enterprise/:enterpriseId", async (req, res) => {
+    try {
+      const { enterpriseId } = req.params;
+      
+      const enterprise = await storage.getEnterprise(enterpriseId);
+      if (!enterprise) {
+        return res.status(404).json({ error: "Enterprise not found" });
+      }
+
+      const properties = await storage.getProperties(enterpriseId);
+      
+      // Get summary status for each property
+      const propertyStatuses = await Promise.all(
+        properties.map(async (property) => {
+          const [serviceHosts, workstations, printers] = await Promise.all([
+            storage.getServiceHosts(property.id),
+            storage.getWorkstations().then(all => all.filter(w => w.propertyId === property.id)),
+            storage.getPrinters().then(all => all.filter(p => p.propertyId === property.id)),
+          ]);
+
+          const now = new Date();
+          const staleThreshold = 60000;
+          
+          const hasOnlineServiceHost = serviceHosts.some(sh => {
+            const lastHeartbeat = sh.lastHeartbeatAt ? new Date(sh.lastHeartbeatAt) : null;
+            return lastHeartbeat && (now.getTime() - lastHeartbeat.getTime()) < staleThreshold;
+          });
+
+          let mode: 'green' | 'yellow' | 'orange' | 'red' = 'green';
+          if (!hasOnlineServiceHost && serviceHosts.length > 0) {
+            mode = 'red';
+          }
+
+          const offlineDevices = 
+            serviceHosts.filter(sh => {
+              const lastHeartbeat = sh.lastHeartbeatAt ? new Date(sh.lastHeartbeatAt) : null;
+              return !lastHeartbeat || (now.getTime() - lastHeartbeat.getTime()) > staleThreshold;
+            }).length +
+            printers.filter(p => p.isActive === false).length;
+
+          return {
+            propertyId: property.id,
+            propertyName: property.name,
+            mode,
+            serviceHostCount: serviceHosts.length,
+            workstationCount: workstations.length,
+            printerCount: printers.length,
+            offlineDeviceCount: offlineDevices,
+            alertCount: offlineDevices,
+          };
+        })
+      );
+
+      // Calculate enterprise-wide stats
+      const totalDevices = propertyStatuses.reduce((sum, p) => 
+        sum + p.serviceHostCount + p.workstationCount + p.printerCount, 0);
+      const totalOffline = propertyStatuses.reduce((sum, p) => sum + p.offlineDeviceCount, 0);
+      const worstMode = propertyStatuses.reduce((worst, p) => {
+        const modeOrder = { green: 0, yellow: 1, orange: 2, red: 3 };
+        return modeOrder[p.mode] > modeOrder[worst] ? p.mode : worst;
+      }, 'green' as 'green' | 'yellow' | 'orange' | 'red');
+
+      res.json({
+        enterpriseId,
+        enterpriseName: enterprise.name,
+        overallMode: worstMode,
+        totalProperties: properties.length,
+        totalDevices,
+        totalOffline,
+        properties: propertyStatuses,
+        lastUpdated: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("Error fetching enterprise system status:", error);
+      res.status(500).json({ error: "Failed to fetch enterprise system status" });
+    }
+  });
+
+  // POST /api/system-status/workstation/heartbeat - Workstation heartbeat for FOH
+  app.post("/api/system-status/workstation/heartbeat", async (req, res) => {
+    try {
+      const { 
+        workstationId, 
+        connectionMode, 
+        pendingSyncCount, 
+        checkCount,
+        employeeId,
+        ipAddress,
+      } = req.body;
+
+      if (!workstationId) {
+        return res.status(400).json({ error: "workstationId is required" });
+      }
+
+      // Update workstation status in database
+      const workstation = await storage.getWorkstation(workstationId);
+      if (workstation) {
+        await storage.updateWorkstation(workstationId, {
+          isOnline: true,
+          lastSeenAt: new Date(),
+          ipAddress: ipAddress || workstation.ipAddress,
+        });
+      }
+
+      res.json({
+        acknowledged: true,
+        serverTime: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("Workstation heartbeat error:", error);
+      res.status(500).json({ error: "Heartbeat failed" });
+    }
+  });
+
   // CAL Package Download - for Service Hosts to download packages
   app.get("/api/cal-package-versions/:id/download", async (req, res) => {
     try {
