@@ -162,6 +162,62 @@ function broadcastMenuUpdate() {
   broadcastPosEvent({ type: "menu_update" });
 }
 
+// Send device status event directly to WebSocket channel (flat format for frontend)
+function broadcastDeviceStatusDirect(channel: string, event: Record<string, any>) {
+  const channelClients = clients.get(channel);
+  if (channelClients) {
+    const message = JSON.stringify(event);
+    channelClients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  }
+}
+
+function broadcastDeviceStatus(deviceType: string, deviceId: string, status: string, propertyId?: string) {
+  // Flat event format matching frontend expectations
+  const event = {
+    type: "device_status",
+    deviceType,
+    deviceId,
+    status,
+    propertyId,
+    timestamp: new Date().toISOString()
+  };
+  // Broadcast to property-specific channel
+  if (propertyId) {
+    broadcastDeviceStatusDirect(`device_status_${propertyId}`, event);
+  }
+  // Also broadcast to global device status channel
+  broadcastDeviceStatusDirect("device_status_all", event);
+}
+
+function broadcastModeChange(propertyId: string, newMode: string, previousMode?: string) {
+  const event = {
+    type: "mode_change",
+    mode: newMode,
+    previousMode,
+    propertyId,
+    timestamp: new Date().toISOString()
+  };
+  broadcastDeviceStatusDirect(`device_status_${propertyId}`, event);
+}
+
+function broadcastAlert(alert: { id: string; severity: string; deviceId: string; deviceName: string; deviceType: string; message: string }, propertyId?: string) {
+  const event = {
+    type: "alert",
+    ...alert,
+    timestamp: new Date().toISOString()
+  };
+  // Broadcast to property-specific channel if provided
+  if (propertyId) {
+    broadcastDeviceStatusDirect(`device_status_${propertyId}`, event);
+  }
+  // Also broadcast to global
+  broadcastDeviceStatusDirect("device_status_all", event);
+}
+
 // Helper to calculate tax snapshot for a check item at ring-in time
 // This captures the tax settings so they are IMMUTABLE and not retroactively changed
 interface TaxSnapshot {
@@ -710,14 +766,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   wss.on("connection", (ws) => {
-    let subscribedChannel: string | null = null;
+    const subscribedChannels: string[] = [];
 
     ws.on("message", (message) => {
       try {
         const data = JSON.parse(message.toString());
+        
+        // Legacy KDS subscription
         if (data.type === "subscribe" && data.channel === "kds") {
           const channel = data.rvcId || "all";
-          subscribedChannel = channel;
+          subscribedChannels.push(channel);
+          if (!clients.has(channel)) {
+            clients.set(channel, new Set());
+          }
+          clients.get(channel)!.add(ws);
+        }
+        
+        // Device status subscription for FOH/EMC
+        if (data.type === "subscribe_device_status" && data.propertyId) {
+          const channel = `device_status_${data.propertyId}`;
+          subscribedChannels.push(channel);
+          if (!clients.has(channel)) {
+            clients.set(channel, new Set());
+          }
+          clients.get(channel)!.add(ws);
+          
+          // Also subscribe to "all" channel for global updates
+          if (!clients.has("device_status_all")) {
+            clients.set("device_status_all", new Set());
+          }
+          clients.get("device_status_all")!.add(ws);
+          subscribedChannels.push("device_status_all");
+        }
+        
+        // Enterprise status subscription for EMC
+        if (data.type === "subscribe_enterprise_status" && data.enterpriseId) {
+          const channel = `enterprise_status_${data.enterpriseId}`;
+          subscribedChannels.push(channel);
           if (!clients.has(channel)) {
             clients.set(channel, new Set());
           }
@@ -729,9 +814,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
 
     ws.on("close", () => {
-      if (subscribedChannel && clients.has(subscribedChannel)) {
-        clients.get(subscribedChannel)!.delete(ws);
-      }
+      subscribedChannels.forEach((channel) => {
+        if (clients.has(channel)) {
+          clients.get(channel)!.delete(ws);
+        }
+      });
     });
   });
 
@@ -15384,13 +15471,31 @@ connect();
         return res.status(404).json({ error: "Service host not found" });
       }
 
+      const wasOffline = serviceHost.status === 'offline';
+      const newStatus = status || "online";
+      
       await storage.updateServiceHost(id, {
-        status: status || "online",
+        status: newStatus,
         lastHeartbeatAt: new Date(),
         activeChecks: activeChecks ?? 0,
         pendingTransactions: pendingTransactions ?? 0,
         localConfigVersion: localConfigVersion ?? 0,
       });
+      
+      // Broadcast status update to connected clients
+      broadcastDeviceStatus('service_host', id, newStatus, serviceHost.propertyId);
+      
+      // If device came back online, broadcast a recovery alert
+      if (wasOffline && newStatus === 'online') {
+        broadcastAlert({
+          id: `sh-online-${id}`,
+          severity: 'info',
+          deviceId: id,
+          deviceName: serviceHost.name,
+          deviceType: 'service_host',
+          message: 'Service Host is back online',
+        }, serviceHost.propertyId);
+      }
 
       // Get current cloud config version
       const cloudConfigVersion = await storage.getLatestConfigVersion(serviceHost.propertyId);
@@ -16440,11 +16545,27 @@ connect();
       // Update workstation status in database
       const workstation = await storage.getWorkstation(workstationId);
       if (workstation) {
+        const wasOffline = !workstation.isOnline;
         await storage.updateWorkstation(workstationId, {
           isOnline: true,
           lastSeenAt: new Date(),
           ipAddress: ipAddress || workstation.ipAddress,
         });
+        
+        // Broadcast status update to connected clients
+        broadcastDeviceStatus('workstation', workstationId, 'online', workstation.propertyId);
+        
+        // If device came back online, broadcast a recovery alert
+        if (wasOffline) {
+          broadcastAlert({
+            id: `ws-online-${workstationId}`,
+            severity: 'info',
+            deviceId: workstationId,
+            deviceName: workstation.name,
+            deviceType: 'workstation',
+            message: 'Workstation is back online',
+          }, workstation.propertyId);
+        }
       }
 
       res.json({
