@@ -16089,5 +16089,29 @@ connect();
     }
   });
 
+  // CAL Package Download - for Service Hosts to download packages
+  app.get("/api/cal-package-versions/:id/download", async (req, res) => {
+    try {
+      const version = await storage.getCalPackageVersionById(req.params.id);
+      if (!version) {
+        return res.status(404).json({ error: "CAL package version not found" });
+      }
+      
+      // In production, this would stream the actual package file
+      // For now, return package metadata for download
+      res.json({
+        id: version.id,
+        packageId: version.packageId,
+        version: version.version,
+        downloadUrl: version.downloadUrl,
+        checksum: version.checksum,
+        size: version.size,
+      });
+    } catch (error) {
+      console.error("Error downloading CAL package:", error);
+      res.status(500).json({ error: "Failed to download CAL package" });
+    }
+  });
+
   return httpServer;
 }

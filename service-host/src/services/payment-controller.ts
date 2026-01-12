@@ -1,0 +1,307 @@
+/**
+ * Payment Controller
+ * 
+ * Handles payment terminal integration:
+ * - Authorize card payments
+ * - Capture/void transactions
+ * - Store-and-forward for offline
+ */
+
+import { Database } from '../db/database.js';
+import { TransactionSync } from '../sync/transaction-sync.js';
+import { randomUUID } from 'crypto';
+
+export class PaymentController {
+  private db: Database;
+  private transactionSync: TransactionSync;
+  
+  constructor(db: Database, transactionSync: TransactionSync) {
+    this.db = db;
+    this.transactionSync = transactionSync;
+  }
+  
+  // Authorize a payment
+  async authorize(params: AuthorizeParams): Promise<PaymentResult> {
+    const transactionId = randomUUID();
+    
+    // For now, simulate authorization
+    // In production, this would connect to payment gateway
+    const result: PaymentResult = {
+      success: true,
+      transactionId,
+      authCode: this.generateAuthCode(),
+      cardLast4: params.cardLast4 || '****',
+      cardBrand: params.cardBrand || 'unknown',
+      amount: params.amount,
+      tip: params.tip || 0,
+    };
+    
+    // Store authorization
+    this.db.run(
+      `INSERT INTO payments (id, check_id, tender_id, tender_type, amount, tip, reference, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'authorized')`,
+      [
+        transactionId,
+        params.checkId,
+        params.tenderId || 'card',
+        params.tenderType || 'credit',
+        params.amount,
+        params.tip || 0,
+        JSON.stringify({
+          authCode: result.authCode,
+          cardLast4: result.cardLast4,
+          cardBrand: result.cardBrand,
+        }),
+      ]
+    );
+    
+    // Queue for cloud sync
+    this.transactionSync.queuePayment(transactionId, {
+      id: transactionId,
+      checkId: params.checkId,
+      amount: params.amount,
+      tip: params.tip || 0,
+      authCode: result.authCode,
+      cardLast4: result.cardLast4,
+      cardBrand: result.cardBrand,
+      status: 'authorized',
+    });
+    
+    return result;
+  }
+  
+  // Capture an authorized payment
+  async capture(transactionId: string): Promise<PaymentResult> {
+    const payment = this.getPayment(transactionId);
+    if (!payment) {
+      return { success: false, error: 'Transaction not found' };
+    }
+    
+    if (payment.status !== 'authorized') {
+      return { success: false, error: `Cannot capture ${payment.status} transaction` };
+    }
+    
+    // Update status
+    this.db.run(
+      `UPDATE payments SET status = 'captured' WHERE id = ?`,
+      [transactionId]
+    );
+    
+    return {
+      success: true,
+      transactionId,
+      amount: payment.amount,
+    };
+  }
+  
+  // Void a transaction
+  async void(transactionId: string, reason?: string): Promise<PaymentResult> {
+    const payment = this.getPayment(transactionId);
+    if (!payment) {
+      return { success: false, error: 'Transaction not found' };
+    }
+    
+    if (payment.status === 'voided') {
+      return { success: false, error: 'Transaction already voided' };
+    }
+    
+    // Update status
+    this.db.run(
+      `UPDATE payments SET status = 'voided' WHERE id = ?`,
+      [transactionId]
+    );
+    
+    return {
+      success: true,
+      transactionId,
+      amount: payment.amount,
+    };
+  }
+  
+  // Refund a captured payment
+  async refund(transactionId: string, amount?: number): Promise<PaymentResult> {
+    const payment = this.getPayment(transactionId);
+    if (!payment) {
+      return { success: false, error: 'Transaction not found' };
+    }
+    
+    if (payment.status !== 'captured') {
+      return { success: false, error: `Cannot refund ${payment.status} transaction` };
+    }
+    
+    const refundAmount = amount || payment.amount;
+    if (refundAmount > payment.amount) {
+      return { success: false, error: 'Refund amount exceeds original amount' };
+    }
+    
+    // In production, would call payment gateway
+    // For now, just track locally
+    const refundId = randomUUID();
+    
+    return {
+      success: true,
+      transactionId: refundId,
+      amount: refundAmount,
+    };
+  }
+  
+  // Get payment by ID
+  getPayment(transactionId: string): PaymentRecord | null {
+    const row = this.db.get<PaymentRow>(
+      'SELECT * FROM payments WHERE id = ?',
+      [transactionId]
+    );
+    
+    if (!row) return null;
+    
+    const reference = row.reference ? JSON.parse(row.reference) : {};
+    
+    return {
+      id: row.id,
+      checkId: row.check_id,
+      tenderId: row.tender_id,
+      tenderType: row.tender_type,
+      amount: row.amount,
+      tip: row.tip,
+      authCode: reference.authCode,
+      cardLast4: reference.cardLast4,
+      cardBrand: reference.cardBrand,
+      status: row.status as PaymentRecord['status'],
+      createdAt: row.created_at,
+    };
+  }
+  
+  // Get payments for a check
+  getPaymentsForCheck(checkId: string): PaymentRecord[] {
+    const rows = this.db.all<PaymentRow>(
+      'SELECT * FROM payments WHERE check_id = ? ORDER BY created_at',
+      [checkId]
+    );
+    
+    return rows.map(row => {
+      const reference = row.reference ? JSON.parse(row.reference) : {};
+      return {
+        id: row.id,
+        checkId: row.check_id,
+        tenderId: row.tender_id,
+        tenderType: row.tender_type,
+        amount: row.amount,
+        tip: row.tip,
+        authCode: reference.authCode,
+        cardLast4: reference.cardLast4,
+        cardBrand: reference.cardBrand,
+        status: row.status as PaymentRecord['status'],
+        createdAt: row.created_at,
+      };
+    });
+  }
+  
+  // Offline authorization (store-and-forward)
+  async authorizeOffline(params: AuthorizeParams): Promise<PaymentResult> {
+    // For offline, we generate a local auth code and queue for later
+    const transactionId = randomUUID();
+    const offlineAuthCode = `OFF${Date.now().toString(36).toUpperCase()}`;
+    
+    const result: PaymentResult = {
+      success: true,
+      transactionId,
+      authCode: offlineAuthCode,
+      cardLast4: params.cardLast4 || '****',
+      cardBrand: params.cardBrand || 'unknown',
+      amount: params.amount,
+      tip: params.tip || 0,
+      offline: true,
+    };
+    
+    // Store with offline flag
+    this.db.run(
+      `INSERT INTO payments (id, check_id, tender_id, tender_type, amount, tip, reference, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'offline_authorized')`,
+      [
+        transactionId,
+        params.checkId,
+        params.tenderId || 'card',
+        params.tenderType || 'credit',
+        params.amount,
+        params.tip || 0,
+        JSON.stringify({
+          authCode: offlineAuthCode,
+          cardLast4: result.cardLast4,
+          cardBrand: result.cardBrand,
+          offline: true,
+        }),
+      ]
+    );
+    
+    // Queue for sync - will be processed when online
+    this.transactionSync.queuePayment(transactionId, {
+      id: transactionId,
+      checkId: params.checkId,
+      amount: params.amount,
+      tip: params.tip || 0,
+      authCode: offlineAuthCode,
+      cardLast4: result.cardLast4,
+      cardBrand: result.cardBrand,
+      status: 'offline_authorized',
+      requiresOnlineAuth: true,
+    });
+    
+    return result;
+  }
+  
+  // Helper to generate auth code
+  private generateAuthCode(): string {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+}
+
+interface AuthorizeParams {
+  checkId: string;
+  amount: number;
+  tip?: number;
+  tenderId?: string;
+  tenderType?: 'credit' | 'debit';
+  cardLast4?: string;
+  cardBrand?: string;
+  terminalId?: string;
+}
+
+interface PaymentResult {
+  success: boolean;
+  transactionId?: string;
+  authCode?: string;
+  cardLast4?: string;
+  cardBrand?: string;
+  amount?: number;
+  tip?: number;
+  error?: string;
+  offline?: boolean;
+}
+
+interface PaymentRecord {
+  id: string;
+  checkId: string;
+  tenderId: string;
+  tenderType: string;
+  amount: number;
+  tip: number;
+  authCode?: string;
+  cardLast4?: string;
+  cardBrand?: string;
+  status: 'authorized' | 'captured' | 'voided' | 'offline_authorized';
+  createdAt: string;
+}
+
+interface PaymentRow {
+  id: string;
+  check_id: string;
+  tender_id: string;
+  tender_type: string;
+  amount: number;
+  tip: number;
+  reference: string | null;
+  status: string;
+  created_at: string;
+}
+
+export type { PaymentResult, AuthorizeParams, PaymentRecord };
