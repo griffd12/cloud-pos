@@ -4346,9 +4346,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const oldPrice = parseFloat(item.unitPrice || "0");
 
-      // Update the item price
+      // Calculate new taxable amount and tax based on the new price
+      // Use the stored tax rate from ring-in time (if available)
+      const modifierTotal = (item.modifiers || []).reduce(
+        (sum: number, mod: any) => sum + parseFloat(mod.priceDelta || "0"),
+        0
+      );
+      const newTaxableAmount = (newPrice + modifierTotal) * (item.quantity || 1);
+      
+      // Recalculate tax using stored rate or fetch from tax group
+      let newTaxAmount = "0.00";
+      const taxRate = parseFloat(item.taxRateAtSale || "0");
+      if (taxRate > 0) {
+        const taxMode = item.taxModeAtSale || "add_on";
+        if (taxMode === "add_on") {
+          newTaxAmount = (newTaxableAmount * taxRate).toFixed(2);
+        } else {
+          // Inclusive: tax is embedded in price
+          newTaxAmount = (newTaxableAmount - (newTaxableAmount / (1 + taxRate))).toFixed(2);
+        }
+      }
+
+      // Update the item price AND tax fields so recalculation works correctly
       const updatedItem = await storage.updateCheckItem(itemId, {
         unitPrice: newPrice.toFixed(2),
+        taxableAmount: newTaxableAmount.toFixed(2),
+        taxAmount: newTaxAmount,
       });
 
       // Recalculate check totals
