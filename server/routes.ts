@@ -746,9 +746,13 @@ async function finalizePreviewTicket(
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  // Use noServer: true for both WebSocket servers and handle upgrade manually
+  // Use noServer: true for all WebSocket servers and handle upgrade manually
   const wss = new WebSocketServer({ noServer: true });
   const printAgentWss = new WebSocketServer({ noServer: true });
+  const serviceHostWss = new WebSocketServer({ noServer: true });
+  
+  // Track connected Service Hosts
+  const connectedServiceHosts: Map<string, { ws: WebSocket; propertyId: string; lastHeartbeat: Date }> = new Map();
 
   // Handle WebSocket upgrade requests manually to route to correct server
   httpServer.on("upgrade", (request, socket, head) => {
@@ -762,9 +766,140 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       printAgentWss.handleUpgrade(request, socket, head, (ws) => {
         printAgentWss.emit("connection", ws, request);
       });
+    } else if (pathname === "/ws/service-host") {
+      serviceHostWss.handleUpgrade(request, socket, head, (ws) => {
+        serviceHostWss.emit("connection", ws, request);
+      });
     } else {
       socket.destroy();
     }
+  });
+  
+  // Service Host WebSocket handler
+  serviceHostWss.on("connection", async (ws, request) => {
+    let serviceHostId: string | null = null;
+    let authenticated = false;
+    
+    // Parse query params for initial auth attempt
+    const url = new URL(request.url || '', 'http://localhost');
+    const queryServiceHostId = url.searchParams.get('serviceHostId');
+    const queryToken = url.searchParams.get('token');
+    
+    ws.on("message", async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        if (message.type === 'AUTHENTICATE') {
+          const tokenToUse = message.token || queryToken;
+          const idToUse = message.serviceHostId || queryServiceHostId;
+          
+          if (!idToUse || !tokenToUse) {
+            ws.send(JSON.stringify({ type: 'AUTH_FAIL', message: 'Missing credentials' }));
+            return;
+          }
+          
+          const serviceHost = await storage.getServiceHost(idToUse);
+          if (!serviceHost || serviceHost.registrationToken !== tokenToUse) {
+            ws.send(JSON.stringify({ type: 'AUTH_FAIL', message: 'Invalid credentials' }));
+            return;
+          }
+          
+          serviceHostId = idToUse;
+          authenticated = true;
+          
+          // Track this connection
+          connectedServiceHosts.set(serviceHostId, {
+            ws,
+            propertyId: serviceHost.propertyId,
+            lastHeartbeat: new Date(),
+          });
+          
+          // Update status to online
+          await storage.updateServiceHost(serviceHostId, {
+            status: 'online',
+            lastHeartbeatAt: new Date(),
+          });
+          
+          console.log(`Service Host ${serviceHostId} connected`);
+          ws.send(JSON.stringify({ type: 'AUTH_OK', serviceHostId }));
+          
+          // Broadcast status change
+          broadcastPosEvent({
+            type: 'service_host_status',
+            payload: { serviceHostId, status: 'online' },
+          }, 'all');
+        }
+        
+        if (!authenticated) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Not authenticated' }));
+          return;
+        }
+        
+        // Handle heartbeat
+        if (message.type === 'HEARTBEAT') {
+          const conn = connectedServiceHosts.get(serviceHostId!);
+          if (conn) {
+            conn.lastHeartbeat = new Date();
+          }
+          
+          await storage.updateServiceHost(serviceHostId!, {
+            lastHeartbeatAt: new Date(),
+          });
+          
+          ws.send(JSON.stringify({ type: 'HEARTBEAT_ACK', timestamp: new Date().toISOString() }));
+        }
+        
+        // Handle config sync request
+        if (message.type === 'SYNC_REQUEST') {
+          const serviceHost = await storage.getServiceHost(serviceHostId!);
+          if (serviceHost) {
+            const configVersion = await storage.getLatestConfigVersion(serviceHost.propertyId);
+            ws.send(JSON.stringify({
+              type: 'SYNC_INFO',
+              configVersion,
+              propertyId: serviceHost.propertyId,
+            }));
+          }
+        }
+        
+        // Handle transaction upload
+        if (message.type === 'TRANSACTION_UPLOAD') {
+          // Queue transaction for processing
+          console.log(`Received transaction upload from ${serviceHostId}:`, message.transactionId);
+          ws.send(JSON.stringify({ 
+            type: 'TRANSACTION_ACK', 
+            transactionId: message.transactionId,
+            status: 'received',
+          }));
+        }
+        
+      } catch (e) {
+        console.error('Service Host message error:', (e as Error).message);
+      }
+    });
+    
+    ws.on("close", async () => {
+      if (serviceHostId) {
+        connectedServiceHosts.delete(serviceHostId);
+        
+        // Update status to offline
+        await storage.updateServiceHost(serviceHostId, {
+          status: 'offline',
+        });
+        
+        console.log(`Service Host ${serviceHostId} disconnected`);
+        
+        // Broadcast status change
+        broadcastPosEvent({
+          type: 'service_host_status',
+          payload: { serviceHostId, status: 'offline' },
+        }, 'all');
+      }
+    });
+    
+    ws.on("error", (err) => {
+      console.error('Service Host WebSocket error:', err.message);
+    });
   });
 
   wss.on("connection", (ws) => {
