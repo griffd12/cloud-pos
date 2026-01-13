@@ -668,9 +668,8 @@ export function PaymentModal({
     
     const pollSession = async () => {
       try {
-        const res = await fetch(`/api/terminal-sessions/${terminalSession.id}`, {
-          credentials: "include",
-        });
+        // Use apiRequest to include device token for authentication
+        const res = await apiRequest("GET", `/api/terminal-sessions/${terminalSession.id}`);
         if (!res.ok) return;
         const session = await res.json() as TerminalSession;
         
