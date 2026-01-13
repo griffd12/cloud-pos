@@ -11664,6 +11664,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Update terminal status to busy
       await storage.updateTerminalDeviceStatus(terminal.id, "busy");
 
+      // If this is a Stripe terminal, initiate the payment on the reader
+      if (terminal.model?.startsWith('stripe_') && terminal.cloudDeviceId) {
+        try {
+          const { StripePaymentAdapter } = await import('./payments/adapters/stripe');
+          const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+          
+          if (stripeSecretKey) {
+            const stripeAdapter = new StripePaymentAdapter(
+              { SECRET_KEY: stripeSecretKey },
+              {},
+              'production'
+            );
+            
+            const result = await stripeAdapter.initiateTerminalPayment({
+              readerId: terminal.cloudDeviceId,
+              amount: parsed.data.amount,
+              currency: parsed.data.currency || 'usd',
+              metadata: {
+                sessionId: session.id,
+                checkId: parsed.data.checkId,
+                workstationId: parsed.data.workstationId || '',
+                employeeId: parsed.data.employeeId || '',
+              },
+            });
+            
+            if (result.success && result.paymentIntentId) {
+              // Update session with processor reference
+              await storage.updateTerminalSession(session.id, {
+                status: "awaiting_card",
+                processorReference: result.paymentIntentId,
+              });
+              session.status = "awaiting_card";
+              session.processorReference = result.paymentIntentId;
+            } else {
+              // Failed to initiate - update session as error
+              await storage.updateTerminalSession(session.id, {
+                status: "error",
+                statusMessage: result.errorMessage || "Failed to initiate terminal payment",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(terminal.id, "online");
+              return res.status(500).json({ 
+                message: result.errorMessage || "Failed to initiate terminal payment",
+                sessionId: session.id,
+              });
+            }
+          }
+        } catch (stripeError: any) {
+          console.error("Stripe Terminal initiation error:", stripeError);
+          await storage.updateTerminalSession(session.id, {
+            status: "error",
+            statusMessage: stripeError.message || "Terminal communication error",
+            completedAt: new Date(),
+          });
+          await storage.updateTerminalDeviceStatus(terminal.id, "online");
+          return res.status(500).json({ 
+            message: stripeError.message || "Terminal communication error" 
+          });
+        }
+      }
+
       res.status(201).json(session);
     } catch (error) {
       console.error("Create terminal session error:", error);

@@ -348,6 +348,91 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
       };
     }
   }
+
+  /**
+   * Initiate a terminal payment by creating a PaymentIntent and sending it to the reader
+   */
+  async initiateTerminalPayment(params: {
+    readerId: string;
+    amount: number;
+    currency?: string;
+    metadata?: Record<string, string>;
+  }): Promise<{ 
+    success: boolean; 
+    paymentIntentId?: string; 
+    readerActionId?: string;
+    errorMessage?: string;
+  }> {
+    try {
+      // Create a PaymentIntent for the terminal
+      const paymentIntent = await this.stripe.paymentIntents.create({
+        amount: params.amount,
+        currency: params.currency || 'usd',
+        payment_method_types: ['card_present'],
+        capture_method: 'automatic',
+        metadata: params.metadata || {},
+      });
+
+      // Send the PaymentIntent to the reader for processing
+      const reader = await this.stripe.terminal.readers.processPaymentIntent(
+        params.readerId,
+        {
+          payment_intent: paymentIntent.id,
+        }
+      );
+
+      return {
+        success: true,
+        paymentIntentId: paymentIntent.id,
+        readerActionId: reader.action?.process_payment_intent?.payment_intent as string,
+      };
+    } catch (error) {
+      const stripeError = error as Stripe.errors.StripeError;
+      console.error('Stripe Terminal payment initiation error:', stripeError);
+      return {
+        success: false,
+        errorMessage: stripeError.message || 'Failed to initiate terminal payment',
+      };
+    }
+  }
+
+  /**
+   * Cancel an ongoing reader action
+   */
+  async cancelReaderAction(readerId: string): Promise<{ success: boolean; errorMessage?: string }> {
+    try {
+      await this.stripe.terminal.readers.cancelAction(readerId);
+      return { success: true };
+    } catch (error) {
+      const stripeError = error as Stripe.errors.StripeError;
+      return {
+        success: false,
+        errorMessage: stripeError.message || 'Failed to cancel reader action',
+      };
+    }
+  }
+
+  /**
+   * Get reader status from Stripe
+   */
+  async getReaderStatus(readerId: string): Promise<{
+    status: string;
+    action?: { type: string; status: string };
+  } | null> {
+    try {
+      const reader = await this.stripe.terminal.readers.retrieve(readerId);
+      return {
+        status: reader.status || 'unknown',
+        action: reader.action ? {
+          type: reader.action.type || 'unknown',
+          status: reader.action.status || 'unknown',
+        } : undefined,
+      };
+    } catch (error) {
+      console.error('Failed to get reader status:', error);
+      return null;
+    }
+  }
 }
 
 // Factory function
