@@ -1015,6 +1015,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/registered-devices\/validate$/,     // Token validation
     /^\/health$/,                           // Health check endpoint
     /^\/print-agents(\/.*)?$/,              // Print agent management (EMC feature)
+    /^\/cal-packages(\/.*)?$/,              // CAL package management (EMC feature)
+    /^\/cal-package-versions(\/.*)?$/,      // CAL package versions (EMC feature)
+    /^\/cal-deployments(\/.*)?$/,           // CAL deployments (EMC feature)
+    /^\/service-hosts(\/.*)?$/,             // Service host management (EMC feature)
   ];
 
   app.use("/api", async (req, res, next) => {
