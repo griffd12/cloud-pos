@@ -10368,6 +10368,205 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // STRIPE TERMINAL API (EMV Device Integration)
+  // ============================================================================
+  
+  // Get Stripe instance for Terminal operations
+  const getStripeForTerminal = () => {
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      throw new Error('STRIPE_SECRET_KEY not configured');
+    }
+    const Stripe = require('stripe');
+    return new Stripe(secretKey);
+  };
+
+  // Create connection token for Terminal SDK
+  app.post("/api/stripe/terminal/connection-token", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const connectionToken = await stripe.terminal.connectionTokens.create();
+      res.json({ secret: connectionToken.secret });
+    } catch (error: any) {
+      console.error("Connection token error:", error);
+      res.status(500).json({ error: error.message || "Failed to create connection token" });
+    }
+  });
+
+  // List Terminal locations
+  app.get("/api/stripe/terminal/locations", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const locations = await stripe.terminal.locations.list({ limit: 100 });
+      res.json(locations.data);
+    } catch (error: any) {
+      console.error("List locations error:", error);
+      res.status(500).json({ error: error.message || "Failed to list locations" });
+    }
+  });
+
+  // Create Terminal location
+  app.post("/api/stripe/terminal/locations", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const { displayName, address } = req.body;
+      
+      if (!displayName || !address) {
+        return res.status(400).json({ error: "displayName and address are required" });
+      }
+
+      const location = await stripe.terminal.locations.create({
+        display_name: displayName,
+        address: {
+          line1: address.line1 || '',
+          city: address.city || '',
+          state: address.state || '',
+          country: address.country || 'US',
+          postal_code: address.postalCode || '',
+        },
+      });
+
+      res.json(location);
+    } catch (error: any) {
+      console.error("Create location error:", error);
+      res.status(500).json({ error: error.message || "Failed to create location" });
+    }
+  });
+
+  // List Terminal readers
+  app.get("/api/stripe/terminal/readers", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const locationId = req.query.locationId as string | undefined;
+      
+      const params: any = { limit: 100 };
+      if (locationId) {
+        params.location = locationId;
+      }
+      
+      const readers = await stripe.terminal.readers.list(params);
+      res.json(readers.data);
+    } catch (error: any) {
+      console.error("List readers error:", error);
+      res.status(500).json({ error: error.message || "Failed to list readers" });
+    }
+  });
+
+  // Register a new reader with pairing code
+  app.post("/api/stripe/terminal/readers", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const { registrationCode, label, locationId } = req.body;
+      
+      if (!registrationCode || !locationId) {
+        return res.status(400).json({ error: "registrationCode and locationId are required" });
+      }
+
+      const reader = await stripe.terminal.readers.create({
+        registration_code: registrationCode,
+        label: label || 'POS Terminal',
+        location: locationId,
+      });
+
+      res.json(reader);
+    } catch (error: any) {
+      console.error("Register reader error:", error);
+      res.status(500).json({ error: error.message || "Failed to register reader" });
+    }
+  });
+
+  // Get reader status
+  app.get("/api/stripe/terminal/readers/:readerId", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const reader = await stripe.terminal.readers.retrieve(req.params.readerId);
+      res.json(reader);
+    } catch (error: any) {
+      console.error("Get reader error:", error);
+      res.status(500).json({ error: error.message || "Failed to get reader" });
+    }
+  });
+
+  // Delete/deregister a reader
+  app.delete("/api/stripe/terminal/readers/:readerId", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      await stripe.terminal.readers.delete(req.params.readerId);
+      res.json({ success: true, message: "Reader deleted" });
+    } catch (error: any) {
+      console.error("Delete reader error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete reader" });
+    }
+  });
+
+  // Create PaymentIntent for Terminal (card-present)
+  app.post("/api/stripe/terminal/payment-intent", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const { amount, currency, checkId, employeeId, workstationId } = req.body;
+      
+      if (!amount) {
+        return res.status(400).json({ error: "amount is required" });
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: currency || 'usd',
+        payment_method_types: ['card_present'],
+        capture_method: 'automatic',
+        metadata: {
+          checkId: checkId || '',
+          employeeId: employeeId || '',
+          workstationId: workstationId || '',
+          source: 'terminal',
+        },
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      });
+    } catch (error: any) {
+      console.error("Create payment intent error:", error);
+      res.status(500).json({ error: error.message || "Failed to create payment intent" });
+    }
+  });
+
+  // Process payment on reader (server-driven integration)
+  app.post("/api/stripe/terminal/readers/:readerId/process-payment", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const { paymentIntentId } = req.body;
+      
+      if (!paymentIntentId) {
+        return res.status(400).json({ error: "paymentIntentId is required" });
+      }
+
+      const reader = await stripe.terminal.readers.processPaymentIntent(
+        req.params.readerId,
+        { payment_intent: paymentIntentId }
+      );
+
+      res.json(reader);
+    } catch (error: any) {
+      console.error("Process payment error:", error);
+      res.status(500).json({ error: error.message || "Failed to process payment" });
+    }
+  });
+
+  // Cancel reader action
+  app.post("/api/stripe/terminal/readers/:readerId/cancel", async (req, res) => {
+    try {
+      const stripe = getStripeForTerminal();
+      const reader = await stripe.terminal.readers.cancelAction(req.params.readerId);
+      res.json(reader);
+    } catch (error: any) {
+      console.error("Cancel action error:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel action" });
+    }
+  });
+
+  // ============================================================================
   // PAYMENT GATEWAY OPERATIONS (Authorize, Capture, Void, Refund, Tip Adjust)
   // ============================================================================
 

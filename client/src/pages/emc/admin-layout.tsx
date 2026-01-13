@@ -73,6 +73,7 @@ import DescriptorsPage from "../admin/descriptors";
 import CalPackagesPage from "../admin/cal-packages";
 import ServiceHostsPage from "../admin/service-hosts";
 import ConnectivityTestPage from "../admin/connectivity-test";
+import StripeTerminalPage from "../admin/stripe-terminal";
 
 function EmcDashboard() {
   const { data: stats } = useQuery<{
@@ -348,6 +349,7 @@ export default function EmcAdminLayout() {
               <Route path="/emc/accounting-export" component={AccountingExportPage} />
               <Route path="/emc/print-agents" component={PrintAgentsPage} />
               <Route path="/emc/descriptors" component={DescriptorsPage} />
+              <Route path="/emc/stripe-terminal" component={StripeTerminalPage} />
             </Switch>
           </main>
         </div>

@@ -98,6 +98,7 @@ const menuGroupsTemplate = [
       { title: "Discounts", url: "/admin/discounts", icon: Percent },
       { title: "Tenders", url: "/admin/tenders", icon: CreditCard },
       { title: "Payment Processors", url: "/admin/payment-processors", icon: Wallet },
+      { title: "Stripe Terminal", url: "/admin/stripe-terminal", icon: CreditCard },
       { title: "Service Charges", url: "/admin/service-charges", icon: DollarSign },
       { title: "Major Groups", url: "/admin/major-groups", icon: LayoutGrid },
       { title: "Family Groups", url: "/admin/family-groups", icon: LayoutGrid },
