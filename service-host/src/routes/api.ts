@@ -465,5 +465,466 @@ export function createApiRoutes(
     }
   });
   
+  // Get service charges
+  router.get('/config/service-charges', (req, res) => {
+    try {
+      const serviceCharges = config.getServiceCharges();
+      res.json(serviceCharges);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get employees
+  router.get('/config/employees', (req, res) => {
+    try {
+      const employees = config.getEmployees();
+      res.json(employees);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get employee by ID
+  router.get('/config/employees/:id', (req, res) => {
+    try {
+      const employee = config.getEmployee(req.params.id);
+      if (!employee) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
+      res.json(employee);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get workstations
+  router.get('/config/workstations', (req, res) => {
+    try {
+      const workstations = config.getWorkstations();
+      res.json(workstations);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get printers
+  router.get('/config/printers', (req, res) => {
+    try {
+      const printers = config.getPrinters();
+      res.json(printers);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get KDS devices
+  router.get('/config/kds-devices', (req, res) => {
+    try {
+      const kdsDevices = config.getKdsDevices();
+      res.json(kdsDevices);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get order devices
+  router.get('/config/order-devices', (req, res) => {
+    try {
+      const orderDevices = config.getOrderDevices();
+      res.json(orderDevices);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get POS layout for RVC
+  router.get('/config/pos-layout', (req, res) => {
+    try {
+      const rvcId = req.query.rvcId as string;
+      const orderType = req.query.orderType as string | undefined;
+      if (!rvcId) {
+        return res.status(400).json({ error: 'rvcId required' });
+      }
+      const layout = config.getPosLayoutForRvc(rvcId, orderType);
+      if (!layout) {
+        return res.status(404).json({ error: 'No layout found for RVC' });
+      }
+      const cells = config.getPosLayoutCells(layout.id);
+      res.json({ ...layout, cells });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get menu item with modifiers
+  router.get('/config/menu-items/:id', (req, res) => {
+    try {
+      const item = config.getMenuItemWithModifiers(req.params.id);
+      if (!item) {
+        return res.status(404).json({ error: 'Menu item not found' });
+      }
+      res.json(item);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get menu items by SLU
+  router.get('/config/slus/:id/items', (req, res) => {
+    try {
+      const items = config.getMenuItemsBySlu(req.params.id);
+      res.json(items);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get SLUs by RVC
+  router.get('/config/rvcs/:id/slus', (req, res) => {
+    try {
+      const slus = config.getSlusByRvc(req.params.id);
+      res.json(slus);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get roles
+  router.get('/config/roles', (req, res) => {
+    try {
+      const roles = config.getRoles();
+      res.json(roles);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get payment processors
+  router.get('/config/payment-processors', (req, res) => {
+    try {
+      const processors = config.getPaymentProcessors();
+      res.json(processors);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get payment processor by ID
+  router.get('/config/payment-processors/:id', (req, res) => {
+    try {
+      const processor = config.getPaymentProcessor(req.params.id);
+      if (!processor) {
+        return res.status(404).json({ error: 'Payment processor not found' });
+      }
+      res.json(processor);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get RVCs
+  router.get('/config/rvcs', (req, res) => {
+    try {
+      const rvcs = config.getRvcs();
+      res.json(rvcs);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get RVC by ID
+  router.get('/config/rvcs/:id', (req, res) => {
+    try {
+      const rvc = config.getRvc(req.params.id);
+      if (!rvc) {
+        return res.status(404).json({ error: 'RVC not found' });
+      }
+      res.json(rvc);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get property
+  router.get('/config/property', (req, res) => {
+    try {
+      const property = config.getProperty();
+      if (!property) {
+        return res.status(404).json({ error: 'Property not found' });
+      }
+      res.json(property);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get major groups
+  router.get('/config/major-groups', (req, res) => {
+    try {
+      const majorGroups = config.getMajorGroups();
+      res.json(majorGroups);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get family groups by major group
+  router.get('/config/major-groups/:id/family-groups', (req, res) => {
+    try {
+      const familyGroups = config.getFamilyGroups(req.params.id);
+      res.json(familyGroups);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get print classes
+  router.get('/config/print-classes', (req, res) => {
+    try {
+      const printClasses = config.getPrintClasses();
+      res.json(printClasses);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get job codes
+  router.get('/config/job-codes', (req, res) => {
+    try {
+      const jobCodes = config.getJobCodes();
+      res.json(jobCodes);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // ============================================================================
+  // Loyalty
+  // ============================================================================
+  
+  // Get loyalty programs
+  router.get('/loyalty/programs', (req, res) => {
+    try {
+      const programs = config.getLoyaltyPrograms();
+      res.json(programs);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get loyalty program by ID
+  router.get('/loyalty/programs/:id', (req, res) => {
+    try {
+      const program = config.getLoyaltyProgram(req.params.id);
+      if (!program) {
+        return res.status(404).json({ error: 'Loyalty program not found' });
+      }
+      res.json(program);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Lookup loyalty member by phone
+  router.get('/loyalty/members/phone/:phone', (req, res) => {
+    try {
+      const member = config.getLoyaltyMemberByPhone(req.params.phone);
+      if (!member) {
+        return res.status(404).json({ error: 'Loyalty member not found' });
+      }
+      const enrollments = config.getLoyaltyMemberEnrollments(member.id);
+      res.json({ ...member, enrollments });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Lookup loyalty member by email
+  router.get('/loyalty/members/email/:email', (req, res) => {
+    try {
+      const member = config.getLoyaltyMemberByEmail(req.params.email);
+      if (!member) {
+        return res.status(404).json({ error: 'Loyalty member not found' });
+      }
+      const enrollments = config.getLoyaltyMemberEnrollments(member.id);
+      res.json({ ...member, enrollments });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get member enrollments
+  router.get('/loyalty/members/:id/enrollments', (req, res) => {
+    try {
+      const enrollments = config.getLoyaltyMemberEnrollments(req.params.id);
+      res.json(enrollments);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get loyalty member by ID
+  router.get('/loyalty/members/:id', (req, res) => {
+    try {
+      const member = config.getLoyaltyMember(req.params.id);
+      if (!member) {
+        return res.status(404).json({ error: 'Loyalty member not found' });
+      }
+      const enrollments = config.getLoyaltyMemberEnrollments(member.id);
+      res.json({ ...member, enrollments });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // ============================================================================
+  // Terminal Devices (PED/Payment terminals)
+  // ============================================================================
+  
+  // Get terminal devices
+  router.get('/config/terminal-devices', (req, res) => {
+    try {
+      const devices = config.getTerminalDevices();
+      res.json(devices);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get terminal device by ID
+  router.get('/config/terminal-devices/:id', (req, res) => {
+    try {
+      const device = config.getTerminalDevice(req.params.id);
+      if (!device) {
+        return res.status(404).json({ error: 'Terminal device not found' });
+      }
+      res.json(device);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // ============================================================================
+  // Fiscal Periods
+  // ============================================================================
+  
+  // Get fiscal periods
+  router.get('/fiscal/periods', (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 30;
+      const periods = config.getFiscalPeriods(limit);
+      res.json(periods);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get active fiscal period
+  router.get('/fiscal/periods/active', (req, res) => {
+    try {
+      const period = config.getActiveFiscalPeriod();
+      if (!period) {
+        return res.status(404).json({ error: 'No active fiscal period' });
+      }
+      res.json(period);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Get fiscal period by ID
+  router.get('/fiscal/periods/:id', (req, res) => {
+    try {
+      const period = config.getFiscalPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ error: 'Fiscal period not found' });
+      }
+      res.json(period);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // ============================================================================
+  // Sync Operations
+  // ============================================================================
+  
+  // Get sync status
+  router.get('/sync/status', (req, res) => {
+    try {
+      const status = config.getStatus();
+      res.json(status);
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Trigger full sync
+  router.post('/sync/full', async (req, res) => {
+    try {
+      const result = await config.syncFull();
+      if (result.success) {
+        res.json({ 
+          success: true, 
+          message: `Synced ${result.recordCount} records`,
+          recordCount: result.recordCount 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          error: result.error 
+        });
+      }
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Trigger delta sync
+  router.post('/sync/delta', async (req, res) => {
+    try {
+      const result = await config.syncDelta();
+      if (result.success) {
+        res.json({ 
+          success: true, 
+          message: `Applied ${result.changeCount} changes`,
+          changeCount: result.changeCount 
+        });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          error: result.error 
+        });
+      }
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Start auto-sync (background periodic sync)
+  router.post('/sync/auto/start', (req, res) => {
+    try {
+      const intervalMs = parseInt(req.query.interval as string) || 120000;
+      config.startAutoSync(intervalMs);
+      res.json({ 
+        success: true, 
+        message: `Auto-sync started (every ${intervalMs / 1000}s)` 
+      });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
+  // Stop auto-sync
+  router.post('/sync/auto/stop', (req, res) => {
+    try {
+      config.stopAutoSync();
+      res.json({ success: true, message: 'Auto-sync stopped' });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  });
+  
   return router;
 }

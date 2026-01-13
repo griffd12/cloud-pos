@@ -131,12 +131,25 @@ export class Database {
   // Sync Metadata
   // ==========================================================================
   
-  getSyncMetadata(key: string): string | null {
+  getSyncMetadata(key: string): { lastSyncAt: string | null; lastVersion: number; recordCount: number } | null {
     const row = this.get<{ value: string }>('SELECT value FROM sync_metadata WHERE key = ?', [key]);
-    return row?.value ?? null;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.value);
+    } catch {
+      return null;
+    }
   }
   
   setSyncMetadata(key: string, value: string): void {
+    this.run(
+      `INSERT OR REPLACE INTO sync_metadata (key, value, updated_at) VALUES (?, ?, datetime('now'))`,
+      [key, value]
+    );
+  }
+  
+  updateSyncMetadata(key: string, lastSyncAt: string, lastVersion: number, recordCount: number = 0): void {
+    const value = JSON.stringify({ lastSyncAt, lastVersion, recordCount });
     this.run(
       `INSERT OR REPLACE INTO sync_metadata (key, value, updated_at) VALUES (?, ?, datetime('now'))`,
       [key, value]
@@ -182,7 +195,7 @@ export class Database {
   }
   
   getEnterprise(id: string): any | null {
-    return this.get('SELECT * FROM enterprises WHERE id = ?', [id]);
+    return this.get('SELECT * FROM enterprises WHERE id = ? AND active = 1', [id]);
   }
   
   upsertProperty(property: any): void {
@@ -206,7 +219,7 @@ export class Database {
   }
   
   getProperty(id: string): any | null {
-    return this.get('SELECT * FROM properties WHERE id = ?', [id]);
+    return this.get('SELECT * FROM properties WHERE id = ? AND active = 1', [id]);
   }
   
   upsertRvc(rvc: any): void {
@@ -229,11 +242,47 @@ export class Database {
   }
   
   getRvc(id: string): any | null {
-    return this.get('SELECT * FROM rvcs WHERE id = ?', [id]);
+    return this.get('SELECT * FROM rvcs WHERE id = ? AND active = 1', [id]);
   }
   
   getRvcsByProperty(propertyId: string): any[] {
     return this.all('SELECT * FROM rvcs WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  // ==========================================================================
+  // Major Groups & Family Groups
+  // ==========================================================================
+  
+  upsertMajorGroup(mg: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO major_groups (id, enterprise_id, property_id, name, code, display_order, active, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [mg.id, mg.enterpriseId, mg.propertyId, mg.name, mg.code, mg.displayOrder || 0, mg.active !== false ? 1 : 0]
+    );
+  }
+  
+  getMajorGroup(id: string): any | null {
+    return this.get('SELECT * FROM major_groups WHERE id = ? AND active = 1', [id]);
+  }
+  
+  getMajorGroupsByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM major_groups WHERE property_id = ? AND active = 1 ORDER BY display_order', [propertyId]);
+  }
+  
+  upsertFamilyGroup(fg: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO family_groups (id, enterprise_id, property_id, major_group_id, name, code, display_order, active, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [fg.id, fg.enterpriseId, fg.propertyId, fg.majorGroupId, fg.name, fg.code, fg.displayOrder || 0, fg.active !== false ? 1 : 0]
+    );
+  }
+  
+  getFamilyGroup(id: string): any | null {
+    return this.get('SELECT * FROM family_groups WHERE id = ? AND active = 1', [id]);
+  }
+  
+  getFamilyGroupsByMajorGroup(majorGroupId: string): any[] {
+    return this.all('SELECT * FROM family_groups WHERE major_group_id = ? AND active = 1 ORDER BY display_order', [majorGroupId]);
   }
   
   // ==========================================================================
@@ -255,7 +304,7 @@ export class Database {
   }
   
   getEmployee(id: string): any | null {
-    return this.get('SELECT * FROM employees WHERE id = ?', [id]);
+    return this.get('SELECT * FROM employees WHERE id = ? AND active = 1', [id]);
   }
   
   getEmployeeByNumber(empNumber: string): any | null {
@@ -264,6 +313,22 @@ export class Database {
   
   getEmployeesByProperty(propertyId: string): any[] {
     return this.all('SELECT * FROM employees WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getEmployeeByPin(pinHash: string): any | null {
+    return this.get('SELECT * FROM employees WHERE pin_hash = ? AND active = 1', [pinHash]);
+  }
+  
+  upsertEmployeeAssignment(assign: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO employee_assignments (id, employee_id, property_id, rvc_id, role_id, is_primary, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [assign.id, assign.employeeId, assign.propertyId, assign.rvcId, assign.roleId, assign.isPrimary ? 1 : 0]
+    );
+  }
+  
+  getEmployeeAssignments(employeeId: string): any[] {
+    return this.all('SELECT * FROM employee_assignments WHERE employee_id = ?', [employeeId]);
   }
   
   // ==========================================================================
@@ -283,7 +348,7 @@ export class Database {
   }
   
   getRole(id: string): any | null {
-    return this.get('SELECT * FROM roles WHERE id = ?', [id]);
+    return this.get('SELECT * FROM roles WHERE id = ? AND active = 1', [id]);
   }
   
   upsertPrivilege(priv: any): void {
@@ -310,6 +375,30 @@ export class Database {
     return rows.map(r => r.privilege_code);
   }
   
+  getRolesByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM roles WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  // ==========================================================================
+  // Print Classes
+  // ==========================================================================
+  
+  upsertPrintClass(pc: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO print_classes (id, enterprise_id, property_id, name, code, display_order, active, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [pc.id, pc.enterpriseId, pc.propertyId, pc.name, pc.code, pc.displayOrder || 0, pc.active !== false ? 1 : 0]
+    );
+  }
+  
+  getPrintClass(id: string): any | null {
+    return this.get('SELECT * FROM print_classes WHERE id = ? AND active = 1', [id]);
+  }
+  
+  getPrintClassesByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM print_classes WHERE property_id = ? AND active = 1 ORDER BY display_order', [propertyId]);
+  }
+  
   // ==========================================================================
   // Menu Items
   // ==========================================================================
@@ -334,8 +423,16 @@ export class Database {
     return this.get('SELECT * FROM menu_items WHERE id = ? AND active = 1', [id]);
   }
   
+  getAllMenuItems(): any[] {
+    return this.all('SELECT * FROM menu_items WHERE active = 1', []);
+  }
+  
   getMenuItemsByProperty(propertyId: string): any[] {
     return this.all('SELECT * FROM menu_items WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getMenuItemWithModifiers(menuItemId: string): any | null {
+    return this.getFullMenuItemWithModifiers(menuItemId);
   }
   
   getMenuItemsBySlu(sluId: string): any[] {
@@ -411,7 +508,7 @@ export class Database {
   }
   
   getModifierGroup(id: string): any | null {
-    return this.get('SELECT * FROM modifier_groups WHERE id = ?', [id]);
+    return this.get('SELECT * FROM modifier_groups WHERE id = ? AND active = 1', [id]);
   }
   
   getModifierGroupsByProperty(propertyId: string): any[] {
@@ -435,7 +532,7 @@ export class Database {
   }
   
   getModifier(id: string): any | null {
-    return this.get('SELECT * FROM modifiers WHERE id = ?', [id]);
+    return this.get('SELECT * FROM modifiers WHERE id = ? AND active = 1', [id]);
   }
   
   getModifiersByProperty(propertyId: string): any[] {
@@ -521,7 +618,7 @@ export class Database {
   }
   
   getTaxGroup(id: string): any | null {
-    return this.get('SELECT * FROM tax_groups WHERE id = ?', [id]);
+    return this.get('SELECT * FROM tax_groups WHERE id = ? AND active = 1', [id]);
   }
   
   getTaxGroupsByProperty(propertyId: string): any[] {
@@ -551,7 +648,7 @@ export class Database {
   }
   
   getTender(id: string): any | null {
-    return this.get('SELECT * FROM tenders WHERE id = ?', [id]);
+    return this.get('SELECT * FROM tenders WHERE id = ? AND active = 1', [id]);
   }
   
   getTendersByProperty(propertyId: string): any[] {
@@ -587,7 +684,7 @@ export class Database {
   }
   
   getDiscount(id: string): any | null {
-    return this.get('SELECT * FROM discounts WHERE id = ?', [id]);
+    return this.get('SELECT * FROM discounts WHERE id = ? AND active = 1', [id]);
   }
   
   getDiscountsByProperty(propertyId: string): any[] {
@@ -621,7 +718,7 @@ export class Database {
   }
   
   getServiceCharge(id: string): any | null {
-    return this.get('SELECT * FROM service_charges WHERE id = ?', [id]);
+    return this.get('SELECT * FROM service_charges WHERE id = ? AND active = 1', [id]);
   }
   
   getServiceChargesByProperty(propertyId: string): any[] {
@@ -684,7 +781,7 @@ export class Database {
   }
   
   getWorkstation(id: string): any | null {
-    return this.get('SELECT * FROM workstations WHERE id = ?', [id]);
+    return this.get('SELECT * FROM workstations WHERE id = ? AND active = 1', [id]);
   }
   
   getWorkstationsByProperty(propertyId: string): any[] {
@@ -717,7 +814,7 @@ export class Database {
   }
   
   getPrinter(id: string): any | null {
-    return this.get('SELECT * FROM printers WHERE id = ?', [id]);
+    return this.get('SELECT * FROM printers WHERE id = ? AND active = 1', [id]);
   }
   
   getPrintersByProperty(propertyId: string): any[] {
@@ -753,7 +850,7 @@ export class Database {
   }
   
   getKdsDevice(id: string): any | null {
-    return this.get('SELECT * FROM kds_devices WHERE id = ?', [id]);
+    return this.get('SELECT * FROM kds_devices WHERE id = ? AND active = 1', [id]);
   }
   
   getKdsDevicesByProperty(propertyId: string): any[] {
@@ -778,7 +875,31 @@ export class Database {
   }
   
   getOrderDevice(id: string): any | null {
-    return this.get('SELECT * FROM order_devices WHERE id = ?', [id]);
+    return this.get('SELECT * FROM order_devices WHERE id = ? AND active = 1', [id]);
+  }
+  
+  upsertOrderDevicePrinter(odp: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO order_device_printers (id, order_device_id, printer_id, updated_at)
+       VALUES (?, ?, ?, datetime('now'))`,
+      [odp.id, odp.orderDeviceId, odp.printerId]
+    );
+  }
+  
+  getOrderDevicePrinters(orderDeviceId: string): any[] {
+    return this.all('SELECT * FROM order_device_printers WHERE order_device_id = ?', [orderDeviceId]);
+  }
+  
+  upsertOrderDeviceKds(odk: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO order_device_kds (id, order_device_id, kds_device_id, updated_at)
+       VALUES (?, ?, ?, datetime('now'))`,
+      [odk.id, odk.orderDeviceId, odk.kdsDeviceId]
+    );
+  }
+  
+  getOrderDeviceKds(orderDeviceId: string): any[] {
+    return this.all('SELECT * FROM order_device_kds WHERE order_device_id = ?', [orderDeviceId]);
   }
   
   getOrderDevicesByProperty(propertyId: string): any[] {
@@ -1033,7 +1154,7 @@ export class Database {
   }
   
   getPaymentProcessor(id: string): any | null {
-    return this.get('SELECT * FROM payment_processors WHERE id = ?', [id]);
+    return this.get('SELECT * FROM payment_processors WHERE id = ? AND active = 1', [id]);
   }
   
   getPaymentProcessorsByProperty(propertyId: string): any[] {
@@ -1066,7 +1187,7 @@ export class Database {
   }
   
   getLoyaltyProgram(id: string): any | null {
-    return this.get('SELECT * FROM loyalty_programs WHERE id = ?', [id]);
+    return this.get('SELECT * FROM loyalty_programs WHERE id = ? AND active = 1', [id]);
   }
   
   getLoyaltyProgramsByProperty(propertyId: string): any[] {
@@ -1088,12 +1209,16 @@ export class Database {
     );
   }
   
+  getLoyaltyMember(id: string): any | null {
+    return this.get('SELECT * FROM loyalty_members WHERE id = ? AND active = 1', [id]);
+  }
+  
   getLoyaltyMemberByPhone(phone: string): any | null {
-    return this.get('SELECT * FROM loyalty_members WHERE phone = ?', [phone]);
+    return this.get('SELECT * FROM loyalty_members WHERE phone = ? AND active = 1', [phone]);
   }
   
   getLoyaltyMemberByEmail(email: string): any | null {
-    return this.get('SELECT * FROM loyalty_members WHERE email = ?', [email]);
+    return this.get('SELECT * FROM loyalty_members WHERE email = ? AND active = 1', [email]);
   }
   
   upsertLoyaltyMemberEnrollment(enrollment: any): void {
@@ -1281,7 +1406,7 @@ export class Database {
   }
   
   getPosLayout(id: string): any | null {
-    return this.get('SELECT * FROM pos_layouts WHERE id = ?', [id]);
+    return this.get('SELECT * FROM pos_layouts WHERE id = ? AND active = 1', [id]);
   }
   
   getPosLayoutForRvc(propertyId: string, rvcId: string, orderType?: string): any | null {
@@ -1633,7 +1758,7 @@ export class Database {
   }
   
   getJobCode(id: string): any | null {
-    return this.get('SELECT * FROM job_codes WHERE id = ?', [id]);
+    return this.get('SELECT * FROM job_codes WHERE id = ? AND active = 1', [id]);
   }
   
   getJobCodesByProperty(propertyId: string): any[] {
@@ -1772,6 +1897,21 @@ export class Database {
     );
   }
   
+  upsertFiscalPeriod(period: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO fiscal_periods (
+        id, property_id, period_type, business_date, start_time, end_time, status,
+        opened_by_employee_id, closed_by_employee_id, cloud_synced, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM fiscal_periods WHERE id = ?), datetime('now')), datetime('now'))`,
+      [
+        period.id, period.propertyId, period.periodType, period.businessDate,
+        period.startTime, period.endTime, period.status || 'open',
+        period.openedByEmployeeId, period.closedByEmployeeId,
+        period.cloudSynced ? 1 : 0, period.id
+      ]
+    );
+  }
+  
   getFiscalPeriod(id: string): any | null {
     return this.get('SELECT * FROM fiscal_periods WHERE id = ?', [id]);
   }
@@ -1780,6 +1920,13 @@ export class Database {
     return this.get(
       'SELECT * FROM fiscal_periods WHERE property_id = ? AND status = ? ORDER BY start_time DESC LIMIT 1',
       [propertyId, 'open']
+    );
+  }
+  
+  getFiscalPeriodsByProperty(propertyId: string, limit: number = 30): any[] {
+    return this.all(
+      'SELECT * FROM fiscal_periods WHERE property_id = ? ORDER BY business_date DESC LIMIT ?',
+      [propertyId, limit]
     );
   }
   
