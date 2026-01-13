@@ -11601,10 +11601,59 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get a single terminal session
   app.get("/api/terminal-sessions/:id", async (req, res) => {
     try {
-      const session = await storage.getTerminalSession(req.params.id);
+      let session = await storage.getTerminalSession(req.params.id);
       if (!session) {
         return res.status(404).json({ message: "Terminal session not found" });
       }
+      
+      // If session is still active and has a Stripe PaymentIntent, check its status
+      const activeStatuses = ["pending", "awaiting_card", "processing", "card_inserted"];
+      if (activeStatuses.includes(session.status || "") && session.processorReference?.startsWith("pi_")) {
+        try {
+          const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+          if (stripeSecretKey) {
+            const Stripe = (await import('stripe')).default;
+            const stripe = new Stripe(stripeSecretKey);
+            const paymentIntent = await stripe.paymentIntents.retrieve(session.processorReference);
+            
+            // Check PaymentIntent status and update session accordingly
+            if (paymentIntent.status === "succeeded") {
+              // Payment completed successfully
+              const updated = await storage.updateTerminalSession(session.id, {
+                status: "approved",
+                statusMessage: "Payment approved",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+              session = updated || session;
+            } else if (paymentIntent.status === "canceled") {
+              // Payment was cancelled
+              const updated = await storage.updateTerminalSession(session.id, {
+                status: "cancelled",
+                statusMessage: "Payment cancelled",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+              session = updated || session;
+            } else if (paymentIntent.status === "requires_payment_method" && 
+                       paymentIntent.last_payment_error) {
+              // Card was declined
+              const updated = await storage.updateTerminalSession(session.id, {
+                status: "declined",
+                statusMessage: paymentIntent.last_payment_error.message || "Card declined",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+              session = updated || session;
+            }
+            // If still processing, leave status as-is
+          }
+        } catch (stripeError) {
+          console.error("Error checking Stripe PaymentIntent:", stripeError);
+          // Don't fail the request, just return current session status
+        }
+      }
+      
       res.json(session);
     } catch (error) {
       console.error("Get terminal session error:", error);
