@@ -4368,7 +4368,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks/:id/lock", async (req, res) => {
     try {
       const { id } = req.params;
-      const { workstationId, employeeId } = req.body;
+      const { workstationId, employeeId, lockMode = 'green' } = req.body;
 
       if (!workstationId || !employeeId) {
         return res.status(400).json({ message: "workstationId and employeeId required" });
@@ -4383,13 +4383,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (existingLock) {
         if (existingLock.workstationId === workstationId) {
           const newExpiry = new Date(Date.now() + LOCK_EXPIRY_MINUTES * 60 * 1000);
-          const refreshedLock = await storage.updateCheckLock(existingLock.id, { expiresAt: newExpiry });
+          const refreshedLock = await storage.updateCheckLock(existingLock.id, { expiresAt: newExpiry, lockMode });
           return res.json({ success: true, lock: refreshedLock });
         }
         if (new Date(existingLock.expiresAt) > new Date()) {
+          // Get workstation info for better error message
+          const lockingWs = await storage.getWorkstation(existingLock.workstationId);
           return res.status(409).json({
             error: "Check locked by another workstation",
             lockedBy: existingLock.workstationId,
+            lockedByName: lockingWs?.name || 'Unknown',
+            lockMode: existingLock.lockMode,
             expiresAt: existingLock.expiresAt,
           });
         }
@@ -4397,7 +4401,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const expiresAt = new Date(Date.now() + LOCK_EXPIRY_MINUTES * 60 * 1000);
-      const lock = await storage.createCheckLock({ checkId: id, workstationId, employeeId, expiresAt });
+      const lock = await storage.createCheckLock({ checkId: id, workstationId, employeeId, lockMode, expiresAt });
 
       res.json({ success: true, lock });
     } catch (error) {
@@ -4485,6 +4489,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Release workstation locks error:", error);
       res.status(500).json({ message: "Failed to release locks" });
+    }
+  });
+
+  // Get lock status for multiple checks (for open checks list with indicators)
+  app.get("/api/checks/locks", async (req, res) => {
+    try {
+      const rvcId = req.query.rvcId as string;
+      const currentWorkstationId = req.query.workstationId as string;
+      
+      if (!rvcId) {
+        return res.status(400).json({ message: "rvcId is required" });
+      }
+
+      // Get all open checks for this RVC
+      const openChecks = await storage.getOpenChecks(rvcId);
+      const checkIds = openChecks.map(c => c.id);
+      
+      // Get all locks for these checks
+      const locks = await storage.getCheckLocksByCheckIds(checkIds);
+      
+      // Get workstation online status for offline detection
+      const workstationIds = [...new Set(locks.map(l => l.workstationId))];
+      const workstations = await Promise.all(
+        workstationIds.map(id => storage.getWorkstation(id))
+      );
+      const wsMap = new Map(workstations.filter(Boolean).map(ws => [ws!.id, ws!]));
+      
+      // Build lock status map with pickup availability
+      const lockStatusMap: Record<string, {
+        status: 'available' | 'locked' | 'offline_locked';
+        lockedByWorkstationId?: string;
+        lockedByWorkstationName?: string;
+        lockMode?: string;
+        isCurrentWorkstation?: boolean;
+      }> = {};
+      
+      const now = new Date();
+      for (const checkId of checkIds) {
+        const lock = locks.find(l => l.checkId === checkId);
+        
+        if (!lock || new Date(lock.expiresAt) <= now) {
+          // No lock or expired - available for pickup
+          lockStatusMap[checkId] = { status: 'available' };
+        } else if (lock.workstationId === currentWorkstationId) {
+          // Current workstation has the lock
+          lockStatusMap[checkId] = { 
+            status: 'available',
+            isCurrentWorkstation: true,
+          };
+        } else {
+          // Another workstation has the lock
+          const lockingWs = wsMap.get(lock.workstationId);
+          const isOffline = lock.lockMode === 'red' || lock.lockMode === 'orange' || 
+                           (lockingWs && !lockingWs.isOnline);
+          
+          lockStatusMap[checkId] = {
+            status: isOffline ? 'offline_locked' : 'locked',
+            lockedByWorkstationId: lock.workstationId,
+            lockedByWorkstationName: lockingWs?.name || 'Unknown',
+            lockMode: lock.lockMode,
+          };
+        }
+      }
+      
+      res.json({ lockStatus: lockStatusMap });
+    } catch (error) {
+      console.error("Get check locks error:", error);
+      res.status(500).json({ message: "Failed to get check locks" });
     }
   });
 

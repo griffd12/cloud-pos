@@ -803,9 +803,13 @@ export const checkLocks = pgTable("check_locks", {
   checkId: varchar("check_id").notNull().references(() => checks.id).unique(),
   workstationId: varchar("workstation_id").notNull().references(() => workstations.id),
   employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  lockMode: text("lock_mode").notNull().default("green"), // 'green', 'yellow', 'red' - connection mode when lock acquired
   acquiredAt: timestamp("acquired_at").defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+
+export const insertCheckLockSchema = createInsertSchema(checkLocks).omit({ id: true, acquiredAt: true });
+export type InsertCheckLock = z.infer<typeof insertCheckLockSchema>;
 
 // Check Items (line items on a check)
 export const checkItems = pgTable("check_items", {

@@ -367,8 +367,9 @@ export interface IStorage {
 
   // Check Locks (for multi-workstation operation)
   getCheckLock(checkId: string): Promise<CheckLock | undefined>;
-  createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; expiresAt: Date }): Promise<CheckLock>;
-  updateCheckLock(id: string, data: Partial<{ expiresAt: Date }>): Promise<CheckLock | undefined>;
+  getCheckLocksByCheckIds(checkIds: string[]): Promise<CheckLock[]>;
+  createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; lockMode?: string; expiresAt: Date }): Promise<CheckLock>;
+  updateCheckLock(id: string, data: Partial<{ expiresAt: Date; lockMode: string }>): Promise<CheckLock | undefined>;
   deleteCheckLock(id: string): Promise<boolean>;
   deleteCheckLocksByWorkstation(workstationId: string): Promise<number>;
 
@@ -1862,12 +1863,17 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; expiresAt: Date }): Promise<CheckLock> {
+  async getCheckLocksByCheckIds(checkIds: string[]): Promise<CheckLock[]> {
+    if (checkIds.length === 0) return [];
+    return db.select().from(checkLocks).where(inArray(checkLocks.checkId, checkIds));
+  }
+
+  async createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; lockMode?: string; expiresAt: Date }): Promise<CheckLock> {
     const [result] = await db.insert(checkLocks).values(data).returning();
     return result;
   }
 
-  async updateCheckLock(id: string, data: Partial<{ expiresAt: Date }>): Promise<CheckLock | undefined> {
+  async updateCheckLock(id: string, data: Partial<{ expiresAt: Date; lockMode: string }>): Promise<CheckLock | undefined> {
     const [result] = await db.update(checkLocks).set(data).where(eq(checkLocks.id, id)).returning();
     return result;
   }
