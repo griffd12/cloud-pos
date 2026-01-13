@@ -125,6 +125,26 @@ export default function PosPage() {
     enabled: !!workstationId && !!currentEmployee,
   });
 
+  // Release lock on the current check (call before clearing check or signing out)
+  const releaseCurrentCheckLock = useCallback(async (checkId?: string) => {
+    const idToRelease = checkId || currentCheck?.id;
+    if (!idToRelease || !workstationId) return;
+    
+    try {
+      await apiRequest("POST", `/api/checks/${idToRelease}/unlock`, { workstationId });
+    } catch (error) {
+      console.error("Failed to release check lock:", error);
+    }
+  }, [currentCheck?.id, workstationId]);
+
+  // Enhanced logout that releases locks first
+  const handleLogout = useCallback(async () => {
+    if (currentCheck?.id && workstationId) {
+      await releaseCurrentCheckLock();
+    }
+    logout();
+  }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout]);
+
   // Auto-set RVC from workstation if not already set
   useEffect(() => {
     if (!currentRvc && wsContext?.rvcs && wsContext.rvcs.length > 0) {
@@ -417,7 +437,8 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
-      // Clear check state and sign out - check remains open for later pickup
+      // Release lock and clear check state - check remains open for later pickup
+      releaseCurrentCheckLock();
       setCurrentCheck(null);
       setCheckItems([]);
       logout();
@@ -444,7 +465,8 @@ export default function PosPage() {
       if (currentRvc?.propertyId) {
         queryClient.invalidateQueries({ queryKey: ["/api/item-availability", currentRvc.propertyId] });
       }
-      // Clear check state and sign out
+      // Release lock, clear check state and sign out
+      releaseCurrentCheckLock();
       setCurrentCheck(null);
       setCheckItems([]);
       if (data.voidedCount > 0) {
@@ -622,6 +644,7 @@ export default function PosPage() {
           }
         }
         setShowPaymentModal(false);
+        releaseCurrentCheckLock();
         setCurrentCheck(null);
         setCheckItems([]);
       } else {
@@ -637,6 +660,7 @@ export default function PosPage() {
   const handleReadyForNextOrder = () => {
     setCashChangeDue(null);
     setShowPaymentModal(false);
+    releaseCurrentCheckLock();
     setCurrentCheck(null);
     setCheckItems([]);
   };
@@ -681,6 +705,7 @@ export default function PosPage() {
     onSuccess: (updatedCheck: Check) => {
       setShowTransferModal(false);
       toast({ title: "Check Transferred", description: `Check #${updatedCheck.checkNumber} transferred successfully` });
+      releaseCurrentCheckLock();
       setCurrentCheck(null);
       setCheckItems([]);
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
@@ -1194,7 +1219,7 @@ export default function PosPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={logout}
+            onClick={handleLogout}
             data-testid="button-sign-out"
           >
             <LogOut className="w-4 h-4" />
