@@ -1659,6 +1659,7 @@ export default function PosPage() {
         onClose={() => setShowOpenChecksModal(false)}
         onSelect={handlePickupCheck}
         rvcId={currentRvc?.id}
+        workstationId={workstationId}
       />
 
       <TransactionLookupModal
