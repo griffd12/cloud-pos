@@ -71,7 +71,9 @@ async function getPaymentAdapter(processorId: string) {
   const gatewayType = processor.gatewayType;
   if (!isGatewayTypeSupported(gatewayType)) return null;
   
-  const credentials = await resolveCredentials(gatewayType);
+  // Get required credential keys for this gateway type and resolve them
+  const requiredKeys = getRequiredCredentialKeys(gatewayType);
+  const credentials = resolveCredentials(gatewayType.toUpperCase(), requiredKeys);
   const settings = processor.settings || {};
   const environment = (processor.environment as 'sandbox' | 'production') || 'sandbox';
   
