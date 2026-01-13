@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,19 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const PACKAGE_TYPE_ICONS: Record<string, React.ComponentType<any>> = {
   service_host: Server,
@@ -79,6 +91,8 @@ export default function CalPackagesPage() {
   const [selectedVersion, setSelectedVersion] = useState<CalPackageVersion | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [showPackageDialog, setShowPackageDialog] = useState(false);
+  const [showEditPackageDialog, setShowEditPackageDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [showDeployDialog, setShowDeployDialog] = useState(false);
 
@@ -173,6 +187,38 @@ export default function CalPackagesPage() {
     },
     onError: () => {
       toast({ title: "Failed to create version", variant: "destructive" });
+    },
+  });
+
+  const updatePackageMutation = useMutation({
+    mutationFn: async (data: { name: string; description: string }) => {
+      const res = await apiRequest("PATCH", `/api/cal-packages/${selectedPackage?.id}`, data);
+      return res.json();
+    },
+    onSuccess: (updatedPackage) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", enterpriseId] });
+      setShowEditPackageDialog(false);
+      setSelectedPackage(updatedPackage);
+      toast({ title: "Package updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update package", variant: "destructive" });
+    },
+  });
+
+  const deletePackageMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/cal-packages/${selectedPackage?.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", enterpriseId] });
+      setShowDeleteConfirm(false);
+      setSelectedPackage(null);
+      setSelectedVersion(null);
+      toast({ title: "Package deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete package", variant: "destructive" });
     },
   });
 
@@ -290,6 +336,14 @@ export default function CalPackagesPage() {
                     <CardDescription>{selectedPackage.description || "No description"}</CardDescription>
                   </div>
                   <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowEditPackageDialog(true)} data-testid="button-edit-package">
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowDeleteConfirm(true)} data-testid="button-delete-package">
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => setShowVersionDialog(true)} data-testid="button-add-version">
                       <Plus className="h-4 w-4 mr-1" />
                       Add Version
@@ -382,6 +436,38 @@ export default function CalPackagesPage() {
           enterpriseId={enterpriseId || ""}
         />
       )}
+
+      {selectedPackage && (
+        <EditPackageDialog
+          open={showEditPackageDialog}
+          onClose={() => setShowEditPackageDialog(false)}
+          onSubmit={(data) => updatePackageMutation.mutate(data)}
+          isLoading={updatePackageMutation.isPending}
+          package={selectedPackage}
+        />
+      )}
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete CAL Package</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedPackage?.name}"? This action cannot be undone.
+              All versions and deployment history for this package will also be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletePackageMutation.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deletePackageMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -452,6 +538,75 @@ function PackageDialog({
           </Button>
           <Button onClick={handleSubmit} disabled={isLoading || !name} data-testid="button-save-package">
             {isLoading ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditPackageDialog({
+  open,
+  onClose,
+  onSubmit,
+  isLoading,
+  package: pkg,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: { name: string; description: string }) => void;
+  isLoading: boolean;
+  package: CalPackage;
+}) {
+  const [name, setName] = useState(pkg.name);
+  const [description, setDescription] = useState(pkg.description || "");
+
+  useEffect(() => {
+    setName(pkg.name);
+    setDescription(pkg.description || "");
+  }, [pkg.id, pkg.name, pkg.description]);
+
+  const handleSubmit = () => {
+    onSubmit({ name, description });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit CAL Package</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Package Name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Service Host"
+              data-testid="input-edit-package-name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Package Type</Label>
+            <Badge variant="secondary">{PACKAGE_TYPE_LABELS[pkg.packageType] || pkg.packageType}</Badge>
+            <p className="text-xs text-muted-foreground">Package type cannot be changed after creation</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+              data-testid="input-edit-package-description"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-cancel-edit">
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isLoading || !name} data-testid="button-save-edit-package">
+            {isLoading ? "Saving..." : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
