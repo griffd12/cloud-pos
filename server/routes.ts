@@ -7882,7 +7882,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       
       // Get check payments with tips for the date range
-      const allCheckPayments = await storage.getCheckPayments();
+      const allCheckPayments = await storage.getAllPayments();
       const allChecks = await storage.getChecks();
       
       // Filter checks by property and date range
