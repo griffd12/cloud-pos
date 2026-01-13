@@ -2323,7 +2323,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const relevantTargets = targets.filter(t => 
           t.workstationId === workstation.id || 
           t.propertyId === workstation.propertyId ||
-          (!t.workstationId && !t.propertyId)
+          (primaryServiceHost && t.serviceHostId === primaryServiceHost.id) ||
+          (!t.workstationId && !t.propertyId && !t.serviceHostId)
         );
         for (const target of relevantTargets) {
           if (target.status !== "completed") {
@@ -16558,10 +16559,29 @@ connect();
     try {
       const { enterpriseId, deploymentScope, propertyId, workstationId, serviceHostId, ...deploymentData } = req.body;
       
+      if (!enterpriseId || !deploymentScope) {
+        return res.status(400).json({ error: "enterpriseId and deploymentScope are required" });
+      }
+      
+      if (deploymentScope === "property" && !propertyId) {
+        return res.status(400).json({ error: "propertyId is required for property-scoped deployments" });
+      }
+      
+      if (deploymentScope === "workstation" && !workstationId) {
+        return res.status(400).json({ error: "workstationId is required for workstation-scoped deployments" });
+      }
+      
+      if (deploymentScope === "service_host" && !serviceHostId) {
+        return res.status(400).json({ error: "serviceHostId is required for service_host-scoped deployments" });
+      }
+      
       const deployment = await storage.createCalDeployment({
+        ...deploymentData,
         enterpriseId,
         deploymentScope,
-        ...deploymentData,
+        targetPropertyId: propertyId || null,
+        targetWorkstationId: workstationId || null,
+        targetServiceHostId: serviceHostId || null,
       });
 
       const createdTargets: any[] = [];

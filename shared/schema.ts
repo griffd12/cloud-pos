@@ -3110,7 +3110,10 @@ export const calDeployments = pgTable("cal_deployments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").notNull().references(() => enterprises.id),
   packageVersionId: varchar("package_version_id").notNull().references(() => calPackageVersions.id),
-  deploymentScope: text("deployment_scope").notNull(), // enterprise, property, workstation
+  deploymentScope: text("deployment_scope").notNull(), // enterprise, property, workstation, service_host
+  targetPropertyId: varchar("target_property_id").references(() => properties.id), // For property-scoped
+  targetWorkstationId: varchar("target_workstation_id").references(() => workstations.id), // For workstation-scoped
+  targetServiceHostId: varchar("target_service_host_id").references(() => serviceHosts.id), // For service_host-scoped
   action: text("action").notNull().default("install"), // install, update, remove, reinstall
   scheduledAt: timestamp("scheduled_at"), // When to deploy (null = immediate)
   expiresAt: timestamp("expires_at"), // Deployment expires after this time
