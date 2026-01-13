@@ -63,6 +63,21 @@ import {
 
 const clients: Map<string, Set<WebSocket>> = new Map();
 
+// Helper to get a payment adapter for a processor
+async function getPaymentAdapter(processorId: string) {
+  const processor = await storage.getPaymentProcessor(processorId);
+  if (!processor) return null;
+  
+  const gatewayType = processor.gatewayType;
+  if (!isGatewayTypeSupported(gatewayType)) return null;
+  
+  const credentials = await resolveCredentials(gatewayType);
+  const settings = processor.settings || {};
+  const environment = (processor.environment as 'sandbox' | 'production') || 'sandbox';
+  
+  return createPaymentAdapter(gatewayType, credentials, settings, environment);
+}
+
 // Print agent connection tracking (module scope for access from printCheckReceipt)
 const connectedAgents: Map<string, WebSocket> = new Map(); // agentId -> WebSocket
 
@@ -11606,50 +11621,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Terminal session not found" });
       }
       
-      // If session is still active and has a Stripe PaymentIntent, check its status
+      // If session is still active and has a processor reference, check payment status
       const activeStatuses = ["pending", "awaiting_card", "processing", "card_inserted"];
-      if (activeStatuses.includes(session.status || "") && session.processorReference?.startsWith("pi_")) {
+      if (activeStatuses.includes(session.status || "") && session.processorReference) {
         try {
-          const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-          if (stripeSecretKey) {
-            const Stripe = (await import('stripe')).default;
-            const stripe = new Stripe(stripeSecretKey);
-            const paymentIntent = await stripe.paymentIntents.retrieve(session.processorReference);
-            
-            // Check PaymentIntent status and update session accordingly
-            if (paymentIntent.status === "succeeded") {
-              // Payment completed successfully
-              const updated = await storage.updateTerminalSession(session.id, {
-                status: "approved",
-                statusMessage: "Payment approved",
-                completedAt: new Date(),
-              });
-              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
-              session = updated || session;
-            } else if (paymentIntent.status === "canceled") {
-              // Payment was cancelled
-              const updated = await storage.updateTerminalSession(session.id, {
-                status: "cancelled",
-                statusMessage: "Payment cancelled",
-                completedAt: new Date(),
-              });
-              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
-              session = updated || session;
-            } else if (paymentIntent.status === "requires_payment_method" && 
-                       paymentIntent.last_payment_error) {
-              // Card was declined
-              const updated = await storage.updateTerminalSession(session.id, {
-                status: "declined",
-                statusMessage: paymentIntent.last_payment_error.message || "Card declined",
-                completedAt: new Date(),
-              });
-              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
-              session = updated || session;
+          // Get terminal device to find its processor
+          const terminal = await storage.getTerminalDevice(session.terminalDeviceId);
+          if (terminal?.paymentProcessorId) {
+            const processor = await storage.getPaymentProcessor(terminal.paymentProcessorId);
+            if (processor) {
+              // Get the payment adapter for this processor
+              const adapter = await getPaymentAdapter(processor.id);
+              if (adapter?.checkTerminalPaymentStatus) {
+                const status = await adapter.checkTerminalPaymentStatus(session.processorReference);
+                
+                // Update session based on processor status response
+                if (status.status === 'succeeded') {
+                  const updated = await storage.updateTerminalSession(session.id, {
+                    status: "approved",
+                    statusMessage: "Payment approved",
+                    completedAt: new Date(),
+                  });
+                  await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+                  session = updated || session;
+                } else if (status.status === 'cancelled') {
+                  const updated = await storage.updateTerminalSession(session.id, {
+                    status: "cancelled",
+                    statusMessage: "Payment cancelled",
+                    completedAt: new Date(),
+                  });
+                  await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+                  session = updated || session;
+                } else if (status.status === 'declined') {
+                  const updated = await storage.updateTerminalSession(session.id, {
+                    status: "declined",
+                    statusMessage: status.errorMessage || "Card declined",
+                    completedAt: new Date(),
+                  });
+                  await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+                  session = updated || session;
+                }
+                // If still processing/pending, leave status as-is
+              }
             }
-            // If still processing, leave status as-is
           }
-        } catch (stripeError) {
-          console.error("Error checking Stripe PaymentIntent:", stripeError);
+        } catch (adapterError) {
+          console.error("Error checking payment status via adapter:", adapterError);
           // Don't fail the request, just return current session status
         }
       }
@@ -11713,20 +11730,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Update terminal status to busy
       await storage.updateTerminalDeviceStatus(terminal.id, "busy");
 
-      // If this is a Stripe terminal, initiate the payment on the reader
-      if (terminal.model?.startsWith('stripe_') && terminal.cloudDeviceId) {
+      // If terminal has a cloud device ID and processor, initiate payment via adapter
+      if (terminal.cloudDeviceId && terminal.paymentProcessorId) {
         try {
-          const { StripePaymentAdapter } = await import('./payments/adapters/stripe');
-          const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+          const adapter = await getPaymentAdapter(terminal.paymentProcessorId);
           
-          if (stripeSecretKey) {
-            const stripeAdapter = new StripePaymentAdapter(
-              { SECRET_KEY: stripeSecretKey },
-              {},
-              'production'
-            );
-            
-            const result = await stripeAdapter.initiateTerminalPayment({
+          if (adapter?.initiateTerminalPayment) {
+            const result = await adapter.initiateTerminalPayment({
               readerId: terminal.cloudDeviceId,
               amount: parsed.data.amount,
               currency: parsed.data.currency || 'usd',
@@ -11738,14 +11748,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               },
             });
             
-            if (result.success && result.paymentIntentId) {
+            if (result.success && result.processorReference) {
               // Update session with processor reference
               await storage.updateTerminalSession(session.id, {
                 status: "awaiting_card",
-                processorReference: result.paymentIntentId,
+                processorReference: result.processorReference,
               });
               session.status = "awaiting_card";
-              session.processorReference = result.paymentIntentId;
+              session.processorReference = result.processorReference;
             } else {
               // Failed to initiate - update session as error
               await storage.updateTerminalSession(session.id, {
@@ -11760,16 +11770,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               });
             }
           }
-        } catch (stripeError: any) {
-          console.error("Stripe Terminal initiation error:", stripeError);
+        } catch (adapterError: any) {
+          console.error("Terminal payment initiation error:", adapterError);
           await storage.updateTerminalSession(session.id, {
             status: "error",
-            statusMessage: stripeError.message || "Terminal communication error",
+            statusMessage: adapterError.message || "Terminal communication error",
             completedAt: new Date(),
           });
           await storage.updateTerminalDeviceStatus(terminal.id, "online");
           return res.status(500).json({ 
-            message: stripeError.message || "Terminal communication error" 
+            message: adapterError.message || "Terminal communication error" 
           });
         }
       }

@@ -159,6 +159,33 @@ export interface PaymentGatewayAdapter {
   
   // Health check
   testConnection?(): Promise<{ success: boolean; message?: string }>;
+  
+  // Terminal-specific operations (for EMV/card-present)
+  initiateTerminalPayment?(request: TerminalPaymentRequest): Promise<TerminalPaymentResponse>;
+  checkTerminalPaymentStatus?(processorReference: string): Promise<TerminalPaymentStatusResponse>;
+  cancelTerminalPayment?(processorReference: string): Promise<{ success: boolean; errorMessage?: string }>;
+}
+
+// Terminal payment types
+export interface TerminalPaymentRequest {
+  readerId: string; // The processor's reader/terminal ID (e.g., Stripe reader ID)
+  amount: number; // Amount in cents
+  currency?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface TerminalPaymentResponse {
+  success: boolean;
+  processorReference?: string; // The processor's transaction/intent ID
+  errorMessage?: string;
+}
+
+export interface TerminalPaymentStatusResponse {
+  status: 'pending' | 'processing' | 'succeeded' | 'declined' | 'cancelled' | 'error';
+  errorMessage?: string;
+  cardBrand?: string;
+  cardLast4?: string;
+  authCode?: string;
 }
 
 /**

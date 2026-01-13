@@ -351,31 +351,31 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
 
   /**
    * Initiate a terminal payment by creating a PaymentIntent and sending it to the reader
+   * Implements PaymentGatewayAdapter interface
    */
-  async initiateTerminalPayment(params: {
+  async initiateTerminalPayment(request: {
     readerId: string;
     amount: number;
     currency?: string;
     metadata?: Record<string, string>;
   }): Promise<{ 
     success: boolean; 
-    paymentIntentId?: string; 
-    readerActionId?: string;
+    processorReference?: string;
     errorMessage?: string;
   }> {
     try {
       // Create a PaymentIntent for the terminal
       const paymentIntent = await this.stripe.paymentIntents.create({
-        amount: params.amount,
-        currency: params.currency || 'usd',
+        amount: request.amount,
+        currency: request.currency || 'usd',
         payment_method_types: ['card_present'],
         capture_method: 'automatic',
-        metadata: params.metadata || {},
+        metadata: request.metadata || {},
       });
 
       // Send the PaymentIntent to the reader for processing
-      const reader = await this.stripe.terminal.readers.processPaymentIntent(
-        params.readerId,
+      await this.stripe.terminal.readers.processPaymentIntent(
+        request.readerId,
         {
           payment_intent: paymentIntent.id,
         }
@@ -383,8 +383,7 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
 
       return {
         success: true,
-        paymentIntentId: paymentIntent.id,
-        readerActionId: reader.action?.process_payment_intent?.payment_intent as string,
+        processorReference: paymentIntent.id,
       };
     } catch (error) {
       const stripeError = error as Stripe.errors.StripeError;
@@ -397,7 +396,106 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
   }
 
   /**
-   * Cancel an ongoing reader action
+   * Check the status of a terminal payment via PaymentIntent
+   * Implements PaymentGatewayAdapter interface
+   */
+  async checkTerminalPaymentStatus(processorReference: string): Promise<{
+    status: 'pending' | 'processing' | 'succeeded' | 'declined' | 'cancelled' | 'error';
+    errorMessage?: string;
+    cardBrand?: string;
+    cardLast4?: string;
+    authCode?: string;
+  }> {
+    try {
+      const paymentIntent = await this.stripe.paymentIntents.retrieve(processorReference, {
+        expand: ['latest_charge'],
+      });
+
+      // Map Stripe PaymentIntent status to our standard statuses
+      let status: 'pending' | 'processing' | 'succeeded' | 'declined' | 'cancelled' | 'error';
+      let errorMessage: string | undefined;
+
+      switch (paymentIntent.status) {
+        case 'succeeded':
+          status = 'succeeded';
+          break;
+        case 'canceled':
+          status = 'cancelled';
+          break;
+        case 'requires_payment_method':
+          if (paymentIntent.last_payment_error) {
+            status = 'declined';
+            errorMessage = paymentIntent.last_payment_error.message || 'Card declined';
+          } else {
+            status = 'pending';
+          }
+          break;
+        case 'processing':
+        case 'requires_capture':
+        case 'requires_confirmation':
+          status = 'processing';
+          break;
+        case 'requires_action':
+          status = 'pending';
+          break;
+        default:
+          status = 'pending';
+      }
+
+      // Extract card details from latest charge if available
+      let cardBrand: string | undefined;
+      let cardLast4: string | undefined;
+      let authCode: string | undefined;
+
+      if (status === 'succeeded' && paymentIntent.latest_charge) {
+        const charge = paymentIntent.latest_charge as Stripe.Charge;
+        if (charge.payment_method_details?.card_present) {
+          const cardDetails = charge.payment_method_details.card_present;
+          cardBrand = cardDetails.brand || undefined;
+          cardLast4 = cardDetails.last4 || undefined;
+        }
+        authCode = charge.authorization_code || undefined;
+      }
+
+      return {
+        status,
+        errorMessage,
+        cardBrand,
+        cardLast4,
+        authCode,
+      };
+    } catch (error) {
+      const stripeError = error as Stripe.errors.StripeError;
+      console.error('Error checking Stripe payment status:', stripeError);
+      return {
+        status: 'error',
+        errorMessage: stripeError.message || 'Failed to check payment status',
+      };
+    }
+  }
+
+  /**
+   * Cancel a terminal payment by cancelling the PaymentIntent
+   * Implements PaymentGatewayAdapter interface
+   */
+  async cancelTerminalPayment(processorReference: string): Promise<{ 
+    success: boolean; 
+    errorMessage?: string;
+  }> {
+    try {
+      await this.stripe.paymentIntents.cancel(processorReference);
+      return { success: true };
+    } catch (error) {
+      const stripeError = error as Stripe.errors.StripeError;
+      return {
+        success: false,
+        errorMessage: stripeError.message || 'Failed to cancel payment',
+      };
+    }
+  }
+
+  /**
+   * Cancel an ongoing reader action (Stripe-specific)
    */
   async cancelReaderAction(readerId: string): Promise<{ success: boolean; errorMessage?: string }> {
     try {
@@ -413,7 +511,7 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
   }
 
   /**
-   * Get reader status from Stripe
+   * Get reader status from Stripe (Stripe-specific)
    */
   async getReaderStatus(readerId: string): Promise<{
     status: string;
