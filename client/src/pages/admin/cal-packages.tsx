@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { type CalPackage, type CalPackageVersion, type CalDeployment, type Enterprise, type Property, type Workstation, CAL_PACKAGE_TYPES, CAL_DEPLOYMENT_ACTIONS } from "@shared/schema";
+import { type CalPackage, type CalPackageVersion, type CalDeployment, type Enterprise, type Property, type Workstation, CAL_PACKAGE_TYPES, CAL_DEPLOYMENT_ACTIONS, CAL_VERSION_REGEX, CAL_VERSION_FORMAT_MESSAGE } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -627,10 +627,34 @@ function VersionDialog({
 }) {
   const [version, setVersion] = useState("");
   const [releaseNotes, setReleaseNotes] = useState("");
+  const [versionError, setVersionError] = useState("");
+
+  const validateVersion = (v: string) => {
+    if (!v) {
+      setVersionError("");
+      return false;
+    }
+    if (!CAL_VERSION_REGEX.test(v)) {
+      setVersionError(CAL_VERSION_FORMAT_MESSAGE);
+      return false;
+    }
+    setVersionError("");
+    return true;
+  };
+
+  const handleVersionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setVersion(v);
+    validateVersion(v);
+  };
 
   const handleSubmit = () => {
-    onSubmit({ version, releaseNotes });
+    if (validateVersion(version)) {
+      onSubmit({ version, releaseNotes });
+    }
   };
+
+  const isValid = version && CAL_VERSION_REGEX.test(version);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -643,10 +667,17 @@ function VersionDialog({
             <Label>Version</Label>
             <Input
               value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="e.g., 3.5"
+              onChange={handleVersionChange}
+              placeholder="e.g., 1.0.0"
               data-testid="input-version"
+              className={versionError ? "border-destructive" : ""}
             />
+            <p className="text-xs text-muted-foreground">
+              Format: X.X.X (Major.Patch.Hotfix) - e.g., 1.0.0, 3.5.2, 19.3.1
+            </p>
+            {versionError && (
+              <p className="text-xs text-destructive">{versionError}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Release Notes</Label>
@@ -662,7 +693,7 @@ function VersionDialog({
           <Button variant="outline" onClick={onClose} data-testid="button-cancel">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isLoading || !version} data-testid="button-save-version">
+          <Button onClick={handleSubmit} disabled={isLoading || !isValid} data-testid="button-save-version">
             {isLoading ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>

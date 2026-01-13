@@ -3167,7 +3167,20 @@ export const calDeploymentTargetsRelations = relations(calDeploymentTargets, ({ 
 }));
 
 export const insertCalPackageSchema = createInsertSchema(calPackages).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertCalPackageVersionSchema = createInsertSchema(calPackageVersions).omit({ id: true, createdAt: true });
+
+// CAL Package Version format: X.X.X (Major.Patch.Hotfix)
+// - Major: Main product version number
+// - Patch: New enhancements/features added
+// - Hotfix: Bug fix to the patch
+// Similar to Oracle Simphony versioning (e.g., 19.3.1, 19.5.0)
+export const CAL_VERSION_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+export const CAL_VERSION_FORMAT_MESSAGE = "Version must be in X.X.X format (e.g., 1.0.0, 3.5.2)";
+
+export const insertCalPackageVersionSchema = createInsertSchema(calPackageVersions)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    version: z.string().regex(CAL_VERSION_REGEX, CAL_VERSION_FORMAT_MESSAGE),
+  });
 export const insertCalPackagePrerequisiteSchema = createInsertSchema(calPackagePrerequisites).omit({ id: true });
 export const insertCalDeploymentSchema = createInsertSchema(calDeployments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCalDeploymentTargetSchema = createInsertSchema(calDeploymentTargets).omit({ id: true });

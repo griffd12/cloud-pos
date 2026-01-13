@@ -38,6 +38,8 @@ import {
   // Descriptor schemas
   insertDescriptorSetSchema,
   DESCRIPTOR_SCOPE_TYPES,
+  // CAL Package schemas
+  insertCalPackageVersionSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -16463,7 +16465,17 @@ connect();
 
   app.post("/api/cal-package-versions", async (req, res) => {
     try {
-      const version = await storage.createCalPackageVersion(req.body);
+      // Validate version format (X.X.X)
+      const parseResult = insertCalPackageVersionSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const versionError = parseResult.error.errors.find(e => e.path.includes("version"));
+        if (versionError) {
+          return res.status(400).json({ error: versionError.message });
+        }
+        return res.status(400).json({ error: "Invalid version data" });
+      }
+      
+      const version = await storage.createCalPackageVersion(parseResult.data);
       res.status(201).json(version);
     } catch (error) {
       console.error("Error creating CAL package version:", error);
