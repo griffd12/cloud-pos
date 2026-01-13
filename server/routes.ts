@@ -11627,43 +11627,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         try {
           // Get terminal device to find its processor
           const terminal = await storage.getTerminalDevice(session.terminalDeviceId);
+          let adapter = null;
+          
+          // Try to get adapter from processor assignment first
           if (terminal?.paymentProcessorId) {
-            const processor = await storage.getPaymentProcessor(terminal.paymentProcessorId);
-            if (processor) {
-              // Get the payment adapter for this processor
-              const adapter = await getPaymentAdapter(processor.id);
-              if (adapter?.checkTerminalPaymentStatus) {
-                const status = await adapter.checkTerminalPaymentStatus(session.processorReference);
-                
-                // Update session based on processor status response
-                if (status.status === 'succeeded') {
-                  const updated = await storage.updateTerminalSession(session.id, {
-                    status: "approved",
-                    statusMessage: "Payment approved",
-                    completedAt: new Date(),
-                  });
-                  await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
-                  session = updated || session;
-                } else if (status.status === 'cancelled') {
-                  const updated = await storage.updateTerminalSession(session.id, {
-                    status: "cancelled",
-                    statusMessage: "Payment cancelled",
-                    completedAt: new Date(),
-                  });
-                  await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
-                  session = updated || session;
-                } else if (status.status === 'declined') {
-                  const updated = await storage.updateTerminalSession(session.id, {
-                    status: "declined",
-                    statusMessage: status.errorMessage || "Card declined",
-                    completedAt: new Date(),
-                  });
-                  await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
-                  session = updated || session;
-                }
-                // If still processing/pending, leave status as-is
-              }
+            adapter = await getPaymentAdapter(terminal.paymentProcessorId);
+          }
+          
+          // Fall back to Stripe adapter for Stripe terminal models or Stripe-like references
+          if (!adapter && (terminal?.model?.startsWith('stripe_') || session.processorReference.startsWith('pi_'))) {
+            const { StripePaymentAdapter } = await import('./payments/adapters/stripe');
+            const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+            if (stripeSecretKey) {
+              adapter = new StripePaymentAdapter(
+                { SECRET_KEY: stripeSecretKey },
+                {},
+                'production'
+              );
             }
+          }
+          
+          if (adapter?.checkTerminalPaymentStatus) {
+            const status = await adapter.checkTerminalPaymentStatus(session.processorReference);
+            
+            // Update session based on processor status response
+            if (status.status === 'succeeded') {
+              const updated = await storage.updateTerminalSession(session.id, {
+                status: "approved",
+                statusMessage: "Payment approved",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+              session = updated || session;
+            } else if (status.status === 'cancelled') {
+              const updated = await storage.updateTerminalSession(session.id, {
+                status: "cancelled",
+                statusMessage: "Payment cancelled",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+              session = updated || session;
+            } else if (status.status === 'declined') {
+              const updated = await storage.updateTerminalSession(session.id, {
+                status: "declined",
+                statusMessage: status.errorMessage || "Card declined",
+                completedAt: new Date(),
+              });
+              await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+              session = updated || session;
+            }
+            // If still processing/pending, leave status as-is
           }
         } catch (adapterError) {
           console.error("Error checking payment status via adapter:", adapterError);
@@ -11730,10 +11743,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Update terminal status to busy
       await storage.updateTerminalDeviceStatus(terminal.id, "busy");
 
-      // If terminal has a cloud device ID and processor, initiate payment via adapter
-      if (terminal.cloudDeviceId && terminal.paymentProcessorId) {
+      // Initiate payment on terminal if it has a cloud device ID
+      if (terminal.cloudDeviceId) {
         try {
-          const adapter = await getPaymentAdapter(terminal.paymentProcessorId);
+          let adapter = null;
+          
+          // Try to get adapter from processor assignment first
+          if (terminal.paymentProcessorId) {
+            adapter = await getPaymentAdapter(terminal.paymentProcessorId);
+          }
+          
+          // Fall back to Stripe adapter for Stripe terminal models (backward compatibility)
+          if (!adapter && terminal.model?.startsWith('stripe_')) {
+            const { StripePaymentAdapter } = await import('./payments/adapters/stripe');
+            const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+            if (stripeSecretKey) {
+              adapter = new StripePaymentAdapter(
+                { SECRET_KEY: stripeSecretKey },
+                {},
+                'production'
+              );
+            }
+          }
           
           if (adapter?.initiateTerminalPayment) {
             const result = await adapter.initiateTerminalPayment({
