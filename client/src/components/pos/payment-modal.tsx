@@ -662,13 +662,15 @@ export function PaymentModal({
     }
   };
   
-  // Poll terminal session status (use apiRequest for device token)
+  // Poll terminal session status
   useEffect(() => {
     if (!terminalSession || !terminalPolling) return;
     
     const pollSession = async () => {
       try {
-        const res = await apiRequest("GET", `/api/terminal-sessions/${terminalSession.id}`);
+        const res = await fetch(`/api/terminal-sessions/${terminalSession.id}`, {
+          credentials: "include",
+        });
         if (!res.ok) return;
         const session = await res.json() as TerminalSession;
         
