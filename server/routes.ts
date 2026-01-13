@@ -16551,7 +16551,60 @@ connect();
         return res.status(400).json({ error: "enterpriseId is required" });
       }
       const deployments = await storage.getCalDeployments(enterpriseId as string);
-      res.json(deployments);
+      
+      // Enrich deployments with package, version, and target info
+      const enrichedDeployments = await Promise.all(deployments.map(async (deployment) => {
+        let packageName = "";
+        let versionNumber = "";
+        let targetName = "";
+        
+        // Get package version and package info
+        if (deployment.packageVersionId) {
+          const version = await storage.getCalPackageVersion(deployment.packageVersionId);
+          if (version) {
+            versionNumber = version.version;
+            const pkg = await storage.getCalPackage(version.packageId);
+            if (pkg) {
+              packageName = pkg.name;
+            }
+          }
+        }
+        
+        // Get target name based on scope
+        if (deployment.deploymentScope === "property" && deployment.targetPropertyId) {
+          const property = await storage.getProperty(deployment.targetPropertyId);
+          if (property) targetName = property.name;
+        } else if (deployment.deploymentScope === "workstation" && deployment.targetWorkstationId) {
+          const workstation = await storage.getWorkstation(deployment.targetWorkstationId);
+          if (workstation) targetName = workstation.name;
+        } else if (deployment.deploymentScope === "service_host" && deployment.targetServiceHostId) {
+          const serviceHost = await storage.getServiceHost(deployment.targetServiceHostId);
+          if (serviceHost) targetName = serviceHost.name;
+        } else if (deployment.deploymentScope === "enterprise") {
+          targetName = "All Properties";
+        }
+        
+        // Get deployment targets to determine overall status
+        const targets = await storage.getCalDeploymentTargets(deployment.id);
+        let overallStatus = "pending";
+        if (targets.length > 0) {
+          const statuses = targets.map(t => t.status);
+          if (statuses.every(s => s === "completed")) overallStatus = "completed";
+          else if (statuses.some(s => s === "failed")) overallStatus = "failed";
+          else if (statuses.some(s => s === "installing")) overallStatus = "installing";
+          else if (statuses.some(s => s === "downloading")) overallStatus = "downloading";
+        }
+        
+        return {
+          ...deployment,
+          packageName,
+          versionNumber,
+          targetName,
+          overallStatus,
+        };
+      }));
+      
+      res.json(enrichedDeployments);
     } catch (error) {
       console.error("Error fetching CAL deployments:", error);
       res.status(500).json({ error: "Failed to fetch CAL deployments" });

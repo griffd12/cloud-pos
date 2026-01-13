@@ -311,13 +311,27 @@ export default function CalPackagesPage() {
                 <p className="text-sm text-muted-foreground">No deployments</p>
               ) : (
                 <div className="space-y-2">
-                  {deployments.slice(0, 5).map((deployment) => (
-                    <div key={deployment.id} className="flex items-center gap-2 text-sm p-2 rounded-md bg-muted/30">
-                      {deployment.action === "install" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                      {deployment.action === "remove" && <XCircle className="h-4 w-4 text-red-600" />}
-                      {deployment.action === "update" && <Clock className="h-4 w-4 text-amber-600" />}
-                      <span className="flex-1 truncate">{deployment.action}</span>
-                      <Badge variant="outline" className="text-xs">{deployment.deploymentScope}</Badge>
+                  {deployments.slice(0, 5).map((deployment: CalDeployment & { packageName?: string; versionNumber?: string; targetName?: string; overallStatus?: string }) => (
+                    <div key={deployment.id} className="flex flex-col gap-1 text-sm p-2 rounded-md bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        {deployment.overallStatus === "completed" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                        {deployment.overallStatus === "failed" && <XCircle className="h-4 w-4 text-red-600" />}
+                        {deployment.overallStatus === "pending" && <Clock className="h-4 w-4 text-amber-600" />}
+                        {(deployment.overallStatus === "downloading" || deployment.overallStatus === "installing") && <Clock className="h-4 w-4 text-blue-600 animate-pulse" />}
+                        <span className="font-medium truncate">{deployment.packageName || "Unknown Package"}</span>
+                        <Badge variant="secondary" className="text-xs">{deployment.versionNumber || "?"}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
+                        <span className="capitalize">{deployment.action}</span>
+                        <span>→</span>
+                        <span>{deployment.targetName || deployment.deploymentScope}</span>
+                        <Badge 
+                          variant={deployment.overallStatus === "completed" ? "default" : deployment.overallStatus === "failed" ? "destructive" : "outline"} 
+                          className="text-xs ml-auto"
+                        >
+                          {deployment.overallStatus || "pending"}
+                        </Badge>
+                      </div>
                     </div>
                   ))}
                 </div>
