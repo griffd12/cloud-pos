@@ -10377,7 +10377,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!secretKey) {
       throw new Error('STRIPE_SECRET_KEY not configured');
     }
-    const Stripe = require('stripe');
     return new Stripe(secretKey);
   };
 
