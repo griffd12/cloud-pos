@@ -168,7 +168,7 @@ export default function KdsPage() {
         ...t,
         createdAt: new Date(t.createdAt),
       })),
-    refetchInterval: 5000,
+    refetchInterval: 2000,
   });
 
   // WebSocket for real-time KDS updates
