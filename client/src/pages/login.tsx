@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle, Monitor } from "lucide-react";
+import { useFullscreen } from "@/hooks/use-fullscreen";
+import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle, Monitor, Maximize, Minimize } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,6 +46,7 @@ interface ClockStatusResponse {
 export default function LoginPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { isFullscreen, isSupported: fullscreenSupported, toggleFullscreen } = useFullscreen();
   const {
     setCurrentEmployee,
     setCurrentRvc,
@@ -438,7 +440,18 @@ export default function LoginPage() {
   if (!workstationId) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="absolute top-4 right-4 z-10">
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          {fullscreenSupported && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              data-testid="button-fullscreen"
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </Button>
+          )}
           <ThemeToggle />
         </div>
         <Card className="w-full max-w-md">
@@ -490,7 +503,18 @@ export default function LoginPage() {
   if (wsContextError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="absolute top-4 right-4 z-10">
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          {fullscreenSupported && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              data-testid="button-fullscreen"
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </Button>
+          )}
           <ThemeToggle />
         </div>
         <Card className="w-full max-w-md">
@@ -522,6 +546,17 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <ConnectionModeBanner />
       <div className="absolute top-10 right-4 z-10 flex items-center gap-2">
+        {fullscreenSupported && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            data-testid="button-fullscreen"
+          >
+            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+          </Button>
+        )}
         <ThemeToggle />
       </div>
 
