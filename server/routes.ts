@@ -2297,6 +2297,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  app.get("/api/workstations/:id/activation-config", async (req, res) => {
+    try {
+      const workstation = await storage.getWorkstation(req.params.id);
+      if (!workstation) return res.status(404).json({ message: "Workstation not found" });
+      
+      const property = await storage.getProperty(workstation.propertyId);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const enterprise = await storage.getEnterprise(property.enterpriseId);
+      
+      const rvcs = await storage.getRvcs(workstation.propertyId);
+      
+      const serviceBindings = await storage.getWorkstationServiceBindings(workstation.propertyId);
+      const myBindings = serviceBindings.filter(b => b.workstationId === workstation.id && b.active);
+      
+      const serviceHosts = await storage.getServiceHosts(workstation.propertyId);
+      const primaryServiceHost = serviceHosts.find(sh => sh.isPrimary) || serviceHosts[0] || null;
+      
+      const pendingDeployments = await storage.getCalDeployments(property.enterpriseId);
+      const workstationDeploymentTargets: any[] = [];
+      
+      for (const deployment of pendingDeployments) {
+        const targets = await storage.getCalDeploymentTargets(deployment.id);
+        const relevantTargets = targets.filter(t => 
+          t.workstationId === workstation.id || 
+          t.propertyId === workstation.propertyId ||
+          (!t.workstationId && !t.propertyId)
+        );
+        for (const target of relevantTargets) {
+          if (target.status !== "completed") {
+            workstationDeploymentTargets.push({
+              ...target,
+              deployment,
+            });
+          }
+        }
+      }
+
+      res.json({
+        workstation,
+        property,
+        enterprise,
+        rvcs,
+        serviceBindings: myBindings,
+        serviceHost: primaryServiceHost,
+        pendingDeployments: workstationDeploymentTargets,
+        connectionConfig: {
+          cloudUrl: process.env.REPLIT_URL || "",
+          serviceHostUrl: primaryServiceHost ? `http://${primaryServiceHost.lastKnownIp || "localhost"}:3001` : null,
+          syncEnabled: workstation.allowOfflineOperation,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching workstation activation config:", error);
+      res.status(500).json({ error: "Failed to fetch activation config" });
+    }
+  });
+
   app.post("/api/workstations", async (req, res) => {
     try {
       const validated = insertWorkstationSchema.parse(req.body);
@@ -16498,8 +16556,76 @@ connect();
 
   app.post("/api/cal-deployments", async (req, res) => {
     try {
-      const deployment = await storage.createCalDeployment(req.body);
-      res.status(201).json(deployment);
+      const { enterpriseId, deploymentScope, propertyId, workstationId, serviceHostId, ...deploymentData } = req.body;
+      
+      const deployment = await storage.createCalDeployment({
+        enterpriseId,
+        deploymentScope,
+        ...deploymentData,
+      });
+
+      const createdTargets: any[] = [];
+
+      if (deploymentScope === "enterprise") {
+        const allProperties = await storage.getProperties(enterpriseId);
+        for (const property of allProperties) {
+          const propertyServiceHosts = await storage.getServiceHosts(property.id);
+          if (propertyServiceHosts.length > 0) {
+            for (const sh of propertyServiceHosts) {
+              const target = await storage.createCalDeploymentTarget({
+                deploymentId: deployment.id,
+                propertyId: property.id,
+                serviceHostId: sh.id,
+                status: "pending",
+              });
+              createdTargets.push(target);
+            }
+          } else {
+            const target = await storage.createCalDeploymentTarget({
+              deploymentId: deployment.id,
+              propertyId: property.id,
+              status: "pending",
+            });
+            createdTargets.push(target);
+          }
+        }
+      } else if (deploymentScope === "property" && propertyId) {
+        const propertyServiceHosts = await storage.getServiceHosts(propertyId);
+        if (propertyServiceHosts.length > 0) {
+          for (const sh of propertyServiceHosts) {
+            const target = await storage.createCalDeploymentTarget({
+              deploymentId: deployment.id,
+              propertyId,
+              serviceHostId: sh.id,
+              status: "pending",
+            });
+            createdTargets.push(target);
+          }
+        } else {
+          const target = await storage.createCalDeploymentTarget({
+            deploymentId: deployment.id,
+            propertyId,
+            status: "pending",
+          });
+          createdTargets.push(target);
+        }
+      } else if (deploymentScope === "workstation" && workstationId) {
+        const target = await storage.createCalDeploymentTarget({
+          deploymentId: deployment.id,
+          workstationId,
+          status: "pending",
+        });
+        createdTargets.push(target);
+      } else if (deploymentScope === "service_host" && serviceHostId) {
+        const target = await storage.createCalDeploymentTarget({
+          deploymentId: deployment.id,
+          serviceHostId,
+          status: "pending",
+        });
+        createdTargets.push(target);
+      }
+
+      res.status(201).json({ ...deployment, targets: createdTargets });
     } catch (error) {
       console.error("Error creating CAL deployment:", error);
       res.status(500).json({ error: "Failed to create CAL deployment" });
