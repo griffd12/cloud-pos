@@ -323,9 +323,8 @@ export default function TerminalDevicesPage() {
         onDelete={(item) => deleteMutation.mutate(item.id)}
         addLabel="Add Terminal"
         searchPlaceholder="Search terminals..."
-        customActions={[(item: TerminalDevice) => (
+        actionButtons={(item) => (
           <Button
-            key="ping"
             size="icon"
             variant="ghost"
             onClick={() => pingMutation.mutate(item.id)}
@@ -338,7 +337,7 @@ export default function TerminalDevicesPage() {
               <RefreshCw className="w-4 h-4" />
             )}
           </Button>
-        )]}
+        )}
       />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
