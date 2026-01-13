@@ -10,6 +10,8 @@
     "start": "node dist/index.js",
     "setup": "node scripts/setup-wizard.js",
     "package": "node scripts/package.js",
+    "package:windows": "node scripts/build-windows-installer.js",
+    "package:exe": "node scripts/build-standalone-exe.js",
     "test": "node scripts/test-all.js",
     "test:verbose": "node scripts/test-all.js --verbose",
     "service:install": "node scripts/service-wrappers/windows-service.js install",
