@@ -131,12 +131,16 @@ export default function TerminalDevicesPage() {
     queryKey: ["/api/terminal-devices/metadata"],
   });
 
-  const { data: stripeLocations = [], isLoading: stripeLocationsLoading } = useQuery<StripeLocation[]>({
+  const { data: stripeLocations = [], isLoading: stripeLocationsLoading, isError: stripeLocationsError } = useQuery<StripeLocation[]>({
     queryKey: ["/api/stripe/terminal/locations"],
+    enabled: false, // Only fetch when needed
+    retry: false,
   });
 
   const { data: stripeReaders = [], refetch: refetchStripeReaders } = useQuery<StripeReader[]>({
     queryKey: ["/api/stripe/terminal/readers"],
+    enabled: false, // Only fetch when needed
+    retry: false,
   });
 
   const createStripeLocationMutation = useMutation({
