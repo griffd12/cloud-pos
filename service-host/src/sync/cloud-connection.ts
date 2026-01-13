@@ -10,19 +10,25 @@ import { WebSocket } from 'ws';
 export class CloudConnection {
   private cloudUrl: string;
   private token: string;
+  private serviceHostId: string;
   private ws: WebSocket | null = null;
   private connected: boolean = false;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private messageHandlers: Map<string, (data: any) => void> = new Map();
   
-  constructor(cloudUrl: string, token: string) {
+  constructor(cloudUrl: string, token: string, serviceHostId: string) {
     this.cloudUrl = cloudUrl.replace(/\/$/, ''); // Remove trailing slash
     this.token = token;
+    this.serviceHostId = serviceHostId;
+  }
+  
+  getServiceHostId(): string {
+    return this.serviceHostId;
   }
   
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wsUrl = this.cloudUrl.replace(/^http/, 'ws') + '/ws/service-host';
+      const wsUrl = this.cloudUrl.replace(/^http/, 'ws') + `/ws/service-host?serviceHostId=${encodeURIComponent(this.serviceHostId)}&token=${encodeURIComponent(this.token)}`;
       
       this.ws = new WebSocket(wsUrl);
       
@@ -121,6 +127,14 @@ export class CloudConnection {
     this.connected = false;
   }
   
+  getCloudUrl(): string {
+    return this.cloudUrl;
+  }
+  
+  getToken(): string {
+    return this.token;
+  }
+  
   // HTTP API methods
   async fetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.cloudUrl}${endpoint}`;
@@ -139,6 +153,23 @@ export class CloudConnection {
     }
     
     return response.json();
+  }
+  
+  // Download file from cloud with authentication
+  async downloadFile(endpoint: string): Promise<ArrayBuffer> {
+    const url = `${this.cloudUrl}${endpoint}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'x-service-host-token': this.token,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    }
+    
+    return response.arrayBuffer();
   }
   
   async get<T = any>(endpoint: string): Promise<T> {

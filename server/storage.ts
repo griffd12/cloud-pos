@@ -848,8 +848,10 @@ export interface IStorage {
   // CAL Deployment Targets
   getCalDeploymentTargets(deploymentId: string): Promise<CalDeploymentTarget[]>;
   getCalDeploymentTarget(id: string): Promise<CalDeploymentTarget | undefined>;
+  getCalDeploymentTargetsByServiceHost(serviceHostId: string): Promise<CalDeploymentTarget[]>;
   createCalDeploymentTarget(data: InsertCalDeploymentTarget): Promise<CalDeploymentTarget>;
   updateCalDeploymentTarget(id: string, data: Partial<InsertCalDeploymentTarget>): Promise<CalDeploymentTarget | undefined>;
+  updateCalDeploymentTargetStatus(id: string, status: string, statusMessage?: string): Promise<CalDeploymentTarget | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5647,6 +5649,48 @@ export class DatabaseStorage implements IStorage {
   async updateCalDeploymentTarget(id: string, data: Partial<InsertCalDeploymentTarget>): Promise<CalDeploymentTarget | undefined> {
     const [result] = await db.update(calDeploymentTargets)
       .set(data)
+      .where(eq(calDeploymentTargets.id, id))
+      .returning();
+    return result;
+  }
+
+  async getCalDeploymentTargetsByServiceHost(serviceHostId: string): Promise<CalDeploymentTarget[]> {
+    return db.select()
+      .from(calDeploymentTargets)
+      .where(
+        and(
+          eq(calDeploymentTargets.serviceHostId, serviceHostId),
+          inArray(calDeploymentTargets.status, ['pending', 'downloading', 'installing', 'failed'])
+        )
+      );
+  }
+
+  async updateCalDeploymentTargetStatus(id: string, status: string, statusMessage?: string): Promise<CalDeploymentTarget | undefined> {
+    const target = await this.getCalDeploymentTarget(id);
+    if (!target) return undefined;
+    
+    const updateData: any = { status };
+    
+    if (statusMessage !== undefined) {
+      updateData.statusMessage = statusMessage;
+    }
+    
+    // Only set startedAt when transitioning from pending to downloading
+    if ((status === 'downloading' || status === 'installing') && target.status === 'pending') {
+      updateData.startedAt = new Date();
+    }
+    
+    // Only set completedAt if not already completed
+    if ((status === 'completed' || status === 'failed') && !target.completedAt) {
+      updateData.completedAt = new Date();
+    }
+    
+    if (status === 'failed') {
+      updateData.retryCount = (target.retryCount || 0) + 1;
+    }
+
+    const [result] = await db.update(calDeploymentTargets)
+      .set(updateData)
       .where(eq(calDeploymentTargets.id, id))
       .returning();
     return result;

@@ -1020,6 +1020,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/cal-packages(\/.*)?$/,              // CAL package management (EMC feature)
     /^\/cal-package-versions(\/.*)?$/,      // CAL package versions (EMC feature)
     /^\/cal-deployments(\/.*)?$/,           // CAL deployments (EMC feature)
+    /^\/cal-deployment-targets(\/.*)?$/,    // CAL deployment targets (Service Host updates)
     /^\/service-hosts(\/.*)?$/,             // Service host management (EMC feature)
   ];
 
@@ -15828,6 +15829,79 @@ connect();
     }
   });
 
+  // GET /api/service-hosts/:id/pending-deployments - Get pending CAL deployments for a Service Host
+  app.get("/api/service-hosts/:id/pending-deployments", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const serviceHost = await storage.getServiceHost(id);
+      if (!serviceHost) {
+        return res.status(404).json({ error: "Service host not found" });
+      }
+
+      // Get pending deployment targets for this service host
+      const targets = await storage.getCalDeploymentTargetsByServiceHost(id);
+      
+      // Enrich with package and version info
+      const enrichedDeployments = await Promise.all(
+        targets.map(async (target: any) => {
+          const deployment = await storage.getCalDeployment(target.deploymentId);
+          if (!deployment) return null;
+          
+          const version = await storage.getCalPackageVersion(deployment.packageVersionId);
+          if (!version) return null;
+          
+          const pkg = await storage.getCalPackage(version.packageId);
+          if (!pkg) return null;
+          
+          return {
+            targetId: target.id,
+            deploymentId: deployment.id,
+            packageName: pkg.name,
+            packageType: pkg.packageType,
+            versionNumber: version.versionNumber,
+            downloadUrl: version.downloadUrl,
+            checksum: version.checksum,
+            action: deployment.action,
+            scheduledAt: deployment.scheduledAt,
+          };
+        })
+      );
+      
+      res.json(enrichedDeployments.filter(Boolean));
+    } catch (error: any) {
+      console.error("Get pending deployments error:", error);
+      res.status(500).json({ error: "Failed to get pending deployments" });
+    }
+  });
+
+  // POST /api/cal-deployment-targets/:id/status - Update deployment target status
+  app.post("/api/cal-deployment-targets/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, statusMessage } = req.body;
+      
+      if (!status) {
+        return res.status(400).json({ error: "status is required" });
+      }
+      
+      const validStatuses = ['pending', 'downloading', 'installing', 'completed', 'failed'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      }
+      
+      const target = await storage.updateCalDeploymentTargetStatus(id, status, statusMessage);
+      if (!target) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      
+      res.json(target);
+    } catch (error: any) {
+      console.error("Update deployment target status error:", error);
+      res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+
   // GET /api/service-host-alerts - Get Service Host alerts
   app.get("/api/service-host-alerts", async (req, res) => {
     try {
@@ -16712,6 +16786,31 @@ connect();
           status: "pending",
         });
         createdTargets.push(target);
+      }
+
+      // Notify connected Service Hosts about new deployments
+      const packageVersion = await storage.getCalPackageVersion(deployment.packageVersionId);
+      const calPackage = packageVersion ? await storage.getCalPackage(packageVersion.packageId) : null;
+      
+      for (const target of createdTargets) {
+        if (target.serviceHostId) {
+          const wsConn = serviceHostConnections.get(target.serviceHostId);
+          if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+            wsConn.send(JSON.stringify({
+              type: "CAL_DEPLOYMENT",
+              targetId: target.id,
+              deploymentId: deployment.id,
+              packageName: calPackage?.name || "Unknown",
+              packageType: calPackage?.packageType || "unknown",
+              versionNumber: packageVersion?.versionNumber || "0.0.0",
+              downloadUrl: packageVersion?.downloadUrl || null,
+              checksum: packageVersion?.checksum || null,
+              action: deployment.action,
+              scheduledAt: deployment.scheduledAt,
+            }));
+            console.log(`Notified Service Host ${target.serviceHostId} about CAL deployment`);
+          }
+        }
       }
 
       res.status(201).json({ ...deployment, targets: createdTargets });

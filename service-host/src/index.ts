@@ -25,6 +25,7 @@ import { fileURLToPath } from 'url';
 import { Database } from './db/database.js';
 import { ConfigSync } from './sync/config-sync.js';
 import { TransactionSync } from './sync/transaction-sync.js';
+import { CalSync } from './sync/cal-sync.js';
 import { CapsService } from './services/caps.js';
 import { PrintController } from './services/print-controller.js';
 import { KdsController } from './services/kds-controller.js';
@@ -38,6 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 interface Config {
   cloudUrl: string;
   token: string;
+  serviceHostId: string;
   propertyId: string;
   port: number;
   dataDir: string;
@@ -46,6 +48,7 @@ interface Config {
 const defaultConfig: Config = {
   cloudUrl: '',
   token: '',
+  serviceHostId: '',
   propertyId: '',
   port: 3001,
   dataDir: path.join(__dirname, '../data'),
@@ -62,6 +65,9 @@ function parseArgs(): Partial<Config> {
         break;
       case '--token':
         config.token = args[++i];
+        break;
+      case '--service-host-id':
+        config.serviceHostId = args[++i];
         break;
       case '--property':
         config.propertyId = args[++i];
@@ -101,6 +107,7 @@ class ServiceHost {
   private cloudConnection: CloudConnection;
   private configSync: ConfigSync;
   private transactionSync: TransactionSync;
+  private calSync: CalSync;
   private capsService: CapsService;
   private printController: PrintController;
   private kdsController: KdsController;
@@ -118,11 +125,12 @@ class ServiceHost {
     this.db = new Database(path.join(config.dataDir, 'service-host.db'));
     
     // Initialize cloud connection
-    this.cloudConnection = new CloudConnection(config.cloudUrl, config.token);
+    this.cloudConnection = new CloudConnection(config.cloudUrl, config.token, config.serviceHostId);
     
     // Initialize sync services
     this.configSync = new ConfigSync(this.db, this.cloudConnection);
     this.transactionSync = new TransactionSync(this.db, this.cloudConnection);
+    this.calSync = new CalSync(this.db, this.cloudConnection, config.serviceHostId, config.dataDir);
     
     // Initialize service controllers
     this.capsService = new CapsService(this.db, this.transactionSync);
@@ -150,9 +158,11 @@ class ServiceHost {
       res.json({
         status: 'ok',
         version: '1.0.0',
+        serviceHostId: this.config.serviceHostId,
         cloudConnected: this.cloudConnection.isConnected(),
         propertyId: this.config.propertyId,
         uptime: process.uptime(),
+        installedPackages: this.calSync.getInstalledPackages(),
       });
     });
     
@@ -219,6 +229,7 @@ class ServiceHost {
     console.log('Cloud POS Service Host v1.0.0');
     console.log('='.repeat(60));
     console.log(`Cloud URL: ${this.config.cloudUrl}`);
+    console.log(`Service Host ID: ${this.config.serviceHostId}`);
     console.log(`Property ID: ${this.config.propertyId}`);
     console.log(`Data Directory: ${this.config.dataDir}`);
     console.log('');
@@ -234,6 +245,10 @@ class ServiceHost {
       
       await this.configSync.syncFull();
       console.log('Configuration synced from cloud');
+      
+      // Start CAL deployment sync
+      await this.calSync.start();
+      console.log('CAL deployment sync started');
     } catch (e) {
       console.warn('Cloud connection failed, operating in offline mode:', (e as Error).message);
     }
@@ -267,6 +282,7 @@ class ServiceHost {
   
   private shutdown() {
     console.log('\nShutting down Service Host...');
+    this.calSync.stop();
     this.transactionSync.stopWorker();
     this.cloudConnection.disconnect();
     this.wss.close();
@@ -291,7 +307,13 @@ async function main() {
   
   if (!config.cloudUrl) {
     console.error('Error: Cloud URL is required');
-    console.error('Usage: node dist/index.js --cloud <url> --token <token>');
+    console.error('Usage: node dist/index.js --cloud <url> --service-host-id <id> --token <token>');
+    process.exit(1);
+  }
+  
+  if (!config.serviceHostId) {
+    console.error('Error: Service Host ID is required');
+    console.error('Usage: node dist/index.js --cloud <url> --service-host-id <id> --token <token>');
     process.exit(1);
   }
   
