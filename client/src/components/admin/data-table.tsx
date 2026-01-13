@@ -138,7 +138,7 @@ export function DataTable<T extends { id: string }>({
               </div>
             )}
             {onAdd && (
-              <Button onClick={onAdd} data-testid="button-add-item">
+              <Button type="button" onClick={onAdd} data-testid="button-add-item">
                 <Plus className="w-4 h-4 mr-2" />
                 {addLabel}
               </Button>
