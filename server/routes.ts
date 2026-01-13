@@ -4313,6 +4313,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const itemId = req.params.id;
       const { newPrice, reason, employeeId, managerPin } = req.body;
 
+      console.log("Price override request:", { itemId, newPrice, reason, employeeId, hasManagerPin: !!managerPin });
+
       if (!employeeId) {
         return res.status(400).json({ message: "Employee ID required" });
       }
@@ -4322,6 +4324,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const item = await storage.getCheckItem(itemId);
       if (!item) {
+        console.log("Price override: Item not found:", itemId);
         return res.status(404).json({ message: "Item not found" });
       }
 
@@ -4332,14 +4335,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (managerPin) {
         const manager = await storage.getEmployeeByPin(managerPin);
         if (!manager) {
+          console.log("Price override: Invalid manager PIN");
           return res.status(401).json({ message: "Invalid manager PIN" });
         }
         // Check if manager has price override approval privilege
         if (manager.roleId) {
           const privileges = await storage.getRolePrivileges(manager.roleId);
           if (!privileges.includes("approve_price_override") && !privileges.includes("admin_access")) {
+            console.log("Price override: Manager lacks privilege. Has:", privileges);
             return res.status(403).json({ message: "Manager does not have price override approval privilege" });
           }
+        } else {
+          // Manager has no role - check if they should still be allowed
+          console.log("Price override: Manager has no roleId, checking employee default privileges");
         }
         managerApprovalId = manager.id;
       }
@@ -4371,9 +4379,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         managerApprovalId,
       });
 
+      console.log("Price override successful:", { itemId, oldPrice, newPrice });
       res.json(updatedItem);
-    } catch (error) {
-      console.error("Price override error:", error);
+    } catch (error: any) {
+      console.error("Price override error:", error.message, error.stack);
       res.status(500).json({ message: "Failed to override price" });
     }
   });
