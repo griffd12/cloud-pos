@@ -14,7 +14,7 @@
 // CONFIGURATION TABLES (Synced from cloud)
 // =============================================================================
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const CREATE_SCHEMA_SQL = `
 -- Schema version tracking
@@ -898,6 +898,332 @@ CREATE TABLE IF NOT EXISTS item_availability (
 );
 
 -- =============================================================================
+-- PAYMENT TRANSACTIONS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS payment_transactions (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  check_id TEXT REFERENCES checks(id),
+  check_payment_id TEXT REFERENCES check_payments(id),
+  payment_processor_id TEXT REFERENCES payment_processors(id),
+  tender_id TEXT REFERENCES tenders(id),
+  transaction_type TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  tip_amount INTEGER DEFAULT 0,
+  auth_code TEXT,
+  reference_number TEXT,
+  card_type TEXT,
+  card_last4 TEXT,
+  card_holder_name TEXT,
+  entry_mode TEXT,
+  response_code TEXT,
+  response_message TEXT,
+  avs_result TEXT,
+  cvv_result TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  settled INTEGER DEFAULT 0,
+  settled_at TEXT,
+  voided INTEGER DEFAULT 0,
+  voided_at TEXT,
+  void_reason TEXT,
+  refunded INTEGER DEFAULT 0,
+  refunded_at TEXT,
+  refund_amount INTEGER DEFAULT 0,
+  gateway_transaction_id TEXT,
+  gateway_response TEXT,
+  employee_id TEXT REFERENCES employees(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  terminal_device_id TEXT REFERENCES terminal_devices(id),
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS terminal_devices (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  name TEXT NOT NULL,
+  device_type TEXT NOT NULL,
+  serial_number TEXT,
+  ip_address TEXT,
+  port INTEGER,
+  payment_processor_id TEXT REFERENCES payment_processors(id),
+  is_online INTEGER DEFAULT 0,
+  last_seen_at TEXT,
+  firmware_version TEXT,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- CASH MANAGEMENT
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS cash_drawers (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  name TEXT NOT NULL,
+  workstation_id TEXT REFERENCES workstations(id),
+  starting_balance INTEGER DEFAULT 0,
+  current_balance INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'closed',
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS drawer_assignments (
+  id TEXT PRIMARY KEY,
+  cash_drawer_id TEXT NOT NULL REFERENCES cash_drawers(id),
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  assigned_at TEXT DEFAULT (datetime('now')),
+  unassigned_at TEXT,
+  opening_balance INTEGER NOT NULL,
+  closing_balance INTEGER,
+  expected_balance INTEGER,
+  over_short INTEGER,
+  status TEXT DEFAULT 'open',
+  business_date TEXT,
+  manager_employee_id TEXT REFERENCES employees(id),
+  cloud_synced INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS cash_transactions (
+  id TEXT PRIMARY KEY,
+  cash_drawer_id TEXT NOT NULL REFERENCES cash_drawers(id),
+  drawer_assignment_id TEXT REFERENCES drawer_assignments(id),
+  transaction_type TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  balance_before INTEGER NOT NULL,
+  balance_after INTEGER NOT NULL,
+  check_id TEXT REFERENCES checks(id),
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  manager_employee_id TEXT REFERENCES employees(id),
+  reason TEXT,
+  notes TEXT,
+  reference_number TEXT,
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS safe_counts (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  count_type TEXT NOT NULL,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  manager_employee_id TEXT REFERENCES employees(id),
+  business_date TEXT NOT NULL,
+  expected_amount INTEGER,
+  actual_amount INTEGER NOT NULL,
+  variance INTEGER,
+  denominations TEXT,
+  notes TEXT,
+  status TEXT DEFAULT 'pending',
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- JOB CODES & TIME PUNCHES
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS job_codes (
+  id TEXT PRIMARY KEY,
+  enterprise_id TEXT REFERENCES enterprises(id),
+  property_id TEXT REFERENCES properties(id),
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  hourly_rate TEXT,
+  overtime_eligible INTEGER DEFAULT 1,
+  tipped INTEGER DEFAULT 0,
+  default_tip_rate TEXT,
+  color TEXT,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS employee_job_codes (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  job_code_id TEXT NOT NULL REFERENCES job_codes(id),
+  hourly_rate_override TEXT,
+  is_primary INTEGER DEFAULT 0,
+  effective_from TEXT,
+  effective_until TEXT,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS time_punches (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  job_code_id TEXT REFERENCES job_codes(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  punch_type TEXT NOT NULL,
+  punch_time TEXT NOT NULL,
+  original_punch_time TEXT,
+  edited INTEGER DEFAULT 0,
+  edited_by_employee_id TEXT REFERENCES employees(id),
+  edit_reason TEXT,
+  business_date TEXT,
+  ip_address TEXT,
+  geo_location TEXT,
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS break_sessions (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  time_entry_id TEXT,
+  break_type TEXT NOT NULL DEFAULT 'unpaid',
+  start_time TEXT NOT NULL,
+  end_time TEXT,
+  duration_minutes INTEGER,
+  paid INTEGER DEFAULT 0,
+  workstation_id TEXT REFERENCES workstations(id),
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- FISCAL PERIODS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS fiscal_periods (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  period_type TEXT NOT NULL,
+  business_date TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  opened_by_employee_id TEXT REFERENCES employees(id),
+  closed_by_employee_id TEXT REFERENCES employees(id),
+  gross_sales INTEGER DEFAULT 0,
+  net_sales INTEGER DEFAULT 0,
+  tax_collected INTEGER DEFAULT 0,
+  discounts_given INTEGER DEFAULT 0,
+  refunds_given INTEGER DEFAULT 0,
+  check_count INTEGER DEFAULT 0,
+  guest_count INTEGER DEFAULT 0,
+  void_count INTEGER DEFAULT 0,
+  void_amount INTEGER DEFAULT 0,
+  cash_over_short INTEGER DEFAULT 0,
+  notes TEXT,
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  closed_at TEXT
+);
+
+-- =============================================================================
+-- KDS TICKET ITEMS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS kds_ticket_items (
+  id TEXT PRIMARY KEY,
+  kds_ticket_id TEXT NOT NULL REFERENCES kds_tickets(id),
+  check_item_id TEXT REFERENCES check_items(id),
+  menu_item_id TEXT NOT NULL REFERENCES menu_items(id),
+  name TEXT NOT NULL,
+  short_name TEXT,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  modifiers TEXT,
+  seat_number INTEGER,
+  course_number INTEGER DEFAULT 1,
+  special_instructions TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  bumped_at TEXT,
+  started_at TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- OFFLINE ORDER QUEUE
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS offline_order_queue (
+  id TEXT PRIMARY KEY,
+  rvc_id TEXT NOT NULL REFERENCES rvcs(id),
+  order_type TEXT NOT NULL,
+  order_source TEXT DEFAULT 'pos',
+  table_number TEXT,
+  guest_count INTEGER DEFAULT 1,
+  items TEXT NOT NULL,
+  payments TEXT,
+  customer_name TEXT,
+  customer_phone TEXT,
+  customer_email TEXT,
+  special_instructions TEXT,
+  scheduled_time TEXT,
+  priority INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'queued',
+  error_message TEXT,
+  retry_count INTEGER DEFAULT 0,
+  employee_id TEXT REFERENCES employees(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  created_at TEXT DEFAULT (datetime('now')),
+  processed_at TEXT,
+  cloud_check_id TEXT
+);
+
+-- =============================================================================
+-- ONLINE ORDERS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS online_order_sources (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  name TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  api_key TEXT,
+  webhook_url TEXT,
+  auto_accept INTEGER DEFAULT 0,
+  default_prep_time INTEGER DEFAULT 15,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS online_orders (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  rvc_id TEXT REFERENCES rvcs(id),
+  source_id TEXT REFERENCES online_order_sources(id),
+  external_order_id TEXT,
+  order_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'received',
+  customer_name TEXT,
+  customer_phone TEXT,
+  customer_email TEXT,
+  delivery_address TEXT,
+  special_instructions TEXT,
+  items TEXT NOT NULL,
+  subtotal INTEGER NOT NULL DEFAULT 0,
+  tax INTEGER NOT NULL DEFAULT 0,
+  delivery_fee INTEGER DEFAULT 0,
+  tip INTEGER DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 0,
+  payment_status TEXT DEFAULT 'unpaid',
+  payment_method TEXT,
+  scheduled_time TEXT,
+  estimated_ready_time TEXT,
+  actual_ready_time TEXT,
+  picked_up_at TEXT,
+  delivered_at TEXT,
+  cancelled_at TEXT,
+  cancel_reason TEXT,
+  check_id TEXT REFERENCES checks(id),
+  employee_id TEXT REFERENCES employees(id),
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
 -- LOCAL-ONLY TABLES
 -- =============================================================================
 
@@ -1046,4 +1372,37 @@ CREATE INDEX IF NOT EXISTS idx_refunds_original_check ON refunds(original_check_
 CREATE INDEX IF NOT EXISTS idx_refunds_date ON refunds(business_date);
 CREATE INDEX IF NOT EXISTS idx_refund_items_refund ON refund_items(refund_id);
 CREATE INDEX IF NOT EXISTS idx_refund_payments_refund ON refund_payments(refund_id);
+
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_check ON payment_transactions(check_id);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_property ON payment_transactions(property_id);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_status ON payment_transactions(status);
+CREATE INDEX IF NOT EXISTS idx_terminal_devices_property ON terminal_devices(property_id);
+
+CREATE INDEX IF NOT EXISTS idx_cash_drawers_property ON cash_drawers(property_id);
+CREATE INDEX IF NOT EXISTS idx_drawer_assignments_drawer ON drawer_assignments(cash_drawer_id);
+CREATE INDEX IF NOT EXISTS idx_drawer_assignments_employee ON drawer_assignments(employee_id);
+CREATE INDEX IF NOT EXISTS idx_drawer_assignments_date ON drawer_assignments(business_date);
+CREATE INDEX IF NOT EXISTS idx_cash_transactions_drawer ON cash_transactions(cash_drawer_id);
+CREATE INDEX IF NOT EXISTS idx_safe_counts_property ON safe_counts(property_id);
+CREATE INDEX IF NOT EXISTS idx_safe_counts_date ON safe_counts(business_date);
+
+CREATE INDEX IF NOT EXISTS idx_job_codes_property ON job_codes(property_id);
+CREATE INDEX IF NOT EXISTS idx_employee_job_codes_employee ON employee_job_codes(employee_id);
+CREATE INDEX IF NOT EXISTS idx_time_punches_employee ON time_punches(employee_id);
+CREATE INDEX IF NOT EXISTS idx_time_punches_date ON time_punches(business_date);
+CREATE INDEX IF NOT EXISTS idx_break_sessions_employee ON break_sessions(employee_id);
+
+CREATE INDEX IF NOT EXISTS idx_fiscal_periods_property ON fiscal_periods(property_id);
+CREATE INDEX IF NOT EXISTS idx_fiscal_periods_date ON fiscal_periods(business_date);
+CREATE INDEX IF NOT EXISTS idx_fiscal_periods_status ON fiscal_periods(status);
+
+CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_ticket ON kds_ticket_items(kds_ticket_id);
+CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_status ON kds_ticket_items(status);
+
+CREATE INDEX IF NOT EXISTS idx_offline_order_queue_status ON offline_order_queue(status);
+CREATE INDEX IF NOT EXISTS idx_offline_order_queue_rvc ON offline_order_queue(rvc_id);
+
+CREATE INDEX IF NOT EXISTS idx_online_orders_property ON online_orders(property_id);
+CREATE INDEX IF NOT EXISTS idx_online_orders_status ON online_orders(status);
+CREATE INDEX IF NOT EXISTS idx_online_orders_external ON online_orders(external_order_id);
 `;

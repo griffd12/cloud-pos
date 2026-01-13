@@ -1359,6 +1359,502 @@ export class Database {
   }
   
   // ==========================================================================
+  // Payment Transactions
+  // ==========================================================================
+  
+  insertPaymentTransaction(txn: any): void {
+    this.run(
+      `INSERT INTO payment_transactions (
+        id, property_id, check_id, check_payment_id, payment_processor_id, tender_id,
+        transaction_type, amount, tip_amount, auth_code, reference_number,
+        card_type, card_last4, card_holder_name, entry_mode,
+        response_code, response_message, avs_result, cvv_result,
+        status, gateway_transaction_id, gateway_response,
+        employee_id, workstation_id, terminal_device_id, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        txn.id, txn.propertyId, txn.checkId, txn.checkPaymentId, txn.paymentProcessorId, txn.tenderId,
+        txn.transactionType, txn.amount, txn.tipAmount || 0, txn.authCode, txn.referenceNumber,
+        txn.cardType, txn.cardLast4, txn.cardHolderName, txn.entryMode,
+        txn.responseCode, txn.responseMessage, txn.avsResult, txn.cvvResult,
+        txn.status || 'pending', txn.gatewayTransactionId, txn.gatewayResponse,
+        txn.employeeId, txn.workstationId, txn.terminalDeviceId
+      ]
+    );
+  }
+  
+  getPaymentTransaction(id: string): any | null {
+    return this.get('SELECT * FROM payment_transactions WHERE id = ?', [id]);
+  }
+  
+  getPaymentTransactionsByCheck(checkId: string): any[] {
+    return this.all('SELECT * FROM payment_transactions WHERE check_id = ? ORDER BY created_at', [checkId]);
+  }
+  
+  updatePaymentTransactionStatus(id: string, status: string, responseData?: any): void {
+    this.run(
+      `UPDATE payment_transactions SET status = ?, response_code = ?, response_message = ?, gateway_response = ? WHERE id = ?`,
+      [status, responseData?.responseCode, responseData?.responseMessage, JSON.stringify(responseData), id]
+    );
+  }
+  
+  // ==========================================================================
+  // Terminal Devices
+  // ==========================================================================
+  
+  upsertTerminalDevice(device: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO terminal_devices (
+        id, property_id, name, device_type, serial_number, ip_address, port,
+        payment_processor_id, is_online, last_seen_at, firmware_version, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        device.id, device.propertyId, device.name, device.deviceType, device.serialNumber,
+        device.ipAddress, device.port, device.paymentProcessorId,
+        device.isOnline ? 1 : 0, device.lastSeenAt, device.firmwareVersion,
+        device.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  getTerminalDevice(id: string): any | null {
+    return this.get('SELECT * FROM terminal_devices WHERE id = ?', [id]);
+  }
+  
+  getTerminalDevicesByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM terminal_devices WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  // ==========================================================================
+  // Cash Drawers
+  // ==========================================================================
+  
+  upsertCashDrawer(drawer: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO cash_drawers (
+        id, property_id, name, workstation_id, starting_balance, current_balance, status, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        drawer.id, drawer.propertyId, drawer.name, drawer.workstationId,
+        drawer.startingBalance || 0, drawer.currentBalance || 0,
+        drawer.status || 'closed', drawer.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  getCashDrawer(id: string): any | null {
+    return this.get('SELECT * FROM cash_drawers WHERE id = ?', [id]);
+  }
+  
+  getCashDrawersByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM cash_drawers WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getCashDrawerByWorkstation(workstationId: string): any | null {
+    return this.get('SELECT * FROM cash_drawers WHERE workstation_id = ? AND active = 1', [workstationId]);
+  }
+  
+  // ==========================================================================
+  // Drawer Assignments
+  // ==========================================================================
+  
+  insertDrawerAssignment(assignment: any): void {
+    this.run(
+      `INSERT INTO drawer_assignments (
+        id, cash_drawer_id, employee_id, workstation_id, assigned_at, opening_balance,
+        status, business_date, manager_employee_id, cloud_synced
+      ) VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, 0)`,
+      [
+        assignment.id, assignment.cashDrawerId, assignment.employeeId, assignment.workstationId,
+        assignment.openingBalance, assignment.status || 'open', assignment.businessDate, assignment.managerEmployeeId
+      ]
+    );
+  }
+  
+  getDrawerAssignment(id: string): any | null {
+    return this.get('SELECT * FROM drawer_assignments WHERE id = ?', [id]);
+  }
+  
+  getActiveDrawerAssignment(employeeId: string): any | null {
+    return this.get(
+      'SELECT * FROM drawer_assignments WHERE employee_id = ? AND status = ? ORDER BY assigned_at DESC LIMIT 1',
+      [employeeId, 'open']
+    );
+  }
+  
+  closeDrawerAssignment(id: string, closingBalance: number, expectedBalance: number): void {
+    const overShort = closingBalance - expectedBalance;
+    this.run(
+      `UPDATE drawer_assignments SET 
+        status = 'closed', closing_balance = ?, expected_balance = ?, over_short = ?, unassigned_at = datetime('now')
+       WHERE id = ?`,
+      [closingBalance, expectedBalance, overShort, id]
+    );
+  }
+  
+  // ==========================================================================
+  // Cash Transactions
+  // ==========================================================================
+  
+  insertCashTransaction(txn: any): void {
+    this.run(
+      `INSERT INTO cash_transactions (
+        id, cash_drawer_id, drawer_assignment_id, transaction_type, amount,
+        balance_before, balance_after, check_id, employee_id, manager_employee_id,
+        reason, notes, reference_number, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        txn.id, txn.cashDrawerId, txn.drawerAssignmentId, txn.transactionType, txn.amount,
+        txn.balanceBefore, txn.balanceAfter, txn.checkId, txn.employeeId, txn.managerEmployeeId,
+        txn.reason, txn.notes, txn.referenceNumber
+      ]
+    );
+  }
+  
+  getCashTransactionsByDrawer(cashDrawerId: string): any[] {
+    return this.all('SELECT * FROM cash_transactions WHERE cash_drawer_id = ? ORDER BY created_at', [cashDrawerId]);
+  }
+  
+  getCashTransactionsByAssignment(drawerAssignmentId: string): any[] {
+    return this.all('SELECT * FROM cash_transactions WHERE drawer_assignment_id = ? ORDER BY created_at', [drawerAssignmentId]);
+  }
+  
+  // ==========================================================================
+  // Safe Counts
+  // ==========================================================================
+  
+  insertSafeCount(count: any): void {
+    this.run(
+      `INSERT INTO safe_counts (
+        id, property_id, count_type, employee_id, manager_employee_id, business_date,
+        expected_amount, actual_amount, variance, denominations, notes, status, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        count.id, count.propertyId, count.countType, count.employeeId, count.managerEmployeeId,
+        count.businessDate, count.expectedAmount, count.actualAmount, count.variance,
+        count.denominations ? JSON.stringify(count.denominations) : null,
+        count.notes, count.status || 'pending'
+      ]
+    );
+  }
+  
+  getSafeCountsByDate(propertyId: string, businessDate: string): any[] {
+    return this.all(
+      'SELECT * FROM safe_counts WHERE property_id = ? AND business_date = ? ORDER BY created_at',
+      [propertyId, businessDate]
+    );
+  }
+  
+  // ==========================================================================
+  // Job Codes
+  // ==========================================================================
+  
+  upsertJobCode(job: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO job_codes (
+        id, enterprise_id, property_id, name, code, hourly_rate,
+        overtime_eligible, tipped, default_tip_rate, color, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        job.id, job.enterpriseId, job.propertyId, job.name, job.code, job.hourlyRate,
+        job.overtimeEligible !== false ? 1 : 0, job.tipped ? 1 : 0, job.defaultTipRate,
+        job.color, job.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  getJobCode(id: string): any | null {
+    return this.get('SELECT * FROM job_codes WHERE id = ?', [id]);
+  }
+  
+  getJobCodesByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM job_codes WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  // ==========================================================================
+  // Employee Job Codes
+  // ==========================================================================
+  
+  upsertEmployeeJobCode(ejc: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO employee_job_codes (
+        id, employee_id, job_code_id, hourly_rate_override, is_primary, effective_from, effective_until, active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ejc.id, ejc.employeeId, ejc.jobCodeId, ejc.hourlyRateOverride,
+        ejc.isPrimary ? 1 : 0, ejc.effectiveFrom, ejc.effectiveUntil, ejc.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  getEmployeeJobCodes(employeeId: string): any[] {
+    return this.all(
+      `SELECT ejc.*, jc.name as job_name, jc.code as job_code 
+       FROM employee_job_codes ejc 
+       JOIN job_codes jc ON ejc.job_code_id = jc.id 
+       WHERE ejc.employee_id = ? AND ejc.active = 1`,
+      [employeeId]
+    );
+  }
+  
+  getPrimaryJobCode(employeeId: string): any | null {
+    return this.get(
+      `SELECT jc.* FROM job_codes jc
+       JOIN employee_job_codes ejc ON jc.id = ejc.job_code_id
+       WHERE ejc.employee_id = ? AND ejc.is_primary = 1 AND ejc.active = 1`,
+      [employeeId]
+    );
+  }
+  
+  // ==========================================================================
+  // Time Punches
+  // ==========================================================================
+  
+  insertTimePunch(punch: any): void {
+    this.run(
+      `INSERT INTO time_punches (
+        id, employee_id, job_code_id, workstation_id, punch_type, punch_time,
+        original_punch_time, business_date, ip_address, geo_location, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        punch.id, punch.employeeId, punch.jobCodeId, punch.workstationId,
+        punch.punchType, punch.punchTime, punch.punchTime, punch.businessDate,
+        punch.ipAddress, punch.geoLocation
+      ]
+    );
+  }
+  
+  getTimePunch(id: string): any | null {
+    return this.get('SELECT * FROM time_punches WHERE id = ?', [id]);
+  }
+  
+  getTimePunchesByEmployee(employeeId: string, businessDate?: string): any[] {
+    if (businessDate) {
+      return this.all(
+        'SELECT * FROM time_punches WHERE employee_id = ? AND business_date = ? ORDER BY punch_time',
+        [employeeId, businessDate]
+      );
+    }
+    return this.all('SELECT * FROM time_punches WHERE employee_id = ? ORDER BY punch_time DESC LIMIT 50', [employeeId]);
+  }
+  
+  getLastPunch(employeeId: string): any | null {
+    return this.get(
+      'SELECT * FROM time_punches WHERE employee_id = ? ORDER BY punch_time DESC LIMIT 1',
+      [employeeId]
+    );
+  }
+  
+  editTimePunch(id: string, newTime: string, editedBy: string, reason: string): void {
+    this.run(
+      `UPDATE time_punches SET punch_time = ?, edited = 1, edited_by_employee_id = ?, edit_reason = ? WHERE id = ?`,
+      [newTime, editedBy, reason, id]
+    );
+  }
+  
+  // ==========================================================================
+  // Break Sessions
+  // ==========================================================================
+  
+  insertBreakSession(breakSession: any): void {
+    this.run(
+      `INSERT INTO break_sessions (
+        id, employee_id, time_entry_id, break_type, start_time, paid, workstation_id, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        breakSession.id, breakSession.employeeId, breakSession.timeEntryId,
+        breakSession.breakType || 'unpaid', breakSession.startTime, breakSession.paid ? 1 : 0,
+        breakSession.workstationId
+      ]
+    );
+  }
+  
+  endBreakSession(id: string): void {
+    const endTime = new Date().toISOString();
+    const breakSession = this.get<{ start_time: string }>('SELECT start_time FROM break_sessions WHERE id = ?', [id]);
+    let durationMinutes = 0;
+    if (breakSession) {
+      durationMinutes = Math.round((new Date(endTime).getTime() - new Date(breakSession.start_time).getTime()) / 60000);
+    }
+    this.run(
+      'UPDATE break_sessions SET end_time = ?, duration_minutes = ? WHERE id = ?',
+      [endTime, durationMinutes, id]
+    );
+  }
+  
+  getActiveBreakSession(employeeId: string): any | null {
+    return this.get('SELECT * FROM break_sessions WHERE employee_id = ? AND end_time IS NULL', [employeeId]);
+  }
+  
+  // ==========================================================================
+  // Fiscal Periods
+  // ==========================================================================
+  
+  insertFiscalPeriod(period: any): void {
+    this.run(
+      `INSERT INTO fiscal_periods (
+        id, property_id, period_type, business_date, start_time, status,
+        opened_by_employee_id, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        period.id, period.propertyId, period.periodType, period.businessDate,
+        period.startTime, period.status || 'open', period.openedByEmployeeId
+      ]
+    );
+  }
+  
+  getFiscalPeriod(id: string): any | null {
+    return this.get('SELECT * FROM fiscal_periods WHERE id = ?', [id]);
+  }
+  
+  getActiveFiscalPeriod(propertyId: string): any | null {
+    return this.get(
+      'SELECT * FROM fiscal_periods WHERE property_id = ? AND status = ? ORDER BY start_time DESC LIMIT 1',
+      [propertyId, 'open']
+    );
+  }
+  
+  closeFiscalPeriod(id: string, closedByEmployeeId: string, totals: any): void {
+    this.run(
+      `UPDATE fiscal_periods SET 
+        status = 'closed', end_time = datetime('now'), closed_by_employee_id = ?,
+        gross_sales = ?, net_sales = ?, tax_collected = ?, discounts_given = ?,
+        refunds_given = ?, check_count = ?, guest_count = ?, void_count = ?, void_amount = ?,
+        cash_over_short = ?, closed_at = datetime('now')
+       WHERE id = ?`,
+      [
+        closedByEmployeeId, totals.grossSales || 0, totals.netSales || 0, totals.taxCollected || 0,
+        totals.discountsGiven || 0, totals.refundsGiven || 0, totals.checkCount || 0,
+        totals.guestCount || 0, totals.voidCount || 0, totals.voidAmount || 0, totals.cashOverShort || 0, id
+      ]
+    );
+  }
+  
+  // ==========================================================================
+  // KDS Ticket Items
+  // ==========================================================================
+  
+  insertKdsTicketItem(item: any): void {
+    this.run(
+      `INSERT INTO kds_ticket_items (
+        id, kds_ticket_id, check_item_id, menu_item_id, name, short_name, quantity,
+        modifiers, seat_number, course_number, special_instructions, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        item.id, item.kdsTicketId, item.checkItemId, item.menuItemId, item.name, item.shortName,
+        item.quantity || 1, item.modifiers ? JSON.stringify(item.modifiers) : null,
+        item.seatNumber, item.courseNumber || 1, item.specialInstructions, item.status || 'active'
+      ]
+    );
+  }
+  
+  getKdsTicketItems(kdsTicketId: string): any[] {
+    return this.all('SELECT * FROM kds_ticket_items WHERE kds_ticket_id = ? ORDER BY created_at', [kdsTicketId]);
+  }
+  
+  bumpKdsTicketItem(id: string): void {
+    this.run(
+      'UPDATE kds_ticket_items SET status = ?, bumped_at = datetime(\'now\') WHERE id = ?',
+      ['bumped', id]
+    );
+  }
+  
+  // ==========================================================================
+  // Offline Order Queue
+  // ==========================================================================
+  
+  insertOfflineOrder(order: any): void {
+    this.run(
+      `INSERT INTO offline_order_queue (
+        id, rvc_id, order_type, order_source, table_number, guest_count, items, payments,
+        customer_name, customer_phone, customer_email, special_instructions, scheduled_time,
+        priority, status, employee_id, workstation_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        order.id, order.rvcId, order.orderType, order.orderSource || 'pos',
+        order.tableNumber, order.guestCount || 1,
+        JSON.stringify(order.items), order.payments ? JSON.stringify(order.payments) : null,
+        order.customerName, order.customerPhone, order.customerEmail,
+        order.specialInstructions, order.scheduledTime, order.priority || 0,
+        order.status || 'queued', order.employeeId, order.workstationId
+      ]
+    );
+  }
+  
+  getOfflineOrder(id: string): any | null {
+    return this.get('SELECT * FROM offline_order_queue WHERE id = ?', [id]);
+  }
+  
+  getPendingOfflineOrders(): any[] {
+    return this.all(
+      'SELECT * FROM offline_order_queue WHERE status = ? ORDER BY priority DESC, created_at ASC',
+      ['queued']
+    );
+  }
+  
+  updateOfflineOrderStatus(id: string, status: string, cloudCheckId?: string, errorMessage?: string): void {
+    this.run(
+      `UPDATE offline_order_queue SET status = ?, cloud_check_id = ?, error_message = ?, 
+       processed_at = CASE WHEN ? = 'synced' THEN datetime('now') ELSE processed_at END,
+       retry_count = CASE WHEN ? = 'failed' THEN retry_count + 1 ELSE retry_count END
+       WHERE id = ?`,
+      [status, cloudCheckId, errorMessage, status, status, id]
+    );
+  }
+  
+  // ==========================================================================
+  // Online Orders
+  // ==========================================================================
+  
+  upsertOnlineOrderSource(source: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO online_order_sources (
+        id, property_id, name, source_type, api_key, webhook_url, auto_accept, default_prep_time, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        source.id, source.propertyId, source.name, source.sourceType,
+        source.apiKey, source.webhookUrl, source.autoAccept ? 1 : 0,
+        source.defaultPrepTime || 15, source.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  insertOnlineOrder(order: any): void {
+    this.run(
+      `INSERT INTO online_orders (
+        id, property_id, rvc_id, source_id, external_order_id, order_type, status,
+        customer_name, customer_phone, customer_email, delivery_address, special_instructions,
+        items, subtotal, tax, delivery_fee, tip, total, payment_status, payment_method,
+        scheduled_time, estimated_ready_time, employee_id, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        order.id, order.propertyId, order.rvcId, order.sourceId, order.externalOrderId,
+        order.orderType, order.status || 'received', order.customerName, order.customerPhone,
+        order.customerEmail, order.deliveryAddress, order.specialInstructions,
+        JSON.stringify(order.items), order.subtotal || 0, order.tax || 0,
+        order.deliveryFee || 0, order.tip || 0, order.total || 0,
+        order.paymentStatus || 'unpaid', order.paymentMethod, order.scheduledTime,
+        order.estimatedReadyTime, order.employeeId
+      ]
+    );
+  }
+  
+  getOnlineOrder(id: string): any | null {
+    return this.get('SELECT * FROM online_orders WHERE id = ?', [id]);
+  }
+  
+  getOnlineOrdersByStatus(propertyId: string, status: string): any[] {
+    return this.all(
+      'SELECT * FROM online_orders WHERE property_id = ? AND status = ? ORDER BY created_at DESC',
+      [propertyId, status]
+    );
+  }
+  
+  updateOnlineOrderStatus(id: string, status: string): void {
+    this.run('UPDATE online_orders SET status = ?, updated_at = datetime(\'now\') WHERE id = ?', [status, id]);
+  }
+  
+  // ==========================================================================
   // Bulk Operations
   // ==========================================================================
   
@@ -1373,6 +1869,9 @@ export class Database {
       'loyalty_transactions', 'loyalty_rewards', 'loyalty_redemptions', 'item_availability',
       'pos_layouts', 'pos_layout_cells', 'pos_layout_rvc_assignments',
       'gift_cards', 'gift_card_transactions', 'audit_logs', 'refunds', 'refund_items', 'refund_payments',
+      'payment_transactions', 'terminal_devices', 'cash_drawers', 'drawer_assignments', 'cash_transactions', 'safe_counts',
+      'job_codes', 'employee_job_codes', 'time_punches', 'break_sessions', 'fiscal_periods',
+      'kds_ticket_items', 'offline_order_queue', 'online_order_sources', 'online_orders',
     ];
     
     if (!allowedTables.includes(tableName)) {
