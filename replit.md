@@ -193,3 +193,18 @@ Cloud-side monitoring and alerting for Service Hosts:
 - **EMC Dashboard**: `client/src/pages/admin/service-hosts.tsx` - Real-time status with GREEN/YELLOW/ORANGE/RED indicators
 - **Alert Conditions**: Offline detection, sync queue backup, disk space, connection mode degradation, high CPU/memory
 - **API Endpoints**: `/api/service-hosts/status-dashboard`, `/api/service-host-alerts`, `/api/service-host-alert-rules`
+
+### Phase 8: CAL Package Deployment Pipeline (Complete)
+Software distribution and workstation activation system:
+- **CAL Packages**: `cal_packages` table - Software package registry (Service Host Runtime, CAPS, Print Controller, KDS Controller, Payment Controller, CAL Client)
+- **Package Versions**: `cal_package_versions` table - Versioned releases with checksums and download URLs
+- **Deployments**: `cal_deployments` table - Deployment records with scope identifiers (enterprise, property, workstation, service_host)
+- **Deployment Targets**: `cal_deployment_targets` table - Individual installation targets with status tracking (pending → downloading → installing → completed/failed)
+- **Scope Identifiers**: `targetPropertyId`, `targetWorkstationId`, `targetServiceHostId` - Persist deployment scope for filtering
+- **Auto-Population**: Enterprise-scoped deployments auto-create targets for all properties/service hosts; property-scoped for specific property's service hosts
+- **API Endpoints**: 
+  - `GET/POST /api/cal-packages` - Package CRUD
+  - `GET/POST/DELETE /api/cal-packages/:id/versions` - Version management
+  - `GET/POST /api/cal-deployments` - Deployment creation with auto-target generation
+  - `GET /api/workstations/:id/activation-config` - Full workstation configuration with pending deployments and service bindings
+- **Admin UI**: `client/src/pages/admin/cal-packages.tsx` - Package management, version creation, deployment scheduling
