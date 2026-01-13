@@ -524,6 +524,14 @@ export class Database {
     return this.get('SELECT * FROM tax_groups WHERE id = ?', [id]);
   }
   
+  getTaxGroupsByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM tax_groups WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getTaxGroupsByRvc(rvcId: string): any[] {
+    return this.all('SELECT * FROM tax_groups WHERE rvc_id = ? AND active = 1', [rvcId]);
+  }
+  
   // ==========================================================================
   // Tenders
   // ==========================================================================
@@ -548,6 +556,14 @@ export class Database {
   
   getTendersByProperty(propertyId: string): any[] {
     return this.all('SELECT * FROM tenders WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getTendersByRvc(rvcId: string): any[] {
+    return this.all('SELECT * FROM tenders WHERE rvc_id = ? AND active = 1', [rvcId]);
+  }
+  
+  getTendersByType(propertyId: string, type: string): any[] {
+    return this.all('SELECT * FROM tenders WHERE property_id = ? AND type = ? AND active = 1', [propertyId, type]);
   }
   
   // ==========================================================================
@@ -576,6 +592,59 @@ export class Database {
   
   getDiscountsByProperty(propertyId: string): any[] {
     return this.all('SELECT * FROM discounts WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getDiscountsByRvc(rvcId: string): any[] {
+    return this.all('SELECT * FROM discounts WHERE rvc_id = ? AND active = 1', [rvcId]);
+  }
+  
+  // ==========================================================================
+  // Service Charges
+  // ==========================================================================
+  
+  upsertServiceCharge(sc: any): void {
+    const amountStr = String(sc.amount || '0');
+    this.run(
+      `INSERT OR REPLACE INTO service_charges (
+        id, enterprise_id, property_id, rvc_id, name, code,
+        charge_type, amount, apply_to_subtotal, apply_to_discounted,
+        taxable, tax_group_id, auto_apply, auto_apply_guest_count, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        sc.id, sc.enterpriseId, sc.propertyId, sc.rvcId,
+        sc.name, sc.code, sc.chargeType || 'percent', amountStr,
+        sc.applyToSubtotal !== false ? 1 : 0, sc.applyToDiscounted !== false ? 1 : 0,
+        sc.taxable ? 1 : 0, sc.taxGroupId, sc.autoApply ? 1 : 0,
+        sc.autoApplyGuestCount, sc.active !== false ? 1 : 0,
+      ]
+    );
+  }
+  
+  getServiceCharge(id: string): any | null {
+    return this.get('SELECT * FROM service_charges WHERE id = ?', [id]);
+  }
+  
+  getServiceChargesByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM service_charges WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  getServiceChargesByRvc(rvcId: string): any[] {
+    return this.all('SELECT * FROM service_charges WHERE rvc_id = ? AND active = 1', [rvcId]);
+  }
+  
+  getAutoApplyServiceCharges(propertyId: string, guestCount?: number): any[] {
+    if (guestCount) {
+      return this.all(
+        `SELECT * FROM service_charges 
+         WHERE property_id = ? AND active = 1 AND auto_apply = 1 
+         AND (auto_apply_guest_count IS NULL OR auto_apply_guest_count <= ?)`,
+        [propertyId, guestCount]
+      );
+    }
+    return this.all(
+      'SELECT * FROM service_charges WHERE property_id = ? AND active = 1 AND auto_apply = 1',
+      [propertyId]
+    );
   }
   
   // ==========================================================================
@@ -1861,7 +1930,7 @@ export class Database {
   clearTable(tableName: string): void {
     const allowedTables = [
       'employees', 'menu_items', 'slus', 'menu_item_slus', 'tax_groups',
-      'tenders', 'discounts', 'workstations', 'printers', 'kds_devices',
+      'tenders', 'discounts', 'service_charges', 'workstations', 'printers', 'kds_devices',
       'order_devices', 'print_class_routing', 'modifier_groups', 'modifiers',
       'modifier_group_modifiers', 'menu_item_modifier_groups', 'roles',
       'privileges', 'role_privileges', 'print_classes', 'major_groups', 'family_groups',
