@@ -748,8 +748,8 @@ function DeployDialog({
       onClose();
       toast({ title: "Deployment scheduled" });
     },
-    onError: () => {
-      toast({ title: "Failed to create deployment", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create deployment", variant: "destructive" });
     },
   });
 
