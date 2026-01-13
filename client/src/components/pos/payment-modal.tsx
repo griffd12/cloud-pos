@@ -925,13 +925,66 @@ export function PaymentModal({
       });
     } catch (error: any) {
       console.error("Failed to start terminal session:", error);
-      toast({
-        title: "Terminal Error",
-        description: error.message || "Failed to connect to terminal",
-        variant: "destructive",
-      });
-      setSelectedTerminal(null);
-      setPaymentMethod("select");
+      
+      // Check if this is an active session conflict (409)
+      if (error.message?.includes("active payment session")) {
+        // Parse the error to get activeSessionId
+        // Error format: "409: {\"message\":\"...\",\"activeSessionId\":\"...\"}"
+        let activeSessionId: string | null = null;
+        try {
+          const jsonPart = error.message.substring(error.message.indexOf("{"));
+          const errorData = JSON.parse(jsonPart);
+          activeSessionId = errorData?.activeSessionId;
+        } catch (parseError) {
+          console.error("Failed to parse error response:", parseError);
+        }
+        
+        if (activeSessionId) {
+          // Try to cancel the existing session and retry
+          try {
+            await apiRequest("POST", `/api/terminal-sessions/${activeSessionId}/cancel`);
+            // Retry after canceling
+            const retryRes = await apiRequest("POST", "/api/terminal-sessions", {
+              terminalDeviceId: terminal.id,
+              checkId: check.id,
+              tenderId: cardTender.id,
+              amount: Math.round(amount * 100),
+              employeeId,
+              workstationId,
+            });
+            const session = await retryRes.json() as TerminalSession;
+            setTerminalSession(session);
+            setTerminalPolling(true);
+            toast({
+              title: "Present Card",
+              description: `Waiting for card on ${terminal.name}`,
+            });
+            return;
+          } catch (cancelError) {
+            console.error("Failed to cancel existing session:", cancelError);
+          }
+        }
+        
+        // If cancel/retry failed, show error but stay on method selection
+        toast({
+          title: "Terminal Busy",
+          description: "Terminal has an active session. Please wait or try another terminal.",
+          variant: "destructive",
+        });
+        setCardPaymentStep("method");
+        setPaymentMethod("select");
+        setSelectedTerminal(null);
+      } else {
+        // Other errors - go back to method selection
+        toast({
+          title: "Terminal Error",
+          description: error.message || "Failed to connect to terminal",
+          variant: "destructive",
+        });
+        setCardPaymentStep("method");
+        setPaymentMethod("select");
+        setSelectedTerminal(null);
+      }
     } finally {
       setIsProcessingCard(false);
     }
