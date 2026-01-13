@@ -9703,6 +9703,133 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // TIP RULES API ROUTES (Square-style tip distribution configuration)
+  // ============================================================================
+
+  // Get tip rules
+  app.get("/api/tip-rules", async (req, res) => {
+    try {
+      const { enterpriseId, propertyId, rvcId } = req.query;
+      const rules = await storage.getTipRules({
+        enterpriseId: enterpriseId as string,
+        propertyId: propertyId as string,
+        rvcId: rvcId as string,
+      });
+      res.json(rules);
+    } catch (error) {
+      console.error("Get tip rules error:", error);
+      res.status(500).json({ message: "Failed to get tip rules" });
+    }
+  });
+
+  // Get tip rule for a specific property (with enterprise fallback)
+  app.get("/api/tip-rules/property/:propertyId", async (req, res) => {
+    try {
+      const rule = await storage.getTipRuleForProperty(req.params.propertyId);
+      if (!rule) {
+        return res.status(404).json({ message: "No tip rule found for this property" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Get tip rule for property error:", error);
+      res.status(500).json({ message: "Failed to get tip rule for property" });
+    }
+  });
+
+  // Get single tip rule by ID
+  app.get("/api/tip-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.getTipRule(req.params.id);
+      if (!rule) {
+        return res.status(404).json({ message: "Tip rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Get tip rule error:", error);
+      res.status(500).json({ message: "Failed to get tip rule" });
+    }
+  });
+
+  // Create tip rule
+  app.post("/api/tip-rules", async (req, res) => {
+    try {
+      const { insertTipRuleSchema } = await import("@shared/schema");
+      const parsed = insertTipRuleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid tip rule data", errors: parsed.error.issues });
+      }
+      const rule = await storage.createTipRule(parsed.data);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Create tip rule error:", error);
+      res.status(500).json({ message: "Failed to create tip rule" });
+    }
+  });
+
+  // Update tip rule
+  app.patch("/api/tip-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.updateTipRule(req.params.id, req.body);
+      if (!rule) {
+        return res.status(404).json({ message: "Tip rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Update tip rule error:", error);
+      res.status(500).json({ message: "Failed to update tip rule" });
+    }
+  });
+
+  // Delete tip rule
+  app.delete("/api/tip-rules/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteTipRule(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Tip rule not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete tip rule error:", error);
+      res.status(500).json({ message: "Failed to delete tip rule" });
+    }
+  });
+
+  // === TIP RULE JOB PERCENTAGES ===
+
+  // Get job percentages for a tip rule
+  app.get("/api/tip-rules/:tipRuleId/percentages", async (req, res) => {
+    try {
+      const percentages = await storage.getTipRuleJobPercentages(req.params.tipRuleId);
+      res.json(percentages);
+    } catch (error) {
+      console.error("Get tip rule job percentages error:", error);
+      res.status(500).json({ message: "Failed to get tip rule job percentages" });
+    }
+  });
+
+  // Upsert job percentages for a tip rule
+  app.put("/api/tip-rules/:tipRuleId/percentages", async (req, res) => {
+    try {
+      const { percentages } = req.body;
+      if (!Array.isArray(percentages)) {
+        return res.status(400).json({ message: "Percentages must be an array" });
+      }
+      
+      // Validate that percentages sum to 100 (if provided)
+      const total = percentages.reduce((sum: number, p: { percentage: string }) => sum + parseFloat(p.percentage || "0"), 0);
+      if (percentages.length > 0 && Math.abs(total - 100) > 0.01) {
+        return res.status(400).json({ message: `Job percentages must sum to 100% (currently ${total.toFixed(2)}%)` });
+      }
+      
+      const result = await storage.upsertTipRuleJobPercentages(req.params.tipRuleId, percentages);
+      res.json(result);
+    } catch (error) {
+      console.error("Upsert tip rule job percentages error:", error);
+      res.status(500).json({ message: "Failed to update tip rule job percentages" });
+    }
+  });
+
+  // ============================================================================
   // LABOR ANALYTICS API ROUTES
   // ============================================================================
 

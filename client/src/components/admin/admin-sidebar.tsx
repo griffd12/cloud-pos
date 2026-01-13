@@ -117,6 +117,7 @@ const menuGroupsTemplate = [
       { title: "Jobs", url: "/admin/jobs", icon: Briefcase },
       { title: "Roles & Privileges", url: "/admin/roles", icon: Shield },
       { title: "Overtime Rules", url: "/admin/overtime-rules", icon: Scale },
+      { title: "Tip Rules", url: "/admin/tip-rules", icon: Coins },
     ],
   },
   {

@@ -1965,6 +1965,59 @@ export const tipAllocationsRelations = relations(tipAllocations, ({ one }) => ({
 }));
 
 // ============================================================================
+// TIP RULES - Square-style tip distribution configuration
+// ============================================================================
+
+export const TIP_DISTRIBUTION_METHODS = [
+  "tip_directly",           // Tips go to the employee who collected them
+  "pool_per_transaction",   // Split equally among clocked-in employees at time of transaction
+  "pool_by_hours_worked",   // Split based on hours worked in day/week
+  "pool_by_percentages",    // Split by job code percentages
+] as const;
+export type TipDistributionMethod = typeof TIP_DISTRIBUTION_METHODS[number];
+
+export const TIP_TIMEFRAMES = ["daily", "weekly"] as const;
+export type TipTimeframe = typeof TIP_TIMEFRAMES[number];
+
+export const tipRules = pgTable("tip_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull().default("Default Tip Rules"),
+  distributionMethod: text("distribution_method").notNull().default("tip_directly"),
+  timeframe: text("timeframe").default("daily"), // daily = 24-hour workday, weekly = 7-day workweek
+  appliesToAllLocations: boolean("applies_to_all_locations").default(false),
+  declareCashTips: boolean("declare_cash_tips").default(false),
+  declareCashTipsAllLocations: boolean("declare_cash_tips_all_locations").default(false),
+  excludeManagers: boolean("exclude_managers").default(true),
+  minimumHoursForPool: decimal("minimum_hours_for_pool", { precision: 4, scale: 2 }).default("0"),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tipRuleJobPercentages = pgTable("tip_rule_job_percentages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tipRuleId: varchar("tip_rule_id").notNull().references(() => tipRules.id, { onDelete: "cascade" }),
+  jobCodeId: varchar("job_code_id").notNull().references(() => jobCodes.id),
+  percentage: decimal("percentage", { precision: 5, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tipRulesRelations = relations(tipRules, ({ one, many }) => ({
+  enterprise: one(enterprises, { fields: [tipRules.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [tipRules.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [tipRules.rvcId], references: [rvcs.id] }),
+  jobPercentages: many(tipRuleJobPercentages),
+}));
+
+export const tipRuleJobPercentagesRelations = relations(tipRuleJobPercentages, ({ one }) => ({
+  tipRule: one(tipRules, { fields: [tipRuleJobPercentages.tipRuleId], references: [tipRules.id] }),
+  jobCode: one(jobCodes, { fields: [tipRuleJobPercentages.jobCodeId], references: [jobCodes.id] }),
+}));
+
+// ============================================================================
 // LABOR VS SALES ANALYTICS
 // ============================================================================
 
@@ -2044,6 +2097,8 @@ export const insertShiftCoverApprovalSchema = createInsertSchema(shiftCoverAppro
 export const insertTipPoolPolicySchema = createInsertSchema(tipPoolPolicies).omit({ id: true, createdAt: true });
 export const insertTipPoolRunSchema = createInsertSchema(tipPoolRuns).omit({ id: true, createdAt: true });
 export const insertTipAllocationSchema = createInsertSchema(tipAllocations).omit({ id: true, createdAt: true });
+export const insertTipRuleSchema = createInsertSchema(tipRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTipRuleJobPercentageSchema = createInsertSchema(tipRuleJobPercentages).omit({ id: true, createdAt: true });
 export const insertLaborSnapshotSchema = createInsertSchema(laborSnapshots).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOvertimeRuleSchema = createInsertSchema(overtimeRules).omit({ id: true, createdAt: true, updatedAt: true });
 
@@ -2085,6 +2140,10 @@ export type TipPoolRun = typeof tipPoolRuns.$inferSelect;
 export type InsertTipPoolRun = z.infer<typeof insertTipPoolRunSchema>;
 export type TipAllocation = typeof tipAllocations.$inferSelect;
 export type InsertTipAllocation = z.infer<typeof insertTipAllocationSchema>;
+export type TipRule = typeof tipRules.$inferSelect;
+export type InsertTipRule = z.infer<typeof insertTipRuleSchema>;
+export type TipRuleJobPercentage = typeof tipRuleJobPercentages.$inferSelect;
+export type InsertTipRuleJobPercentage = z.infer<typeof insertTipRuleJobPercentageSchema>;
 export type LaborSnapshot = typeof laborSnapshots.$inferSelect;
 export type InsertLaborSnapshot = z.infer<typeof insertLaborSnapshotSchema>;
 export type OvertimeRule = typeof overtimeRules.$inferSelect;

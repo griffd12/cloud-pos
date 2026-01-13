@@ -52,6 +52,7 @@ import TipPoolingPage from "./tip-pooling";
 import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
+import TipRulesPage from "./tip-rules";
 import PaymentProcessorsPage from "./payment-processors";
 import TerminalDevicesPage from "./terminal-devices";
 import RegisteredDevicesPage from "./registered-devices";
@@ -302,6 +303,7 @@ export default function AdminLayout() {
               <Route path="/admin/labor-analytics" component={LaborAnalyticsPage} />
               <Route path="/admin/jobs" component={JobsPage} />
               <Route path="/admin/overtime-rules" component={OvertimeRulesPage} />
+              <Route path="/admin/tip-rules" component={TipRulesPage} />
               <Route path="/admin/onboarding" component={OnboardingPage} />
               <Route path="/admin/gift-cards" component={GiftCardsPage} />
               <Route path="/admin/loyalty" component={LoyaltyPage} />

@@ -17,7 +17,7 @@ import {
   timecards, timecardExceptions, timecardEdits,
   employeeAvailability, availabilityExceptions, timeOffRequests,
   shiftTemplates, shifts, shiftCoverRequests, shiftCoverOffers, shiftCoverApprovals,
-  tipPoolPolicies, tipPoolRuns, tipAllocations, laborSnapshots, overtimeRules,
+  tipPoolPolicies, tipPoolRuns, tipAllocations, tipRules, tipRuleJobPercentages, laborSnapshots, overtimeRules,
   // Phase 1-3 new tables
   offlineOrderQueue, fiscalPeriods, cashDrawers, drawerAssignments, cashTransactions, safeCounts,
   giftCards, giftCardTransactions, glMappings, accountingExports,
@@ -90,6 +90,8 @@ import {
   type TipPoolPolicy, type InsertTipPoolPolicy,
   type TipPoolRun, type InsertTipPoolRun,
   type TipAllocation, type InsertTipAllocation,
+  type TipRule, type InsertTipRule,
+  type TipRuleJobPercentage, type InsertTipRuleJobPercentage,
   type LaborSnapshot, type InsertLaborSnapshot,
   type OvertimeRule, type InsertOvertimeRule,
   type PaymentProcessor, type InsertPaymentProcessor,
@@ -682,6 +684,21 @@ export interface IStorage {
   getTipAllocations(tipPoolRunId: string): Promise<TipAllocation[]>;
   createTipAllocation(data: InsertTipAllocation): Promise<TipAllocation>;
   runTipPoolSettlement(propertyId: string, businessDate: string, policyId: string, runById: string): Promise<{ run: TipPoolRun; allocations: TipAllocation[] }>;
+
+  // ============================================================================
+  // TIP RULES (Square-style tip configuration)
+  // ============================================================================
+
+  getTipRules(filters: { enterpriseId?: string; propertyId?: string; rvcId?: string }): Promise<TipRule[]>;
+  getTipRule(id: string): Promise<TipRule | undefined>;
+  getTipRuleForProperty(propertyId: string): Promise<TipRule | undefined>;
+  createTipRule(data: InsertTipRule): Promise<TipRule>;
+  updateTipRule(id: string, data: Partial<InsertTipRule>): Promise<TipRule | undefined>;
+  deleteTipRule(id: string): Promise<boolean>;
+
+  // Tip Rule Job Percentages (for pool_by_percentages distribution method)
+  getTipRuleJobPercentages(tipRuleId: string): Promise<TipRuleJobPercentage[]>;
+  upsertTipRuleJobPercentages(tipRuleId: string, percentages: Array<{ jobCodeId: string; percentage: string }>): Promise<TipRuleJobPercentage[]>;
 
   // ============================================================================
   // LABOR VS SALES
@@ -4341,6 +4358,87 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { run, allocations };
+  }
+
+  // ============================================================================
+  // TIP RULES IMPLEMENTATIONS (Square-style tip configuration)
+  // ============================================================================
+
+  async getTipRules(filters: { enterpriseId?: string; propertyId?: string; rvcId?: string }): Promise<TipRule[]> {
+    const conditions: any[] = [];
+    if (filters.enterpriseId) conditions.push(eq(tipRules.enterpriseId, filters.enterpriseId));
+    if (filters.propertyId) conditions.push(eq(tipRules.propertyId, filters.propertyId));
+    if (filters.rvcId) conditions.push(eq(tipRules.rvcId, filters.rvcId));
+    
+    if (conditions.length === 0) {
+      return db.select().from(tipRules).orderBy(desc(tipRules.createdAt));
+    }
+    return db.select().from(tipRules).where(and(...conditions)).orderBy(desc(tipRules.createdAt));
+  }
+
+  async getTipRule(id: string): Promise<TipRule | undefined> {
+    const [result] = await db.select().from(tipRules).where(eq(tipRules.id, id));
+    return result;
+  }
+
+  async getTipRuleForProperty(propertyId: string): Promise<TipRule | undefined> {
+    // First check for property-specific rule
+    const [propertyRule] = await db.select().from(tipRules).where(
+      and(eq(tipRules.propertyId, propertyId), eq(tipRules.active, true))
+    );
+    if (propertyRule) return propertyRule;
+
+    // Fall back to enterprise-wide rule if property doesn't have one
+    const property = await this.getProperty(propertyId);
+    if (property?.enterpriseId) {
+      const [enterpriseRule] = await db.select().from(tipRules).where(
+        and(
+          eq(tipRules.enterpriseId, property.enterpriseId),
+          eq(tipRules.appliesToAllLocations, true),
+          eq(tipRules.active, true)
+        )
+      );
+      if (enterpriseRule) return enterpriseRule;
+    }
+
+    return undefined;
+  }
+
+  async createTipRule(data: InsertTipRule): Promise<TipRule> {
+    const [result] = await db.insert(tipRules).values(data).returning();
+    return result;
+  }
+
+  async updateTipRule(id: string, data: Partial<InsertTipRule>): Promise<TipRule | undefined> {
+    const [result] = await db.update(tipRules).set({ ...data, updatedAt: new Date() }).where(eq(tipRules.id, id)).returning();
+    return result;
+  }
+
+  async deleteTipRule(id: string): Promise<boolean> {
+    const result = await db.delete(tipRules).where(eq(tipRules.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getTipRuleJobPercentages(tipRuleId: string): Promise<TipRuleJobPercentage[]> {
+    return db.select().from(tipRuleJobPercentages).where(eq(tipRuleJobPercentages.tipRuleId, tipRuleId));
+  }
+
+  async upsertTipRuleJobPercentages(tipRuleId: string, percentages: Array<{ jobCodeId: string; percentage: string }>): Promise<TipRuleJobPercentage[]> {
+    // Delete existing percentages for this rule
+    await db.delete(tipRuleJobPercentages).where(eq(tipRuleJobPercentages.tipRuleId, tipRuleId));
+    
+    if (percentages.length === 0) return [];
+    
+    // Insert new percentages
+    const results = await db.insert(tipRuleJobPercentages).values(
+      percentages.map(p => ({
+        tipRuleId,
+        jobCodeId: p.jobCodeId,
+        percentage: p.percentage,
+      }))
+    ).returning();
+    
+    return results;
   }
 
   // ============================================================================
