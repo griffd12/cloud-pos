@@ -831,13 +831,24 @@ export class Database {
   
   upsertPaymentProcessor(proc: any): void {
     const configStr = proc.config ? JSON.stringify(proc.config) : null;
+    const credentialsStr = proc.credentials ? JSON.stringify(proc.credentials) : null;
     this.run(
       `INSERT OR REPLACE INTO payment_processors (
-        id, property_id, name, processor_type, is_primary, config, active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM payment_processors WHERE id = ?), datetime('now')), datetime('now'))`,
+        id, property_id, name, processor_type, is_primary, config, config_version,
+        credentials, settlement_cutoff_time, supports_tip_adjust, supports_void, supports_refund,
+        gateway_mode, max_retry_attempts, timeout_seconds, created_by, updated_by,
+        active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM payment_processors WHERE id = ?), datetime('now')), datetime('now'))`,
       [
         proc.id, proc.propertyId, proc.name, proc.processorType,
-        proc.isPrimary ? 1 : 0, configStr, proc.active !== false ? 1 : 0, proc.id
+        proc.isPrimary ? 1 : 0, configStr, proc.configVersion || 1,
+        credentialsStr, proc.settlementCutoffTime,
+        proc.supportsTipAdjust !== false ? 1 : 0,
+        proc.supportsVoid !== false ? 1 : 0,
+        proc.supportsRefund !== false ? 1 : 0,
+        proc.gatewayMode || 'production', proc.maxRetryAttempts || 3, proc.timeoutSeconds || 30,
+        proc.createdBy, proc.updatedBy,
+        proc.active !== false ? 1 : 0, proc.id
       ]
     );
   }
@@ -886,11 +897,14 @@ export class Database {
   upsertLoyaltyMember(member: any): void {
     this.run(
       `INSERT OR REPLACE INTO loyalty_members (
-        id, enterprise_id, phone, email, first_name, last_name, external_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM loyalty_members WHERE id = ?), datetime('now')), datetime('now'))`,
+        id, enterprise_id, property_id, phone, email, first_name, last_name, external_id,
+        birthday, notes, sms_opt_in, email_opt_in, marketing_opt_in, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM loyalty_members WHERE id = ?), datetime('now')), datetime('now'))`,
       [
-        member.id, member.enterpriseId, member.phone, member.email,
-        member.firstName, member.lastName, member.externalId, member.id
+        member.id, member.enterpriseId, member.propertyId, member.phone, member.email,
+        member.firstName, member.lastName, member.externalId,
+        member.birthday, member.notes, member.smsOptIn ? 1 : 0,
+        member.emailOptIn ? 1 : 0, member.marketingOptIn ? 1 : 0, member.id
       ]
     );
   }
@@ -927,15 +941,20 @@ export class Database {
     this.run(
       `INSERT OR REPLACE INTO loyalty_rewards (
         id, program_id, name, description, reward_type, points_required,
-        menu_item_id, discount_id, fixed_value, percent_off, max_uses, active, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM loyalty_rewards WHERE id = ?), datetime('now')))`,
+        menu_item_id, discount_id, fixed_value, percent_off, max_uses,
+        valid_from, valid_until, min_check_amount, max_discount_amount, usage_limit_per_member,
+        active, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM loyalty_rewards WHERE id = ?), datetime('now')))`,
       [
         reward.id, reward.programId, reward.name, reward.description,
         reward.rewardType, reward.pointsRequired,
         reward.menuItemId, reward.discountId,
         reward.fixedValue ? String(reward.fixedValue) : null,
         reward.percentOff ? String(reward.percentOff) : null,
-        reward.maxUses, reward.active !== false ? 1 : 0, reward.id
+        reward.maxUses, reward.validFrom, reward.validUntil,
+        reward.minCheckAmount ? String(reward.minCheckAmount) : null,
+        reward.maxDiscountAmount ? String(reward.maxDiscountAmount) : null,
+        reward.usageLimitPerMember, reward.active !== false ? 1 : 0, reward.id
       ]
     );
   }

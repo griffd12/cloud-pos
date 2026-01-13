@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS privileges (
 CREATE TABLE IF NOT EXISTS role_privileges (
   id TEXT PRIMARY KEY,
   role_id TEXT NOT NULL REFERENCES roles(id),
-  privilege_code TEXT NOT NULL,
+  privilege_code TEXT NOT NULL REFERENCES privileges(code),
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -609,6 +609,17 @@ CREATE TABLE IF NOT EXISTS payment_processors (
   processor_type TEXT NOT NULL,
   is_primary INTEGER DEFAULT 0,
   config TEXT,
+  config_version INTEGER DEFAULT 1,
+  credentials TEXT,
+  settlement_cutoff_time TEXT,
+  supports_tip_adjust INTEGER DEFAULT 1,
+  supports_void INTEGER DEFAULT 1,
+  supports_refund INTEGER DEFAULT 1,
+  gateway_mode TEXT DEFAULT 'production',
+  max_retry_attempts INTEGER DEFAULT 3,
+  timeout_seconds INTEGER DEFAULT 30,
+  created_by TEXT REFERENCES employees(id),
+  updated_by TEXT REFERENCES employees(id),
   active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -638,11 +649,17 @@ CREATE TABLE IF NOT EXISTS loyalty_programs (
 CREATE TABLE IF NOT EXISTS loyalty_members (
   id TEXT PRIMARY KEY,
   enterprise_id TEXT REFERENCES enterprises(id),
+  property_id TEXT REFERENCES properties(id),
   phone TEXT,
   email TEXT,
   first_name TEXT,
   last_name TEXT,
   external_id TEXT,
+  birthday TEXT,
+  notes TEXT,
+  sms_opt_in INTEGER DEFAULT 0,
+  email_opt_in INTEGER DEFAULT 0,
+  marketing_opt_in INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -693,6 +710,11 @@ CREATE TABLE IF NOT EXISTS loyalty_rewards (
   fixed_value TEXT,
   percent_off TEXT,
   max_uses INTEGER,
+  valid_from TEXT,
+  valid_until TEXT,
+  min_check_amount TEXT,
+  max_discount_amount TEXT,
+  usage_limit_per_member INTEGER,
   active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
