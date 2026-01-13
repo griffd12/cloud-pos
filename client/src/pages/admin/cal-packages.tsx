@@ -724,23 +724,24 @@ function DeployDialog({
 
   const createDeploymentMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/cal-deployments", {
+      const payload: Record<string, string> = {
         enterpriseId,
         packageVersionId: packageVersion.id,
         deploymentScope,
         action,
-      });
-      if (!res.ok) throw new Error("Failed to create deployment");
-      const deployment = await res.json();
+      };
       
+      // Include propertyId for property-scoped deployments
       if (deploymentScope === "property" && selectedPropertyId) {
-        await apiRequest("POST", "/api/cal-deployment-targets", {
-          deploymentId: deployment.id,
-          propertyId: selectedPropertyId,
-        });
+        payload.propertyId = selectedPropertyId;
       }
       
-      return deployment;
+      const res = await apiRequest("POST", "/api/cal-deployments", payload);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to create deployment");
+      }
+      return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cal-deployments", enterpriseId] });
