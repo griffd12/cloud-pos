@@ -150,9 +150,9 @@ export function PaymentModal({
     enabled: !!propertyId && showCardEntry,
   });
   
-  // Filter to online terminals, preferring workstation-assigned
+  // Filter to active terminals (show all active, not just online - display status indicator)
   const availableTerminals = terminalDevices.filter(
-    (t) => t.active && t.status === "online"
+    (t) => t.active
   );
   const assignedTerminal = availableTerminals.find(
     (t) => t.workstationId === workstationId
@@ -1660,12 +1660,18 @@ export function PaymentModal({
                     data-testid="button-assigned-terminal"
                   >
                     <div className="flex items-center gap-2">
-                      <Wifi className="w-5 h-5 text-green-500" />
+                      {assignedTerminal.status === "online" ? (
+                        <Wifi className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <WifiOff className="w-5 h-5 text-yellow-500" />
+                      )}
                       <Smartphone className="w-5 h-5" />
                     </div>
                     <div className="text-left">
                       <p className="font-medium">{assignedTerminal.name}</p>
-                      <p className="text-xs text-muted-foreground">Assigned terminal</p>
+                      <p className="text-xs text-muted-foreground">
+                        Assigned terminal {assignedTerminal.status !== "online" && `(${assignedTerminal.status})`}
+                      </p>
                     </div>
                   </Button>
                 )}
@@ -1680,12 +1686,18 @@ export function PaymentModal({
                     data-testid={`button-terminal-${terminal.id}`}
                   >
                     <div className="flex items-center gap-2">
-                      <Wifi className="w-5 h-5 text-green-500" />
+                      {terminal.status === "online" ? (
+                        <Wifi className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <WifiOff className="w-5 h-5 text-yellow-500" />
+                      )}
                       <Smartphone className="w-5 h-5" />
                     </div>
                     <div className="text-left">
                       <p className="font-medium">{terminal.name}</p>
-                      <p className="text-xs text-muted-foreground">Available terminal</p>
+                      <p className="text-xs text-muted-foreground">
+                        Available terminal {terminal.status !== "online" && `(${terminal.status})`}
+                      </p>
                     </div>
                   </Button>
                 ))}
