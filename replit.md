@@ -61,6 +61,13 @@ Preferred communication style: Simple, everyday language.
   - KDS test ticket broadcasting for connectivity verification
   - Simulated cloud disconnect toggle for offline failover testing
   - Service Host URL configuration
+- **Service Host WebSocket Integration**: Cloud endpoint `/ws/service-host` for real-time Service Host connections with:
+  - Token-based authentication with property verification
+  - Heartbeat monitoring for connection health
+  - Automatic status updates (online/offline) with broadcast notifications
+  - Config sync request handling
+  - Transaction upload acknowledgment
+- **Transaction Sync Security**: All sync endpoints (`/api/sync/transactions`, `/api/sync/time-punches`) protected with Service Host token authentication and property authorization
 - **CAL Package Deployment Pipeline**: System for distributing and managing software packages (CAL Packages) to workstations and Service Hosts, including versioning, targeted deployments, and agent-side reception.
 - **Config Sync Service**: Cloud → Local SQLite synchronization with full and delta sync support. Handles all entity types: hierarchy (enterprises, properties, RVCs), menu (SLUs, items, modifiers), employees (roles, privileges, assignments), devices (workstations, printers, KDS, order devices), operations (tax groups, tenders, discounts, service charges), POS layouts, payments, and loyalty. Features version tracking, auto-sync intervals, real-time updates via WebSocket, and proper soft/hard delete handling. Located at `service-host/src/sync/config-sync.ts`.
 - **Service Host SQLite Schema (v3)**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations. Includes:

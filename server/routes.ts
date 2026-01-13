@@ -16368,12 +16368,30 @@ connect();
   });
 
   // POST /api/sync/transactions - Receive transactions from Service Host
+  // Protected with Service Host token authentication
   app.post("/api/sync/transactions", async (req, res) => {
     try {
+      // Validate Service Host authentication
+      const serviceHostToken = req.headers['x-service-host-token'] as string;
       const { serviceHostId, propertyId, businessDate, transactions } = req.body;
 
       if (!serviceHostId || !propertyId || !transactions) {
         return res.status(400).json({ error: "serviceHostId, propertyId, and transactions are required" });
+      }
+      
+      // Verify Service Host token matches the registered host
+      const serviceHost = await storage.getServiceHost(serviceHostId);
+      if (!serviceHost) {
+        return res.status(404).json({ error: "Service Host not found" });
+      }
+      
+      if (!serviceHostToken || serviceHost.registrationToken !== serviceHostToken) {
+        return res.status(401).json({ error: "Invalid Service Host authentication" });
+      }
+      
+      // Verify the Service Host is authorized for this property
+      if (serviceHost.propertyId !== propertyId) {
+        return res.status(403).json({ error: "Service Host not authorized for this property" });
       }
 
       const cloudIds: Record<string, string> = {};
@@ -16442,12 +16460,30 @@ connect();
   });
 
   // POST /api/sync/time-punches - Receive time punches from Service Host
+  // Protected with Service Host token authentication
   app.post("/api/sync/time-punches", async (req, res) => {
     try {
+      // Validate Service Host authentication
+      const serviceHostToken = req.headers['x-service-host-token'] as string;
       const { serviceHostId, propertyId, punches } = req.body;
 
       if (!serviceHostId || !propertyId || !punches) {
         return res.status(400).json({ error: "serviceHostId, propertyId, and punches are required" });
+      }
+      
+      // Verify Service Host token matches the registered host
+      const serviceHost = await storage.getServiceHost(serviceHostId);
+      if (!serviceHost) {
+        return res.status(404).json({ error: "Service Host not found" });
+      }
+      
+      if (!serviceHostToken || serviceHost.registrationToken !== serviceHostToken) {
+        return res.status(401).json({ error: "Invalid Service Host authentication" });
+      }
+      
+      // Verify the Service Host is authorized for this property
+      if (serviceHost.propertyId !== propertyId) {
+        return res.status(403).json({ error: "Service Host not authorized for this property" });
       }
 
       const cloudIds: Record<string, string> = {};
