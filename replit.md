@@ -54,6 +54,13 @@ Preferred communication style: Simple, everyday language.
 - **Print Agent System**: Standalone Node.js agent for bridging cloud POS to local network printers via WebSocket.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting, Manager Alerts, Item Availability, Offline Order Queue, Accounting Export.
 - **V2 Hybrid Architecture**: Introduces an optional on-premise Service Host (Node.js with SQLite) for offline resilience, supporting yellow (LAN only) and red (isolated) modes. Includes cloud sync infrastructure for configuration, transactions, and real-time updates.
+- **Connectivity Test Dashboard**: EMC admin page (`/emc/connectivity-test`) for testing and monitoring device connectivity. Features:
+  - Real-time connection mode display (GREEN/YELLOW/ORANGE/RED)
+  - Service Host status monitoring with online/offline detection
+  - Registered device status (workstations/KDS) with activity-based connectivity
+  - KDS test ticket broadcasting for connectivity verification
+  - Simulated cloud disconnect toggle for offline failover testing
+  - Service Host URL configuration
 - **CAL Package Deployment Pipeline**: System for distributing and managing software packages (CAL Packages) to workstations and Service Hosts, including versioning, targeted deployments, and agent-side reception.
 - **Config Sync Service**: Cloud → Local SQLite synchronization with full and delta sync support. Handles all entity types: hierarchy (enterprises, properties, RVCs), menu (SLUs, items, modifiers), employees (roles, privileges, assignments), devices (workstations, printers, KDS, order devices), operations (tax groups, tenders, discounts, service charges), POS layouts, payments, and loyalty. Features version tracking, auto-sync intervals, real-time updates via WebSocket, and proper soft/hard delete handling. Located at `service-host/src/sync/config-sync.ts`.
 - **Service Host SQLite Schema (v3)**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations. Includes:

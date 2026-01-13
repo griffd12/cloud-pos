@@ -423,6 +423,33 @@ export default function ConnectivityTestPage() {
                 </Button>
               </div>
             </div>
+
+            <Separator />
+
+            <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="simulate-offline" className="text-sm font-medium">
+                    Simulate Cloud Disconnect
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Block cloud requests to test offline failover
+                  </p>
+                </div>
+                <Switch
+                  id="simulate-offline"
+                  checked={simulateOffline}
+                  onCheckedChange={handleSimulateOffline}
+                  data-testid="switch-simulate-offline"
+                />
+              </div>
+              {simulateOffline && (
+                <div className="mt-2 flex items-center gap-2 text-orange-600 text-xs">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Offline simulation active</span>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

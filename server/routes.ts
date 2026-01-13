@@ -4668,7 +4668,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Broadcast a test message to all KDS displays
       broadcastPosEvent({
         type: 'kds_test_ticket',
-        data: {
+        payload: {
           message: testMessage || 'Test ticket from connectivity dashboard',
           source: source || 'admin',
           timestamp: new Date().toISOString(),
@@ -11341,14 +11341,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const devices = await storage.getRegisteredDevices();
       
-      const summary = devices.map(d => ({
-        id: d.id,
-        name: d.name,
-        type: d.deviceType === 'kds_display' ? 'kds' : 'workstation',
-        status: d.status === 'enrolled' ? 'connected' : 
-                d.status === 'pending' ? 'pending' : 'disconnected',
-        lastSeen: d.lastAccessAt,
-      }));
+      // Consider a device connected if last access was within 5 minutes
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      
+      const summary = devices.map(d => {
+        let status: 'connected' | 'pending' | 'disconnected';
+        
+        if (d.status === 'pending') {
+          status = 'pending';
+        } else if (d.status === 'enrolled' && d.lastAccessAt && new Date(d.lastAccessAt) > fiveMinutesAgo) {
+          status = 'connected';
+        } else if (d.status === 'enrolled') {
+          status = 'disconnected';
+        } else {
+          status = 'disconnected';
+        }
+        
+        return {
+          id: d.id,
+          name: d.name,
+          type: d.deviceType === 'kds_display' ? 'kds' : 'workstation',
+          status,
+          lastSeen: d.lastAccessAt,
+        };
+      });
       
       res.json(summary);
     } catch (error) {
