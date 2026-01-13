@@ -136,7 +136,7 @@ export function PaymentModal({
     (p) => p.paymentStatus === "authorized"
   );
   
-  // Query terminal devices for property (using apiRequest to include device token)
+  // Query terminal devices for property when modal is open (using apiRequest to include device token)
   const { data: terminalDevices = [] } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices", { propertyId }],
     queryFn: async () => {
@@ -145,7 +145,7 @@ export function PaymentModal({
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!propertyId && showCardEntry,
+    enabled: !!propertyId && open,
   });
   
   // Filter to active terminals (show all active, not just online - display status indicator)

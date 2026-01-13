@@ -1698,6 +1698,7 @@ export default function PosPage() {
         changeDue={cashChangeDue}
         onReadyForNextOrder={handleReadyForNextOrder}
         propertyId={currentRvc?.propertyId}
+        workstationId={workstationId}
         employeeId={currentEmployee?.id}
       />
 
