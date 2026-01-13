@@ -73,6 +73,8 @@ import DescriptorsPage from "../admin/descriptors";
 import CalPackagesPage from "../admin/cal-packages";
 import ServiceHostsPage from "../admin/service-hosts";
 import ConnectivityTestPage from "../admin/connectivity-test";
+import TipRulesPage from "../admin/tip-rules";
+import TimecardReportPage from "../admin/timecard-report";
 
 function EmcDashboard() {
   const { data: stats } = useQuery<{
@@ -335,6 +337,8 @@ export default function EmcAdminLayout() {
               <Route path="/emc/labor-analytics" component={LaborAnalyticsPage} />
               <Route path="/emc/jobs" component={JobsPage} />
               <Route path="/emc/overtime-rules" component={OvertimeRulesPage} />
+              <Route path="/emc/tip-rules" component={TipRulesPage} />
+              <Route path="/emc/timecard-report" component={TimecardReportPage} />
               <Route path="/emc/onboarding" component={OnboardingPage} />
               <Route path="/emc/gift-cards" component={GiftCardsPage} />
               <Route path="/emc/loyalty" component={LoyaltyPage} />
