@@ -14,7 +14,7 @@
 // CONFIGURATION TABLES (Synced from cloud)
 // =============================================================================
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const CREATE_SCHEMA_SQL = `
 -- Schema version tracking
@@ -599,6 +599,157 @@ CREATE TABLE IF NOT EXISTS time_entries (
 );
 
 -- =============================================================================
+-- POS LAYOUTS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS pos_layouts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  layout_type TEXT DEFAULT 'menu',
+  rows INTEGER DEFAULT 5,
+  columns INTEGER DEFAULT 8,
+  cell_width INTEGER DEFAULT 100,
+  cell_height INTEGER DEFAULT 80,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pos_layout_cells (
+  id TEXT PRIMARY KEY,
+  layout_id TEXT NOT NULL REFERENCES pos_layouts(id),
+  row_index INTEGER NOT NULL,
+  col_index INTEGER NOT NULL,
+  cell_type TEXT NOT NULL DEFAULT 'menu_item',
+  menu_item_id TEXT REFERENCES menu_items(id),
+  slu_id TEXT REFERENCES slus(id),
+  label TEXT,
+  color TEXT,
+  icon TEXT,
+  action TEXT,
+  action_data TEXT,
+  span_rows INTEGER DEFAULT 1,
+  span_cols INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS pos_layout_rvc_assignments (
+  id TEXT PRIMARY KEY,
+  layout_id TEXT NOT NULL REFERENCES pos_layouts(id),
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  rvc_id TEXT REFERENCES rvcs(id),
+  is_default INTEGER DEFAULT 0,
+  order_type TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- GIFT CARDS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS gift_cards (
+  id TEXT PRIMARY KEY,
+  property_id TEXT NOT NULL REFERENCES properties(id),
+  card_number TEXT NOT NULL UNIQUE,
+  pin TEXT,
+  balance INTEGER NOT NULL DEFAULT 0,
+  initial_balance INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  activated_at TEXT,
+  activated_by_employee_id TEXT REFERENCES employees(id),
+  expires_at TEXT,
+  last_used_at TEXT,
+  customer_name TEXT,
+  customer_phone TEXT,
+  customer_email TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS gift_card_transactions (
+  id TEXT PRIMARY KEY,
+  gift_card_id TEXT NOT NULL REFERENCES gift_cards(id),
+  check_id TEXT REFERENCES checks(id),
+  transaction_type TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  balance_before INTEGER NOT NULL,
+  balance_after INTEGER NOT NULL,
+  employee_id TEXT REFERENCES employees(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  notes TEXT,
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- AUDIT LOGS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  previous_value TEXT,
+  new_value TEXT,
+  employee_id TEXT REFERENCES employees(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  ip_address TEXT,
+  reason TEXT,
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
+-- REFUNDS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS refunds (
+  id TEXT PRIMARY KEY,
+  original_check_id TEXT NOT NULL REFERENCES checks(id),
+  rvc_id TEXT NOT NULL REFERENCES rvcs(id),
+  refund_number INTEGER NOT NULL,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  manager_employee_id TEXT REFERENCES employees(id),
+  workstation_id TEXT REFERENCES workstations(id),
+  refund_type TEXT NOT NULL DEFAULT 'full',
+  subtotal INTEGER NOT NULL DEFAULT 0,
+  tax INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 0,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  business_date TEXT,
+  cloud_synced INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS refund_items (
+  id TEXT PRIMARY KEY,
+  refund_id TEXT NOT NULL REFERENCES refunds(id),
+  original_item_id TEXT REFERENCES check_items(id),
+  menu_item_id TEXT NOT NULL REFERENCES menu_items(id),
+  name TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price INTEGER NOT NULL,
+  total_price INTEGER NOT NULL,
+  tax_amount INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS refund_payments (
+  id TEXT PRIMARY KEY,
+  refund_id TEXT NOT NULL REFERENCES refunds(id),
+  original_payment_id TEXT REFERENCES check_payments(id),
+  tender_id TEXT NOT NULL REFERENCES tenders(id),
+  amount INTEGER NOT NULL,
+  refund_method TEXT NOT NULL,
+  reference_number TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- =============================================================================
 -- PAYMENT PROCESSORS
 -- =============================================================================
 
@@ -875,4 +1026,24 @@ CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_check ON loyalty_transaction
 CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_program ON loyalty_rewards(program_id);
 CREATE INDEX IF NOT EXISTS idx_item_availability_item ON item_availability(menu_item_id);
 CREATE INDEX IF NOT EXISTS idx_item_availability_property ON item_availability(property_id);
+
+CREATE INDEX IF NOT EXISTS idx_pos_layouts_active ON pos_layouts(active);
+CREATE INDEX IF NOT EXISTS idx_pos_layout_cells_layout ON pos_layout_cells(layout_id);
+CREATE INDEX IF NOT EXISTS idx_pos_layout_rvc_property ON pos_layout_rvc_assignments(property_id);
+CREATE INDEX IF NOT EXISTS idx_pos_layout_rvc_rvc ON pos_layout_rvc_assignments(rvc_id);
+
+CREATE INDEX IF NOT EXISTS idx_gift_cards_number ON gift_cards(card_number);
+CREATE INDEX IF NOT EXISTS idx_gift_cards_property ON gift_cards(property_id);
+CREATE INDEX IF NOT EXISTS idx_gift_cards_status ON gift_cards(status);
+CREATE INDEX IF NOT EXISTS idx_gift_card_transactions_card ON gift_card_transactions(gift_card_id);
+CREATE INDEX IF NOT EXISTS idx_gift_card_transactions_check ON gift_card_transactions(check_id);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_employee ON audit_logs(employee_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_refunds_original_check ON refunds(original_check_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_date ON refunds(business_date);
+CREATE INDEX IF NOT EXISTS idx_refund_items_refund ON refund_items(refund_id);
+CREATE INDEX IF NOT EXISTS idx_refund_payments_refund ON refund_payments(refund_id);
 `;

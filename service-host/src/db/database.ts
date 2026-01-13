@@ -1061,6 +1061,194 @@ export class Database {
   }
   
   // ==========================================================================
+  // POS Layouts
+  // ==========================================================================
+  
+  upsertPosLayout(layout: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO pos_layouts (
+        id, name, description, layout_type, rows, columns, cell_width, cell_height, active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM pos_layouts WHERE id = ?), datetime('now')), datetime('now'))`,
+      [
+        layout.id, layout.name, layout.description, layout.layoutType || 'menu',
+        layout.rows || 5, layout.columns || 8, layout.cellWidth || 100, layout.cellHeight || 80,
+        layout.active !== false ? 1 : 0, layout.id
+      ]
+    );
+  }
+  
+  upsertPosLayoutCell(cell: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO pos_layout_cells (
+        id, layout_id, row_index, col_index, cell_type, menu_item_id, slu_id,
+        label, color, icon, action, action_data, span_rows, span_cols
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        cell.id, cell.layoutId, cell.rowIndex, cell.colIndex,
+        cell.cellType || 'menu_item', cell.menuItemId, cell.sluId,
+        cell.label, cell.color, cell.icon, cell.action, cell.actionData,
+        cell.spanRows || 1, cell.spanCols || 1
+      ]
+    );
+  }
+  
+  upsertPosLayoutRvcAssignment(assign: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO pos_layout_rvc_assignments (
+        id, layout_id, property_id, rvc_id, is_default, order_type, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [assign.id, assign.layoutId, assign.propertyId, assign.rvcId, assign.isDefault ? 1 : 0, assign.orderType]
+    );
+  }
+  
+  getPosLayout(id: string): any | null {
+    return this.get('SELECT * FROM pos_layouts WHERE id = ?', [id]);
+  }
+  
+  getPosLayoutForRvc(propertyId: string, rvcId: string, orderType?: string): any | null {
+    let sql = `
+      SELECT pl.* FROM pos_layouts pl
+      JOIN pos_layout_rvc_assignments pla ON pl.id = pla.layout_id
+      WHERE pla.property_id = ? AND (pla.rvc_id = ? OR pla.rvc_id IS NULL) AND pl.active = 1
+    `;
+    const params: any[] = [propertyId, rvcId];
+    if (orderType) {
+      sql += ' AND (pla.order_type = ? OR pla.order_type IS NULL)';
+      params.push(orderType);
+    }
+    sql += ' ORDER BY pla.rvc_id DESC, pla.is_default DESC LIMIT 1';
+    return this.get(sql, params);
+  }
+  
+  getPosLayoutCells(layoutId: string): any[] {
+    return this.all('SELECT * FROM pos_layout_cells WHERE layout_id = ? ORDER BY row_index, col_index', [layoutId]);
+  }
+  
+  // ==========================================================================
+  // Gift Cards
+  // ==========================================================================
+  
+  upsertGiftCard(card: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO gift_cards (
+        id, property_id, card_number, pin, balance, initial_balance, status,
+        activated_at, activated_by_employee_id, expires_at, last_used_at,
+        customer_name, customer_phone, customer_email, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM gift_cards WHERE id = ?), datetime('now')), datetime('now'))`,
+      [
+        card.id, card.propertyId, card.cardNumber, card.pin,
+        card.balance || 0, card.initialBalance || card.balance || 0,
+        card.status || 'active', card.activatedAt, card.activatedByEmployeeId,
+        card.expiresAt, card.lastUsedAt, card.customerName, card.customerPhone, card.customerEmail, card.id
+      ]
+    );
+  }
+  
+  getGiftCardByNumber(cardNumber: string): any | null {
+    return this.get('SELECT * FROM gift_cards WHERE card_number = ?', [cardNumber]);
+  }
+  
+  getGiftCard(id: string): any | null {
+    return this.get('SELECT * FROM gift_cards WHERE id = ?', [id]);
+  }
+  
+  insertGiftCardTransaction(tx: any): void {
+    this.run(
+      `INSERT INTO gift_card_transactions (
+        id, gift_card_id, check_id, transaction_type, amount, balance_before, balance_after,
+        employee_id, workstation_id, notes, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        tx.id, tx.giftCardId, tx.checkId, tx.transactionType,
+        tx.amount, tx.balanceBefore, tx.balanceAfter,
+        tx.employeeId, tx.workstationId, tx.notes
+      ]
+    );
+  }
+  
+  getGiftCardTransactions(giftCardId: string): any[] {
+    return this.all('SELECT * FROM gift_card_transactions WHERE gift_card_id = ? ORDER BY created_at DESC', [giftCardId]);
+  }
+  
+  // ==========================================================================
+  // Audit Logs
+  // ==========================================================================
+  
+  insertAuditLog(log: any): void {
+    this.run(
+      `INSERT INTO audit_logs (
+        id, entity_type, entity_id, action, previous_value, new_value,
+        employee_id, workstation_id, ip_address, reason, cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        log.id, log.entityType, log.entityId, log.action,
+        log.previousValue ? JSON.stringify(log.previousValue) : null,
+        log.newValue ? JSON.stringify(log.newValue) : null,
+        log.employeeId, log.workstationId, log.ipAddress, log.reason
+      ]
+    );
+  }
+  
+  getAuditLogsForEntity(entityType: string, entityId: string): any[] {
+    return this.all(
+      'SELECT * FROM audit_logs WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC',
+      [entityType, entityId]
+    );
+  }
+  
+  // ==========================================================================
+  // Refunds
+  // ==========================================================================
+  
+  insertRefund(refund: any): void {
+    this.run(
+      `INSERT INTO refunds (
+        id, original_check_id, rvc_id, refund_number, employee_id, manager_employee_id,
+        workstation_id, refund_type, subtotal, tax, total, reason, status, business_date,
+        cloud_synced, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        refund.id, refund.originalCheckId, refund.rvcId, refund.refundNumber,
+        refund.employeeId, refund.managerEmployeeId, refund.workstationId,
+        refund.refundType || 'full', refund.subtotal || 0, refund.tax || 0, refund.total || 0,
+        refund.reason, refund.status || 'pending', refund.businessDate
+      ]
+    );
+  }
+  
+  getRefund(id: string): any | null {
+    return this.get('SELECT * FROM refunds WHERE id = ?', [id]);
+  }
+  
+  getRefundsByCheck(originalCheckId: string): any[] {
+    return this.all('SELECT * FROM refunds WHERE original_check_id = ?', [originalCheckId]);
+  }
+  
+  insertRefundItem(item: any): void {
+    this.run(
+      `INSERT INTO refund_items (
+        id, refund_id, original_item_id, menu_item_id, name, quantity, unit_price, total_price, tax_amount, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        item.id, item.refundId, item.originalItemId, item.menuItemId,
+        item.name, item.quantity || 1, item.unitPrice, item.totalPrice, item.taxAmount || 0
+      ]
+    );
+  }
+  
+  insertRefundPayment(payment: any): void {
+    this.run(
+      `INSERT INTO refund_payments (
+        id, refund_id, original_payment_id, tender_id, amount, refund_method, reference_number, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        payment.id, payment.refundId, payment.originalPaymentId, payment.tenderId,
+        payment.amount, payment.refundMethod, payment.referenceNumber, payment.status || 'pending'
+      ]
+    );
+  }
+  
+  // ==========================================================================
   // Bulk Operations
   // ==========================================================================
   
@@ -1073,6 +1261,8 @@ export class Database {
       'privileges', 'role_privileges', 'print_classes', 'major_groups', 'family_groups',
       'payment_processors', 'loyalty_programs', 'loyalty_members', 'loyalty_member_enrollments',
       'loyalty_transactions', 'loyalty_rewards', 'loyalty_redemptions', 'item_availability',
+      'pos_layouts', 'pos_layout_cells', 'pos_layout_rvc_assignments',
+      'gift_cards', 'gift_card_transactions', 'audit_logs', 'refunds', 'refund_items', 'refund_payments',
     ];
     
     if (!allowedTables.includes(tableName)) {
