@@ -266,7 +266,6 @@ export default function AdminLayout() {
 
           <main className="flex-1 overflow-auto">
             <Switch>
-              <Route path="/admin" component={AdminDashboard} />
               <Route path="/admin/enterprises" component={EnterprisesPage} />
               <Route path="/admin/properties" component={PropertiesPage} />
               <Route path="/admin/rvcs" component={RvcsPage} />
@@ -317,6 +316,7 @@ export default function AdminLayout() {
               <Route path="/admin/manager-alerts" component={ManagerAlertsPage} />
               <Route path="/admin/item-availability" component={ItemAvailabilityPage} />
               <Route path="/admin/accounting-export" component={AccountingExportPage} />
+              <Route path="/admin" component={AdminDashboard} />
             </Switch>
           </main>
         </div>
