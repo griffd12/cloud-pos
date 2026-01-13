@@ -58,6 +58,7 @@ interface DataTableProps<T extends { id: string }> {
   emptyMessage?: string;
   pageSize?: number;
   hideSearch?: boolean;
+  addLabel?: string;
 }
 
 export function DataTable<T extends { id: string }>({
@@ -75,6 +76,7 @@ export function DataTable<T extends { id: string }>({
   emptyMessage = "No items found",
   pageSize = 10,
   hideSearch = false,
+  addLabel = "Add New",
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -138,7 +140,7 @@ export function DataTable<T extends { id: string }>({
             {onAdd && (
               <Button onClick={onAdd} data-testid="button-add-item">
                 <Plus className="w-4 h-4 mr-2" />
-                Add New
+                {addLabel}
               </Button>
             )}
           </div>
