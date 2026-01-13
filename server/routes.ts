@@ -11458,6 +11458,127 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Sync terminal device status from Stripe API
+  app.post("/api/terminal-devices/:id/sync-status", async (req, res) => {
+    try {
+      const device = await storage.getTerminalDevice(req.params.id);
+      if (!device) {
+        return res.status(404).json({ message: "Terminal device not found" });
+      }
+
+      // Only sync if this is a Stripe terminal with a cloud device ID
+      if (!device.cloudDeviceId || !device.cloudDeviceId.startsWith("tmr_")) {
+        return res.status(400).json({ 
+          message: "No Stripe reader ID configured. Add the reader ID (starts with tmr_) to sync status.",
+          device
+        });
+      }
+
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeSecretKey) {
+        return res.status(500).json({ message: "Stripe API key not configured" });
+      }
+
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(stripeSecretKey);
+
+      try {
+        const reader = await stripe.terminal.readers.retrieve(device.cloudDeviceId);
+        const newStatus = reader.status === "online" ? "online" : "offline";
+        
+        const updatedDevice = await storage.updateTerminalDeviceStatus(
+          device.id,
+          newStatus,
+          new Date()
+        );
+
+        res.json({
+          success: true,
+          device: updatedDevice,
+          stripeReader: {
+            id: reader.id,
+            status: reader.status,
+            label: reader.label,
+            serialNumber: reader.serial_number,
+            ipAddress: reader.ip_address,
+            deviceType: reader.device_type,
+          }
+        });
+      } catch (stripeError: any) {
+        console.error("Stripe reader fetch error:", stripeError);
+        if (stripeError.code === "resource_missing") {
+          await storage.updateTerminalDeviceStatus(device.id, "offline", new Date());
+          return res.status(404).json({ 
+            message: "Reader not found in Stripe. Check the reader ID.",
+            device
+          });
+        }
+        return res.status(500).json({ 
+          message: stripeError.message || "Failed to fetch reader from Stripe" 
+        });
+      }
+    } catch (error: any) {
+      console.error("Sync terminal status error:", error);
+      res.status(500).json({ message: error.message || "Failed to sync terminal status" });
+    }
+  });
+
+  // Bulk sync all terminal devices for a property from Stripe
+  app.post("/api/terminal-devices/sync-all", async (req, res) => {
+    try {
+      const { propertyId } = req.body;
+      if (!propertyId) {
+        return res.status(400).json({ message: "propertyId is required" });
+      }
+
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeSecretKey) {
+        return res.status(500).json({ message: "Stripe API key not configured" });
+      }
+
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(stripeSecretKey);
+
+      const devices = await storage.getTerminalDevices(propertyId);
+      const stripeDevices = devices.filter(d => d.cloudDeviceId?.startsWith("tmr_"));
+
+      if (stripeDevices.length === 0) {
+        return res.json({ 
+          success: true, 
+          message: "No Stripe terminals to sync",
+          synced: 0,
+          total: devices.length
+        });
+      }
+
+      const readers = await stripe.terminal.readers.list({ limit: 100 });
+      const readerMap = new Map(readers.data.map(r => [r.id, r]));
+
+      const results = [];
+      for (const device of stripeDevices) {
+        const reader = readerMap.get(device.cloudDeviceId!);
+        if (reader) {
+          const newStatus = reader.status === "online" ? "online" : "offline";
+          await storage.updateTerminalDeviceStatus(device.id, newStatus, new Date());
+          results.push({ id: device.id, name: device.name, status: newStatus, synced: true });
+        } else {
+          await storage.updateTerminalDeviceStatus(device.id, "offline", new Date());
+          results.push({ id: device.id, name: device.name, status: "offline", synced: false, error: "Not found in Stripe" });
+        }
+      }
+
+      res.json({
+        success: true,
+        synced: results.filter(r => r.synced).length,
+        total: stripeDevices.length,
+        results
+      });
+    } catch (error: any) {
+      console.error("Bulk sync terminal status error:", error);
+      res.status(500).json({ message: error.message || "Failed to sync terminal statuses" });
+    }
+  });
+
   // ============================================================================
   // TERMINAL SESSIONS - Payment sessions on EMV terminals
   // ============================================================================

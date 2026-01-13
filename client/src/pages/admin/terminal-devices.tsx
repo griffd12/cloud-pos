@@ -231,6 +231,47 @@ export default function TerminalDevicesPage() {
     },
   });
 
+  const syncStatusMutation = useMutation({
+    mutationFn: async (deviceId: string) => {
+      const response = await apiRequest("POST", `/api/terminal-devices/${deviceId}/sync-status`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      if (data.stripeReader) {
+        toast({ 
+          title: "Status synced from Stripe", 
+          description: `${data.stripeReader.label || 'Terminal'} is ${data.stripeReader.status}` 
+        });
+      } else {
+        toast({ title: "Status synced" });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to sync status", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const syncAllMutation = useMutation({
+    mutationFn: async () => {
+      const propertyIds = [...new Set(devices.map(d => d.propertyId))];
+      const results = [];
+      for (const propertyId of propertyIds) {
+        const response = await apiRequest("POST", "/api/terminal-devices/sync-all", { propertyId });
+        results.push(await response.json());
+      }
+      return results;
+    },
+    onSuccess: (results) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      const totalSynced = results.reduce((sum, r) => sum + (r.synced || 0), 0);
+      toast({ title: "Status sync complete", description: `${totalSynced} terminal(s) updated from Stripe` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to sync statuses", description: error.message, variant: "destructive" });
+    },
+  });
+
   function openAddDialog() {
     setEditingDevice(null);
     form.reset({
@@ -316,10 +357,26 @@ export default function TerminalDevicesPage() {
           <h1 className="text-2xl font-bold">Terminal Devices</h1>
           <p className="text-muted-foreground">Manage payment terminals and card readers</p>
         </div>
-        <Button type="button" onClick={openAddDialog} data-testid="button-add-terminal">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Terminal
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            type="button" 
+            variant="outline"
+            onClick={() => syncAllMutation.mutate()} 
+            disabled={syncAllMutation.isPending || devices.length === 0}
+            data-testid="button-sync-all"
+          >
+            {syncAllMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Sync Status
+          </Button>
+          <Button type="button" onClick={openAddDialog} data-testid="button-add-terminal">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Terminal
+          </Button>
+        </div>
       </div>
 
       <Card>
