@@ -136,14 +136,12 @@ export function PaymentModal({
     (p) => p.paymentStatus === "authorized"
   );
   
-  // Query terminal devices for property
+  // Query terminal devices for property (using apiRequest to include device token)
   const { data: terminalDevices = [] } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices", { propertyId }],
     queryFn: async () => {
       if (!propertyId) return [];
-      const res = await fetch(`/api/terminal-devices?propertyId=${propertyId}`, {
-        credentials: "include",
-      });
+      const res = await apiRequest("GET", `/api/terminal-devices?propertyId=${propertyId}`);
       if (!res.ok) return [];
       return res.json();
     },
