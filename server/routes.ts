@@ -4660,6 +4660,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Send test ticket to KDS for connectivity testing
+  app.post("/api/kds-tickets/test", async (req, res) => {
+    try {
+      const { testMessage, source } = req.body;
+      
+      // Broadcast a test message to all KDS displays
+      broadcastPosEvent({
+        type: 'kds_test_ticket',
+        data: {
+          message: testMessage || 'Test ticket from connectivity dashboard',
+          source: source || 'admin',
+          timestamp: new Date().toISOString(),
+        }
+      }, 'all');
+      
+      res.json({ success: true, message: 'Test ticket broadcast sent' });
+    } catch (error) {
+      console.error("Send test ticket error:", error);
+      res.status(500).json({ message: "Failed to send test ticket" });
+    }
+  });
+
   // Get bumped tickets for recall modal
   app.get("/api/kds-tickets/bumped", async (req, res) => {
     try {
@@ -11314,6 +11336,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Get registered devices status summary for connectivity dashboard
+  app.get("/api/registered-devices/status-summary", async (req, res) => {
+    try {
+      const devices = await storage.getRegisteredDevices();
+      
+      const summary = devices.map(d => ({
+        id: d.id,
+        name: d.name,
+        type: d.deviceType === 'kds_display' ? 'kds' : 'workstation',
+        status: d.status === 'enrolled' ? 'connected' : 
+                d.status === 'pending' ? 'pending' : 'disconnected',
+        lastSeen: d.lastAccessAt,
+      }));
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Get registered devices status summary error:", error);
+      res.status(500).json({ message: "Failed to get status summary" });
+    }
+  });
+
   // Get single registered device
   app.get("/api/registered-devices/:id", async (req, res) => {
     try {
@@ -15630,6 +15673,34 @@ connect();
     } catch (error: any) {
       console.error("Get status dashboard error:", error);
       res.status(500).json({ error: "Failed to get status dashboard" });
+    }
+  });
+
+  // GET /api/service-hosts/status-summary - Simple status list for connectivity dashboard
+  app.get("/api/service-hosts/status-summary", async (req, res) => {
+    try {
+      const serviceHosts = await storage.getServiceHosts();
+      const properties = await storage.getProperties();
+      
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      
+      const summary = serviceHosts.map(sh => {
+        const property = properties.find(p => p.id === sh.propertyId);
+        const isOnline = sh.lastHeartbeatAt && new Date(sh.lastHeartbeatAt) > fiveMinutesAgo;
+        
+        return {
+          id: sh.id,
+          name: sh.name,
+          status: isOnline ? 'online' : 'offline',
+          lastHeartbeat: sh.lastHeartbeatAt,
+          propertyName: property?.name || 'Unknown',
+        };
+      });
+      
+      res.json(summary);
+    } catch (error: any) {
+      console.error("Get service hosts status summary error:", error);
+      res.status(500).json({ error: "Failed to get status summary" });
     }
   });
 

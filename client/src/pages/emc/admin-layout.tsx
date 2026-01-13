@@ -72,6 +72,7 @@ import PrintAgentsPage from "../admin/print-agents";
 import DescriptorsPage from "../admin/descriptors";
 import CalPackagesPage from "../admin/cal-packages";
 import ServiceHostsPage from "../admin/service-hosts";
+import ConnectivityTestPage from "../admin/connectivity-test";
 
 function EmcDashboard() {
   const { data: stats } = useQuery<{
@@ -326,6 +327,7 @@ export default function EmcAdminLayout() {
               <Route path="/emc/devices-hub" component={DevicesHubPage} />
               <Route path="/emc/cal-packages" component={CalPackagesPage} />
               <Route path="/emc/service-hosts" component={ServiceHostsPage} />
+              <Route path="/emc/connectivity-test" component={ConnectivityTestPage} />
               <Route path="/emc/timecards" component={TimecardsPage} />
               <Route path="/emc/scheduling" component={SchedulingPage} />
               <Route path="/emc/line-up" component={LineUpPage} />
