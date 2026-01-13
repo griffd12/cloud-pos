@@ -11640,13 +11640,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      // Get the terminal to verify it exists and is online
+      // Get the terminal to verify it exists and is not offline
       const terminal = await storage.getTerminalDevice(parsed.data.terminalDeviceId);
       if (!terminal) {
         return res.status(404).json({ message: "Terminal device not found" });
       }
-      if (terminal.status !== "online") {
-        return res.status(400).json({ message: `Terminal is ${terminal.status}, cannot initiate payment` });
+      // Only reject if terminal is explicitly offline - "busy" status from Stripe just means
+      // it was previously processing something but should still accept new payments
+      if (terminal.status === "offline") {
+        return res.status(400).json({ message: "Terminal is offline, cannot initiate payment" });
       }
 
       // Set session expiration (5 minutes from now)
