@@ -33,6 +33,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { useItemAvailability } from "@/hooks/use-item-availability";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { apiClient } from "@/lib/api-client";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer } from "lucide-react";
@@ -807,6 +808,27 @@ export default function PosPage() {
 
   const handlePickupCheck = async (checkId: string) => {
     try {
+      // First try to acquire a lock on the check
+      if (workstationId && currentEmployee?.id) {
+        const lockRes = await apiRequest("POST", `/api/checks/${checkId}/lock`, {
+          workstationId,
+          employeeId: currentEmployee.id,
+          lockMode: apiClient.getMode(),
+        });
+        
+        if (!lockRes.ok) {
+          const errorData = await lockRes.json();
+          if (lockRes.status === 409) {
+            toast({ 
+              title: "Check locked by another workstation", 
+              description: `Locked by ${errorData.lockedByName || 'Unknown'}`,
+              variant: "destructive" 
+            });
+            return;
+          }
+        }
+      }
+
       const res = await fetch(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to load check");
       const data = await res.json();

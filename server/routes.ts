@@ -4364,6 +4364,76 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
   const LOCK_EXPIRY_MINUTES = 5;
 
+  // IMPORTANT: This batch endpoint must be defined BEFORE parameterized routes
+  // to prevent Express from treating "locks" as a :id parameter
+  // Get lock status for multiple checks (for open checks list with indicators)
+  app.get("/api/checks/locks", async (req, res) => {
+    try {
+      const rvcId = req.query.rvcId as string;
+      const currentWorkstationId = req.query.workstationId as string;
+      
+      if (!rvcId) {
+        return res.status(400).json({ message: "rvcId is required" });
+      }
+
+      // Get all open checks for this RVC
+      const openChecks = await storage.getOpenChecks(rvcId);
+      const checkIds = openChecks.map(c => c.id);
+      
+      // Get all locks for these checks
+      const locks = await storage.getCheckLocksByCheckIds(checkIds);
+      
+      // Get workstation online status for offline detection
+      const workstationIds = [...new Set(locks.map(l => l.workstationId))];
+      const workstations = await Promise.all(
+        workstationIds.map(id => storage.getWorkstation(id))
+      );
+      const wsMap = new Map(workstations.filter(Boolean).map(ws => [ws!.id, ws!]));
+      
+      // Build lock status map with pickup availability
+      const lockStatusMap: Record<string, {
+        status: 'available' | 'locked' | 'offline_locked';
+        lockedByWorkstationId?: string;
+        lockedByWorkstationName?: string;
+        lockMode?: string;
+        isCurrentWorkstation?: boolean;
+      }> = {};
+      
+      const now = new Date();
+      for (const checkId of checkIds) {
+        const lock = locks.find(l => l.checkId === checkId);
+        
+        if (!lock || new Date(lock.expiresAt) <= now) {
+          // No lock or expired - available for pickup
+          lockStatusMap[checkId] = { status: 'available' };
+        } else if (lock.workstationId === currentWorkstationId) {
+          // Current workstation has the lock
+          lockStatusMap[checkId] = { 
+            status: 'available',
+            isCurrentWorkstation: true,
+          };
+        } else {
+          // Another workstation has the lock
+          const lockingWs = wsMap.get(lock.workstationId);
+          const isOffline = lock.lockMode === 'red' || lock.lockMode === 'orange' || 
+                           (lockingWs && !lockingWs.isOnline);
+          
+          lockStatusMap[checkId] = {
+            status: isOffline ? 'offline_locked' : 'locked',
+            lockedByWorkstationId: lock.workstationId,
+            lockedByWorkstationName: lockingWs?.name || 'Unknown',
+            lockMode: lock.lockMode,
+          };
+        }
+      }
+      
+      res.json({ lockStatus: lockStatusMap });
+    } catch (error) {
+      console.error("Get check locks error:", error);
+      res.status(500).json({ message: "Failed to get check locks" });
+    }
+  });
+
   // Acquire lock on a check
   app.post("/api/checks/:id/lock", async (req, res) => {
     try {
@@ -4489,74 +4559,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Release workstation locks error:", error);
       res.status(500).json({ message: "Failed to release locks" });
-    }
-  });
-
-  // Get lock status for multiple checks (for open checks list with indicators)
-  app.get("/api/checks/locks", async (req, res) => {
-    try {
-      const rvcId = req.query.rvcId as string;
-      const currentWorkstationId = req.query.workstationId as string;
-      
-      if (!rvcId) {
-        return res.status(400).json({ message: "rvcId is required" });
-      }
-
-      // Get all open checks for this RVC
-      const openChecks = await storage.getOpenChecks(rvcId);
-      const checkIds = openChecks.map(c => c.id);
-      
-      // Get all locks for these checks
-      const locks = await storage.getCheckLocksByCheckIds(checkIds);
-      
-      // Get workstation online status for offline detection
-      const workstationIds = [...new Set(locks.map(l => l.workstationId))];
-      const workstations = await Promise.all(
-        workstationIds.map(id => storage.getWorkstation(id))
-      );
-      const wsMap = new Map(workstations.filter(Boolean).map(ws => [ws!.id, ws!]));
-      
-      // Build lock status map with pickup availability
-      const lockStatusMap: Record<string, {
-        status: 'available' | 'locked' | 'offline_locked';
-        lockedByWorkstationId?: string;
-        lockedByWorkstationName?: string;
-        lockMode?: string;
-        isCurrentWorkstation?: boolean;
-      }> = {};
-      
-      const now = new Date();
-      for (const checkId of checkIds) {
-        const lock = locks.find(l => l.checkId === checkId);
-        
-        if (!lock || new Date(lock.expiresAt) <= now) {
-          // No lock or expired - available for pickup
-          lockStatusMap[checkId] = { status: 'available' };
-        } else if (lock.workstationId === currentWorkstationId) {
-          // Current workstation has the lock
-          lockStatusMap[checkId] = { 
-            status: 'available',
-            isCurrentWorkstation: true,
-          };
-        } else {
-          // Another workstation has the lock
-          const lockingWs = wsMap.get(lock.workstationId);
-          const isOffline = lock.lockMode === 'red' || lock.lockMode === 'orange' || 
-                           (lockingWs && !lockingWs.isOnline);
-          
-          lockStatusMap[checkId] = {
-            status: isOffline ? 'offline_locked' : 'locked',
-            lockedByWorkstationId: lock.workstationId,
-            lockedByWorkstationName: lockingWs?.name || 'Unknown',
-            lockMode: lock.lockMode,
-          };
-        }
-      }
-      
-      res.json({ lockStatus: lockStatusMap });
-    } catch (error) {
-      console.error("Get check locks error:", error);
-      res.status(500).json({ message: "Failed to get check locks" });
     }
   });
 
