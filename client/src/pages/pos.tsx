@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
+import { useWorkstationHeartbeat } from "@/hooks/use-workstation-heartbeat";
+import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -112,6 +114,14 @@ export default function PosPage() {
   useInactivityLogout({
     timeoutMinutes: wsContext?.workstation?.autoLogoutMinutes,
     enabled: !!currentEmployee && !!wsContext?.workstation?.autoLogoutMinutes,
+  });
+
+  // Send periodic heartbeat to track workstation status
+  useWorkstationHeartbeat({
+    workstationId,
+    employeeId: currentEmployee?.id,
+    intervalMs: 30000,
+    enabled: !!workstationId && !!currentEmployee,
   });
 
   // Auto-set RVC from workstation if not already set
@@ -1095,6 +1105,7 @@ export default function PosPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      <ConnectionModeBanner />
       <header className="flex-shrink-0 bg-card border-b px-3 py-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

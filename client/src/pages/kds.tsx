@@ -11,6 +11,7 @@ import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { ArrowLeft, Settings, Wifi, WifiOff } from "lucide-react";
 import { Link, Redirect, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
+import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 
 interface KdsItem {
   id: string;
@@ -322,6 +323,7 @@ export default function KdsPage() {
 
   return (
     <div className="h-screen flex flex-col">
+      <ConnectionModeBanner />
       <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {!isDedicatedKds && (

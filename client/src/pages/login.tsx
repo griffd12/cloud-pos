@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import type { Employee, Rvc, Property, Timecard, JobCode, Workstation } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -518,8 +519,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+    <div className="min-h-screen bg-background flex flex-col">
+      <ConnectionModeBanner />
+      <div className="absolute top-10 right-4 z-10 flex items-center gap-2">
         <ThemeToggle />
       </div>
 
