@@ -132,6 +132,7 @@ const menuGroupsTemplate = [
     label: "Reports",
     items: [
       { title: "Reports Dashboard", url: "/admin/reports", icon: LayoutGrid },
+      { title: "Timecard Report", url: "/admin/timecard-report", icon: Timer },
       { title: "Tip Pooling", url: "/admin/tip-pooling", icon: Coins },
       { title: "Labor Analytics", url: "/admin/labor-analytics", icon: BarChart3 },
       { title: "Forecasting", url: "/admin/forecasting", icon: TrendingUp },

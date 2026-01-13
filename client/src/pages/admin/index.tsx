@@ -49,6 +49,7 @@ import TimecardsPage from "./timecards";
 import SchedulingPage from "./scheduling";
 import LineUpPage from "./line-up";
 import TipPoolingPage from "./tip-pooling";
+import TimecardReportPage from "./timecard-report";
 import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
@@ -300,6 +301,7 @@ export default function AdminLayout() {
               <Route path="/admin/scheduling" component={SchedulingPage} />
               <Route path="/admin/line-up" component={LineUpPage} />
               <Route path="/admin/tip-pooling" component={TipPoolingPage} />
+              <Route path="/admin/timecard-report" component={TimecardReportPage} />
               <Route path="/admin/labor-analytics" component={LaborAnalyticsPage} />
               <Route path="/admin/jobs" component={JobsPage} />
               <Route path="/admin/overtime-rules" component={OvertimeRulesPage} />

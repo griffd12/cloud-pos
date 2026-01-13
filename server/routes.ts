@@ -7814,6 +7814,265 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Timecard Report - Square-style labor + tips report
+  app.get("/api/reports/timecard", async (req, res) => {
+    try {
+      const { propertyId, startDate, endDate } = req.query;
+      
+      if (!propertyId || !startDate || !endDate) {
+        return res.status(400).json({ message: "propertyId, startDate, and endDate are required" });
+      }
+      
+      const propId = propertyId as string;
+      const startDateStr = startDate as string;
+      const endDateStr = endDate as string;
+      
+      // Get timecards for the date range
+      const timecards = await storage.getTimecards({
+        propertyId: propId,
+        startDate: startDateStr,
+        endDate: endDateStr,
+      });
+      
+      // Get shifts for scheduled hours calculation
+      const shifts = await storage.getShifts({
+        propertyId: propId,
+        startDate: startDateStr,
+        endDate: endDateStr,
+      });
+      
+      // Calculate scheduled hours per employee from shifts
+      const employeeScheduledHours = new Map<string, number>();
+      shifts.forEach(shift => {
+        if (shift.employeeId && shift.startTime && shift.endTime) {
+          const [startH, startM] = shift.startTime.split(':').map(Number);
+          const [endH, endM] = shift.endTime.split(':').map(Number);
+          let shiftMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+          if (shiftMinutes < 0) shiftMinutes += 24 * 60; // Handle overnight shifts
+          shiftMinutes -= (shift.scheduledBreakMinutes || 0);
+          const hours = Math.max(0, shiftMinutes / 60);
+          const current = employeeScheduledHours.get(shift.employeeId) || 0;
+          employeeScheduledHours.set(shift.employeeId, current + hours);
+        }
+      });
+      
+      // Get employees for the property
+      const allEmployees = await storage.getEmployees();
+      const propertyEmployees = allEmployees.filter(e => 
+        e.propertyId === propId || e.assignments?.some((a: any) => a.propertyId === propId)
+      );
+      const employeeMap = new Map(propertyEmployees.map(e => [e.id, e]));
+      
+      // Get job codes for tip eligibility
+      const jobCodes = await storage.getJobCodes();
+      const jobCodeMap = new Map(jobCodes.map(jc => [jc.id, jc]));
+      
+      // Get tip rule for this property
+      const tipRule = await storage.getTipRuleForProperty(propId);
+      
+      // Get timecard exceptions for alerts
+      const exceptions = await storage.getTimecardExceptions({ propertyId: propId });
+      const exceptionsByEmployee = new Map<string, string[]>();
+      exceptions.forEach(exc => {
+        if (exc.businessDate >= startDateStr && exc.businessDate <= endDateStr && exc.status !== 'resolved') {
+          const alerts = exceptionsByEmployee.get(exc.employeeId) || [];
+          alerts.push(exc.exceptionType);
+          exceptionsByEmployee.set(exc.employeeId, alerts);
+        }
+      });
+      
+      // Get check payments with tips for the date range
+      const allCheckPayments = await storage.getCheckPayments();
+      const allChecks = await storage.getChecks();
+      
+      // Filter checks by property and date range
+      const checksInRange = allChecks.filter(c => {
+        if (!c.businessDate) return false;
+        if (!c.propertyId || c.propertyId !== propId) return false;
+        return c.businessDate >= startDateStr && c.businessDate <= endDateStr;
+      });
+      const checkIds = new Set(checksInRange.map(c => c.id));
+      
+      // Get payments for these checks that have tips
+      const tipsFromPayments = allCheckPayments.filter(p => 
+        checkIds.has(p.checkId) && Number(p.tipAmount || 0) > 0
+      );
+      
+      // Calculate TOTAL transaction tips (for pooling) and direct tips per employee
+      let totalPoolableTips = 0;
+      const directTipsByEmployee = new Map<string, number>();
+      
+      tipsFromPayments.forEach(p => {
+        const tipAmount = Number(p.tipAmount || 0);
+        totalPoolableTips += tipAmount;
+        const check = checksInRange.find(c => c.id === p.checkId);
+        if (check?.employeeId) {
+          const current = directTipsByEmployee.get(check.employeeId) || 0;
+          directTipsByEmployee.set(check.employeeId, current + tipAmount);
+        }
+      });
+      
+      // Employee job code tracking for percentage-based distribution
+      const employeeJobCodes = new Map<string, string>();
+      
+      // Aggregate timecards by employee
+      const employeeAggregates = new Map<string, {
+        employeeId: string;
+        firstName: string;
+        lastName: string;
+        scheduledHours: number;
+        regularHours: number;
+        overtimeHours: number;
+        doubleTimeHours: number;
+        paidHours: number;
+        laborCost: number;
+        transactionTips: number;
+        declaredCashTips: number;
+        tippedWage: number;
+        alerts: string[];
+      }>();
+      
+      timecards.forEach(tc => {
+        let agg = employeeAggregates.get(tc.employeeId);
+        if (!agg) {
+          const emp = employeeMap.get(tc.employeeId);
+          agg = {
+            employeeId: tc.employeeId,
+            firstName: emp?.firstName || "Unknown",
+            lastName: emp?.lastName || "",
+            scheduledHours: employeeScheduledHours.get(tc.employeeId) || 0,
+            regularHours: 0,
+            overtimeHours: 0,
+            doubleTimeHours: 0,
+            paidHours: 0,
+            laborCost: 0,
+            transactionTips: 0,
+            declaredCashTips: Number(tc.tips || 0),
+            tippedWage: 0,
+            alerts: exceptionsByEmployee.get(tc.employeeId) || [],
+          };
+        } else {
+          agg.declaredCashTips += Number(tc.tips || 0);
+        }
+        
+        agg.regularHours += Number(tc.regularHours || 0);
+        agg.overtimeHours += Number(tc.overtimeHours || 0);
+        agg.doubleTimeHours += Number(tc.doubleTimeHours || 0);
+        agg.paidHours += Number(tc.totalHours || 0);
+        agg.laborCost += Number(tc.totalPay || 0);
+        
+        if (tc.jobCodeId) {
+          employeeJobCodes.set(tc.employeeId, tc.jobCodeId);
+        }
+        
+        // Check for alerts from missing clock out
+        if (!tc.clockOutTime && tc.clockInTime && !agg.alerts.includes("missed_punch")) {
+          agg.alerts.push("missed_punch");
+        }
+        
+        employeeAggregates.set(tc.employeeId, agg);
+      });
+      
+      // Calculate total hours for pooling calculations
+      const totalHours = Array.from(employeeAggregates.values()).reduce((sum, e) => sum + e.paidHours, 0);
+      const employeeList = Array.from(employeeAggregates.values());
+      
+      // Distribute transaction tips based on tip rule
+      if (!tipRule || tipRule.distributionMethod === "tip_directly") {
+        // Tips go directly to the employee who received them
+        employeeList.forEach(agg => {
+          agg.transactionTips = directTipsByEmployee.get(agg.employeeId) || 0;
+        });
+      } else if (totalPoolableTips > 0) {
+        // Pool and redistribute tips based on the rule
+        let jobPercentages: Array<{ jobCodeId: string; percentage: string }> = [];
+        if (tipRule.distributionMethod === "pool_by_percentages") {
+          jobPercentages = await storage.getTipRuleJobPercentages(tipRule.id);
+        }
+        const jobPercentageMap = new Map(jobPercentages.map(jp => [jp.jobCodeId, Number(jp.percentage)]));
+        
+        if (tipRule.distributionMethod === "pool_per_transaction") {
+          // Equal split among all employees
+          const empCount = employeeList.length;
+          const splitAmount = empCount > 0 ? totalPoolableTips / empCount : 0;
+          employeeList.forEach(agg => { agg.transactionTips = splitAmount; });
+        } else if (tipRule.distributionMethod === "pool_by_hours") {
+          // Distribute by hours worked
+          employeeList.forEach(agg => {
+            agg.transactionTips = totalHours > 0 ? (agg.paidHours / totalHours) * totalPoolableTips : 0;
+          });
+        } else if (tipRule.distributionMethod === "pool_by_percentages") {
+          // Distribute by job-based percentages
+          let totalWeight = 0;
+          employeeList.forEach(agg => {
+            const jobCodeId = employeeJobCodes.get(agg.employeeId);
+            if (jobCodeId && jobPercentageMap.has(jobCodeId)) {
+              totalWeight += jobPercentageMap.get(jobCodeId)!;
+            }
+          });
+          
+          if (totalWeight > 0) {
+            employeeList.forEach(agg => {
+              const jobCodeId = employeeJobCodes.get(agg.employeeId);
+              const percentage = jobCodeId ? (jobPercentageMap.get(jobCodeId) || 0) : 0;
+              agg.transactionTips = (percentage / totalWeight) * totalPoolableTips;
+            });
+          } else {
+            // Fallback to hours-based if no matching job percentages
+            employeeList.forEach(agg => {
+              agg.transactionTips = totalHours > 0 ? (agg.paidHours / totalHours) * totalPoolableTips : 0;
+            });
+          }
+        }
+      }
+      
+      // Calculate tipped wage (tips / hours)
+      employeeAggregates.forEach(agg => {
+        const totalTips = agg.transactionTips + agg.declaredCashTips;
+        agg.tippedWage = agg.paidHours > 0 ? totalTips / agg.paidHours : 0;
+      });
+      
+      // Calculate summary totals
+      const summary = {
+        regularHours: 0,
+        overtimeHours: 0,
+        doubleTimeHours: 0,
+        paidHours: 0,
+        transactionTips: 0,
+        declaredCashTips: 0,
+        totalLaborCost: 0,
+      };
+      
+      const employeeData = Array.from(employeeAggregates.values()).map(e => {
+        summary.regularHours += e.regularHours;
+        summary.overtimeHours += e.overtimeHours;
+        summary.doubleTimeHours += e.doubleTimeHours;
+        summary.paidHours += e.paidHours;
+        summary.transactionTips += e.transactionTips;
+        summary.declaredCashTips += e.declaredCashTips;
+        summary.totalLaborCost += e.laborCost;
+        return e;
+      });
+      
+      // Sort by name
+      employeeData.sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+      
+      res.json({
+        startDate: startDateStr,
+        endDate: endDateStr,
+        tipRule: tipRule ? {
+          distributionMethod: tipRule.distributionMethod,
+          timeFrame: tipRule.timeFrame,
+        } : null,
+        summary,
+        employees: employeeData,
+      });
+    } catch (error) {
+      console.error("Timecard report error:", error);
+      res.status(500).json({ message: "Failed to generate timecard report" });
+    }
+  });
+
   // ============================================================================
   // TIME & ATTENDANCE API ROUTES
   // ============================================================================
