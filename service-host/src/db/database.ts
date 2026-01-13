@@ -393,6 +393,116 @@ export class Database {
   }
   
   // ==========================================================================
+  // Modifier Groups
+  // ==========================================================================
+  
+  upsertModifierGroup(mg: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO modifier_groups (
+        id, enterprise_id, property_id, name, code, selection_type,
+        min_selections, max_selections, display_order, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        mg.id, mg.enterpriseId, mg.propertyId, mg.name, mg.code,
+        mg.selectionType || 'optional', mg.minSelections || 0, mg.maxSelections,
+        mg.displayOrder || 0, mg.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  getModifierGroup(id: string): any | null {
+    return this.get('SELECT * FROM modifier_groups WHERE id = ?', [id]);
+  }
+  
+  getModifierGroupsByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM modifier_groups WHERE property_id = ? AND active = 1 ORDER BY display_order', [propertyId]);
+  }
+  
+  // ==========================================================================
+  // Modifiers
+  // ==========================================================================
+  
+  upsertModifier(mod: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO modifiers (
+        id, enterprise_id, property_id, name, code, price_delta, active, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        mod.id, mod.enterpriseId, mod.propertyId, mod.name, mod.code,
+        mod.priceDelta || 0, mod.active !== false ? 1 : 0
+      ]
+    );
+  }
+  
+  getModifier(id: string): any | null {
+    return this.get('SELECT * FROM modifiers WHERE id = ?', [id]);
+  }
+  
+  getModifiersByProperty(propertyId: string): any[] {
+    return this.all('SELECT * FROM modifiers WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+  
+  // ==========================================================================
+  // Modifier Group Modifiers (which modifiers belong to which groups)
+  // ==========================================================================
+  
+  upsertModifierGroupModifier(link: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO modifier_group_modifiers (
+        id, modifier_group_id, modifier_id, is_default, display_order, updated_at
+      ) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [link.id, link.modifierGroupId, link.modifierId, link.isDefault ? 1 : 0, link.displayOrder || 0]
+    );
+  }
+  
+  getModifiersForGroup(modifierGroupId: string): any[] {
+    return this.all(
+      `SELECT m.*, mgm.is_default, mgm.display_order 
+       FROM modifiers m
+       JOIN modifier_group_modifiers mgm ON m.id = mgm.modifier_id
+       WHERE mgm.modifier_group_id = ? AND m.active = 1
+       ORDER BY mgm.display_order`,
+      [modifierGroupId]
+    );
+  }
+  
+  // ==========================================================================
+  // Menu Item Modifier Groups (which modifier groups are assigned to which items)
+  // ==========================================================================
+  
+  upsertMenuItemModifierGroup(link: any): void {
+    this.run(
+      `INSERT OR REPLACE INTO menu_item_modifier_groups (
+        id, menu_item_id, modifier_group_id, display_order, updated_at
+      ) VALUES (?, ?, ?, ?, datetime('now'))`,
+      [link.id, link.menuItemId, link.modifierGroupId, link.displayOrder || 0]
+    );
+  }
+  
+  getModifierGroupsForMenuItem(menuItemId: string): any[] {
+    return this.all(
+      `SELECT mg.*, mimg.display_order as assignment_order
+       FROM modifier_groups mg
+       JOIN menu_item_modifier_groups mimg ON mg.id = mimg.modifier_group_id
+       WHERE mimg.menu_item_id = ? AND mg.active = 1
+       ORDER BY mimg.display_order`,
+      [menuItemId]
+    );
+  }
+  
+  getFullMenuItemWithModifiers(menuItemId: string): any | null {
+    const item = this.get('SELECT * FROM menu_items WHERE id = ?', [menuItemId]);
+    if (!item) return null;
+    
+    const modifierGroups = this.getModifierGroupsForMenuItem(menuItemId);
+    for (const group of modifierGroups) {
+      group.modifiers = this.getModifiersForGroup(group.id);
+    }
+    
+    return { ...item, modifierGroups };
+  }
+  
+  // ==========================================================================
   // Tax Groups
   // ==========================================================================
   
