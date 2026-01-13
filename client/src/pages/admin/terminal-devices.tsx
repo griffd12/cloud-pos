@@ -34,7 +34,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Wifi, WifiOff, Loader2, CreditCard, RefreshCw } from "lucide-react";
+import { Wifi, WifiOff, Loader2, CreditCard, RefreshCw, Plus, MapPin, CheckCircle2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+
+interface StripeLocation {
+  id: string;
+  display_name: string;
+  address: {
+    line1: string;
+    city: string;
+    state: string;
+    country: string;
+    postal_code: string;
+  };
+}
+
+interface StripeReader {
+  id: string;
+  label: string;
+  device_type: string;
+  status: string;
+  location: string;
+  serial_number: string;
+}
 
 const MODEL_LABELS: Record<string, string> = {
   pax_a920: "PAX A920",
@@ -67,10 +91,25 @@ const STATUS_COLORS: Record<string, string> = {
   maintenance: "bg-blue-500",
 };
 
+const STRIPE_MODELS = ["stripe_s700", "stripe_m2", "stripe_wisepos_e"];
+
 export default function TerminalDevicesPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TerminalDevice | null>(null);
+  const [showStripeLocationDialog, setShowStripeLocationDialog] = useState(false);
+  const [showStripeReaderDialog, setShowStripeReaderDialog] = useState(false);
+  const [selectedStripeLocationId, setSelectedStripeLocationId] = useState<string>("");
+  const [stripeRegistrationCode, setStripeRegistrationCode] = useState("");
+  const [stripeReaderLabel, setStripeReaderLabel] = useState("");
+  const [newStripeLocation, setNewStripeLocation] = useState({
+    displayName: "",
+    line1: "",
+    city: "",
+    state: "",
+    country: "US",
+    postalCode: "",
+  });
 
   const { data: devices = [], isLoading } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices"],
@@ -90,6 +129,58 @@ export default function TerminalDevicesPage() {
 
   const { data: metadata } = useQuery<{ models: string[]; connectionTypes: string[]; statuses: string[] }>({
     queryKey: ["/api/terminal-devices/metadata"],
+  });
+
+  const { data: stripeLocations = [], isLoading: stripeLocationsLoading } = useQuery<StripeLocation[]>({
+    queryKey: ["/api/stripe/terminal/locations"],
+  });
+
+  const { data: stripeReaders = [], refetch: refetchStripeReaders } = useQuery<StripeReader[]>({
+    queryKey: ["/api/stripe/terminal/readers"],
+  });
+
+  const createStripeLocationMutation = useMutation({
+    mutationFn: async (data: typeof newStripeLocation) => {
+      const response = await apiRequest("POST", "/api/stripe/terminal/locations", {
+        displayName: data.displayName,
+        address: {
+          line1: data.line1,
+          city: data.city,
+          state: data.state,
+          country: data.country,
+          postalCode: data.postalCode,
+        },
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Stripe location created" });
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe/terminal/locations"] });
+      setShowStripeLocationDialog(false);
+      setNewStripeLocation({ displayName: "", line1: "", city: "", state: "", country: "US", postalCode: "" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create Stripe location", variant: "destructive" });
+    },
+  });
+
+  const registerStripeReaderMutation = useMutation({
+    mutationFn: async (data: { registrationCode: string; label: string; locationId: string }) => {
+      const response = await apiRequest("POST", "/api/stripe/terminal/readers", data);
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Stripe reader registered", description: `Reader ID: ${data.id}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe/terminal/readers"] });
+      form.setValue("cloudDeviceId", data.id);
+      form.setValue("serialNumber", data.serial_number || "");
+      setShowStripeReaderDialog(false);
+      setStripeRegistrationCode("");
+      setStripeReaderLabel("");
+    },
+    onError: () => {
+      toast({ title: "Failed to register Stripe reader", variant: "destructive" });
+    },
   });
 
   const columns: Column<TerminalDevice>[] = [
@@ -566,6 +657,103 @@ export default function TerminalDevicesPage() {
                 )}
               </div>
 
+              {STRIPE_MODELS.includes(form.watch("model")) && connectionType === "cloud" && (
+                <Card className="border-dashed">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CreditCard className="w-4 h-4" />
+                      Stripe Terminal Registration
+                    </CardTitle>
+                    <CardDescription>
+                      Register your Stripe reader to get the Cloud Device ID
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Stripe Location</label>
+                      <div className="flex gap-2">
+                        <Select value={selectedStripeLocationId} onValueChange={setSelectedStripeLocationId}>
+                          <SelectTrigger className="flex-1" data-testid="select-stripe-location">
+                            <SelectValue placeholder="Select a Stripe location" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stripeLocations.map((loc) => (
+                              <SelectItem key={loc.id} value={loc.id}>
+                                {loc.display_name} - {loc.address.city}, {loc.address.state}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setShowStripeLocationDialog(true)}
+                          data-testid="button-add-stripe-location"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      {stripeLocations.length === 0 && !stripeLocationsLoading && (
+                        <p className="text-sm text-muted-foreground">
+                          No Stripe locations found. Create one to register readers.
+                        </p>
+                      )}
+                    </div>
+
+                    {selectedStripeLocationId && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Pairing Code</label>
+                        <Input
+                          placeholder="Enter pairing code from device screen"
+                          value={stripeRegistrationCode}
+                          onChange={(e) => setStripeRegistrationCode(e.target.value)}
+                          className="font-mono tracking-wider"
+                          data-testid="input-stripe-pairing-code"
+                        />
+                        <Input
+                          placeholder="Reader label (optional)"
+                          value={stripeReaderLabel}
+                          onChange={(e) => setStripeReaderLabel(e.target.value)}
+                          data-testid="input-stripe-reader-label"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => {
+                            if (!stripeRegistrationCode || !selectedStripeLocationId) {
+                              toast({ title: "Enter pairing code and select location", variant: "destructive" });
+                              return;
+                            }
+                            registerStripeReaderMutation.mutate({
+                              registrationCode: stripeRegistrationCode,
+                              label: stripeReaderLabel || form.getValues("name") || "POS Terminal",
+                              locationId: selectedStripeLocationId,
+                            });
+                          }}
+                          disabled={registerStripeReaderMutation.isPending || !stripeRegistrationCode}
+                          data-testid="button-register-stripe-reader"
+                        >
+                          {registerStripeReaderMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                          )}
+                          Register with Stripe
+                        </Button>
+                      </div>
+                    )}
+
+                    {form.watch("cloudDeviceId") && (
+                      <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950 rounded text-sm text-green-700 dark:text-green-300">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Reader registered: {form.watch("cloudDeviceId")}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <FormField
                 control={form.control}
                 name="active"
@@ -601,6 +789,98 @@ export default function TerminalDevicesPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showStripeLocationDialog} onOpenChange={setShowStripeLocationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              Create Stripe Location
+            </DialogTitle>
+            <DialogDescription>
+              Add a physical location for your Stripe Terminal readers
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Location Name</label>
+              <Input
+                placeholder="e.g., Main Store"
+                value={newStripeLocation.displayName}
+                onChange={(e) => setNewStripeLocation({ ...newStripeLocation, displayName: e.target.value })}
+                data-testid="input-stripe-location-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Street Address</label>
+              <Input
+                placeholder="123 Main St"
+                value={newStripeLocation.line1}
+                onChange={(e) => setNewStripeLocation({ ...newStripeLocation, line1: e.target.value })}
+                data-testid="input-stripe-location-address"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">City</label>
+                <Input
+                  placeholder="City"
+                  value={newStripeLocation.city}
+                  onChange={(e) => setNewStripeLocation({ ...newStripeLocation, city: e.target.value })}
+                  data-testid="input-stripe-location-city"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">State</label>
+                <Input
+                  placeholder="CA"
+                  value={newStripeLocation.state}
+                  onChange={(e) => setNewStripeLocation({ ...newStripeLocation, state: e.target.value })}
+                  data-testid="input-stripe-location-state"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">ZIP Code</label>
+                <Input
+                  placeholder="90210"
+                  value={newStripeLocation.postalCode}
+                  onChange={(e) => setNewStripeLocation({ ...newStripeLocation, postalCode: e.target.value })}
+                  data-testid="input-stripe-location-zip"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Country</label>
+                <Input
+                  value={newStripeLocation.country}
+                  onChange={(e) => setNewStripeLocation({ ...newStripeLocation, country: e.target.value })}
+                  data-testid="input-stripe-location-country"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStripeLocationDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!newStripeLocation.displayName || !newStripeLocation.line1 || !newStripeLocation.city || !newStripeLocation.state || !newStripeLocation.postalCode) {
+                  toast({ title: "Please fill in all address fields", variant: "destructive" });
+                  return;
+                }
+                createStripeLocationMutation.mutate(newStripeLocation);
+              }}
+              disabled={createStripeLocationMutation.isPending}
+              data-testid="button-create-stripe-location"
+            >
+              {createStripeLocationMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Create Location
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
