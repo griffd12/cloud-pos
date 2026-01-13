@@ -8,7 +8,8 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { ArrowLeft, Settings, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Settings, Wifi, WifiOff, Maximize, Minimize } from "lucide-react";
+import { useFullscreen } from "@/hooks/use-fullscreen";
 import { Link, Redirect, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
@@ -59,6 +60,7 @@ export default function KdsPage() {
   const [wsConnected, setWsConnected] = useState(false);
   const [selectedStation, setSelectedStation] = useState("all");
   const [initialized, setInitialized] = useState(false);
+  const { isFullscreen, isSupported: fullscreenSupported, toggleFullscreen } = useFullscreen();
 
   // Real-time sync for menu updates, employee changes, etc.
   usePosWebSocket();
@@ -357,6 +359,17 @@ export default function KdsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {fullscreenSupported && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              data-testid="button-fullscreen"
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </Button>
+          )}
           <Button 
             variant="ghost" 
             size="icon" 

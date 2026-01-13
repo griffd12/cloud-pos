@@ -36,7 +36,8 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { apiClient } from "@/lib/api-client";
 import { usePosContext } from "@/lib/pos-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
-import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer } from "lucide-react";
+import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer, Maximize, Minimize } from "lucide-react";
+import { useFullscreen } from "@/hooks/use-fullscreen";
 import { Link, Redirect } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -75,6 +76,7 @@ interface SelectedModifier {
 
 export default function PosPage() {
   const { toast } = useToast();
+  const { isFullscreen, isSupported: fullscreenSupported, toggleFullscreen } = useFullscreen();
   
   // Enable real-time updates via WebSocket for menu changes, gift cards, etc.
   usePosWebSocket();
@@ -1214,6 +1216,17 @@ export default function PosPage() {
                 <Receipt className="w-4 h-4" />
               </Button>
             </Link>
+          )}
+          {fullscreenSupported && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              data-testid="button-fullscreen"
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </Button>
           )}
           <ThemeToggle />
           <Button
