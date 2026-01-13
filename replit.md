@@ -54,6 +54,12 @@ Preferred communication style: Simple, everyday language.
 - **Print Agent System**: Standalone Node.js agent for bridging cloud POS to local network printers via WebSocket.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting, Manager Alerts, Item Availability, Offline Order Queue, Accounting Export.
 - **V2 Hybrid Architecture**: Introduces an optional on-premise Service Host (Node.js with SQLite) for offline resilience, supporting yellow (LAN only) and red (isolated) modes. Includes cloud sync infrastructure for configuration, transactions, and real-time updates.
+- **Browser IndexedDB Offline Storage**: Client-side storage for ORANGE/RED connection modes when no server is available. Features:
+  - IndexedDB-based local storage (`client/src/lib/offline-storage.ts`) for checks, timePunches, syncQueue
+  - Automatic sync service (`client/src/lib/offline-sync.ts`) with retry logic and queue management
+  - React hooks (`client/src/hooks/use-offline-sync.ts`) for connection mode and sync status
+  - Graceful mode transitions with retry counter reset when connectivity is restored
+- **Standalone Windows Executable**: Service Host can be packaged as a standalone .exe using `npm run package:exe`. Uses esbuild to bundle TypeScript/ESM into CommonJS, then pkg to create the executable. Native modules (better-sqlite3) are included as external assets.
 - **Connectivity Test Dashboard**: EMC admin page (`/emc/connectivity-test`) for testing and monitoring device connectivity. Features:
   - Real-time connection mode display (GREEN/YELLOW/ORANGE/RED)
   - Service Host status monitoring with online/offline detection
