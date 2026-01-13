@@ -9,7 +9,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Clock, Receipt, ShoppingBag, Send, Loader2, Lock } from "lucide-react";
+import { Clock, Receipt, ShoppingBag, Send, Loader2, Lock, User, DollarSign } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -25,6 +25,9 @@ interface OpenCheck {
   roundCount: number;
   lastRoundAt: string | null;
   createdAt: string;
+  employeeName: string | null;
+  subtotal: string | null;
+  total: string | null;
 }
 
 interface CheckLockStatus {
@@ -220,8 +223,19 @@ export function OpenChecksModal({
                           <Badge variant="secondary" className="text-xs">
                             {formatOrderType(check.orderType)}
                           </Badge>
+                          {check.subtotal && parseFloat(check.subtotal) > 0 && (
+                            <span className="font-semibold text-primary">
+                              ${parseFloat(check.subtotal).toFixed(2)}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                          {check.employeeName && (
+                            <span className="flex items-center gap-1">
+                              <User className="w-3 h-3" />
+                              {check.employeeName}
+                            </span>
+                          )}
                           <span>{check.itemCount} items</span>
                           {check.roundCount > 0 && (
                             <span className="flex items-center gap-1">

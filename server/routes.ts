@@ -3079,7 +3079,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const openChecks = await storage.getOpenChecks(rvcId);
       
-      // Enrich each check with item count and last round info
+      // Enrich each check with item count, last round info, employee name, and totals
       const enrichedChecks = await Promise.all(
         openChecks.map(async (check) => {
           const items = await storage.getCheckItems(check.id);
@@ -3087,8 +3087,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const rounds = await storage.getRounds(check.id);
           const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
           
+          // Get employee name if employeeId exists
+          let employeeName: string | null = null;
+          if (check.employeeId) {
+            const employee = await storage.getEmployee(check.employeeId);
+            if (employee) {
+              employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+            }
+          }
+          
           return {
             ...check,
+            employeeName,
             itemCount: activeItems.length,
             unsentCount: activeItems.filter((i) => !i.sent).length,
             roundCount: rounds.length,
