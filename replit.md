@@ -55,7 +55,23 @@ Preferred communication style: Simple, everyday language.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting, Manager Alerts, Item Availability, Offline Order Queue, Accounting Export.
 - **V2 Hybrid Architecture**: Introduces an optional on-premise Service Host (Node.js with SQLite) for offline resilience, supporting yellow (LAN only) and red (isolated) modes. Includes cloud sync infrastructure for configuration, transactions, and real-time updates.
 - **CAL Package Deployment Pipeline**: System for distributing and managing software packages (CAL Packages) to workstations and Service Hosts, including versioning, targeted deployments, and agent-side reception.
-- **Service Host SQLite Schema**: Local database schema mirroring cloud PostgreSQL for offline operations. Includes configuration tables (enterprises, properties, rvcs, roles, employees, menu, devices), transactional tables (checks, rounds, payments), payment processors, loyalty programs (members, enrollments, transactions, rewards, redemptions), item availability, and local-only tables (sync_queue, check_locks, print_queue). Monetary values stored as INTEGER cents for precision; decimal rates stored as TEXT for exact precision. Located at `service-host/src/db/schema.ts` and `service-host/src/db/database.ts`.
+- **Service Host SQLite Schema (v3)**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations. Includes:
+  - **Configuration**: enterprises, properties, rvcs, roles, privileges, employees, employee_assignments, major_groups, family_groups, slus, tax_groups, print_classes
+  - **Menu System**: menu_items, menu_item_slus, modifier_groups, modifiers, modifier_group_modifiers, menu_item_modifier_groups
+  - **Devices**: workstations, printers, kds_devices, order_devices, order_device_printers, order_device_kds, print_class_routing, terminal_devices
+  - **Transactions**: checks, rounds, check_items, check_payments, check_discounts, check_service_charges, tenders, discounts, service_charges
+  - **Payments**: payment_processors, payment_transactions
+  - **KDS**: kds_tickets, kds_ticket_items
+  - **Cash Management**: cash_drawers, drawer_assignments, cash_transactions, safe_counts
+  - **Time & Attendance**: job_codes, employee_job_codes, time_punches, break_sessions, time_entries
+  - **Fiscal Operations**: fiscal_periods
+  - **Loyalty**: loyalty_programs, loyalty_members, loyalty_member_enrollments, loyalty_transactions, loyalty_rewards, loyalty_redemptions
+  - **Gift Cards**: gift_cards, gift_card_transactions
+  - **Orders**: offline_order_queue, online_order_sources, online_orders
+  - **Other**: pos_layouts, pos_layout_cells, pos_layout_rvc_assignments, item_availability, refunds, refund_items, refund_payments, audit_logs
+  - **Local-Only**: sync_queue, sync_metadata, check_locks, print_queue, workstation_config, config_cache
+  
+  Design patterns: Monetary values as INTEGER cents; decimal rates as TEXT for precision; all tables use TEXT for IDs, INTEGER for booleans (0/1), TEXT for timestamps (ISO8601); cloud_synced flags for sync tracking. Located at `service-host/src/db/schema.ts` and `service-host/src/db/database.ts`.
 
 ## External Dependencies
 
