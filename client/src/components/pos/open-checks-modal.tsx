@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -121,7 +122,7 @@ export function OpenChecksModal({
   rvcId,
   workstationId,
 }: OpenChecksModalProps) {
-  const { data: openChecks = [], isLoading } = useQuery<OpenCheck[]>({
+  const { data: openChecks = [], isLoading, refetch: refetchChecks } = useQuery<OpenCheck[]>({
     queryKey: ["/api/checks/open", { rvcId }],
     queryFn: async () => {
       if (!rvcId) return [];
@@ -133,10 +134,12 @@ export function OpenChecksModal({
       return res.json();
     },
     enabled: open && !!rvcId,
-    refetchOnMount: true,
+    refetchOnMount: "always",
+    staleTime: 0,
+    refetchInterval: open ? 2000 : false,
   });
   
-  const { data: lockData } = useQuery<{ lockStatus: Record<string, CheckLockStatus> }>({
+  const { data: lockData, refetch: refetchLocks } = useQuery<{ lockStatus: Record<string, CheckLockStatus> }>({
     queryKey: ["/api/checks/locks", { rvcId, workstationId }],
     queryFn: async () => {
       if (!rvcId) return { lockStatus: {} };
@@ -152,10 +155,19 @@ export function OpenChecksModal({
       return res.json();
     },
     enabled: open && !!rvcId,
-    refetchInterval: 10000,
+    refetchOnMount: "always",
+    staleTime: 0,
+    refetchInterval: open ? 2000 : false,
   });
 
   const lockStatuses = lockData?.lockStatus || {};
+
+  useEffect(() => {
+    if (open && rvcId) {
+      refetchChecks();
+      refetchLocks();
+    }
+  }, [open, rvcId, refetchChecks, refetchLocks]);
 
   const handleSelect = (checkId: string) => {
     onSelect(checkId);
