@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Wifi,
   WifiOff,
@@ -33,8 +34,10 @@ import {
   Laptop,
   ArrowRightLeft,
   Clock,
+  Building2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import type { Property } from "@shared/schema";
 
 interface ConnectivityStatus {
   mode: ConnectionMode;
@@ -60,6 +63,7 @@ interface ServiceHostStatus {
   name: string;
   status: 'online' | 'offline';
   lastHeartbeat: string | null;
+  propertyId: string;
   propertyName: string;
 }
 
@@ -69,6 +73,8 @@ interface DeviceStatus {
   type: 'workstation' | 'kds';
   status: 'connected' | 'disconnected' | 'pending';
   lastSeen: string | null;
+  propertyId: string;
+  propertyName: string;
 }
 
 const modeConfig: Record<ConnectionMode, {
@@ -117,6 +123,11 @@ export default function ConnectivityTestPage() {
     localStorage.getItem('serviceHostUrl') || 'http://service-host.local:3001'
   );
   const [simulateOffline, setSimulateOffline] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+
+  const { data: properties = [] } = useQuery<Property[]>({
+    queryKey: ["/api/properties"],
+  });
 
   const { data: serviceHosts = [], isLoading: hostsLoading } = useQuery<ServiceHostStatus[]>({
     queryKey: ["/api/service-hosts/status-summary"],
@@ -127,6 +138,14 @@ export default function ConnectivityTestPage() {
     queryKey: ["/api/registered-devices/status-summary"],
     refetchInterval: 10000,
   });
+
+  const filteredServiceHosts = selectedPropertyId && selectedPropertyId !== "all"
+    ? serviceHosts.filter(h => h.propertyId === selectedPropertyId)
+    : serviceHosts;
+
+  const filteredDevices = selectedPropertyId && selectedPropertyId !== "all"
+    ? registeredDevices.filter(d => d.propertyId === selectedPropertyId)
+    : registeredDevices;
 
   // Fetch live connectivity status from server (Print Agents, etc.)
   const { data: connectivityStatus } = useQuery<{
@@ -201,24 +220,29 @@ export default function ConnectivityTestPage() {
 
   const runKdsTest = async () => {
     setIsRunningTest(true);
+    const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+    const targetLabel = selectedProperty ? selectedProperty.name : 'All Properties';
+    const propertyIdToSend = selectedPropertyId && selectedPropertyId !== "all" ? selectedPropertyId : undefined;
+    
     try {
       const res = await apiRequest("POST", "/api/kds-tickets/test", {
         testMessage: "Connectivity test ticket",
         source: "connectivity-test-dashboard",
+        propertyId: propertyIdToSend,
       });
       
       if (res.ok) {
         addTestResult({
           testType: 'KDS Test Ticket',
-          target: 'Kitchen Display',
+          target: `Kitchen Display (${targetLabel})`,
           success: true,
         });
-        toast({ title: "Test ticket sent to KDS" });
+        toast({ title: `Test ticket sent to KDS at ${targetLabel}` });
       } else {
         const error = await res.json();
         addTestResult({
           testType: 'KDS Test Ticket',
-          target: 'Kitchen Display',
+          target: `Kitchen Display (${targetLabel})`,
           success: false,
           error: error.error || 'Failed to send test ticket',
         });
@@ -226,7 +250,7 @@ export default function ConnectivityTestPage() {
     } catch (e) {
       addTestResult({
         testType: 'KDS Test Ticket',
-        target: 'Kitchen Display',
+        target: `Kitchen Display (${targetLabel})`,
         success: false,
         error: (e as Error).message,
       });
@@ -265,18 +289,39 @@ export default function ConnectivityTestPage() {
             Test workstation, KDS, and Service Host communications
           </p>
         </div>
-        <Button 
-          onClick={runConnectivityTest}
-          disabled={isRunningTest}
-          data-testid="button-run-test"
-        >
-          {isRunningTest ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Play className="w-4 h-4 mr-2" />
-          )}
-          Run Connectivity Test
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-muted-foreground" />
+            <Select
+              value={selectedPropertyId}
+              onValueChange={setSelectedPropertyId}
+            >
+              <SelectTrigger className="w-48" data-testid="select-property">
+                <SelectValue placeholder="All Properties" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Properties</SelectItem>
+                {properties.map((property) => (
+                  <SelectItem key={property.id} value={property.id}>
+                    {property.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button 
+            onClick={runConnectivityTest}
+            disabled={isRunningTest}
+            data-testid="button-run-test"
+          >
+            {isRunningTest ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Play className="w-4 h-4 mr-2" />
+            )}
+            Run Connectivity Test
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -484,15 +529,15 @@ export default function ConnectivityTestPage() {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
-            ) : serviceHosts.length === 0 ? (
+            ) : filteredServiceHosts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Server className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p>No Service Hosts registered</p>
+                <p>No Service Hosts {selectedPropertyId && selectedPropertyId !== "all" ? "for this property" : "registered"}</p>
                 <p className="text-xs">Register a Service Host to enable offline mode</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {serviceHosts.map((host) => (
+                {filteredServiceHosts.map((host) => (
                   <div 
                     key={host.id} 
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
@@ -525,15 +570,15 @@ export default function ConnectivityTestPage() {
             <CardDescription>Workstations and KDS displays</CardDescription>
           </CardHeader>
           <CardContent>
-            {registeredDevices.length === 0 ? (
+            {filteredDevices.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Monitor className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p>No devices registered</p>
+                <p>No devices {selectedPropertyId && selectedPropertyId !== "all" ? "for this property" : "registered"}</p>
                 <p className="text-xs">Enroll devices using an enrollment code</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {registeredDevices.slice(0, 5).map((device) => (
+                {filteredDevices.slice(0, 5).map((device) => (
                   <div 
                     key={device.id} 
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
@@ -546,7 +591,7 @@ export default function ConnectivityTestPage() {
                       )}
                       <div>
                         <p className="font-medium text-sm">{device.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{device.type}</p>
+                        <p className="text-xs text-muted-foreground">{device.propertyName}</p>
                       </div>
                     </div>
                     <Badge variant={

@@ -4944,19 +4944,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Send test ticket to KDS for connectivity testing
   app.post("/api/kds-tickets/test", async (req, res) => {
     try {
-      const { testMessage, source } = req.body;
+      const { testMessage, source, propertyId } = req.body;
       
-      // Broadcast a test message to all KDS displays
+      // Broadcast a test message to KDS displays (optionally scoped by property)
       broadcastPosEvent({
         type: 'kds_test_ticket',
         payload: {
           message: testMessage || 'Test ticket from connectivity dashboard',
           source: source || 'admin',
           timestamp: new Date().toISOString(),
+          propertyId: propertyId || null,
         }
       }, 'all');
       
-      res.json({ success: true, message: 'Test ticket broadcast sent' });
+      const targetDesc = propertyId ? `property ${propertyId}` : 'all properties';
+      res.json({ success: true, message: `Test ticket broadcast sent to ${targetDesc}` });
     } catch (error) {
       console.error("Send test ticket error:", error);
       res.status(500).json({ message: "Failed to send test ticket" });
@@ -12464,6 +12466,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/registered-devices/status-summary", async (req, res) => {
     try {
       const devices = await storage.getRegisteredDevices();
+      const properties = await storage.getProperties();
       
       // Consider a device connected if last access was within 5 minutes
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
@@ -12481,12 +12484,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           status = 'disconnected';
         }
         
+        const property = properties.find(p => p.id === d.propertyId);
+        
         return {
           id: d.id,
           name: d.name,
           type: d.deviceType === 'kds_display' ? 'kds' : 'workstation',
           status,
           lastSeen: d.lastAccessAt,
+          propertyId: d.propertyId,
+          propertyName: property?.name || 'Unknown',
         };
       });
       
@@ -16860,6 +16867,7 @@ connect();
           name: sh.name,
           status: isOnline ? 'online' : 'offline',
           lastHeartbeat: sh.lastHeartbeatAt,
+          propertyId: sh.propertyId,
           propertyName: property?.name || 'Unknown',
         };
       });

@@ -66,22 +66,6 @@ export default function KdsPage() {
   // Real-time sync for menu updates, employee changes, etc.
   usePosWebSocket();
 
-  // Subscribe to KDS test ticket events
-  useEffect(() => {
-    const unsubscribe = subscribeToKdsTestTicket((payload) => {
-      const message = payload?.message || "Test ticket received";
-      setTestTicketMessage(message);
-      toast({
-        title: "Test Ticket Received",
-        description: message,
-        duration: 5000,
-      });
-      // Auto-clear after 5 seconds
-      setTimeout(() => setTestTicketMessage(null), 5000);
-    });
-    return unsubscribe;
-  }, [toast]);
-
   // Check if this is a dedicated KDS device
   const isDedicatedKds = deviceType === "kds" && isConfigured;
 
@@ -109,6 +93,28 @@ export default function KdsPage() {
   const propertyId = isDedicatedKds 
     ? configuredKdsDevice?.propertyId 
     : currentRvc?.propertyId;
+
+  // Subscribe to KDS test ticket events (filtered by property)
+  useEffect(() => {
+    const unsubscribe = subscribeToKdsTestTicket((payload) => {
+      // Only show test ticket if it's for all properties (null) or matches this device's property
+      const testPropertyId = payload?.propertyId;
+      if (testPropertyId && testPropertyId !== propertyId) {
+        return; // Skip - this test ticket is for a different property
+      }
+      
+      const message = payload?.message || "Test ticket received";
+      setTestTicketMessage(message);
+      toast({
+        title: "Test Ticket Received",
+        description: message,
+        duration: 5000,
+      });
+      // Auto-clear after 5 seconds
+      setTimeout(() => setTestTicketMessage(null), 5000);
+    });
+    return unsubscribe;
+  }, [toast, propertyId]);
 
   const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
     queryKey: ["/api/kds-devices/active", propertyId],
