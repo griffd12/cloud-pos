@@ -151,12 +151,15 @@ export function DeviceEnrollmentGuard({
                 Retry Validation
               </Button>
               <Button
+                variant="secondary"
                 className="flex-1"
-                onClick={() => window.location.href = "/cal-setup-wizard/index.html"}
-                data-testid="button-open-wizard"
+                onClick={() => {
+                  alert("The CAL Setup Wizard is a desktop application.\n\nPlease download and run it on this device to complete enrollment.\n\nContact your system administrator for the wizard installer.");
+                }}
+                data-testid="button-wizard-help"
               >
                 <Laptop className="h-4 w-4 mr-2" />
-                Run Setup Wizard
+                Get Wizard
               </Button>
             </div>
           </CardContent>

@@ -2094,11 +2094,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRegisteredDeviceByEnrollmentCode(enrollmentCode: string): Promise<RegisteredDevice | undefined> {
+    // Find device by enrollment code - check both pending and enrolled status
+    // (for claim code redemption after wizard completion)
     const [result] = await db.select().from(registeredDevices)
-      .where(and(
-        eq(registeredDevices.enrollmentCode, enrollmentCode),
-        eq(registeredDevices.status, "pending")
-      ));
+      .where(eq(registeredDevices.enrollmentCode, enrollmentCode));
     return result;
   }
 
