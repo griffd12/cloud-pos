@@ -74,7 +74,16 @@ Preferred communication style: Simple, everyday language.
   - Config sync request handling
   - Transaction upload acknowledgment
 - **Transaction Sync Security**: All sync endpoints (`/api/sync/transactions`, `/api/sync/time-punches`) protected with Service Host token authentication and property authorization
-- **CAL Package Deployment Pipeline**: System for distributing and managing software packages (CAL Packages) to workstations and Service Hosts, including versioning, targeted deployments, and agent-side reception.
+- **CAL Package Deployment Pipeline**: Oracle Simphony-style system for distributing software packages (CAL Packages) to Service Hosts and workstations. Features:
+  - **Package Types**: service_host, service_host_prereqs, caps, print_controller, kds_controller, kds_client, payment_controller, cal_client, configuration, custom
+  - **Install Script Execution**: Automatically runs startup scripts (.bat/.ps1 on Windows, .sh on Linux) with environment variables (CAL_ROOT_DIR, CAL_PACKAGE_NAME, CAL_PACKAGE_VERSION, CAL_PACKAGE_TYPE, CAL_PACKAGE_DIR, CAL_SERVICE_HOST_ID)
+  - **Root Directory**: Configurable installation root (default: C:\OPS-POS\ on Windows, ~/ops-pos/ on Linux)
+  - **WebSocket Broadcasting**: Real-time update progress pushed to connected POS workstations
+  - **POS Update Overlay**: Full-screen blocker during updates showing package name, version, status, and real-time log output
+  - **Package Structure**: manifest.json + install scripts + optional files directory
+  - **Deployment Flow**: Upload .tar.gz → Create version in EMC → Create deployment → Service Host downloads → Extracts → Runs install script → Reports status
+  - **First Package**: "OPS-POS Base Setup" (v1.0.0) creates the C:\OPS-POS\ directory structure with ServiceHost, Packages, PrintAgent, Config, and Logs subdirectories
+  - **Files**: `service-host/src/sync/cal-sync.ts`, `client/src/components/cal-update-overlay.tsx`, `client/src/hooks/use-cal-updates.ts`, `cal-packages/`
 - **Config Sync Service**: Cloud → Local SQLite synchronization with full and delta sync support. Handles all entity types: hierarchy (enterprises, properties, RVCs), menu (SLUs, items, modifiers), employees (roles, privileges, assignments), devices (workstations, printers, KDS, order devices), operations (tax groups, tenders, discounts, service charges), POS layouts, payments, and loyalty. Features version tracking, auto-sync intervals, real-time updates via WebSocket, and proper soft/hard delete handling. Located at `service-host/src/sync/config-sync.ts`.
 - **Service Host SQLite Schema (v3)**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations. Includes:
   - **Configuration**: enterprises, properties, rvcs, roles, privileges, employees, employee_assignments, major_groups, family_groups, slus, tax_groups, print_classes
