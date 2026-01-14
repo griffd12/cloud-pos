@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PosProvider } from "@/lib/pos-context";
-import { DeviceProvider, useDeviceContext } from "@/lib/device-context";
+import { DeviceProvider, useDeviceContext, getAutoEnrollRedirect } from "@/lib/device-context";
 import { EmcProvider } from "@/lib/emc-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import NotFound from "@/pages/not-found";
@@ -53,6 +53,13 @@ function DeviceGuardedRoute({
 function Router() {
   const { deviceType, isConfigured } = useDeviceContext();
   const [location] = useLocation();
+  
+  // Check for auto-enroll redirect from CAL wizard - handle FIRST before any other routing
+  const autoEnrollRedirect = getAutoEnrollRedirect();
+  if (autoEnrollRedirect && isConfigured) {
+    console.log("[Router] Auto-enroll redirect to:", autoEnrollRedirect);
+    return <Redirect to={autoEnrollRedirect} />;
+  }
   
   // EMC routes bypass device enrollment completely - accessible from any browser
   if (location.startsWith("/emc")) {

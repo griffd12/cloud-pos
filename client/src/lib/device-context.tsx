@@ -71,8 +71,10 @@ function getStoredPropertyId(): string | null {
   return localStorage.getItem(DEVICE_PROPERTY_ID_KEY);
 }
 
-function processUrlCredentials(): boolean {
-  if (typeof window === 'undefined') return false;
+const AUTO_ENROLL_REDIRECT_KEY = "pos_auto_enroll_redirect";
+
+function processUrlCredentials(): { stored: boolean; autoEnroll: boolean; targetPath: string | null } {
+  if (typeof window === 'undefined') return { stored: false, autoEnroll: false, targetPath: null };
   
   const params = new URLSearchParams(window.location.search);
   const deviceToken = params.get("device_token");
@@ -81,11 +83,13 @@ function processUrlCredentials(): boolean {
   const deviceName = params.get("device_name");
   const deviceType = params.get("device_type");
   const propertyId = params.get("property_id");
+  const autoEnroll = params.get("auto_enroll") === "true";
   
   console.log("[DeviceContext] Checking URL params:", { 
     hasToken: !!deviceToken, 
     hasDeviceId: !!deviceId,
     hasRegisteredDeviceId: !!registeredDeviceId,
+    autoEnroll,
     path: window.location.pathname,
     search: window.location.search
   });
@@ -95,7 +99,8 @@ function processUrlCredentials(): boolean {
       deviceId,
       registeredDeviceId,
       deviceName,
-      deviceType
+      deviceType,
+      autoEnroll
     });
     
     localStorage.setItem(DEVICE_TOKEN_KEY, deviceToken);
@@ -107,18 +112,33 @@ function processUrlCredentials(): boolean {
       localStorage.setItem(REGISTERED_DEVICE_ID_KEY, registeredDeviceId);
     }
     
+    const targetPath = deviceType === "kds_display" ? "/kds" : "/pos";
+    
     if (deviceType === "pos_workstation") {
       localStorage.setItem(DEVICE_TYPE_KEY, "pos");
     } else if (deviceType === "kds_display") {
       localStorage.setItem(DEVICE_TYPE_KEY, "kds");
     }
     
+    if (autoEnroll) {
+      sessionStorage.setItem(AUTO_ENROLL_REDIRECT_KEY, targetPath);
+    }
+    
     const cleanUrl = window.location.pathname;
     window.history.replaceState({}, document.title, cleanUrl);
-    console.log("[DeviceContext] Credentials stored successfully");
-    return true;
+    console.log("[DeviceContext] Credentials stored successfully, auto-enroll redirect:", autoEnroll ? targetPath : "none");
+    return { stored: true, autoEnroll, targetPath };
   }
-  return false;
+  return { stored: false, autoEnroll: false, targetPath: null };
+}
+
+export function getAutoEnrollRedirect(): string | null {
+  if (typeof window === 'undefined') return null;
+  const redirect = sessionStorage.getItem(AUTO_ENROLL_REDIRECT_KEY);
+  if (redirect) {
+    sessionStorage.removeItem(AUTO_ENROLL_REDIRECT_KEY);
+  }
+  return redirect;
 }
 
 const urlCredsProcessed = processUrlCredentials();
