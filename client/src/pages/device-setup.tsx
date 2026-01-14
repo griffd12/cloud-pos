@@ -9,18 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Shield, Monitor, Tv, Loader2, CheckCircle, AlertCircle, ArrowLeft, Key } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
-interface EnrollmentResponse {
+interface ClaimResponse {
   success: boolean;
   deviceToken: string;
-  device: {
-    id: string;
-    name: string;
-    deviceType: string;
-    propertyId: string;
-    workstationId?: string | null;
-    kdsDeviceId?: string | null;
-    status: string;
-  };
+  registeredDeviceId: string;
+  deviceId: string;
+  deviceName: string;
+  deviceType: string;
+  propertyId: string;
 }
 
 function getDeviceInfo() {
@@ -38,53 +34,63 @@ export default function DeviceSetupPage() {
   
   const [enrollmentCode, setEnrollmentCode] = useState("");
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
-  const [enrollmentSuccess, setEnrollmentSuccess] = useState<EnrollmentResponse | null>(null);
+  const [claimSuccess, setClaimSuccess] = useState<ClaimResponse | null>(null);
 
-  const enrollMutation = useMutation({
+  const claimMutation = useMutation({
     mutationFn: async (code: string) => {
-      const response = await apiRequest("POST", "/api/registered-devices/enroll", {
-        enrollmentCode: code.trim(),
-        deviceInfo: getDeviceInfo(),
+      const response = await apiRequest("POST", "/api/cal-setup/claim", {
+        claimCode: code.trim(),
       });
-      return response.json() as Promise<EnrollmentResponse>;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to claim device");
+      }
+      return response.json() as Promise<ClaimResponse>;
     },
     onSuccess: (data) => {
-      if (data.success && data.deviceToken && data.device) {
-        enrollDevice(data.deviceToken, data.device);
-        setEnrollmentSuccess(data);
+      if (data.success && data.deviceToken) {
+        enrollDevice(data.deviceToken, {
+          id: data.registeredDeviceId,
+          name: data.deviceName,
+          deviceType: data.deviceType,
+          propertyId: data.propertyId,
+          workstationId: data.deviceType === "pos_workstation" ? data.deviceId : null,
+          kdsDeviceId: data.deviceType === "kds_display" ? data.deviceId : null,
+          status: "enrolled",
+        });
+        setClaimSuccess(data);
         setEnrollmentError(null);
       } else {
         setEnrollmentError("Enrollment failed. Please try again.");
       }
     },
     onError: (error: Error) => {
-      setEnrollmentError(error.message || "Invalid or expired enrollment code");
+      setEnrollmentError(error.message || "Invalid or expired claim code");
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (enrollmentCode.length !== 6) {
-      setEnrollmentError("Please enter a 6-digit enrollment code");
+      setEnrollmentError("Please enter a 6-digit claim code");
       return;
     }
     setEnrollmentError(null);
-    enrollMutation.mutate(enrollmentCode);
+    claimMutation.mutate(enrollmentCode);
   };
 
   const handleContinue = () => {
-    if (enrollmentSuccess?.device) {
-      const deviceType = enrollmentSuccess.device.deviceType;
-      if (deviceType === "kds_display") {
+    if (claimSuccess) {
+      if (claimSuccess.deviceType === "kds_display") {
         navigate("/kds");
       } else {
-        navigate("/login");
+        navigate("/pos");
       }
     }
   };
 
-  if (enrollmentSuccess) {
-    const isKds = enrollmentSuccess.device.deviceType === "kds_display";
+  if (claimSuccess) {
+    const isKds = claimSuccess.deviceType === "kds_display";
     
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -106,7 +112,7 @@ export default function DeviceSetupPage() {
                 ) : (
                   <Monitor className="w-5 h-5 text-primary" />
                 )}
-                <span className="font-medium">{enrollmentSuccess.device.name}</span>
+                <span className="font-medium">{claimSuccess.deviceName}</span>
               </div>
               <div className="text-sm text-muted-foreground">
                 Type: {isKds ? "Kitchen Display (KDS)" : "POS Workstation"}
@@ -118,7 +124,7 @@ export default function DeviceSetupPage() {
               onClick={handleContinue}
               data-testid="button-continue"
             >
-              Continue to {isKds ? "Kitchen Display" : "Login"}
+              Continue to {isKds ? "Kitchen Display" : "POS"}
             </Button>
           </CardContent>
         </Card>
@@ -200,7 +206,7 @@ export default function DeviceSetupPage() {
               <Button 
                 variant="outline"
                 className="flex-1"
-                onClick={() => navigate(deviceType === "kds" ? "/kds" : "/login")}
+                onClick={() => navigate(deviceType === "kds" ? "/kds" : "/pos")}
                 data-testid="button-continue-existing"
               >
                 Continue
@@ -221,13 +227,13 @@ export default function DeviceSetupPage() {
           </div>
           <CardTitle data-testid="text-device-setup-title">Device Enrollment</CardTitle>
           <CardDescription>
-            Enter the 6-digit enrollment code from your administrator
+            Enter the 6-digit claim code from the CAL Setup Wizard
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="code">Enrollment Code</Label>
+              <Label htmlFor="code">Claim Code</Label>
               <Input
                 id="code"
                 type="text"
@@ -247,7 +253,7 @@ export default function DeviceSetupPage() {
                 data-testid="input-enrollment-code"
               />
               <p className="text-xs text-muted-foreground text-center">
-                Get this code from Admin &gt; Devices &gt; Registered Devices
+                Enter the code displayed by the CAL Setup Wizard
               </p>
             </div>
 
@@ -261,18 +267,18 @@ export default function DeviceSetupPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={enrollmentCode.length !== 6 || enrollMutation.isPending}
+              disabled={enrollmentCode.length !== 6 || claimMutation.isPending}
               data-testid="button-enroll"
             >
-              {enrollMutation.isPending ? (
+              {claimMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Enrolling...
+                  Claiming...
                 </>
               ) : (
                 <>
                   <Shield className="w-4 h-4 mr-2" />
-                  Enroll Device
+                  Claim Device
                 </>
               )}
             </Button>

@@ -1262,6 +1262,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/cal-deployment-targets(\/.*)?$/,    // CAL deployment targets (Service Host updates)
     /^\/service-hosts(\/.*)?$/,             // Service host management (EMC feature)
     /^\/cal-setup(\/.*)?$/,                 // CAL Setup Wizard endpoints (uses EMC auth)
+    /^\/dev(\/.*)?$/,                       // Dev-only endpoints (testing)
   ];
 
   app.use("/api", async (req, res, next) => {
