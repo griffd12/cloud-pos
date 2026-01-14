@@ -100,6 +100,14 @@ Preferred communication style: Simple, everyday language.
     4. Configures the CAL client for future updates
     After initial setup via wizard or bootstrap, all subsequent updates come via CAL packages automatically.
   - **Files**: `service-host/src/sync/cal-sync.ts`, `client/src/components/cal-update-overlay.tsx`, `client/src/hooks/use-cal-updates.ts`, `cal-packages/`, `bootstrap/`, `cal-setup-wizard/`
+- **Device Binding Security**: Prevents unauthorized browser access to POS/KDS functionality. Features:
+  - **Device Token Generation**: CAL Setup Wizard generates SHA-256 hashed device tokens during registration
+  - **Token Storage**: Tokens stored in browser localStorage (ops_device_token, ops_device_id, ops_device_type, ops_device_name)
+  - **REST API Protection**: Middleware validates X-Device-Token header on all /api routes (exemptions: /emc/*, /cal-setup/*, /registered-devices/enroll|validate, health/connectivity endpoints)
+  - **WebSocket Authentication**: All subscription types (all, kds, device_status, enterprise_status) require valid device token or EMC session; unauthenticated connections closed with code 4001
+  - **DeviceEnrollmentGuard**: React component wrapping POS/KDS pages blocks unenrolled browsers with enrollment instructions
+  - **Device Heartbeat**: useDeviceHeartbeat hook maintains device online status with periodic heartbeats to cloud
+  - **Files**: `client/src/hooks/use-device-enrollment.ts`, `client/src/hooks/use-device-heartbeat.ts`, `client/src/components/device-enrollment-guard.tsx`
 - **Config Sync Service**: Cloud → Local SQLite synchronization with full and delta sync support. Handles all entity types: hierarchy (enterprises, properties, RVCs), menu (SLUs, items, modifiers), employees (roles, privileges, assignments), devices (workstations, printers, KDS, order devices), operations (tax groups, tenders, discounts, service charges), POS layouts, payments, and loyalty. Features version tracking, auto-sync intervals, real-time updates via WebSocket, and proper soft/hard delete handling. Located at `service-host/src/sync/config-sync.ts`.
 - **Service Host SQLite Schema (v3)**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations. Includes:
   - **Configuration**: enterprises, properties, rvcs, roles, privileges, employees, employee_assignments, major_groups, family_groups, slus, tax_groups, print_classes
