@@ -921,13 +921,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   wss.on("connection", (ws) => {
     const subscribedChannels: string[] = [];
+    let isDeviceAuthenticated = false;
+    let isEmcAuthenticated = false;
 
-    ws.on("message", (message) => {
+    ws.on("message", async (message) => {
       try {
         const data = JSON.parse(message.toString());
         
+        // Authenticate helper - validates device token or EMC session
+        async function authenticateConnection(deviceToken?: string, emcSessionToken?: string): Promise<boolean> {
+          // Check device token first
+          if (deviceToken) {
+            const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+            const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
+            if (device && device.status === "enrolled") {
+              isDeviceAuthenticated = true;
+              await storage.updateRegisteredDevice(device.id, { lastAccessAt: new Date() });
+              return true;
+            }
+          }
+          
+          // Check EMC session token
+          if (emcSessionToken) {
+            const sessionTokenHash = crypto.createHash("sha256").update(emcSessionToken).digest("hex");
+            const session = await storage.getEmcSessionByToken(sessionTokenHash);
+            if (session && new Date(session.expiresAt) > new Date()) {
+              isEmcAuthenticated = true;
+              return true;
+            }
+          }
+          
+          return false;
+        }
+        
         // General "all" channel subscription for POS/KDS events
         if (data.type === "subscribe" && data.channel === "all") {
+          // Validate device token or EMC session before allowing subscription
+          const authenticated = await authenticateConnection(data.deviceToken, data.emcSessionToken);
+          
+          if (!authenticated) {
+            ws.send(JSON.stringify({ 
+              type: "error", 
+              code: "AUTH_REQUIRED",
+              message: "Authentication required - device token or EMC session invalid" 
+            }));
+            ws.close(4001, "Unauthenticated");
+            return;
+          }
+          
           subscribedChannels.push("all");
           if (!clients.has("all")) {
             clients.set("all", new Set());
@@ -937,6 +978,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         // Legacy KDS subscription (specific RVC channel)
         if (data.type === "subscribe" && data.channel === "kds") {
+          // Require authentication for KDS subscriptions
+          const authenticated = await authenticateConnection(data.deviceToken, data.emcSessionToken);
+          if (!authenticated) {
+            ws.send(JSON.stringify({ 
+              type: "error", 
+              code: "AUTH_REQUIRED",
+              message: "Authentication required for KDS subscription" 
+            }));
+            ws.close(4001, "Unauthenticated");
+            return;
+          }
+          
           const channel = data.rvcId || "all";
           subscribedChannels.push(channel);
           if (!clients.has(channel)) {
@@ -945,8 +998,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           clients.get(channel)!.add(ws);
         }
         
-        // Device status subscription for FOH/EMC
+        // Device status subscription for FOH/EMC (requires EMC or device auth)
         if (data.type === "subscribe_device_status" && data.propertyId) {
+          const authenticated = await authenticateConnection(data.deviceToken, data.emcSessionToken);
+          if (!authenticated) {
+            ws.send(JSON.stringify({ 
+              type: "error", 
+              code: "AUTH_REQUIRED",
+              message: "Authentication required for device status subscription" 
+            }));
+            ws.close(4001, "Unauthenticated");
+            return;
+          }
+          
           const channel = `device_status_${data.propertyId}`;
           subscribedChannels.push(channel);
           if (!clients.has(channel)) {
@@ -964,6 +1028,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         // Enterprise status subscription for EMC
         if (data.type === "subscribe_enterprise_status" && data.enterpriseId) {
+          const authenticated = await authenticateConnection(data.deviceToken, data.emcSessionToken);
+          if (!authenticated) {
+            ws.send(JSON.stringify({ 
+              type: "error", 
+              code: "AUTH_REQUIRED",
+              message: "Authentication required for enterprise status subscription" 
+            }));
+            ws.close(4001, "Unauthenticated");
+            return;
+          }
+          
           const channel = `enterprise_status_${data.enterpriseId}`;
           subscribedChannels.push(channel);
           if (!clients.has(channel)) {
@@ -1186,6 +1261,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/cal-deployments(\/.*)?$/,           // CAL deployments (EMC feature)
     /^\/cal-deployment-targets(\/.*)?$/,    // CAL deployment targets (Service Host updates)
     /^\/service-hosts(\/.*)?$/,             // Service host management (EMC feature)
+    /^\/cal-setup(\/.*)?$/,                 // CAL Setup Wizard endpoints (uses EMC auth)
   ];
 
   app.use("/api", async (req, res, next) => {
@@ -1289,7 +1365,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ];
       }
 
-      res.json({ employee, privileges, salariedBypass, bypassJobCode });
+      // Include enrolled device info if available (from device token middleware)
+      const enrolledDevice = (req as any).enrolledDevice;
+      
+      res.json({ 
+        employee, 
+        privileges, 
+        salariedBypass, 
+        bypassJobCode,
+        device: enrolledDevice ? {
+          id: enrolledDevice.id,
+          name: enrolledDevice.name,
+          deviceType: enrolledDevice.deviceType,
+          propertyId: enrolledDevice.propertyId,
+          workstationId: enrolledDevice.workstationId,
+          kdsDeviceId: enrolledDevice.kdsDeviceId,
+        } : null
+      });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
@@ -14079,6 +14171,60 @@ connect();
         }
       }
 
+      // ========================================================================
+      // DEVICE BINDING SECURITY - Create registered device and issue device token
+      // This binds the physical device to the POS system with a unique token
+      // ========================================================================
+      
+      // Check if a registered device already exists for this workstation/KDS
+      const existingRegistrations = await storage.getRegisteredDevices(propertyId);
+      let registeredDevice = existingRegistrations.find(rd => 
+        (deviceType === "workstation" && rd.workstationId === deviceId) ||
+        (deviceType === "kds" && rd.kdsDeviceId === deviceId)
+      );
+
+      // Generate a secure device token
+      const deviceToken = crypto.randomUUID() + "-" + crypto.randomBytes(16).toString("hex");
+      const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+
+      if (registeredDevice) {
+        // Update existing registration with new token (re-enrollment)
+        await storage.updateRegisteredDevice(registeredDevice.id, {
+          status: "enrolled",
+          deviceTokenHash,
+          enrollmentCode: null,
+          enrollmentCodeExpiresAt: null,
+          enrolledAt: new Date(),
+          lastAccessAt: new Date(),
+          osInfo: hostname || null,
+          ipAddress: ipAddress || null,
+          macAddress: macAddress || null,
+        });
+      } else {
+        // Create new registered device entry
+        registeredDevice = await storage.createRegisteredDevice({
+          propertyId,
+          deviceType: deviceType === "workstation" ? "pos_workstation" : "kds_display",
+          workstationId: deviceType === "workstation" ? deviceId : null,
+          kdsDeviceId: deviceType === "kds" ? deviceId : null,
+          name: deviceName,
+          status: "enrolled",
+          deviceTokenHash,
+          enrolledAt: new Date(),
+          lastAccessAt: new Date(),
+          osInfo: hostname || null,
+          ipAddress: ipAddress || null,
+          macAddress: macAddress || null,
+        });
+      }
+
+      // Build the POS URL for auto-launch after wizard completes
+      const cloudHost = req.get("host") || "localhost:5000";
+      const protocol = req.secure ? "https" : "http";
+      const posUrl = deviceType === "kds" 
+        ? `${protocol}://${cloudHost}/kds`
+        : `${protocol}://${cloudHost}/pos`;
+
       // Return device configuration for the wizard to use
       res.json({
         success: true,
@@ -14102,6 +14248,13 @@ connect();
           configDownloadUrl: `/api/cal-setup/config/${deviceId}`,
           serviceHostDownloadUrl: `/downloads/service-host`,
           rootDir: process.platform === "win32" ? "C:\\OPS-POS" : "~/ops-pos",
+        },
+        security: {
+          deviceToken,  // Browser stores this securely
+          registeredDeviceId: registeredDevice?.id,
+        },
+        launch: {
+          posUrl,  // URL to launch after setup
         },
         network: {
           hostname,

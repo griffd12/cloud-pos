@@ -8,6 +8,8 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
 import { usePosWebSocket, subscribeToKdsTestTicket } from "@/hooks/use-pos-websocket";
+import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
+import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ArrowLeft, Settings, Wifi, WifiOff, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { Link, Redirect, useLocation } from "wouter";
@@ -65,6 +67,9 @@ export default function KdsPage() {
 
   // Real-time sync for menu updates, employee changes, etc.
   usePosWebSocket();
+  
+  // Send periodic device heartbeats to maintain online status
+  useDeviceHeartbeat(true);
 
   // Check if this is a dedicated KDS device
   const isDedicatedKds = deviceType === "kds" && isConfigured;
@@ -375,6 +380,7 @@ export default function KdsPage() {
   }
 
   return (
+    <DeviceEnrollmentGuard requiredDeviceType="kds_display">
     <div className="h-screen flex flex-col">
       <ConnectionModeBanner />
       <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
@@ -450,5 +456,6 @@ export default function KdsPage() {
         propertyId={propertyId}
       />
     </div>
+    </DeviceEnrollmentGuard>
   );
 }

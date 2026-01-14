@@ -524,6 +524,7 @@
     let selectedProperty = null;
     let selectedDevice = null;
     let selectedDeviceType = null;
+    let launchUrl = null;  // URL to launch POS/KDS after setup
     
     // DOM Elements
     const steps = document.querySelectorAll('.step');
@@ -571,7 +572,7 @@
           btnNext.disabled = true;
           break;
         case 6:
-          btnNext.textContent = 'Restart Device';
+          btnNext.textContent = 'Launch POS';
           btnNext.disabled = false;
           break;
       }
@@ -632,8 +633,8 @@
           }
           break;
         case 6:
-          // Restart device or close wizard
-          window.close();
+          // Launch POS/KDS application
+          launchPOS();
           break;
       }
     }
@@ -915,9 +916,21 @@
         setProgress(90);
         log('Service Host started', 'success');
         
-        // Step 6: Final verification
-        log('Verifying installation...', 'info');
+        // Step 6: Store device token for security binding
+        log('Securing device registration...', 'info');
         await new Promise(r => setTimeout(r, 500));
+        
+        // Store device token in localStorage for future API calls
+        if (registration.security && registration.security.deviceToken) {
+          localStorage.setItem('ops_device_token', registration.security.deviceToken);
+          localStorage.setItem('ops_device_id', registration.security.registeredDeviceId || '');
+          localStorage.setItem('ops_device_name', registration.device.name);
+          localStorage.setItem('ops_device_type', registration.device.type);
+          localStorage.setItem('ops_property_id', registration.property.id);
+          localStorage.setItem('ops_cloud_url', cloudUrl);
+          log('Device security token stored', 'success');
+        }
+        
         setProgress(100);
         log('Installation complete!', 'success');
         
@@ -934,6 +947,14 @@
     
     function showComplete(registration) {
       showStep(6);
+      
+      // Store the launch URL for the "Launch POS" button
+      if (registration.launch && registration.launch.posUrl) {
+        launchUrl = registration.launch.posUrl;
+      }
+      
+      // Update button text based on device type
+      btnNext.textContent = registration.device.type === 'kds' ? 'Launch KDS' : 'Launch POS';
       
       const summary = document.getElementById('device-summary');
       summary.innerHTML = `
@@ -963,7 +984,20 @@
           <span class="label">Registered At</span>
           <span class="value">${new Date(registration.registeredAt).toLocaleString()}</span>
         </div>
+        <div class="row" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+          <span class="label">Security Status</span>
+          <span class="value" style="color: #10b981;">Device Bound</span>
+        </div>
       `;
+    }
+    
+    function launchPOS() {
+      if (launchUrl) {
+        // Navigate to POS/KDS - the device token is already in localStorage
+        window.location.href = launchUrl;
+      } else {
+        alert('Unable to launch POS. Please try reloading this page.');
+      }
     }
   </script>
 </body>

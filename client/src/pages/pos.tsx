@@ -3,7 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { useWorkstationHeartbeat } from "@/hooks/use-workstation-heartbeat";
+import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
 import { useCalUpdates } from "@/hooks/use-cal-updates";
+import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import { CalUpdateOverlay } from "@/components/cal-update-overlay";
 import { Button } from "@/components/ui/button";
@@ -82,6 +84,9 @@ export default function PosPage() {
   
   // Enable real-time updates via WebSocket for menu changes, gift cards, etc.
   usePosWebSocket();
+  
+  // Send periodic device heartbeats to maintain online status
+  useDeviceHeartbeat(true);
   
   const {
     currentEmployee,
@@ -1160,6 +1165,7 @@ export default function PosPage() {
   }
 
   return (
+    <DeviceEnrollmentGuard requiredDeviceType="pos_workstation">
     <div className="h-screen flex flex-col bg-background">
       {/* CAL Update Overlay - blocks POS during system updates */}
       <CalUpdateOverlay 
@@ -2143,5 +2149,6 @@ export default function PosPage() {
         }}
       />
     </div>
+    </DeviceEnrollmentGuard>
   );
 }

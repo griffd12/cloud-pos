@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, getAuthHeaders } from "@/lib/queryClient";
+import { getDeviceToken } from "@/hooks/use-device-enrollment";
 
 interface PosEvent {
   type: string;
@@ -56,7 +57,13 @@ export function usePosWebSocket() {
             ws.close();
             return;
           }
-          ws.send(JSON.stringify({ type: "subscribe", channel: "all" }));
+          // Include device token for authentication
+          const deviceToken = getDeviceToken();
+          ws.send(JSON.stringify({ 
+            type: "subscribe", 
+            channel: "all",
+            deviceToken 
+          }));
         };
 
         ws.onmessage = (event) => {

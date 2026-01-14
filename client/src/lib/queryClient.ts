@@ -1,7 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const EMC_SESSION_KEY = "emc_session_token";
-const DEVICE_TOKEN_KEY = "pos_device_token";
+const DEVICE_TOKEN_KEY = "ops_device_token";  // Device token from CAL Setup Wizard
 
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};

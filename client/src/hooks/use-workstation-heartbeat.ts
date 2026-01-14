@@ -32,16 +32,13 @@ export function useWorkstationHeartbeat({
       });
       
       // Also send registered device heartbeat to update lastAccessAt for connectivity tracking
-      const deviceToken = localStorage.getItem("pos_device_token");
-      if (deviceToken) {
-        await fetch("/api/registered-devices/heartbeat", {
-          method: "POST",
-          headers: {
-            ...getAuthHeaders(),
-            "X-Device-Token": deviceToken,
-          },
-        }).catch(() => {}); // Silently ignore errors
-      }
+      // Note: getAuthHeaders() already includes X-Device-Token from ops_device_token localStorage
+      await fetch("/api/registered-devices/heartbeat", {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      }).catch(() => {}); // Silently ignore errors
     } catch (error) {
       console.warn("Heartbeat failed:", error);
     }
