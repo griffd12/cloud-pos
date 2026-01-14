@@ -921,13 +921,24 @@
         await new Promise(r => setTimeout(r, 500));
         
         // Store device token in localStorage for future API calls
+        // Use the SAME keys that DeviceContext expects (pos_* prefix)
         if (registration.security && registration.security.deviceToken) {
+          // Primary keys used by DeviceContext (device-context.tsx)
+          localStorage.setItem('pos_device_token', registration.security.deviceToken);
+          localStorage.setItem('pos_registered_device_id', registration.security.registeredDeviceId || '');
+          localStorage.setItem('pos_device_name', registration.device.name);
+          localStorage.setItem('pos_device_type', registration.device.type === 'kds' ? 'kds' : 'pos');
+          localStorage.setItem('pos_device_linked_id', registration.device.id);
+          localStorage.setItem('pos_device_property_id', registration.property.id);
+          
+          // Also store with ops_* prefix for use-device-enrollment.ts compatibility
           localStorage.setItem('ops_device_token', registration.security.deviceToken);
           localStorage.setItem('ops_device_id', registration.security.registeredDeviceId || '');
           localStorage.setItem('ops_device_name', registration.device.name);
           localStorage.setItem('ops_device_type', registration.device.type);
           localStorage.setItem('ops_property_id', registration.property.id);
           localStorage.setItem('ops_cloud_url', cloudUrl);
+          
           log('Device security token stored', 'success');
         }
         
