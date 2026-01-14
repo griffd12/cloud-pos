@@ -83,23 +83,25 @@ Preferred communication style: Simple, everyday language.
   - **Package Structure**: manifest.json + install scripts + optional files directory
   - **Deployment Flow**: Upload .tar.gz → Create version in EMC → Create deployment → Service Host downloads → Extracts → Runs install script → Reports status
   - **First Package**: "OPS-POS Base Setup" (v1.0.0) creates the C:\OPS-POS\ directory structure with ServiceHost, Packages, PrintAgent, Config, and Logs subdirectories
-  - **CAL Setup Wizard** (Recommended): A graphical wizard application following the Oracle Simphony CAL model for device initialization. Located at `cal-setup-wizard/index.html`:
-    1. Technician runs the wizard on the new device
+  - **CAL Setup Wizard** (Electron Desktop App): A desktop application following the Oracle Simphony CAL model for complete device initialization. Located at `cal-setup-wizard-electron/`:
+    1. Technician downloads and runs the wizard installer on the new device
     2. Enters the cloud URL for the customer's environment
     3. Logs in with EMC credentials
     4. Selects the property from available options
     5. Selects which workstation/KDS this device will be
-    6. Automatic download and installation of Service Host, CAL client, and configuration
+    6. **Full Installation**: Creates directory structure, downloads Service Host, saves configuration, starts services, and registers device with secure token binding
+    - **Build Commands**: `npm run build:win` (Windows), `npm run build:mac` (macOS), `npm run build:linux` (Linux)
+    - **Output**: Portable executable and installer in `cal-setup-wizard-electron/dist/`
+    - **Directory Structure Created**: `C:\OPS-POS\` with ServiceHost, Packages, PrintAgent, Config, Logs subdirectories
     - **API Endpoints**: `/api/cal-setup/authenticate`, `/api/cal-setup/properties`, `/api/cal-setup/devices/:propertyId`, `/api/cal-setup/register-device`, `/api/cal-setup/config/:deviceId`
     - **Session**: Wizard sessions expire after 4 hours
-    - Can run in browser (limited) or as Electron app (full file system access)
   - **Bootstrap Installation** (Alternative): Standalone Bootstrap Installer scripts (bootstrap-install.ps1 for Windows, bootstrap-install.sh for Linux) for command-line or automated deployments that:
     1. Creates C:\OPS-POS\ directory structure
     2. Downloads and installs Service Host executable
     3. Registers the device with the cloud
     4. Configures the CAL client for future updates
     After initial setup via wizard or bootstrap, all subsequent updates come via CAL packages automatically.
-  - **Files**: `service-host/src/sync/cal-sync.ts`, `client/src/components/cal-update-overlay.tsx`, `client/src/hooks/use-cal-updates.ts`, `cal-packages/`, `bootstrap/`, `cal-setup-wizard/`
+  - **Files**: `service-host/src/sync/cal-sync.ts`, `client/src/components/cal-update-overlay.tsx`, `client/src/hooks/use-cal-updates.ts`, `cal-packages/`, `bootstrap/`, `cal-setup-wizard-electron/`
 - **Device Binding Security**: Prevents unauthorized browser access to POS/KDS functionality. Features:
   - **Device Token Generation**: CAL Setup Wizard generates SHA-256 hashed device tokens during registration
   - **Token Storage**: Tokens stored in browser localStorage (ops_device_token, ops_device_id, ops_device_type, ops_device_name)
