@@ -926,7 +926,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         const data = JSON.parse(message.toString());
         
-        // Legacy KDS subscription
+        // General "all" channel subscription for POS/KDS events
+        if (data.type === "subscribe" && data.channel === "all") {
+          subscribedChannels.push("all");
+          if (!clients.has("all")) {
+            clients.set("all", new Set());
+          }
+          clients.get("all")!.add(ws);
+        }
+        
+        // Legacy KDS subscription (specific RVC channel)
         if (data.type === "subscribe" && data.channel === "kds") {
           const channel = data.rvcId || "all";
           subscribedChannels.push(channel);
