@@ -92,6 +92,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  initLogFile(DEFAULT_ROOT_DIR);
   createWindow();
 
   app.on('activate', () => {

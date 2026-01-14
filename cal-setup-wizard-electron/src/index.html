@@ -513,6 +513,7 @@
         errorEl.textContent = message;
         errorEl.style.display = 'block';
       }
+      window.electronAPI.writeLog('ERROR', `Step ${step} error: ${message}`);
     }
     
     function hideError(step) {
@@ -528,6 +529,9 @@
       entry.textContent = `[${time}] ${message}`;
       logEl.appendChild(entry);
       logEl.scrollTop = logEl.scrollHeight;
+      
+      const level = type === 'error' ? 'ERROR' : type === 'warning' ? 'WARN' : type === 'success' ? 'INFO' : 'INFO';
+      window.electronAPI.writeLog(level, message);
     }
     
     function updateProgress(percent, status) {
