@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useDeviceContext } from "@/lib/device-context";
@@ -19,6 +19,40 @@ interface ClaimResponse {
   propertyId: string;
 }
 
+interface UrlCredentials {
+  deviceToken: string;
+  deviceId: string;
+  registeredDeviceId: string;
+  deviceName: string;
+  deviceType: string;
+  propertyId: string;
+  autoEnroll: boolean;
+}
+
+function extractUrlCredentials(): UrlCredentials | null {
+  const params = new URLSearchParams(window.location.search);
+  const deviceToken = params.get("device_token");
+  const deviceId = params.get("device_id");
+  const registeredDeviceId = params.get("registered_device_id");
+  const deviceName = params.get("device_name");
+  const deviceType = params.get("device_type");
+  const propertyId = params.get("property_id");
+  const autoEnroll = params.get("auto_enroll") === "true";
+  
+  if (deviceToken && deviceId && deviceName && deviceType && propertyId) {
+    return {
+      deviceToken,
+      deviceId,
+      registeredDeviceId: registeredDeviceId || "",
+      deviceName,
+      deviceType,
+      propertyId,
+      autoEnroll
+    };
+  }
+  return null;
+}
+
 function getDeviceInfo() {
   return {
     osInfo: navigator.platform || "Unknown",
@@ -35,6 +69,36 @@ export default function DeviceSetupPage() {
   const [enrollmentCode, setEnrollmentCode] = useState("");
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
   const [claimSuccess, setClaimSuccess] = useState<ClaimResponse | null>(null);
+  const [autoEnrolling, setAutoEnrolling] = useState(false);
+
+  useEffect(() => {
+    const urlCreds = extractUrlCredentials();
+    if (urlCreds && urlCreds.autoEnroll) {
+      console.log("[DeviceSetup] Auto-enrolling from URL params", {
+        deviceName: urlCreds.deviceName,
+        deviceType: urlCreds.deviceType
+      });
+      setAutoEnrolling(true);
+      
+      window.history.replaceState({}, document.title, "/setup");
+      
+      enrollDevice(urlCreds.deviceToken, {
+        id: urlCreds.registeredDeviceId,
+        name: urlCreds.deviceName,
+        deviceType: urlCreds.deviceType,
+        propertyId: urlCreds.propertyId,
+        workstationId: urlCreds.deviceType === "pos_workstation" ? urlCreds.deviceId : null,
+        kdsDeviceId: urlCreds.deviceType === "kds_display" ? urlCreds.deviceId : null,
+        status: "enrolled",
+      });
+      
+      setTimeout(() => {
+        const targetPath = urlCreds.deviceType === "kds_display" ? "/kds" : "/pos";
+        console.log("[DeviceSetup] Navigating to", targetPath);
+        navigate(targetPath);
+      }, 500);
+    }
+  }, [enrollDevice, navigate]);
 
   const claimMutation = useMutation({
     mutationFn: async (code: string) => {
@@ -88,6 +152,20 @@ export default function DeviceSetupPage() {
       }
     }
   };
+
+  if (autoEnrolling) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary mb-4" />
+            <p className="text-lg font-medium mb-2">Setting up device...</p>
+            <p className="text-muted-foreground">Please wait while we complete the enrollment</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (claimSuccess) {
     const isKds = claimSuccess.deviceType === "kds_display";

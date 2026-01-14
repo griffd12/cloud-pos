@@ -1,6 +1,6 @@
 {
   "name": "ops-pos-cal-setup-wizard",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "OPS-POS CAL Setup Wizard - Device provisioning and Service Host installation",
   "main": "src/main.js",
   "scripts": {

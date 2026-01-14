@@ -331,6 +331,7 @@
     <div class="header">
       <h1>OPS-POS CAL Setup Wizard</h1>
       <p>Device Configuration and Installation</p>
+      <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Version 1.0.2</p>
     </div>
     
     <div class="progress-bar">
@@ -816,26 +817,26 @@
     }
     
     async function launchPos() {
-      const basePath = registrationData.device.type === 'kds' ? '/kds' : '/pos';
       const params = new URLSearchParams({
         device_token: registrationData.security.deviceToken,
         device_id: registrationData.device.id,
         registered_device_id: registrationData.security.registeredDeviceId,
         device_name: registrationData.device.name,
         device_type: registrationData.device.type === 'kds' ? 'kds_display' : 'pos_workstation',
-        property_id: registrationData.property.id
+        property_id: registrationData.property.id,
+        auto_enroll: 'true'
       });
-      const posUrl = `${cloudUrl}${basePath}?${params.toString()}`;
+      const setupUrl = `${cloudUrl}/setup?${params.toString()}`;
       
-      await window.electronAPI.writeLog('INFO', 'Launching POS with credentials', {
-        posUrl: posUrl.replace(registrationData.security.deviceToken, '[REDACTED]'),
+      await window.electronAPI.writeLog('INFO', 'Launching setup with credentials', {
+        setupUrl: setupUrl.replace(registrationData.security.deviceToken, '[REDACTED]'),
         deviceId: registrationData.device.id,
         registeredDeviceId: registrationData.security.registeredDeviceId,
         deviceName: registrationData.device.name,
         deviceType: registrationData.device.type
       });
       
-      await window.electronAPI.openPos(posUrl);
+      await window.electronAPI.openPos(setupUrl);
     }
     
     document.getElementById('btn-connect').onclick = connectToCloud;
