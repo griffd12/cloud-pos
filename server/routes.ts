@@ -13754,6 +13754,411 @@ connect();
   });
 
   // ============================================================================
+  // CAL SETUP WIZARD - API endpoints for device initialization wizard
+  // Used by the standalone Setup Wizard application on new workstations/KDS
+  // ============================================================================
+
+  // CAL Setup: Authenticate with EMC credentials
+  // Returns session token and user info for subsequent wizard steps
+  app.post("/api/cal-setup/authenticate", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      const user = await storage.getEmcUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      if (!user.active) {
+        return res.status(401).json({ message: "Account is disabled" });
+      }
+
+      const passwordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordValid) {
+        await storage.updateEmcUser(user.id, {
+          failedLoginAttempts: (user.failedLoginAttempts || 0) + 1,
+          lastFailedLogin: new Date(),
+        });
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // Reset failed attempts on success
+      await storage.updateEmcUser(user.id, {
+        failedLoginAttempts: 0,
+        lastLoginAt: new Date(),
+      });
+
+      // Create session token for wizard
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000); // 4 hours for wizard
+
+      await storage.createEmcSession({
+        userId: user.id,
+        sessionToken: sessionTokenHash,
+        expiresAt,
+        ipAddress: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+
+      res.json({
+        sessionToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          accessLevel: user.accessLevel,
+          enterpriseId: user.enterpriseId,
+          propertyId: user.propertyId,
+        },
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("CAL Setup authenticate error:", error);
+      res.status(500).json({ message: "Authentication failed" });
+    }
+  });
+
+  // CAL Setup: Get list of properties user has access to
+  app.get("/api/cal-setup/properties", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "No session token provided" });
+      }
+
+      const sessionToken = authHeader.slice(7);
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const user = await storage.getEmcUser(session.userId);
+      if (!user || !user.active) {
+        return res.status(401).json({ message: "User account is disabled" });
+      }
+
+      // Get properties based on user access level
+      let properties: any[] = [];
+      
+      if (user.accessLevel === "super_admin" || user.accessLevel === "enterprise_admin") {
+        // Get all properties for the enterprise
+        if (user.enterpriseId) {
+          properties = await storage.getProperties(user.enterpriseId);
+        } else {
+          // Super admin - get all properties
+          const enterprises = await storage.getEnterprises();
+          for (const enterprise of enterprises) {
+            const enterpriseProperties = await storage.getProperties(enterprise.id);
+            properties.push(...enterpriseProperties);
+          }
+        }
+      } else if (user.accessLevel === "property_admin" || user.accessLevel === "property_user") {
+        // Only their assigned property
+        if (user.propertyId) {
+          const property = await storage.getProperty(user.propertyId);
+          if (property) {
+            properties = [property];
+          }
+        }
+      }
+
+      res.json({
+        properties: properties.map(p => ({
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          enterpriseId: p.enterpriseId,
+          timezone: p.timezone,
+          address: p.address,
+          active: p.active,
+        })),
+      });
+    } catch (error) {
+      console.error("CAL Setup get properties error:", error);
+      res.status(500).json({ message: "Failed to get properties" });
+    }
+  });
+
+  // CAL Setup: Get list of devices (workstations/KDS) for a property
+  app.get("/api/cal-setup/devices/:propertyId", async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "No session token provided" });
+      }
+
+      const sessionToken = authHeader.slice(7);
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const user = await storage.getEmcUser(session.userId);
+      if (!user || !user.active) {
+        return res.status(401).json({ message: "User account is disabled" });
+      }
+
+      // Verify user has access to this property
+      if (user.accessLevel !== "super_admin" && user.accessLevel !== "enterprise_admin") {
+        if (user.propertyId !== propertyId) {
+          return res.status(403).json({ message: "Access denied to this property" });
+        }
+      }
+
+      // Get workstations and KDS devices for this property
+      const allWorkstations = await storage.getWorkstations();
+      const workstations = allWorkstations.filter(w => w.propertyId === propertyId);
+      
+      const allKdsDevices = await storage.getKdsDevices();
+      const kdsDevices = allKdsDevices.filter(k => k.propertyId === propertyId);
+
+      // Get service hosts for this property
+      const allServiceHosts = await storage.getServiceHosts();
+      const serviceHosts = allServiceHosts.filter(sh => sh.propertyId === propertyId);
+
+      res.json({
+        workstations: workstations.map(w => ({
+          id: w.id,
+          name: w.name,
+          number: w.number,
+          rvcId: w.rvcId,
+          deviceType: "workstation",
+          active: w.active,
+          serviceHostId: w.serviceHostId,
+          serviceHostUrl: w.serviceHostUrl,
+        })),
+        kdsDevices: kdsDevices.map(k => ({
+          id: k.id,
+          name: k.name,
+          stationType: k.stationType,
+          deviceType: "kds",
+          active: k.active,
+        })),
+        serviceHosts: serviceHosts.map(sh => ({
+          id: sh.id,
+          name: sh.name,
+          hostType: sh.hostType,
+          status: sh.status,
+          lastSeen: sh.lastSeen,
+        })),
+      });
+    } catch (error) {
+      console.error("CAL Setup get devices error:", error);
+      res.status(500).json({ message: "Failed to get devices" });
+    }
+  });
+
+  // CAL Setup: Register this device and get installation package
+  app.post("/api/cal-setup/register-device", async (req, res) => {
+    try {
+      const { 
+        propertyId, 
+        deviceId, 
+        deviceType, 
+        hostname, 
+        ipAddress, 
+        macAddress,
+        useStaticIp 
+      } = req.body;
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "No session token provided" });
+      }
+
+      const sessionToken = authHeader.slice(7);
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const user = await storage.getEmcUser(session.userId);
+      if (!user || !user.active) {
+        return res.status(401).json({ message: "User account is disabled" });
+      }
+
+      if (!propertyId || !deviceId || !deviceType) {
+        return res.status(400).json({ message: "Property ID, device ID, and device type are required" });
+      }
+
+      // Get property info
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+
+      // Get or create service host token for this device
+      const serviceHostToken = crypto.randomBytes(32).toString("hex");
+      const serviceHostTokenHash = crypto.createHash("sha256").update(serviceHostToken).digest("hex");
+
+      let deviceName = "";
+      let rvcId = null;
+      let serviceHostId = null;
+
+      if (deviceType === "workstation") {
+        const workstation = await storage.getWorkstation(deviceId);
+        if (!workstation) {
+          return res.status(404).json({ message: "Workstation not found" });
+        }
+        deviceName = workstation.name;
+        rvcId = workstation.rvcId;
+        serviceHostId = workstation.serviceHostId;
+        
+        // Update workstation with network info
+        await storage.updateWorkstation(deviceId, {
+          serviceHostUrl: ipAddress ? `http://${ipAddress}:3001` : null,
+        });
+      } else if (deviceType === "kds") {
+        const kdsDevice = await storage.getKdsDevice(deviceId);
+        if (!kdsDevice) {
+          return res.status(404).json({ message: "KDS device not found" });
+        }
+        deviceName = kdsDevice.name;
+      }
+
+      // Get RVC info if assigned
+      let rvcInfo = null;
+      if (rvcId) {
+        const rvc = await storage.getRvc(rvcId);
+        if (rvc) {
+          rvcInfo = { id: rvc.id, name: rvc.name, number: rvc.number };
+        }
+      }
+
+      // Get Service Host info if assigned
+      let serviceHostInfo = null;
+      if (serviceHostId) {
+        const sh = await storage.getServiceHost(serviceHostId);
+        if (sh) {
+          serviceHostInfo = { 
+            id: sh.id, 
+            name: sh.name,
+            token: sh.token,
+          };
+        }
+      }
+
+      // Return device configuration for the wizard to use
+      res.json({
+        success: true,
+        device: {
+          id: deviceId,
+          name: deviceName,
+          type: deviceType,
+          propertyId,
+          rvcId,
+        },
+        property: {
+          id: property.id,
+          name: property.name,
+          code: property.code,
+          timezone: property.timezone,
+        },
+        rvc: rvcInfo,
+        serviceHost: serviceHostInfo,
+        installation: {
+          serviceHostToken,
+          configDownloadUrl: `/api/cal-setup/config/${deviceId}`,
+          serviceHostDownloadUrl: `/downloads/service-host`,
+          rootDir: process.platform === "win32" ? "C:\\OPS-POS" : "~/ops-pos",
+        },
+        network: {
+          hostname,
+          ipAddress,
+          macAddress,
+          useStaticIp,
+        },
+        registeredAt: new Date().toISOString(),
+        registeredBy: `${user.firstName} ${user.lastName}`,
+      });
+    } catch (error) {
+      console.error("CAL Setup register device error:", error);
+      res.status(500).json({ message: "Failed to register device" });
+    }
+  });
+
+  // CAL Setup: Download initial configuration for a device
+  app.get("/api/cal-setup/config/:deviceId", async (req, res) => {
+    try {
+      const { deviceId } = req.params;
+      const deviceType = req.query.type as string || "workstation";
+      
+      let device: any = null;
+      let property: any = null;
+      let rvc: any = null;
+      let serviceHost: any = null;
+
+      if (deviceType === "workstation") {
+        device = await storage.getWorkstation(deviceId);
+        if (device) {
+          property = await storage.getProperty(device.propertyId);
+          if (device.rvcId) {
+            rvc = await storage.getRvc(device.rvcId);
+          }
+          if (device.serviceHostId) {
+            serviceHost = await storage.getServiceHost(device.serviceHostId);
+          }
+        }
+      } else if (deviceType === "kds") {
+        device = await storage.getKdsDevice(deviceId);
+        if (device) {
+          property = await storage.getProperty(device.propertyId);
+        }
+      }
+
+      if (!device) {
+        return res.status(404).json({ message: "Device not found" });
+      }
+
+      // Build configuration object
+      const config = {
+        device: {
+          id: device.id,
+          name: device.name,
+          type: deviceType,
+          number: device.number,
+        },
+        property: property ? {
+          id: property.id,
+          name: property.name,
+          code: property.code,
+          enterpriseId: property.enterpriseId,
+          timezone: property.timezone,
+        } : null,
+        rvc: rvc ? {
+          id: rvc.id,
+          name: rvc.name,
+          number: rvc.number,
+        } : null,
+        serviceHost: serviceHost ? {
+          id: serviceHost.id,
+          name: serviceHost.name,
+          token: serviceHost.token,
+          lanUrl: serviceHost.lanUrl,
+        } : null,
+        cloudUrl: `https://${req.get("host")}`,
+        generatedAt: new Date().toISOString(),
+      };
+
+      res.json(config);
+    } catch (error) {
+      console.error("CAL Setup get config error:", error);
+      res.status(500).json({ message: "Failed to get configuration" });
+    }
+  });
+
+  // ============================================================================
   // STRIPE MANUAL CARD ENTRY - PaymentIntent API for secure card processing
   // ============================================================================
 
