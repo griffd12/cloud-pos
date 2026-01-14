@@ -12,6 +12,7 @@ function checkAndStoreUrlCredentials(): boolean {
   const params = new URLSearchParams(window.location.search);
   const deviceToken = params.get("device_token");
   const deviceId = params.get("device_id");
+  const registeredDeviceId = params.get("registered_device_id");
   const deviceName = params.get("device_name");
   const deviceType = params.get("device_type");
   const propertyId = params.get("property_id");
@@ -19,6 +20,7 @@ function checkAndStoreUrlCredentials(): boolean {
   console.log("[DeviceEnrollment] Checking URL params:", { 
     hasToken: !!deviceToken, 
     hasDeviceId: !!deviceId, 
+    hasRegisteredDeviceId: !!registeredDeviceId,
     hasDeviceName: !!deviceName,
     hasDeviceType: !!deviceType,
     hasPropertyId: !!propertyId,
@@ -32,6 +34,9 @@ function checkAndStoreUrlCredentials(): boolean {
     localStorage.setItem(DEVICE_NAME_KEY, deviceName);
     localStorage.setItem(DEVICE_TYPE_KEY, deviceType);
     localStorage.setItem(PROPERTY_ID_KEY, propertyId);
+    if (registeredDeviceId) {
+      localStorage.setItem(REGISTERED_DEVICE_ID_KEY, registeredDeviceId);
+    }
     localStorage.setItem(CLOUD_URL_KEY, window.location.origin);
     
     const cleanUrl = window.location.pathname;
