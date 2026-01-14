@@ -116,6 +116,34 @@ export default function KdsPage() {
     return unsubscribe;
   }, [toast, propertyId]);
 
+  // Device heartbeat for KDS - updates lastAccessAt for connectivity tracking
+  useEffect(() => {
+    const deviceToken = localStorage.getItem("pos_device_token");
+    if (!deviceToken || !isDedicatedKds) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        await fetch("/api/registered-devices/heartbeat", {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "X-Device-Token": deviceToken,
+          },
+        });
+      } catch (error) {
+        // Silently ignore heartbeat errors
+      }
+    };
+
+    // Send initial heartbeat
+    sendHeartbeat();
+
+    // Send heartbeat every 30 seconds
+    const interval = setInterval(sendHeartbeat, 30000);
+
+    return () => clearInterval(interval);
+  }, [isDedicatedKds]);
+
   const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
     queryKey: ["/api/kds-devices/active", propertyId],
     enabled: !!propertyId,

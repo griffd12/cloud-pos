@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { apiClient, useConnectionMode } from "@/lib/api-client";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 
 interface HeartbeatConfig {
   workstationId: string | null;
@@ -22,6 +22,7 @@ export function useWorkstationHeartbeat({
     if (!workstationId) return;
 
     try {
+      // Send workstation heartbeat
       await apiRequest("POST", "/api/system-status/workstation/heartbeat", {
         workstationId,
         employeeId,
@@ -29,6 +30,18 @@ export function useWorkstationHeartbeat({
         pendingSyncCount: 0,
         checkCount: 0,
       });
+      
+      // Also send registered device heartbeat to update lastAccessAt for connectivity tracking
+      const deviceToken = localStorage.getItem("pos_device_token");
+      if (deviceToken) {
+        await fetch("/api/registered-devices/heartbeat", {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "X-Device-Token": deviceToken,
+          },
+        }).catch(() => {}); // Silently ignore errors
+      }
     } catch (error) {
       console.warn("Heartbeat failed:", error);
     }

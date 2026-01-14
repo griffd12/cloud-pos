@@ -4850,7 +4850,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Update device lastAccessAt for connectivity tracking when device polls
     const deviceToken = req.headers["x-device-token"] as string;
     if (deviceToken) {
-      const device = await storage.getRegisteredDeviceByToken(deviceToken);
+      // Hash the token to match stored hash
+      const crypto = await import("crypto");
+      const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
       if (device) {
         await storage.updateRegisteredDevice(device.id, { lastAccessAt: new Date() });
       }
@@ -12528,6 +12531,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Get connectivity status error:", error);
       res.status(500).json({ error: "Failed to get connectivity status" });
+    }
+  });
+
+  // Device heartbeat - called periodically by POS/KDS to keep connectivity status updated
+  app.post("/api/registered-devices/heartbeat", async (req, res) => {
+    try {
+      const deviceToken = req.headers["x-device-token"] as string;
+      if (!deviceToken) {
+        return res.status(400).json({ message: "Device token required" });
+      }
+      
+      // Hash the token to find the device
+      const crypto = await import("crypto");
+      const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
+      
+      if (!device) {
+        return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      // Update last access time
+      await storage.updateRegisteredDevice(device.id, {
+        lastAccessAt: new Date(),
+      });
+      
+      res.json({ success: true, timestamp: new Date().toISOString() });
+    } catch (error) {
+      console.error("Device heartbeat error:", error);
+      res.status(500).json({ message: "Failed to process heartbeat" });
     }
   });
 
