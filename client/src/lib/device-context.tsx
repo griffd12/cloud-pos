@@ -71,6 +71,48 @@ function getStoredPropertyId(): string | null {
   return localStorage.getItem(DEVICE_PROPERTY_ID_KEY);
 }
 
+function processUrlCredentials(): boolean {
+  if (typeof window === 'undefined') return false;
+  
+  const params = new URLSearchParams(window.location.search);
+  const deviceToken = params.get("device_token");
+  const deviceId = params.get("device_id");
+  const deviceName = params.get("device_name");
+  const deviceType = params.get("device_type");
+  const propertyId = params.get("property_id");
+  
+  console.log("[DeviceContext] Checking URL params:", { 
+    hasToken: !!deviceToken, 
+    hasDeviceId: !!deviceId,
+    path: window.location.pathname
+  });
+  
+  if (deviceToken && deviceId && deviceName && deviceType && propertyId) {
+    console.log("[DeviceContext] Storing CAL credentials from URL");
+    
+    localStorage.setItem(DEVICE_TOKEN_KEY, deviceToken);
+    localStorage.setItem(REGISTERED_DEVICE_ID_KEY, deviceId);
+    localStorage.setItem(DEVICE_NAME_KEY, deviceName);
+    localStorage.setItem(DEVICE_PROPERTY_ID_KEY, propertyId);
+    
+    if (deviceType === "pos_workstation") {
+      localStorage.setItem(DEVICE_TYPE_KEY, "pos");
+      localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    } else if (deviceType === "kds_display") {
+      localStorage.setItem(DEVICE_TYPE_KEY, "kds");
+      localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    }
+    
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+    console.log("[DeviceContext] Credentials stored, redirecting to:", cleanUrl);
+    return true;
+  }
+  return false;
+}
+
+const urlCredsProcessed = processUrlCredentials();
+
 export function DeviceProvider({ children }: { children: ReactNode }) {
   const [deviceType, setDeviceType] = useState<DeviceType>(getStoredDeviceType);
   const [linkedDeviceId, setLinkedDeviceId] = useState<string | null>(getStoredDeviceId);
