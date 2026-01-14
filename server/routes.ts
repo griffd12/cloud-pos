@@ -1401,6 +1401,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
   
+  // DEV ONLY: Generate claim code for testing (simulates wizard registration)
+  app.post("/api/dev/generate-claim-code", async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ message: "Not available in production" });
+    }
+    
+    try {
+      const { deviceName } = req.body;
+      
+      // Find the device by name
+      const allDevices = await storage.getRegisteredDevices();
+      const device = allDevices.find(d => d.name === deviceName);
+      
+      if (!device) {
+        return res.status(404).json({ 
+          message: "Device not found",
+          availableDevices: allDevices.map(d => d.name)
+        });
+      }
+      
+      // Generate token and claim code
+      const deviceToken = crypto.randomUUID() + "-" + crypto.randomBytes(16).toString("hex");
+      const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const claimCode = String(Math.floor(100000 + Math.random() * 900000));
+      const claimCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      
+      // Update device with new credentials
+      await storage.updateRegisteredDevice(device.id, {
+        status: "pending",
+        deviceTokenHash,
+        deviceToken,
+        enrollmentCode: claimCode,
+        enrollmentCodeExpiresAt: claimCodeExpiresAt,
+      });
+      
+      console.log(`[DEV] Generated claim code ${claimCode} for ${deviceName}`);
+      
+      res.json({
+        success: true,
+        claimCode,
+        deviceName: device.name,
+        expiresAt: claimCodeExpiresAt.toISOString(),
+        message: `Enter code ${claimCode} at /pos to enroll this device`
+      });
+    } catch (error) {
+      console.error("Dev generate claim code error:", error);
+      res.status(500).json({ message: "Failed to generate claim code" });
+    }
+  });
+
   // Get client's IP address for device troubleshooting
   app.get("/api/client-ip", (req, res) => {
     // Extract client IP from request headers or connection
@@ -14186,50 +14236,50 @@ connect();
       // Generate a secure device token
       const deviceToken = crypto.randomUUID() + "-" + crypto.randomBytes(16).toString("hex");
       const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      
+      // Generate a 6-digit claim code for browser credential handoff
+      // This is used when URL parameters get lost (common with Windows browser reuse)
+      const claimCode = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit code
+      const claimCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      console.log(`[CAL Setup] Registering device: ${deviceName}, claimCode: ${claimCode}`);
 
       if (registeredDevice) {
-        // Update existing registration with new token (re-enrollment)
-        await storage.updateRegisteredDevice(registeredDevice.id, {
-          status: "enrolled",
+        // Update existing registration with new token AND claim code in single update
+        const updateResult = await storage.updateRegisteredDevice(registeredDevice.id, {
+          status: "pending", // Will become "enrolled" after claim
           deviceTokenHash,
-          enrollmentCode: null,
-          enrollmentCodeExpiresAt: null,
+          deviceToken, // Store actual token temporarily for claim code retrieval
+          enrollmentCode: claimCode,
+          enrollmentCodeExpiresAt: claimCodeExpiresAt,
           enrolledAt: new Date(),
           lastAccessAt: new Date(),
           osInfo: hostname || null,
           ipAddress: ipAddress || null,
           macAddress: macAddress || null,
         });
+        console.log(`[CAL Setup] Updated existing device, enrollmentCode saved: ${updateResult?.enrollmentCode}`);
       } else {
-        // Create new registered device entry
+        // Create new registered device entry with all fields including claim code
         registeredDevice = await storage.createRegisteredDevice({
           propertyId,
           deviceType: deviceType === "workstation" ? "pos_workstation" : "kds_display",
           workstationId: deviceType === "workstation" ? deviceId : null,
           kdsDeviceId: deviceType === "kds" ? deviceId : null,
           name: deviceName,
-          status: "enrolled",
+          status: "pending", // Will become "enrolled" after claim
           deviceTokenHash,
+          deviceToken, // Store actual token temporarily for claim code retrieval
+          enrollmentCode: claimCode,
+          enrollmentCodeExpiresAt: claimCodeExpiresAt,
           enrolledAt: new Date(),
           lastAccessAt: new Date(),
           osInfo: hostname || null,
           ipAddress: ipAddress || null,
           macAddress: macAddress || null,
         });
+        console.log(`[CAL Setup] Created new device, enrollmentCode saved: ${registeredDevice?.enrollmentCode}`);
       }
-
-      // Generate a 6-digit claim code for browser credential handoff
-      // This is used when URL parameters get lost (common with Windows browser reuse)
-      const claimCode = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit code
-      const claimCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      
-      // Store the claim code and the ACTUAL device token (not hash) for handoff
-      // The claim code allows the browser to retrieve these credentials
-      await storage.updateRegisteredDevice(registeredDevice!.id, {
-        enrollmentCode: claimCode,
-        enrollmentCodeExpiresAt: claimCodeExpiresAt,
-        deviceToken: deviceToken, // Store actual token temporarily for claim code retrieval
-      });
 
       // Build the POS URL for auto-launch after wizard completes
       const cloudHost = req.get("host") || "localhost:5000";
@@ -14316,12 +14366,16 @@ connect();
       const tokenToReturn = device.deviceToken;
       
       // Clear the claim code and temporary token after successful claim
+      // Set status to enrolled and keep the hash for future validation
       await storage.updateRegisteredDevice(device.id, {
+        status: "enrolled",
         enrollmentCode: null,
         enrollmentCodeExpiresAt: null,
         deviceToken: null,  // Clear the plain token, keep only the hash
         lastAccessAt: new Date(),
       });
+      
+      console.log(`[CAL Setup] Device claimed successfully: ${device.name}, hash preserved: ${device.deviceTokenHash?.substring(0, 16)}...`);
       
       // Return the credentials to store in browser localStorage
       res.json({
