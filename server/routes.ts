@@ -13998,19 +13998,22 @@ connect();
         return res.status(404).json({ message: "Property not found" });
       }
 
-      // Get or create service host token for this device
-      const serviceHostToken = crypto.randomBytes(32).toString("hex");
-      const serviceHostTokenHash = crypto.createHash("sha256").update(serviceHostToken).digest("hex");
-
       let deviceName = "";
       let rvcId = null;
       let serviceHostId = null;
+      let existingServiceHostToken = null;
 
       if (deviceType === "workstation") {
         const workstation = await storage.getWorkstation(deviceId);
         if (!workstation) {
           return res.status(404).json({ message: "Workstation not found" });
         }
+        
+        // Validate workstation belongs to the requested property
+        if (workstation.propertyId !== propertyId) {
+          return res.status(400).json({ message: "Device does not belong to the selected property" });
+        }
+        
         deviceName = workstation.name;
         rvcId = workstation.rvcId;
         serviceHostId = workstation.serviceHostId;
@@ -14024,7 +14027,34 @@ connect();
         if (!kdsDevice) {
           return res.status(404).json({ message: "KDS device not found" });
         }
+        
+        // Validate KDS belongs to the requested property
+        if (kdsDevice.propertyId !== propertyId) {
+          return res.status(400).json({ message: "Device does not belong to the selected property" });
+        }
+        
         deviceName = kdsDevice.name;
+      }
+      
+      // Get or create service host token for this device
+      // If a service host is assigned, use its existing token; otherwise generate a new one
+      let serviceHostToken: string;
+      if (serviceHostId) {
+        const existingHost = await storage.getServiceHost(serviceHostId);
+        if (existingHost && existingHost.token) {
+          // Use existing service host token
+          serviceHostToken = existingHost.token;
+          existingServiceHostToken = existingHost.token;
+        } else {
+          // Generate new token and update the service host
+          serviceHostToken = crypto.randomBytes(32).toString("hex");
+          if (existingHost) {
+            await storage.updateServiceHost(serviceHostId, { token: serviceHostToken });
+          }
+        }
+      } else {
+        // No service host assigned - generate token for standalone device operation
+        serviceHostToken = crypto.randomBytes(32).toString("hex");
       }
 
       // Get RVC info if assigned
