@@ -56,8 +56,13 @@ export function DeviceEnrollmentGuard({
         description: `Successfully enrolled as ${data.deviceName}`,
       });
       
+      // Redirect to the correct page based on device type
       setTimeout(() => {
-        window.location.reload();
+        if (data.deviceType === "kds_display") {
+          window.location.href = "/kds";
+        } else {
+          window.location.href = "/pos";
+        }
       }, 500);
       
     } catch (err: any) {
