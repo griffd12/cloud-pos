@@ -3,7 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { useWorkstationHeartbeat } from "@/hooks/use-workstation-heartbeat";
+import { useCalUpdates } from "@/hooks/use-cal-updates";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
+import { CalUpdateOverlay } from "@/components/cal-update-overlay";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -123,8 +125,13 @@ export default function PosPage() {
   useWorkstationHeartbeat({
     workstationId,
     employeeId: currentEmployee?.id,
-    intervalMs: 30000,
-    enabled: !!workstationId && !!currentEmployee,
+  });
+  
+  // Listen for CAL update events from Service Host (when connected to hybrid mode)
+  const serviceHostUrl = wsContext?.workstation?.serviceHostUrl || null;
+  const { updateStatus: calUpdateStatus, isUpdating: isCalUpdating, dismissUpdate: dismissCalUpdate } = useCalUpdates({
+    serviceHostUrl,
+    enabled: !!serviceHostUrl && !!workstationId && !!currentEmployee,
   });
 
   // Release lock on the current check (call before clearing check or signing out)
@@ -1154,6 +1161,12 @@ export default function PosPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* CAL Update Overlay - blocks POS during system updates */}
+      <CalUpdateOverlay 
+        updateStatus={calUpdateStatus} 
+        onDismiss={dismissCalUpdate} 
+      />
+      
       <ConnectionModeBanner />
       <header className="flex-shrink-0 bg-card border-b px-3 py-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -1711,7 +1724,7 @@ export default function PosPage() {
         changeDue={cashChangeDue}
         onReadyForNextOrder={handleReadyForNextOrder}
         propertyId={currentRvc?.propertyId}
-        workstationId={workstationId}
+        workstationId={workstationId ?? undefined}
         employeeId={currentEmployee?.id}
       />
 

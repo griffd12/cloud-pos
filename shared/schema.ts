@@ -241,6 +241,8 @@ export const workstations = pgTable("workstations", {
   hostname: text("hostname"),
   isOnline: boolean("is_online").default(false),
   lastSeenAt: timestamp("last_seen_at"),
+  // Service Host (Hybrid Mode)
+  serviceHostUrl: text("service_host_url"), // URL to local Service Host for hybrid/offline mode (e.g., http://192.168.1.100:3001)
   // Auto-Logout Settings
   autoLogoutMinutes: integer("auto_logout_minutes"), // null or 0 = disabled
   active: boolean("active").default(true),

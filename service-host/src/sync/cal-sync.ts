@@ -6,13 +6,19 @@
  * - Receives real-time notifications via WebSocket
  * - Downloads package files
  * - Installs/extracts packages
+ * - Executes startup scripts (install.bat/.ps1 on Windows, install.sh on Linux)
  * - Reports status back to cloud
+ * - Broadcasts update status to connected workstations
  */
 
 import fs from 'fs';
 import path from 'path';
+import { exec, spawn } from 'child_process';
+import { promisify } from 'util';
 import { CloudConnection } from './cloud-connection.js';
 import { Database } from '../db/database.js';
+
+const execAsync = promisify(exec);
 
 interface PendingDeployment {
   targetId: string;
@@ -26,30 +32,51 @@ interface PendingDeployment {
   scheduledAt: string | null;
 }
 
+interface CalUpdateEvent {
+  type: 'CAL_UPDATE_STATUS';
+  status: 'starting' | 'downloading' | 'installing' | 'running_script' | 'completed' | 'failed';
+  packageName: string;
+  packageVersion: string;
+  message: string;
+  progress?: number;
+  logOutput?: string;
+}
+
+type UpdateCallback = (event: CalUpdateEvent) => void;
+
 export class CalSync {
   private db: Database;
   private cloud: CloudConnection;
   private serviceHostId: string;
   private packagesDir: string;
+  private calRootDir: string;
   private deploymentQueue: PendingDeployment[] = [];
   private currentlyProcessing: Set<string> = new Set();
-  private successfullyCompleted: Set<string> = new Set(); // Deployments we've successfully installed
-  private failedWithCooldown: Map<string, number> = new Map(); // targetId -> retry after timestamp
+  private successfullyCompleted: Set<string> = new Set();
+  private failedWithCooldown: Map<string, number> = new Map();
   private workerRunning: boolean = false;
   private checkInterval: NodeJS.Timeout | null = null;
+  private updateCallbacks: UpdateCallback[] = [];
+  private currentDeployment: PendingDeployment | null = null;
+  private scriptOutput: string[] = [];
   
-  // Backoff for failed deployments (start at 1 min, max 10 min)
   private static readonly INITIAL_RETRY_DELAY_MS = 60000;
   private static readonly MAX_RETRY_DELAY_MS = 600000;
 
-  constructor(db: Database, cloud: CloudConnection, serviceHostId: string, dataDir: string) {
+  constructor(db: Database, cloud: CloudConnection, serviceHostId: string, dataDir: string, calRootDir: string) {
     this.db = db;
     this.cloud = cloud;
     this.serviceHostId = serviceHostId;
     this.packagesDir = path.join(dataDir, 'packages');
+    this.calRootDir = calRootDir;
 
     if (!fs.existsSync(this.packagesDir)) {
       fs.mkdirSync(this.packagesDir, { recursive: true });
+    }
+
+    if (!fs.existsSync(this.calRootDir)) {
+      fs.mkdirSync(this.calRootDir, { recursive: true });
+      console.log(`[CAL] Created CAL root directory: ${this.calRootDir}`);
     }
 
     this.setupCloudHandlers();
@@ -67,8 +94,43 @@ export class CalSync {
     });
   }
 
+  onUpdate(callback: UpdateCallback): void {
+    this.updateCallbacks.push(callback);
+  }
+
+  private broadcastUpdate(event: CalUpdateEvent): void {
+    for (const callback of this.updateCallbacks) {
+      try {
+        callback(event);
+      } catch (err) {
+        console.error('[CAL] Update callback error:', (err as Error).message);
+      }
+    }
+  }
+
+  isUpdating(): boolean {
+    return this.currentDeployment !== null;
+  }
+
+  getCurrentUpdate(): { packageName: string; version: string } | null {
+    if (!this.currentDeployment) return null;
+    return {
+      packageName: this.currentDeployment.packageName,
+      version: this.currentDeployment.versionNumber,
+    };
+  }
+
+  getScriptOutput(): string[] {
+    return [...this.scriptOutput];
+  }
+
+  getCalRootDir(): string {
+    return this.calRootDir;
+  }
+
   async start(): Promise<void> {
     console.log('[CAL] Starting CAL sync service');
+    console.log(`[CAL] Root directory: ${this.calRootDir}`);
     
     await this.checkPendingDeployments();
 
@@ -108,19 +170,16 @@ export class CalSync {
   }
 
   private enqueueDeployment(deployment: PendingDeployment): void {
-    // Skip if already being processed
     if (this.currentlyProcessing.has(deployment.targetId)) {
       console.log(`[CAL] Skipping ${deployment.targetId}, already being processed`);
       return;
     }
     
-    // Skip if already successfully completed (prevent regression)
     if (this.successfullyCompleted.has(deployment.targetId)) {
       console.log(`[CAL] Skipping ${deployment.targetId}, already successfully completed`);
       return;
     }
     
-    // Skip if failed and still in cooldown period
     const retryAfter = this.failedWithCooldown.get(deployment.targetId);
     if (retryAfter && Date.now() < retryAfter) {
       console.log(`[CAL] Skipping ${deployment.targetId}, in cooldown until ${new Date(retryAfter).toISOString()}`);
@@ -147,27 +206,52 @@ export class CalSync {
     while (this.deploymentQueue.length > 0) {
       const deployment = this.deploymentQueue.shift()!;
       
-      // Mark as currently processing to prevent duplicate enqueuing
       this.currentlyProcessing.add(deployment.targetId);
+      this.currentDeployment = deployment;
+      this.scriptOutput = [];
       
       let success = false;
       try {
         console.log(`[CAL] Processing deployment: ${deployment.packageName} v${deployment.versionNumber}`);
+        
+        this.broadcastUpdate({
+          type: 'CAL_UPDATE_STATUS',
+          status: 'starting',
+          packageName: deployment.packageName,
+          packageVersion: deployment.versionNumber,
+          message: 'Starting package installation...',
+        });
+        
         await this.processDeployment(deployment);
         success = true;
       } catch (err) {
         console.error(`[CAL] Worker error processing ${deployment.targetId}:`, (err as Error).message);
+        
+        this.broadcastUpdate({
+          type: 'CAL_UPDATE_STATUS',
+          status: 'failed',
+          packageName: deployment.packageName,
+          packageVersion: deployment.versionNumber,
+          message: (err as Error).message,
+          logOutput: this.scriptOutput.join('\n'),
+        });
       } finally {
-        // Clear from processing set after completion
         this.currentlyProcessing.delete(deployment.targetId);
+        this.currentDeployment = null;
         
         if (success) {
-          // Track as successfully completed - won't reprocess
           this.successfullyCompleted.add(deployment.targetId);
-          // Clear from failed cooldown if it was there
           this.failedWithCooldown.delete(deployment.targetId);
+          
+          this.broadcastUpdate({
+            type: 'CAL_UPDATE_STATUS',
+            status: 'completed',
+            packageName: deployment.packageName,
+            packageVersion: deployment.versionNumber,
+            message: 'Installation completed successfully',
+            logOutput: this.scriptOutput.join('\n'),
+          });
         } else {
-          // Calculate backoff for failed deployment
           const existingCooldown = this.failedWithCooldown.get(deployment.targetId);
           const previousDelay = existingCooldown 
             ? existingCooldown - Date.now() + CalSync.INITIAL_RETRY_DELAY_MS 
@@ -190,9 +274,9 @@ export class CalSync {
     try {
       await this.updateStatus(deployment.targetId, 'downloading', 'Starting download...');
 
-      if (deployment.action === 'install') {
+      if (deployment.action === 'install' || deployment.action === 'update' || deployment.action === 'reinstall') {
         await this.installPackage(deployment);
-      } else if (deployment.action === 'uninstall') {
+      } else if (deployment.action === 'uninstall' || deployment.action === 'remove') {
         await this.uninstallPackage(deployment);
       } else {
         throw new Error(`Unknown action: ${deployment.action}`);
@@ -205,19 +289,27 @@ export class CalSync {
       const message = (err as Error).message;
       console.error(`[CAL] Deployment failed: ${message}`);
       await this.updateStatus(deployment.targetId, 'failed', message);
-      // Rethrow so runWorker knows this was a failure
       throw err;
     }
   }
 
   private async installPackage(deployment: PendingDeployment): Promise<void> {
-    const packageDir = path.join(this.packagesDir, deployment.packageType);
+    const packageDir = path.join(this.packagesDir, deployment.packageType, deployment.packageName.replace(/\s+/g, '-'));
     
     if (!fs.existsSync(packageDir)) {
       fs.mkdirSync(packageDir, { recursive: true });
     }
 
     if (deployment.downloadUrl) {
+      this.broadcastUpdate({
+        type: 'CAL_UPDATE_STATUS',
+        status: 'downloading',
+        packageName: deployment.packageName,
+        packageVersion: deployment.versionNumber,
+        message: 'Downloading package...',
+        progress: 10,
+      });
+      
       await this.updateStatus(deployment.targetId, 'downloading', 'Downloading package...');
       
       const fileName = `${deployment.packageName.replace(/\s+/g, '-')}-${deployment.versionNumber}.tar.gz`;
@@ -233,8 +325,19 @@ export class CalSync {
         }
       }
 
+      this.broadcastUpdate({
+        type: 'CAL_UPDATE_STATUS',
+        status: 'installing',
+        packageName: deployment.packageName,
+        packageVersion: deployment.versionNumber,
+        message: 'Extracting package...',
+        progress: 40,
+      });
+      
       await this.updateStatus(deployment.targetId, 'installing', 'Extracting package...');
       await this.extractPackage(filePath, packageDir);
+
+      await this.runStartupScript(deployment, packageDir);
 
     } else {
       await this.updateStatus(deployment.targetId, 'installing', 'Registering package...');
@@ -245,8 +348,249 @@ export class CalSync {
     console.log(`[CAL] Installed: ${deployment.packageName} v${deployment.versionNumber}`);
   }
 
+  private async runStartupScript(deployment: PendingDeployment, packageDir: string): Promise<void> {
+    const isWindows = process.platform === 'win32';
+    
+    const scriptCandidates = isWindows
+      ? ['install.ps1', 'install.bat', 'setup.ps1', 'setup.bat']
+      : ['install.sh', 'setup.sh'];
+    
+    let scriptPath: string | null = null;
+    let scriptType: 'powershell' | 'batch' | 'shell' = 'shell';
+    
+    for (const scriptName of scriptCandidates) {
+      const candidatePath = path.join(packageDir, scriptName);
+      if (fs.existsSync(candidatePath)) {
+        scriptPath = candidatePath;
+        if (scriptName.endsWith('.ps1')) {
+          scriptType = 'powershell';
+        } else if (scriptName.endsWith('.bat')) {
+          scriptType = 'batch';
+        } else {
+          scriptType = 'shell';
+        }
+        break;
+      }
+    }
+    
+    if (!scriptPath) {
+      console.log('[CAL] No startup script found, skipping script execution');
+      this.addScriptOutput('[CAL] No startup script found in package');
+      return;
+    }
+    
+    console.log(`[CAL] Found startup script: ${scriptPath}`);
+    this.addScriptOutput(`[CAL] Running startup script: ${path.basename(scriptPath)}`);
+    
+    this.broadcastUpdate({
+      type: 'CAL_UPDATE_STATUS',
+      status: 'running_script',
+      packageName: deployment.packageName,
+      packageVersion: deployment.versionNumber,
+      message: `Running ${path.basename(scriptPath)}...`,
+      progress: 60,
+    });
+    
+    await this.updateStatus(deployment.targetId, 'installing', `Running ${path.basename(scriptPath)}...`);
+    
+    const env = {
+      ...process.env,
+      CAL_ROOT_DIR: this.calRootDir,
+      CAL_PACKAGE_NAME: deployment.packageName,
+      CAL_PACKAGE_VERSION: deployment.versionNumber,
+      CAL_PACKAGE_TYPE: deployment.packageType,
+      CAL_PACKAGE_DIR: packageDir,
+      CAL_SERVICE_HOST_ID: this.serviceHostId,
+    };
+    
+    try {
+      if (scriptType === 'powershell') {
+        await this.runPowerShellScript(scriptPath, env);
+      } else if (scriptType === 'batch') {
+        await this.runBatchScript(scriptPath, env);
+      } else {
+        await this.runShellScript(scriptPath, env);
+      }
+      
+      this.addScriptOutput('[CAL] Startup script completed successfully');
+      console.log('[CAL] Startup script completed');
+      
+    } catch (err) {
+      const errorMsg = (err as Error).message;
+      this.addScriptOutput(`[CAL] Script error: ${errorMsg}`);
+      console.error('[CAL] Startup script failed:', errorMsg);
+      throw new Error(`Startup script failed: ${errorMsg}`);
+    }
+  }
+  
+  private async runPowerShellScript(scriptPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const ps = spawn('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', scriptPath,
+        '-CalRootDir', this.calRootDir,
+      ], {
+        cwd: path.dirname(scriptPath),
+        env,
+        shell: false,
+      });
+      
+      ps.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            this.addScriptOutput(line.trim());
+          }
+        }
+      });
+      
+      ps.stderr.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            this.addScriptOutput(`[ERROR] ${line.trim()}`);
+          }
+        }
+      });
+      
+      ps.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`PowerShell script exited with code ${code}`));
+        }
+      });
+      
+      ps.on('error', (err) => {
+        reject(err);
+      });
+    });
+  }
+  
+  private async runBatchScript(scriptPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const bat = spawn('cmd.exe', ['/c', scriptPath, this.calRootDir], {
+        cwd: path.dirname(scriptPath),
+        env,
+        shell: false,
+      });
+      
+      bat.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            this.addScriptOutput(line.trim());
+          }
+        }
+      });
+      
+      bat.stderr.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            this.addScriptOutput(`[ERROR] ${line.trim()}`);
+          }
+        }
+      });
+      
+      bat.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Batch script exited with code ${code}`));
+        }
+      });
+      
+      bat.on('error', (err) => {
+        reject(err);
+      });
+    });
+  }
+  
+  private async runShellScript(scriptPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+    await execAsync(`chmod +x "${scriptPath}"`);
+    
+    return new Promise((resolve, reject) => {
+      const sh = spawn('bash', [scriptPath, this.calRootDir], {
+        cwd: path.dirname(scriptPath),
+        env,
+        shell: false,
+      });
+      
+      sh.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            this.addScriptOutput(line.trim());
+          }
+        }
+      });
+      
+      sh.stderr.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            this.addScriptOutput(`[ERROR] ${line.trim()}`);
+          }
+        }
+      });
+      
+      sh.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Shell script exited with code ${code}`));
+        }
+      });
+      
+      sh.on('error', (err) => {
+        reject(err);
+      });
+    });
+  }
+  
+  private addScriptOutput(line: string): void {
+    this.scriptOutput.push(line);
+    console.log(`[CAL SCRIPT] ${line}`);
+    
+    if (this.currentDeployment) {
+      this.broadcastUpdate({
+        type: 'CAL_UPDATE_STATUS',
+        status: 'running_script',
+        packageName: this.currentDeployment.packageName,
+        packageVersion: this.currentDeployment.versionNumber,
+        message: line,
+        logOutput: this.scriptOutput.join('\n'),
+      });
+    }
+  }
+
   private async uninstallPackage(deployment: PendingDeployment): Promise<void> {
     const packageDir = path.join(this.packagesDir, deployment.packageType, deployment.packageName.replace(/\s+/g, '-'));
+    
+    const uninstallScripts = process.platform === 'win32'
+      ? ['uninstall.ps1', 'uninstall.bat']
+      : ['uninstall.sh'];
+    
+    for (const scriptName of uninstallScripts) {
+      const scriptPath = path.join(packageDir, scriptName);
+      if (fs.existsSync(scriptPath)) {
+        console.log(`[CAL] Running uninstall script: ${scriptPath}`);
+        try {
+          if (scriptName.endsWith('.ps1')) {
+            await this.runPowerShellScript(scriptPath, process.env);
+          } else if (scriptName.endsWith('.bat')) {
+            await this.runBatchScript(scriptPath, process.env);
+          } else {
+            await this.runShellScript(scriptPath, process.env);
+          }
+        } catch (err) {
+          console.warn(`[CAL] Uninstall script failed: ${(err as Error).message}`);
+        }
+        break;
+      }
+    }
     
     if (fs.existsSync(packageDir)) {
       fs.rmSync(packageDir, { recursive: true, force: true });
@@ -260,16 +604,12 @@ export class CalSync {
   private async downloadFile(url: string, destPath: string): Promise<void> {
     let buffer: ArrayBuffer;
     
-    // Check if URL is a cloud endpoint (relative path) or external URL (full URL)
     if (url.startsWith('/')) {
-      // Cloud endpoint - use authenticated download
       buffer = await this.cloud.downloadFile(url);
     } else if (url.startsWith(this.cloud.getCloudUrl())) {
-      // Full cloud URL - convert to relative and use authenticated download
       const endpoint = url.replace(this.cloud.getCloudUrl(), '');
       buffer = await this.cloud.downloadFile(endpoint);
     } else {
-      // External URL (e.g., pre-signed S3 URL) - no auth needed
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -292,16 +632,15 @@ export class CalSync {
   }
 
   private async extractPackage(archivePath: string, destDir: string): Promise<void> {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
     try {
-      await execAsync(`tar -xzf "${archivePath}" -C "${destDir}"`);
+      if (process.platform === 'win32') {
+        await execAsync(`tar -xzf "${archivePath}" -C "${destDir}"`);
+      } else {
+        await execAsync(`tar -xzf "${archivePath}" -C "${destDir}"`);
+      }
       console.log(`[CAL] Extracted: ${archivePath}`);
     } catch (err) {
       console.error(`[CAL] tar extraction failed: ${(err as Error).message}`);
-      // Propagate error so caller knows extraction failed
       throw new Error(`Package extraction failed: ${(err as Error).message}`);
     }
   }
@@ -354,7 +693,6 @@ export class CalSync {
       });
     } catch (err) {
       console.error('[CAL] Failed to update status on cloud:', (err as Error).message);
-      // Propagate error so caller can handle retry logic
       throw err;
     }
   }

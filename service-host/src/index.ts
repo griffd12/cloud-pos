@@ -43,6 +43,15 @@ interface Config {
   propertyId: string;
   port: number;
   dataDir: string;
+  calRootDir: string; // Root directory for CAL package installations (e.g., C:\OPS-POS on Windows)
+}
+
+// Detect default CAL root directory based on OS
+function getDefaultCalRootDir(): string {
+  if (process.platform === 'win32') {
+    return 'C:\\OPS-POS';
+  }
+  return path.join(process.env.HOME || '/opt', 'ops-pos');
 }
 
 const defaultConfig: Config = {
@@ -52,6 +61,7 @@ const defaultConfig: Config = {
   propertyId: '',
   port: 3001,
   dataDir: path.join(__dirname, '../data'),
+  calRootDir: getDefaultCalRootDir(),
 };
 
 function parseArgs(): Partial<Config> {
@@ -77,6 +87,9 @@ function parseArgs(): Partial<Config> {
         break;
       case '--data-dir':
         config.dataDir = args[++i];
+        break;
+      case '--cal-root-dir':
+        config.calRootDir = args[++i];
         break;
     }
   }
@@ -128,9 +141,9 @@ class ServiceHost {
     this.cloudConnection = new CloudConnection(config.cloudUrl, config.token, config.serviceHostId);
     
     // Initialize sync services
-    this.configSync = new ConfigSync(this.db, this.cloudConnection);
+    this.configSync = new ConfigSync(this.db, this.cloudConnection, config.propertyId);
     this.transactionSync = new TransactionSync(this.db, this.cloudConnection);
-    this.calSync = new CalSync(this.db, this.cloudConnection, config.serviceHostId, config.dataDir);
+    this.calSync = new CalSync(this.db, this.cloudConnection, config.serviceHostId, config.dataDir, config.calRootDir);
     
     // Initialize service controllers
     this.capsService = new CapsService(this.db, this.transactionSync);
@@ -192,6 +205,21 @@ class ServiceHost {
     this.wss.on('connection', (ws: WebSocket) => {
       console.log('Workstation connected via WebSocket');
       
+      // Send current CAL update status if an update is in progress
+      if (this.calSync.isUpdating()) {
+        const current = this.calSync.getCurrentUpdate();
+        if (current) {
+          ws.send(JSON.stringify({
+            type: 'CAL_UPDATE_STATUS',
+            status: 'running_script',
+            packageName: current.packageName,
+            packageVersion: current.version,
+            message: 'Update in progress...',
+            logOutput: this.calSync.getScriptOutput().join('\n'),
+          }));
+        }
+      }
+      
       ws.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
@@ -205,6 +233,20 @@ class ServiceHost {
         console.log('Workstation disconnected');
         this.kdsController.removeClient(ws);
       });
+    });
+    
+    // Subscribe to CAL update events and broadcast to all connected clients
+    this.calSync.onUpdate((event) => {
+      this.broadcastToAll(event);
+    });
+  }
+  
+  private broadcastToAll(message: any): void {
+    const payload = JSON.stringify(message);
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
     });
   }
   
@@ -232,6 +274,7 @@ class ServiceHost {
     console.log(`Service Host ID: ${this.config.serviceHostId}`);
     console.log(`Property ID: ${this.config.propertyId}`);
     console.log(`Data Directory: ${this.config.dataDir}`);
+    console.log(`CAL Root Directory: ${this.config.calRootDir}`);
     console.log('');
     
     // Initialize database schema
