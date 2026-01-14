@@ -1167,6 +1167,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/emc(\/.*)?$/,                      // EMC routes (session-based auth)
     /^\/registered-devices\/enroll$/,       // Device enrollment
     /^\/registered-devices\/validate$/,     // Token validation
+    /^\/registered-devices\/status-summary$/, // Device status for connectivity dashboard
+    /^\/connectivity-status$/,              // Connectivity dashboard status endpoint
     /^\/health$/,                           // Health check endpoint
     /^\/print-agents(\/.*)?$/,              // Print agent management (EMC feature)
     /^\/cal-packages(\/.*)?$/,              // CAL package management (EMC feature)
