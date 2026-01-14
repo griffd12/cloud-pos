@@ -136,8 +136,13 @@ export function useDeviceEnrollment() {
       console.log("[DeviceEnrollment] Validation response:", { ok: response.ok, valid: data.valid, message: data.message });
 
       if (!response.ok || !data.valid) {
-        console.log("[DeviceEnrollment] Validation failed, clearing token");
-        clearDeviceToken();
+        console.log("[DeviceEnrollment] Validation failed:", data.message);
+        // Only clear token if server explicitly says it's invalid (401)
+        // Don't clear on other errors - user can retry
+        if (response.status === 401) {
+          console.log("[DeviceEnrollment] Token revoked/invalid, clearing credentials");
+          clearDeviceToken();
+        }
         setState({
           isEnrolled: false,
           isValidating: false,
