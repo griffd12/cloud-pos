@@ -814,6 +814,13 @@
         property_id: registrationData.property.id
       });
       const posUrl = `${cloudUrl}${basePath}?${params.toString()}`;
+      
+      await window.electronAPI.writeLog('INFO', 'Launching POS with credentials', {
+        posUrl: posUrl.replace(registrationData.security.deviceToken, '[REDACTED]'),
+        deviceName: registrationData.device.name,
+        deviceType: registrationData.device.type
+      });
+      
       await window.electronAPI.openPos(posUrl);
     }
     

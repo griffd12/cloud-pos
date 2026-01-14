@@ -15,7 +15,17 @@ function checkAndStoreUrlCredentials(): boolean {
   const deviceType = params.get("device_type");
   const propertyId = params.get("property_id");
   
+  console.log("[DeviceEnrollment] Checking URL params:", { 
+    hasToken: !!deviceToken, 
+    hasDeviceId: !!deviceId, 
+    hasDeviceName: !!deviceName,
+    hasDeviceType: !!deviceType,
+    hasPropertyId: !!propertyId,
+    fullUrl: window.location.href
+  });
+  
   if (deviceToken && deviceId && deviceName && deviceType && propertyId) {
+    console.log("[DeviceEnrollment] Storing credentials from URL params");
     localStorage.setItem(DEVICE_TOKEN_KEY, deviceToken);
     localStorage.setItem(DEVICE_ID_KEY, deviceId);
     localStorage.setItem(DEVICE_NAME_KEY, deviceName);
@@ -25,6 +35,7 @@ function checkAndStoreUrlCredentials(): boolean {
     
     const cleanUrl = window.location.pathname;
     window.history.replaceState({}, document.title, cleanUrl);
+    console.log("[DeviceEnrollment] Credentials stored, URL cleaned");
     return true;
   }
   return false;
@@ -87,11 +98,14 @@ export function useDeviceEnrollment() {
   });
 
   const validateEnrollment = useCallback(async () => {
-    checkAndStoreUrlCredentials();
+    const storedFromUrl = checkAndStoreUrlCredentials();
+    console.log("[DeviceEnrollment] storedFromUrl:", storedFromUrl);
     
     const deviceToken = getDeviceToken();
+    console.log("[DeviceEnrollment] deviceToken present:", !!deviceToken, deviceToken ? deviceToken.substring(0, 20) + "..." : "null");
 
     if (!deviceToken) {
+      console.log("[DeviceEnrollment] No device token found");
       setState({
         isEnrolled: false,
         isValidating: false,
@@ -102,6 +116,7 @@ export function useDeviceEnrollment() {
     }
 
     try {
+      console.log("[DeviceEnrollment] Validating device token...");
       const response = await fetch("/api/registered-devices/validate", {
         method: "POST",
         headers: {
@@ -111,8 +126,10 @@ export function useDeviceEnrollment() {
       });
 
       const data = await response.json();
+      console.log("[DeviceEnrollment] Validation response:", { ok: response.ok, valid: data.valid, message: data.message });
 
       if (!response.ok || !data.valid) {
+        console.log("[DeviceEnrollment] Validation failed, clearing token");
         clearDeviceToken();
         setState({
           isEnrolled: false,
@@ -123,6 +140,7 @@ export function useDeviceEnrollment() {
         return false;
       }
 
+      console.log("[DeviceEnrollment] Validation successful, device enrolled");
       setState({
         isEnrolled: true,
         isValidating: false,
@@ -131,6 +149,7 @@ export function useDeviceEnrollment() {
       });
       return true;
     } catch (error) {
+      console.log("[DeviceEnrollment] Validation error:", error);
       setState({
         isEnrolled: false,
         isValidating: false,

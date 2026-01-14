@@ -7,8 +7,38 @@ const { exec, spawn } = require('child_process');
 const os = require('os');
 
 let mainWindow;
+let logFilePath = null;
 
 const DEFAULT_ROOT_DIR = process.platform === 'win32' ? 'C:\\OPS-POS' : path.join(os.homedir(), 'ops-pos');
+
+function initLogFile(rootDir) {
+  const normalizedRoot = path.normalize(rootDir || DEFAULT_ROOT_DIR);
+  const logsDir = path.join(normalizedRoot, 'Logs');
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  logFilePath = path.join(logsDir, `setup-wizard-${timestamp}.log`);
+  writeLog('INFO', '=== OPS-POS CAL Setup Wizard Started ===');
+  writeLog('INFO', `Platform: ${process.platform}, Arch: ${process.arch}`);
+  writeLog('INFO', `Hostname: ${os.hostname()}`);
+}
+
+function writeLog(level, message, data = null) {
+  const timestamp = new Date().toISOString();
+  let line = `[${timestamp}] [${level}] ${message}`;
+  if (data) {
+    line += ` | ${JSON.stringify(data)}`;
+  }
+  console.log(line);
+  if (logFilePath) {
+    try {
+      fs.appendFileSync(logFilePath, line + '\n');
+    } catch (e) {
+      console.error('Failed to write log:', e);
+    }
+  }
+}
 const ALLOWED_ROOT_DIRS = [
   process.platform === 'win32' ? 'C:\\OPS-POS' : path.join(os.homedir(), 'ops-pos'),
   process.platform === 'win32' ? 'D:\\OPS-POS' : '/opt/ops-pos',
@@ -146,7 +176,11 @@ ipcMain.handle('get-system-info', async () => {
 });
 
 ipcMain.handle('create-directories', async (event, rootDir) => {
+  initLogFile(rootDir);
+  writeLog('INFO', 'Creating directories', { rootDir });
+  
   if (!validateRootDir(rootDir)) {
+    writeLog('ERROR', 'Invalid root directory', { rootDir });
     return [{ path: rootDir, status: 'error', error: 'Invalid root directory. Use default path.' }];
   }
 
@@ -168,11 +202,14 @@ ipcMain.handle('create-directories', async (event, rootDir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         results.push({ path: dir, status: 'created' });
+        writeLog('INFO', `Created directory: ${dir}`);
       } else {
         results.push({ path: dir, status: 'exists' });
+        writeLog('INFO', `Directory exists: ${dir}`);
       }
     } catch (err) {
       results.push({ path: dir, status: 'error', error: err.message });
+      writeLog('ERROR', `Failed to create directory: ${dir}`, { error: err.message });
     }
   }
   return results;
@@ -209,10 +246,14 @@ ipcMain.handle('download-service-host', async (event, cloudUrl, rootDir) => {
 });
 
 ipcMain.handle('save-config', async (event, rootDir, config) => {
+  writeLog('INFO', 'Saving configuration', { rootDir, deviceName: config?.deviceName, deviceType: config?.deviceType });
+  
   if (!validateRootDir(rootDir)) {
+    writeLog('ERROR', 'Invalid root directory for config save');
     return { success: false, error: 'Invalid root directory' };
   }
   if (!config || typeof config !== 'object') {
+    writeLog('ERROR', 'Invalid configuration object');
     return { success: false, error: 'Invalid configuration' };
   }
 
@@ -239,10 +280,20 @@ ipcMain.handle('save-config', async (event, rootDir, config) => {
     };
     
     fs.writeFileSync(configPath, JSON.stringify(fullConfig, null, 2));
+    writeLog('INFO', `Configuration saved to ${configPath}`);
+    writeLog('INFO', 'Device credentials', { 
+      deviceToken: config.deviceToken ? config.deviceToken.substring(0, 20) + '...' : 'MISSING',
+      registeredDeviceId: config.registeredDeviceId || 'MISSING'
+    });
     return { success: true, path: configPath };
   } catch (err) {
+    writeLog('ERROR', 'Failed to save configuration', { error: err.message });
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('write-log', async (event, level, message, data) => {
+  writeLog(level || 'INFO', message, data);
 });
 
 ipcMain.handle('start-service-host', async (event, rootDir) => {

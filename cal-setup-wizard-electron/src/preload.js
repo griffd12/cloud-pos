@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   quitApp: () => ipcRenderer.invoke('quit-app'),
   
+  writeLog: (level, message, data) => ipcRenderer.invoke('write-log', level, message, data),
+  
   onDownloadProgress: (callback) => {
     ipcRenderer.on('download-progress', (event, progress) => callback(progress));
   },
