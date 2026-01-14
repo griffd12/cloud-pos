@@ -77,6 +77,7 @@ function processUrlCredentials(): boolean {
   const params = new URLSearchParams(window.location.search);
   const deviceToken = params.get("device_token");
   const deviceId = params.get("device_id");
+  const registeredDeviceId = params.get("registered_device_id");
   const deviceName = params.get("device_name");
   const deviceType = params.get("device_type");
   const propertyId = params.get("property_id");
@@ -84,28 +85,37 @@ function processUrlCredentials(): boolean {
   console.log("[DeviceContext] Checking URL params:", { 
     hasToken: !!deviceToken, 
     hasDeviceId: !!deviceId,
-    path: window.location.pathname
+    hasRegisteredDeviceId: !!registeredDeviceId,
+    path: window.location.pathname,
+    search: window.location.search
   });
   
   if (deviceToken && deviceId && deviceName && deviceType && propertyId) {
-    console.log("[DeviceContext] Storing CAL credentials from URL");
+    console.log("[DeviceContext] Storing CAL credentials from URL", {
+      deviceId,
+      registeredDeviceId,
+      deviceName,
+      deviceType
+    });
     
     localStorage.setItem(DEVICE_TOKEN_KEY, deviceToken);
-    localStorage.setItem(REGISTERED_DEVICE_ID_KEY, deviceId);
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
     localStorage.setItem(DEVICE_NAME_KEY, deviceName);
     localStorage.setItem(DEVICE_PROPERTY_ID_KEY, propertyId);
     
+    if (registeredDeviceId) {
+      localStorage.setItem(REGISTERED_DEVICE_ID_KEY, registeredDeviceId);
+    }
+    
     if (deviceType === "pos_workstation") {
       localStorage.setItem(DEVICE_TYPE_KEY, "pos");
-      localStorage.setItem(DEVICE_ID_KEY, deviceId);
     } else if (deviceType === "kds_display") {
       localStorage.setItem(DEVICE_TYPE_KEY, "kds");
-      localStorage.setItem(DEVICE_ID_KEY, deviceId);
     }
     
     const cleanUrl = window.location.pathname;
     window.history.replaceState({}, document.title, cleanUrl);
-    console.log("[DeviceContext] Credentials stored, redirecting to:", cleanUrl);
+    console.log("[DeviceContext] Credentials stored successfully");
     return true;
   }
   return false;

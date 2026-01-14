@@ -808,7 +808,8 @@
       const basePath = registrationData.device.type === 'kds' ? '/kds' : '/pos';
       const params = new URLSearchParams({
         device_token: registrationData.security.deviceToken,
-        device_id: registrationData.security.registeredDeviceId,
+        device_id: registrationData.device.id,
+        registered_device_id: registrationData.security.registeredDeviceId,
         device_name: registrationData.device.name,
         device_type: registrationData.device.type === 'kds' ? 'kds_display' : 'pos_workstation',
         property_id: registrationData.property.id
@@ -817,6 +818,8 @@
       
       await window.electronAPI.writeLog('INFO', 'Launching POS with credentials', {
         posUrl: posUrl.replace(registrationData.security.deviceToken, '[REDACTED]'),
+        deviceId: registrationData.device.id,
+        registeredDeviceId: registrationData.security.registeredDeviceId,
         deviceName: registrationData.device.name,
         deviceType: registrationData.device.type
       });
