@@ -14297,21 +14297,23 @@ connect();
       }
       
       // Find the registered device with this claim code
-      const allRegisteredDevices = await storage.getAllRegisteredDevices();
-      const device = allRegisteredDevices.find(d => 
-        d.enrollmentCode === claimCode && 
-        d.enrollmentCodeExpiresAt && 
-        new Date(d.enrollmentCodeExpiresAt) > new Date()
-      );
+      const device = await storage.getRegisteredDeviceByEnrollmentCode(claimCode);
       
       if (!device) {
         return res.status(404).json({ message: "Invalid or expired claim code" });
+      }
+      
+      // Check if claim code is expired
+      if (device.enrollmentCodeExpiresAt && new Date(device.enrollmentCodeExpiresAt) < new Date()) {
+        return res.status(404).json({ message: "Claim code has expired" });
       }
       
       // Get the device token that was stored temporarily
       if (!device.deviceToken) {
         return res.status(400).json({ message: "No device token found for this claim code" });
       }
+      
+      const tokenToReturn = device.deviceToken;
       
       // Clear the claim code and temporary token after successful claim
       await storage.updateRegisteredDevice(device.id, {
@@ -14324,7 +14326,7 @@ connect();
       // Return the credentials to store in browser localStorage
       res.json({
         success: true,
-        deviceToken: device.deviceToken,
+        deviceToken: tokenToReturn,
         registeredDeviceId: device.id,
         deviceId: device.workstationId || device.kdsDeviceId,
         deviceName: device.name,

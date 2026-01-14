@@ -1,0 +1,66 @@
+[NEW] Explain Console errors by using Copilot in Edge: click 
+ to explain an error. Learn more
+Don't show again
+5
+Tracking Prevention blocked access to storage for <URL>.
+5
+Mixed Content: The page at '<URL>' was loaded over HTTPS, but requested an insecure resource '<URL>'. This content should also be served over HTTPS.
+api-client.ts:357 
+ 
+ GET http://service-host.local:3001/health net::ERR_NAME_NOT_RESOLVED
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+setInterval		
+startHealthChecks	@	api-client.ts:322
+ApiClient	@	api-client.ts:55
+(anonymous)	@	api-client.ts:441
+queryClient.ts:45 
+ 
+ POST https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/api/cal-setup/claim 500 (Internal Server Error)
+apiRequest	@	queryClient.ts:45
+handleClaim	@	device-enrollment-guard.tsx:37
+api-client.ts:357 
+ 
+ GET http://service-host.local:3001/health net::ERR_NAME_NOT_RESOLVED
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+setInterval		
+startHealthChecks	@	api-client.ts:322
+ApiClient	@	api-client.ts:55
+(anonymous)	@	api-client.ts:441
+api-client.ts:357 
+ 
+ GET http://service-host.local:3001/health net::ERR_NAME_NOT_RESOLVED
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+setInterval		
+startHealthChecks	@	api-client.ts:322
+ApiClient	@	api-client.ts:55
+(anonymous)	@	api-client.ts:441
+api-client.ts:357 
+ 
+ GET http://service-host.local:3001/health net::ERR_NAME_NOT_RESOLVED
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+setInterval		
+startHealthChecks	@	api-client.ts:322
+ApiClient	@	api-client.ts:55
+(anonymous)	@	api-client.ts:441
+use-inactivity-logout.ts:99 [Auto-Logout] Warning: 55s until auto-logout
+use-inactivity-logout.ts:99 [Auto-Logout] Warning: 45s until auto-logout
+api-client.ts:357 
+ 
+ GET http://service-host.local:3001/health net::ERR_NAME_NOT_RESOLVED
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+setInterval		
+startHealthChecks	@	api-client.ts:322
+ApiClient	@	api-client.ts:55
+(anonymous)	@	api-client.ts:441
+﻿
+
