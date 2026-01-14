@@ -604,7 +604,8 @@
         headers: { 'Authorization': `Bearer ${sessionToken}` }
       });
       
-      const properties = await response.json();
+      const data = await response.json();
+      const properties = data.properties || [];
       const list = document.getElementById('property-list');
       list.innerHTML = '';
       
