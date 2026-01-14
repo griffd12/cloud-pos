@@ -1169,6 +1169,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/registered-devices\/validate$/,     // Token validation
     /^\/registered-devices\/status-summary$/, // Device status for connectivity dashboard
     /^\/connectivity-status$/,              // Connectivity dashboard status endpoint
+    /^\/kds-tickets\/test$/,                // KDS test ticket from connectivity dashboard
     /^\/health$/,                           // Health check endpoint
     /^\/print-agents(\/.*)?$/,              // Print agent management (EMC feature)
     /^\/cal-packages(\/.*)?$/,              // CAL package management (EMC feature)
@@ -4836,6 +4837,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       stationType: req.query.stationType as string | undefined,
       propertyId: req.query.propertyId as string | undefined,
     };
+    
+    // Update device lastAccessAt for connectivity tracking when device polls
+    const deviceToken = req.headers["x-device-token"] as string;
+    if (deviceToken) {
+      const device = await storage.getRegisteredDeviceByToken(deviceToken);
+      if (device) {
+        await storage.updateRegisteredDevice(device.id, { lastAccessAt: new Date() });
+      }
+    }
+    
     const data = await storage.getKdsTickets(filters);
     res.json(data);
   });
