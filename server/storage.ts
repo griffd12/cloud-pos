@@ -5649,6 +5649,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCalPackage(id: string): Promise<boolean> {
+    // First, get all versions for this package
+    const versions = await db.select().from(calPackageVersions).where(eq(calPackageVersions.packageId, id));
+    
+    // Delete prerequisites for each version
+    for (const version of versions) {
+      await db.delete(calPackagePrerequisites).where(eq(calPackagePrerequisites.packageVersionId, version.id));
+      // Delete deployments that reference this version
+      await db.delete(calDeployments).where(eq(calDeployments.packageVersionId, version.id));
+    }
+    
+    // Delete all versions for this package
+    await db.delete(calPackageVersions).where(eq(calPackageVersions.packageId, id));
+    
+    // Finally delete the package
     const result = await db.delete(calPackages).where(eq(calPackages.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
