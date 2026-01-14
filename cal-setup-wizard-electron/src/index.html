@@ -783,8 +783,15 @@
     function showComplete() {
       showStep(6);
       
+      const claimCode = registrationData.security.claimCode || 'N/A';
+      
       const summary = document.getElementById('summary-card');
       summary.innerHTML = `
+        <div style="background: #1a472a; border: 2px solid #22c55e; border-radius: 8px; padding: 16px; margin-bottom: 16px; text-align: center;">
+          <div style="color: #86efac; font-size: 12px; margin-bottom: 4px;">CLAIM CODE (enter in browser)</div>
+          <div style="color: #22c55e; font-size: 36px; font-family: monospace; font-weight: bold; letter-spacing: 8px;">${claimCode}</div>
+          <div style="color: #86efac; font-size: 11px; margin-top: 4px;">Valid for 10 minutes</div>
+        </div>
         <div class="row">
           <span class="label">Device Name</span>
           <span class="value">${registrationData.device.name}</span>

@@ -1,0 +1,33 @@
+[2026-01-14T17:58:29.717Z] [INFO] === OPS-POS CAL Setup Wizard Started ===
+[2026-01-14T17:58:29.718Z] [INFO] Platform: win32, Arch: x64
+[2026-01-14T17:58:29.718Z] [INFO] Hostname: DESKTOP-PPKCUEH
+[2026-01-14T17:58:29.719Z] [INFO] Creating directories | {"rootDir":"C:\\OPS-POS"}
+[2026-01-14T17:58:29.720Z] [INFO] Directory exists: C:\OPS-POS
+[2026-01-14T17:58:29.721Z] [INFO] Created directory: C:\OPS-POS\ServiceHost
+[2026-01-14T17:58:29.722Z] [INFO] Created directory: C:\OPS-POS\ServiceHost\data
+[2026-01-14T17:58:29.722Z] [INFO] Created directory: C:\OPS-POS\ServiceHost\logs
+[2026-01-14T17:58:29.723Z] [INFO] Created directory: C:\OPS-POS\Packages
+[2026-01-14T17:58:29.723Z] [INFO] Created directory: C:\OPS-POS\PrintAgent
+[2026-01-14T17:58:29.724Z] [INFO] Created directory: C:\OPS-POS\Config
+[2026-01-14T17:58:29.724Z] [INFO] Directory exists: C:\OPS-POS\Logs
+[2026-01-14T17:58:29.727Z] [INFO] Exists: C:\OPS-POS
+[2026-01-14T17:58:29.729Z] [INFO] Created: C:\OPS-POS\ServiceHost
+[2026-01-14T17:58:29.730Z] [INFO] Created: C:\OPS-POS\ServiceHost\data
+[2026-01-14T17:58:29.730Z] [INFO] Created: C:\OPS-POS\ServiceHost\logs
+[2026-01-14T17:58:29.731Z] [INFO] Created: C:\OPS-POS\Packages
+[2026-01-14T17:58:29.731Z] [INFO] Created: C:\OPS-POS\PrintAgent
+[2026-01-14T17:58:29.731Z] [INFO] Created: C:\OPS-POS\Config
+[2026-01-14T17:58:29.732Z] [INFO] Exists: C:\OPS-POS\Logs
+[2026-01-14T17:58:29.734Z] [INFO] Registering device with cloud...
+[2026-01-14T17:58:29.845Z] [INFO] Device registered successfully
+[2026-01-14T17:58:29.848Z] [INFO] Downloading Service Host executable...
+[2026-01-14T17:58:30.407Z] [INFO] Service Host downloaded (0.04 MB)
+[2026-01-14T17:58:30.412Z] [INFO] Creating configuration file...
+[2026-01-14T17:58:30.414Z] [INFO] Saving configuration | {"rootDir":"C:\\OPS-POS","deviceName":"SNS-001-WS01","deviceType":"workstation"}
+[2026-01-14T17:58:30.417Z] [INFO] Configuration saved to C:\OPS-POS\Config\service-host.json
+[2026-01-14T17:58:30.418Z] [INFO] Device credentials | {"deviceToken":"598b8b38-57db-423c-8...","registeredDeviceId":"3589efb8-24b8-4a5d-b3a2-45b84fbe80e0"}
+[2026-01-14T17:58:30.423Z] [INFO] Configuration saved to C:\OPS-POS\Config\service-host.json
+[2026-01-14T17:58:30.424Z] [INFO] Starting Service Host...
+[2026-01-14T17:58:30.500Z] [WARN] Could not start Service Host: spawn UNKNOWN
+[2026-01-14T17:58:30.502Z] [INFO] Installation completed successfully!
+[2026-01-14T17:59:22.803Z] [INFO] Launching POS with credentials | {"posUrl":"https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/pos?device_token=[REDACTED]&device_id=32fb06f3-837f-42ed-a6f5-90436ca62e06&registered_device_id=3589efb8-24b8-4a5d-b3a2-45b84fbe80e0&device_name=SNS-001-WS01&device_type=pos_workstation&property_id=b0c038b1-5c55-4c63-85fe-5ea9dc64a767","deviceId":"32fb06f3-837f-42ed-a6f5-90436ca62e06","registeredDeviceId":"3589efb8-24b8-4a5d-b3a2-45b84fbe80e0","deviceName":"SNS-001-WS01","deviceType":"workstation"}

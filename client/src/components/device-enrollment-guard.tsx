@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { useDeviceEnrollment } from "@/hooks/use-device-enrollment";
-import { Loader2, ShieldX, Laptop } from "lucide-react";
+import { useDeviceContext } from "@/lib/device-context";
+import { Loader2, ShieldX, Laptop, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface DeviceEnrollmentGuardProps {
   children: React.ReactNode;
@@ -13,6 +18,54 @@ export function DeviceEnrollmentGuard({
   requiredDeviceType 
 }: DeviceEnrollmentGuardProps) {
   const { isEnrolled, isValidating, deviceInfo, error, validateEnrollment } = useDeviceEnrollment();
+  const { enrollDevice } = useDeviceContext();
+  const { toast } = useToast();
+  const [claimCode, setClaimCode] = useState("");
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  const handleClaim = async () => {
+    if (claimCode.length !== 6) {
+      setClaimError("Please enter a 6-digit claim code");
+      return;
+    }
+    
+    setIsClaiming(true);
+    setClaimError(null);
+    
+    try {
+      const response = await apiRequest("POST", "/api/cal-setup/claim", { claimCode });
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to claim device");
+      }
+      
+      enrollDevice(data.deviceToken, {
+        id: data.registeredDeviceId,
+        name: data.deviceName,
+        deviceType: data.deviceType,
+        propertyId: data.propertyId,
+        workstationId: data.deviceType === "pos_workstation" ? data.deviceId : null,
+        kdsDeviceId: data.deviceType === "kds_display" ? data.deviceId : null,
+        status: "enrolled",
+      });
+      
+      toast({
+        title: "Device Enrolled",
+        description: `Successfully enrolled as ${data.deviceName}`,
+      });
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err: any) {
+      setClaimError(err.message || "Invalid or expired claim code");
+    } finally {
+      setIsClaiming(false);
+    }
+  };
 
   if (isValidating) {
     return (
@@ -41,14 +94,51 @@ export function DeviceEnrollmentGuard({
               </p>
             </div>
 
-            <div className="bg-muted/50 rounded-lg p-4 text-left text-sm space-y-2">
-              <p className="font-medium">To enroll this device:</p>
-              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>Open the CAL Setup Wizard on this device</li>
-                <li>Log in with EMC administrator credentials</li>
-                <li>Select the property and workstation/KDS</li>
-                <li>Complete the setup process</li>
-              </ol>
+            <div className="bg-muted/50 rounded-lg p-4 text-left space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-sm">Have a claim code?</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter the 6-digit code shown in the CAL Setup Wizard
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="000000"
+                    value={claimCode}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setClaimCode(val);
+                      setClaimError(null);
+                    }}
+                    className="font-mono text-center text-lg tracking-widest"
+                    maxLength={6}
+                    data-testid="input-claim-code"
+                  />
+                  <Button 
+                    onClick={handleClaim} 
+                    disabled={isClaiming || claimCode.length !== 6}
+                    data-testid="button-claim-device"
+                  >
+                    {isClaiming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Claim"}
+                  </Button>
+                </div>
+                {claimError && (
+                  <p className="text-xs text-destructive">{claimError}</p>
+                )}
+              </div>
+              
+              <div className="border-t pt-4 space-y-2">
+                <p className="font-medium text-sm">No claim code?</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
+                  <li>Download the CAL Setup Wizard</li>
+                  <li>Log in with EMC administrator credentials</li>
+                  <li>Select the property and workstation/KDS</li>
+                  <li>Complete setup to get your claim code</li>
+                </ol>
+              </div>
             </div>
 
             <div className="flex gap-3">

@@ -14218,6 +14218,19 @@ connect();
         });
       }
 
+      // Generate a 6-digit claim code for browser credential handoff
+      // This is used when URL parameters get lost (common with Windows browser reuse)
+      const claimCode = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit code
+      const claimCodeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      // Store the claim code and the ACTUAL device token (not hash) for handoff
+      // The claim code allows the browser to retrieve these credentials
+      await storage.updateRegisteredDevice(registeredDevice!.id, {
+        enrollmentCode: claimCode,
+        enrollmentCodeExpiresAt: claimCodeExpiresAt,
+        deviceToken: deviceToken, // Store actual token temporarily for claim code retrieval
+      });
+
       // Build the POS URL for auto-launch after wizard completes
       const cloudHost = req.get("host") || "localhost:5000";
       const protocol = req.secure ? "https" : "http";
@@ -14252,6 +14265,8 @@ connect();
         security: {
           deviceToken,  // Browser stores this securely
           registeredDeviceId: registeredDevice?.id,
+          claimCode,  // 6-digit code for manual browser entry
+          claimCodeExpiresAt: claimCodeExpiresAt.toISOString(),
         },
         launch: {
           posUrl,  // URL to launch after setup
@@ -14268,6 +14283,57 @@ connect();
     } catch (error) {
       console.error("CAL Setup register device error:", error);
       res.status(500).json({ message: "Failed to register device" });
+    }
+  });
+
+  // CAL Setup: Claim device credentials using 6-digit code
+  // This is used when URL parameters get lost (Windows browser reuse issue)
+  app.post("/api/cal-setup/claim", async (req, res) => {
+    try {
+      const { claimCode } = req.body;
+      
+      if (!claimCode || typeof claimCode !== "string" || claimCode.length !== 6) {
+        return res.status(400).json({ message: "Invalid claim code format" });
+      }
+      
+      // Find the registered device with this claim code
+      const allRegisteredDevices = await storage.getAllRegisteredDevices();
+      const device = allRegisteredDevices.find(d => 
+        d.enrollmentCode === claimCode && 
+        d.enrollmentCodeExpiresAt && 
+        new Date(d.enrollmentCodeExpiresAt) > new Date()
+      );
+      
+      if (!device) {
+        return res.status(404).json({ message: "Invalid or expired claim code" });
+      }
+      
+      // Get the device token that was stored temporarily
+      if (!device.deviceToken) {
+        return res.status(400).json({ message: "No device token found for this claim code" });
+      }
+      
+      // Clear the claim code and temporary token after successful claim
+      await storage.updateRegisteredDevice(device.id, {
+        enrollmentCode: null,
+        enrollmentCodeExpiresAt: null,
+        deviceToken: null,  // Clear the plain token, keep only the hash
+        lastAccessAt: new Date(),
+      });
+      
+      // Return the credentials to store in browser localStorage
+      res.json({
+        success: true,
+        deviceToken: device.deviceToken,
+        registeredDeviceId: device.id,
+        deviceId: device.workstationId || device.kdsDeviceId,
+        deviceName: device.name,
+        deviceType: device.deviceType,
+        propertyId: device.propertyId,
+      });
+    } catch (error) {
+      console.error("CAL Setup claim error:", error);
+      res.status(500).json({ message: "Failed to claim device" });
     }
   });
 
