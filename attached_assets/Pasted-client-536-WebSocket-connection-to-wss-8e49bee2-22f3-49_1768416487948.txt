@@ -1,0 +1,60 @@
+client:536 
+ WebSocket connection to 'wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/vite-hmr?token=6HXCsJU_BZ9u' failed: Error during WebSocket handshake: Unexpected response code: 502
+client:536 
+ Uncaught (in promise) SyntaxError: Failed to construct 'WebSocket': The URL 'wss://localhost:undefined/?token=6HXCsJU_BZ9u' is invalid.
+    at setupWebSocket (client:536:19)
+    at fallback (client:509:16)
+    at WebSocket.<anonymous> (client:555:7)
+react-dom.development.js:29895 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+device-context.tsx:85 [DeviceContext] Checking URL params: 
+Object
+device-context.tsx:94 [DeviceContext] Storing CAL credentials from URL 
+Object
+device-context.tsx:118 [DeviceContext] Credentials stored successfully
+48
+Tracking Prevention blocked access to storage for <URL>.
+api-client.ts:357 
+ Mixed Content: The page at 'https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/pos' was loaded over HTTPS, but requested an insecure resource 'http://service-host.local:3001/health'. This content should also be served over HTTPS.
+use-pos-websocket.ts:107 
+ WebSocket connection to 'wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/ws/kds' failed: WebSocket is closed before the connection is established.
+use-pos-websocket.ts:87 
+ WebSocket error: 
+Event
+/api/tax-groups:1 
+ 
+ Failed to load resource: the server responded with a status of 401 (Unauthorized)
+/api/workstations/32…36ca62e06/context:1 
+ 
+ Failed to load resource: the server responded with a status of 401 (Unauthorized)
+/api/discounts:1 
+ 
+ Failed to load resource: the server responded with a status of 401 (Unauthorized)
+/api/menu-items:1 
+ 
+ Failed to load resource: the server responded with a status of 401 (Unauthorized)
+/api/system-status/w…station/heartbeat:1 
+ 
+ Failed to load resource: the server responded with a status of 401 (Unauthorized)
+use-workstation-heartbeat.ts:43 
+ Heartbeat failed: Error: 401: {"message":"Device not enrolled. Please complete device enrollment.","code":"DEVICE_TOKEN_REQUIRED"}
+    at throwIfResNotOk (queryClient.ts:27:11)
+    at async apiRequest (queryClient.ts:52:3)
+    at async use-workstation-heartbeat.ts:26:7
+service-host.local:3001/health:1 
+ 
+ Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+api-client.ts:357 
+ Mixed Content: The page at 'https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/' was loaded over HTTPS, but requested an insecure resource 'http://service-host.local:3001/health'. This content should also be served over HTTPS.
+service-host.local:3001/health:1 
+ 
+ Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+api-client.ts:357 
+ Mixed Content: The page at 'https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/' was loaded over HTTPS, but requested an insecure resource 'http://service-host.local:3001/health'. This content should also be served over HTTPS.
+service-host.local:3001/health:1 
+ 
+ Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+[NEW] Explain Console errors by using Copilot in Edge: click 
+ to explain an error. Learn more
+Don't show again
+﻿
+
