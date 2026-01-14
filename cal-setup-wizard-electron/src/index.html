@@ -805,9 +805,15 @@
     }
     
     async function launchPos() {
-      const posUrl = registrationData.device.type === 'kds'
-        ? `${cloudUrl}/kds`
-        : `${cloudUrl}/pos`;
+      const basePath = registrationData.device.type === 'kds' ? '/kds' : '/pos';
+      const params = new URLSearchParams({
+        device_token: registrationData.security.deviceToken,
+        device_id: registrationData.security.registeredDeviceId,
+        device_name: registrationData.device.name,
+        device_type: registrationData.device.type === 'kds' ? 'kds_display' : 'pos_workstation',
+        property_id: registrationData.property.id
+      });
+      const posUrl = `${cloudUrl}${basePath}?${params.toString()}`;
       await window.electronAPI.openPos(posUrl);
     }
     

@@ -7,6 +7,29 @@ const DEVICE_TYPE_KEY = "ops_device_type";
 const PROPERTY_ID_KEY = "ops_property_id";
 const CLOUD_URL_KEY = "ops_cloud_url";
 
+function checkAndStoreUrlCredentials(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const deviceToken = params.get("device_token");
+  const deviceId = params.get("device_id");
+  const deviceName = params.get("device_name");
+  const deviceType = params.get("device_type");
+  const propertyId = params.get("property_id");
+  
+  if (deviceToken && deviceId && deviceName && deviceType && propertyId) {
+    localStorage.setItem(DEVICE_TOKEN_KEY, deviceToken);
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    localStorage.setItem(DEVICE_NAME_KEY, deviceName);
+    localStorage.setItem(DEVICE_TYPE_KEY, deviceType);
+    localStorage.setItem(PROPERTY_ID_KEY, propertyId);
+    localStorage.setItem(CLOUD_URL_KEY, window.location.origin);
+    
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return true;
+  }
+  return false;
+}
+
 export interface DeviceInfo {
   id: string;
   name: string;
@@ -64,6 +87,8 @@ export function useDeviceEnrollment() {
   });
 
   const validateEnrollment = useCallback(async () => {
+    checkAndStoreUrlCredentials();
+    
     const deviceToken = getDeviceToken();
 
     if (!deviceToken) {
