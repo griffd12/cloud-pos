@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 
-const DEVICE_TOKEN_KEY = "ops_device_token";
-const DEVICE_ID_KEY = "ops_device_id";
-const DEVICE_NAME_KEY = "ops_device_name";
-const DEVICE_TYPE_KEY = "ops_device_type";
-const PROPERTY_ID_KEY = "ops_property_id";
+const DEVICE_TOKEN_KEY = "pos_device_token";
+const DEVICE_ID_KEY = "pos_device_linked_id";
+const DEVICE_NAME_KEY = "pos_device_name";
+const DEVICE_TYPE_KEY = "pos_device_type";
+const PROPERTY_ID_KEY = "pos_device_property_id";
+const REGISTERED_DEVICE_ID_KEY = "pos_registered_device_id";
 const CLOUD_URL_KEY = "ops_cloud_url";
 
 function checkAndStoreUrlCredentials(): boolean {
@@ -72,6 +73,7 @@ export function clearDeviceToken(): void {
   localStorage.removeItem(DEVICE_NAME_KEY);
   localStorage.removeItem(DEVICE_TYPE_KEY);
   localStorage.removeItem(PROPERTY_ID_KEY);
+  localStorage.removeItem(REGISTERED_DEVICE_ID_KEY);
   localStorage.removeItem(CLOUD_URL_KEY);
 }
 
