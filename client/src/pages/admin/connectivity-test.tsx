@@ -120,10 +120,22 @@ export default function ConnectivityTestPage() {
 
   const { data: serviceHosts = [], isLoading: hostsLoading } = useQuery<ServiceHostStatus[]>({
     queryKey: ["/api/service-hosts/status-summary"],
+    refetchInterval: 10000,
   });
 
   const { data: registeredDevices = [] } = useQuery<DeviceStatus[]>({
     queryKey: ["/api/registered-devices/status-summary"],
+    refetchInterval: 10000,
+  });
+
+  // Fetch live connectivity status from server (Print Agents, etc.)
+  const { data: connectivityStatus } = useQuery<{
+    printAgents: { connected: boolean; count: number };
+    serviceHosts: { connected: boolean; count: number };
+    timestamp: string;
+  }>({
+    queryKey: ["/api/connectivity-status"],
+    refetchInterval: 5000,
   });
 
   const config = modeConfig[mode];
@@ -334,14 +346,18 @@ export default function ConnectivityTestPage() {
                   <span className="text-sm font-medium">Print Agent</span>
                 </div>
                 <div className={`flex items-center justify-center gap-1 ${
-                  status?.printAgentAvailable ? 'text-green-600' : 'text-muted-foreground'
+                  connectivityStatus?.printAgents?.connected ? 'text-green-600' : 'text-muted-foreground'
                 }`}>
-                  {status?.printAgentAvailable ? (
+                  {connectivityStatus?.printAgents?.connected ? (
                     <CheckCircle2 className="w-4 h-4" />
                   ) : (
                     <XCircle className="w-4 h-4" />
                   )}
-                  <span className="text-sm">{status?.printAgentAvailable ? 'Available' : 'Not Found'}</span>
+                  <span className="text-sm">
+                    {connectivityStatus?.printAgents?.connected 
+                      ? `Connected (${connectivityStatus.printAgents.count})` 
+                      : 'Not Connected'}
+                  </span>
                 </div>
               </div>
 

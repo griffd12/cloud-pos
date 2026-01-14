@@ -12475,6 +12475,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Get connectivity status for dashboard (Print Agents, Service Hosts, etc.)
+  app.get("/api/connectivity-status", async (req, res) => {
+    try {
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      const connectedCount = connectedAgentsMap?.size || 0;
+      
+      // Get service host connection count
+      const serviceHostsMap = (app as any).connectedServiceHosts as Map<string, WebSocket>;
+      const connectedServiceHostCount = serviceHostsMap?.size || 0;
+      
+      res.json({
+        printAgents: {
+          connected: connectedCount > 0,
+          count: connectedCount,
+        },
+        serviceHosts: {
+          connected: connectedServiceHostCount > 0,
+          count: connectedServiceHostCount,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Get connectivity status error:", error);
+      res.status(500).json({ error: "Failed to get connectivity status" });
+    }
+  });
+
   // Get single registered device
   app.get("/api/registered-devices/:id", async (req, res) => {
     try {
