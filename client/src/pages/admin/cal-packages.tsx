@@ -173,7 +173,7 @@ export default function CalPackagesPage() {
   });
 
   const createVersionMutation = useMutation({
-    mutationFn: async (data: { version: string; releaseNotes: string }) => {
+    mutationFn: async (data: { version: string; releaseNotes: string; downloadUrl: string }) => {
       const res = await apiRequest("POST", "/api/cal-package-versions", {
         ...data,
         packageId: selectedPackage?.id,
@@ -636,12 +636,14 @@ function VersionDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { version: string; releaseNotes: string }) => void;
+  onSubmit: (data: { version: string; releaseNotes: string; downloadUrl: string }) => void;
   isLoading: boolean;
 }) {
   const [version, setVersion] = useState("");
   const [releaseNotes, setReleaseNotes] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
   const [versionError, setVersionError] = useState("");
+  const [urlError, setUrlError] = useState("");
 
   const validateVersion = (v: string) => {
     if (!v) {
@@ -656,19 +658,44 @@ function VersionDialog({
     return true;
   };
 
+  const validateUrl = (url: string) => {
+    if (!url) {
+      setUrlError("");
+      return false;
+    }
+    try {
+      new URL(url);
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        setUrlError("URL must start with http:// or https://");
+        return false;
+      }
+      setUrlError("");
+      return true;
+    } catch {
+      setUrlError("Please enter a valid URL");
+      return false;
+    }
+  };
+
   const handleVersionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setVersion(v);
     validateVersion(v);
   };
 
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setDownloadUrl(url);
+    validateUrl(url);
+  };
+
   const handleSubmit = () => {
-    if (validateVersion(version)) {
-      onSubmit({ version, releaseNotes });
+    if (validateVersion(version) && validateUrl(downloadUrl)) {
+      onSubmit({ version, releaseNotes, downloadUrl });
     }
   };
 
-  const isValid = version && CAL_VERSION_REGEX.test(version);
+  const isValid = version && CAL_VERSION_REGEX.test(version) && downloadUrl && !urlError;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -691,6 +718,22 @@ function VersionDialog({
             </p>
             {versionError && (
               <p className="text-xs text-destructive">{versionError}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Download URL <span className="text-destructive">*</span></Label>
+            <Input
+              value={downloadUrl}
+              onChange={handleUrlChange}
+              placeholder="https://example.com/packages/mypackage-1.0.0.tar.gz"
+              data-testid="input-download-url"
+              className={urlError ? "border-destructive" : ""}
+            />
+            <p className="text-xs text-muted-foreground">
+              URL where Service Hosts will download the .tar.gz package file
+            </p>
+            {urlError && (
+              <p className="text-xs text-destructive">{urlError}</p>
             )}
           </div>
           <div className="space-y-2">

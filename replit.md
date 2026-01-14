@@ -83,7 +83,13 @@ Preferred communication style: Simple, everyday language.
   - **Package Structure**: manifest.json + install scripts + optional files directory
   - **Deployment Flow**: Upload .tar.gz → Create version in EMC → Create deployment → Service Host downloads → Extracts → Runs install script → Reports status
   - **First Package**: "OPS-POS Base Setup" (v1.0.0) creates the C:\OPS-POS\ directory structure with ServiceHost, Packages, PrintAgent, Config, and Logs subdirectories
-  - **Files**: `service-host/src/sync/cal-sync.ts`, `client/src/components/cal-update-overlay.tsx`, `client/src/hooks/use-cal-updates.ts`, `cal-packages/`
+  - **Bootstrap Installation**: Initial Service Host installation requires a standalone Bootstrap Installer (bootstrap-install.ps1 for Windows, bootstrap-install.sh for Linux) that:
+    1. Creates C:\OPS-POS\ directory structure
+    2. Downloads and installs Service Host executable
+    3. Registers the device with the cloud
+    4. Configures the CAL client for future updates
+    After bootstrap, all subsequent updates come via CAL packages automatically.
+  - **Files**: `service-host/src/sync/cal-sync.ts`, `client/src/components/cal-update-overlay.tsx`, `client/src/hooks/use-cal-updates.ts`, `cal-packages/`, `bootstrap/`
 - **Config Sync Service**: Cloud → Local SQLite synchronization with full and delta sync support. Handles all entity types: hierarchy (enterprises, properties, RVCs), menu (SLUs, items, modifiers), employees (roles, privileges, assignments), devices (workstations, printers, KDS, order devices), operations (tax groups, tenders, discounts, service charges), POS layouts, payments, and loyalty. Features version tracking, auto-sync intervals, real-time updates via WebSocket, and proper soft/hard delete handling. Located at `service-host/src/sync/config-sync.ts`.
 - **Service Host SQLite Schema (v3)**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations. Includes:
   - **Configuration**: enterprises, properties, rvcs, roles, privileges, employees, employee_assignments, major_groups, family_groups, slus, tax_groups, print_classes
