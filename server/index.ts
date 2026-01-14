@@ -5,8 +5,12 @@ import { createServer } from "http";
 import { startFiscalScheduler } from "./fiscalScheduler";
 import { startAlertEngine } from "./alertEngine";
 import { storage } from "./storage";
+import path from "path";
 
 const app = express();
+
+// Serve CAL Setup Wizard static files
+app.use('/cal-setup-wizard', express.static(path.join(process.cwd(), 'cal-setup-wizard')));
 const httpServer = createServer(app);
 
 declare module "http" {
