@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
-import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { usePosWebSocket, subscribeToKdsTestTicket } from "@/hooks/use-pos-websocket";
 import { ArrowLeft, Settings, Wifi, WifiOff, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { Link, Redirect, useLocation } from "wouter";
@@ -60,10 +60,27 @@ export default function KdsPage() {
   const [wsConnected, setWsConnected] = useState(false);
   const [selectedStation, setSelectedStation] = useState("all");
   const [initialized, setInitialized] = useState(false);
+  const [testTicketMessage, setTestTicketMessage] = useState<string | null>(null);
   const { isFullscreen, isSupported: fullscreenSupported, toggleFullscreen } = useFullscreen();
 
   // Real-time sync for menu updates, employee changes, etc.
   usePosWebSocket();
+
+  // Subscribe to KDS test ticket events
+  useEffect(() => {
+    const unsubscribe = subscribeToKdsTestTicket((payload) => {
+      const message = payload?.message || "Test ticket received";
+      setTestTicketMessage(message);
+      toast({
+        title: "Test Ticket Received",
+        description: message,
+        duration: 5000,
+      });
+      // Auto-clear after 5 seconds
+      setTimeout(() => setTestTicketMessage(null), 5000);
+    });
+    return unsubscribe;
+  }, [toast]);
 
   // Check if this is a dedicated KDS device
   const isDedicatedKds = deviceType === "kds" && isConfigured;

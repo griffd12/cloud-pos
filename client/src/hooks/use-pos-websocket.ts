@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { queryClient } from "@/lib/queryClient";
 
 interface PosEvent {
@@ -19,7 +19,18 @@ interface PosEvent {
     propertyId?: string;
     menuItemId?: string;
     employeeId?: string;
+    message?: string;
+    source?: string;
+    timestamp?: string;
   };
+}
+
+// Global event listeners for test tickets
+const kdsTestTicketListeners: Set<(payload: PosEvent['payload']) => void> = new Set();
+
+export function subscribeToKdsTestTicket(callback: (payload: PosEvent['payload']) => void) {
+  kdsTestTicketListeners.add(callback);
+  return () => { kdsTestTicketListeners.delete(callback); };
 }
 
 export function usePosWebSocket() {
@@ -310,6 +321,11 @@ function handlePosEvent(event: PosEvent) {
           return key.includes("/api/timecards");
         }
       });
+      break;
+
+    case "kds_test_ticket":
+      // Notify all listeners about test ticket
+      kdsTestTicketListeners.forEach(listener => listener(event.payload));
       break;
 
     default:
