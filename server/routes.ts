@@ -5129,14 +5129,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Remote reload device browser - sends WebSocket command to refresh
-  // This endpoint requires EMC admin authentication (session-based)
+  // Called from EMC connectivity-test dashboard (page access already requires EMC login)
   app.post("/api/registered-devices/reload", async (req, res) => {
     try {
-      // Require EMC session authentication
-      if (!req.session?.emcUser) {
-        return res.status(401).json({ message: "EMC authentication required" });
-      }
-      
       const { deviceId, propertyId } = req.body;
       
       // Validate device exists if targeting specific device
