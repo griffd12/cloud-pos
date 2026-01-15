@@ -347,6 +347,23 @@ function broadcastTimecardUpdate(propertyId: string, employeeId?: string) {
   });
 }
 
+// Broadcast reload command to specific device or all devices
+function broadcastDeviceReload(deviceId?: string, propertyId?: string) {
+  if (deviceId) {
+    // Targeted reload for specific device
+    broadcastPosEvent({
+      type: "device_reload",
+      payload: { entityId: deviceId, propertyId }
+    });
+  } else {
+    // Reload all devices
+    broadcastPosEvent({
+      type: "device_reload_all",
+      payload: { propertyId }
+    });
+  }
+}
+
 // Shared helper to send unsent items to KDS with proper round and ticket creation
 async function sendItemsToKds(
   checkId: string,
@@ -5108,6 +5125,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Send test ticket error:", error);
       res.status(500).json({ message: "Failed to send test ticket" });
+    }
+  });
+
+  // Remote reload device browser - sends WebSocket command to refresh
+  // This endpoint requires EMC admin authentication (session-based)
+  app.post("/api/registered-devices/reload", async (req, res) => {
+    try {
+      // Require EMC session authentication
+      if (!req.session?.emcUser) {
+        return res.status(401).json({ message: "EMC authentication required" });
+      }
+      
+      const { deviceId, propertyId } = req.body;
+      
+      // Validate device exists if targeting specific device
+      if (deviceId) {
+        const device = await storage.getRegisteredDevice(deviceId);
+        if (!device) {
+          return res.status(404).json({ message: "Device not found" });
+        }
+      }
+      
+      // Validate property exists if targeting specific property
+      if (propertyId) {
+        const property = await storage.getProperty(propertyId);
+        if (!property) {
+          return res.status(404).json({ message: "Property not found" });
+        }
+      }
+      
+      // Broadcast reload command to devices
+      broadcastDeviceReload(deviceId, propertyId);
+      
+      const targetDesc = deviceId ? `device ${deviceId}` : (propertyId ? `property ${propertyId}` : 'all devices');
+      res.json({ success: true, message: `Reload command sent to ${targetDesc}` });
+    } catch (error) {
+      console.error("Remote reload error:", error);
+      res.status(500).json({ message: "Failed to send reload command" });
     }
   });
 

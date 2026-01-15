@@ -259,6 +259,70 @@ export default function ConnectivityTestPage() {
     }
   };
 
+  const reloadAllDevices = async () => {
+    const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+    const targetLabel = selectedProperty ? selectedProperty.name : 'All Properties';
+    const propertyIdToSend = selectedPropertyId && selectedPropertyId !== "all" ? selectedPropertyId : undefined;
+    
+    try {
+      const res = await apiRequest("POST", "/api/registered-devices/reload", {
+        propertyId: propertyIdToSend,
+      });
+      
+      if (res.ok) {
+        addTestResult({
+          testType: 'Remote Reload',
+          target: `All Devices (${targetLabel})`,
+          success: true,
+        });
+        toast({ title: `Reload command sent to devices at ${targetLabel}` });
+      } else {
+        const error = await res.json();
+        toast({ 
+          title: "Failed to reload devices", 
+          description: error.message,
+          variant: "destructive" 
+        });
+      }
+    } catch (e) {
+      toast({ 
+        title: "Failed to reload devices", 
+        description: (e as Error).message,
+        variant: "destructive" 
+      });
+    }
+  };
+
+  const reloadDevice = async (deviceId: string, deviceName: string) => {
+    try {
+      const res = await apiRequest("POST", "/api/registered-devices/reload", {
+        deviceId,
+      });
+      
+      if (res.ok) {
+        addTestResult({
+          testType: 'Remote Reload',
+          target: deviceName,
+          success: true,
+        });
+        toast({ title: `Reload command sent to ${deviceName}` });
+      } else {
+        const error = await res.json();
+        toast({ 
+          title: `Failed to reload ${deviceName}`, 
+          description: error.message,
+          variant: "destructive" 
+        });
+      }
+    } catch (e) {
+      toast({ 
+        title: `Failed to reload ${deviceName}`, 
+        description: (e as Error).message,
+        variant: "destructive" 
+      });
+    }
+  };
+
   const handleServiceHostUrlChange = () => {
     localStorage.setItem('serviceHostUrl', serviceHostUrl);
     apiClient.configure({ serviceHostUrl });
@@ -462,6 +526,17 @@ export default function ConnectivityTestPage() {
               Send KDS Test Ticket
             </Button>
 
+            <Button 
+              className="w-full" 
+              variant="outline"
+              onClick={reloadAllDevices}
+              disabled={isRunningTest}
+              data-testid="button-reload-all"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Reload All Devices
+            </Button>
+
             <Separator />
 
             <div className="space-y-2">
@@ -594,12 +669,24 @@ export default function ConnectivityTestPage() {
                         <p className="text-xs text-muted-foreground">{device.propertyName}</p>
                       </div>
                     </div>
-                    <Badge variant={
-                      device.status === 'connected' ? 'default' :
-                      device.status === 'pending' ? 'secondary' : 'destructive'
-                    }>
-                      {device.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => reloadDevice(device.id, device.name)}
+                        disabled={device.status !== 'connected'}
+                        title={device.status === 'connected' ? 'Reload device' : 'Device offline'}
+                        data-testid={`button-reload-device-${device.id}`}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                      <Badge variant={
+                        device.status === 'connected' ? 'default' :
+                        device.status === 'pending' ? 'secondary' : 'destructive'
+                      }>
+                        {device.status}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>

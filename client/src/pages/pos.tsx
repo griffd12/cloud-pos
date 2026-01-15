@@ -5,6 +5,7 @@ import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { useWorkstationHeartbeat } from "@/hooks/use-workstation-heartbeat";
 import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
 import { useCalUpdates } from "@/hooks/use-cal-updates";
+import { useDeviceReload } from "@/hooks/use-device-reload";
 import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import { CalUpdateOverlay } from "@/components/cal-update-overlay";
@@ -39,6 +40,7 @@ import { useItemAvailability } from "@/hooks/use-item-availability";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { apiClient } from "@/lib/api-client";
 import { usePosContext } from "@/lib/pos-context";
+import { useDeviceContext } from "@/lib/device-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
@@ -84,6 +86,12 @@ export default function PosPage() {
   
   // Enable real-time updates via WebSocket for menu changes, gift cards, etc.
   usePosWebSocket();
+  
+  // Get device context for reload filtering
+  const { registeredDeviceId, propertyId } = useDeviceContext();
+  
+  // Listen for remote reload commands from EMC
+  useDeviceReload({ registeredDeviceId: registeredDeviceId || undefined, propertyId: propertyId || undefined });
   
   // Send periodic device heartbeats to maintain online status
   useDeviceHeartbeat(true);

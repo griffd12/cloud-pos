@@ -335,7 +335,36 @@ function handlePosEvent(event: PosEvent) {
       kdsTestTicketListeners.forEach(listener => listener(event.payload));
       break;
 
+    case "device_reload":
+      // Remote reload command from EMC
+      console.log("[WebSocket] Received reload command:", event.payload);
+      // Notify all reload listeners
+      deviceReloadListeners.forEach(listener => listener(event.payload));
+      break;
+
+    case "device_reload_all":
+      // Reload all devices (optionally scoped by property)
+      console.log("[WebSocket] Received reload all command:", event.payload);
+      deviceReloadAllListeners.forEach(listener => listener(event.payload));
+      break;
+
     default:
       break;
   }
+}
+
+// Global event listeners for targeted device reload commands
+const deviceReloadListeners: Set<(payload: PosEvent['payload']) => void> = new Set();
+
+// Global event listeners for reload-all commands
+const deviceReloadAllListeners: Set<(payload: PosEvent['payload']) => void> = new Set();
+
+export function subscribeToDeviceReload(callback: (payload: PosEvent['payload']) => void) {
+  deviceReloadListeners.add(callback);
+  return () => { deviceReloadListeners.delete(callback); };
+}
+
+export function subscribeToDeviceReloadAll(callback: (payload: PosEvent['payload']) => void) {
+  deviceReloadAllListeners.add(callback);
+  return () => { deviceReloadAllListeners.delete(callback); };
 }

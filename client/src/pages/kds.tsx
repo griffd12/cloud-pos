@@ -9,6 +9,7 @@ import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
 import { usePosWebSocket, subscribeToKdsTestTicket } from "@/hooks/use-pos-websocket";
 import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
+import { useDeviceReload } from "@/hooks/use-device-reload";
 import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ArrowLeft, Settings, Wifi, WifiOff, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
@@ -67,6 +68,10 @@ export default function KdsPage() {
 
   // Real-time sync for menu updates, employee changes, etc.
   usePosWebSocket();
+  
+  // Listen for remote reload commands from EMC (use device context for targeting)
+  const { registeredDeviceId, propertyId: devicePropertyId } = useDeviceContext();
+  useDeviceReload({ registeredDeviceId: registeredDeviceId || undefined, propertyId: devicePropertyId || undefined });
   
   // Send periodic device heartbeats to maintain online status
   useDeviceHeartbeat(true);
