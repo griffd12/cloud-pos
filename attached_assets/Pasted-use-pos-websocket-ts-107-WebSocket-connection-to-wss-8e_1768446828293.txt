@@ -1,0 +1,31 @@
+use-pos-websocket.ts:107 WebSocket connection to 'wss://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/ws/kds' failed: WebSocket is closed before the connection is established.
+
+use-device-enrollment.ts:20 [DeviceEnrollment] Checking URL params: 
+{hasToken: false, hasDeviceId: false, hasRegisteredDeviceId: false, hasDeviceName: false, hasDeviceType: false, …}
+use-device-enrollment.ts:109 [DeviceEnrollment] storedFromUrl: false
+use-device-enrollment.ts:112 [DeviceEnrollment] deviceToken present: true eb774d05-345a-4bf7-a...
+use-device-enrollment.ts:126 [DeviceEnrollment] Validating device token...
+use-cal-updates.ts:31 Mixed Content: The page at 'https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/pos' was loaded over HTTPS, but attempted to connect to the insecure WebSocket endpoint 'ws://192.168.1.148:3001/ws'. This request has been blocked; this endpoint must be available over WSS.
+(anonymous)	@	use-cal-updates.ts:31
+(anonymous)	@	use-cal-updates.ts:87
+use-cal-updates.ts:66 [CAL Updates] Failed to connect: SecurityError: Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS.
+    at use-cal-updates.ts:31:18
+    at use-cal-updates.ts:87:7
+(anonymous)	@	use-cal-updates.ts:66
+(anonymous)	@	use-cal-updates.ts:87
+use-pos-websocket.ts:87 WebSocket error: 
+Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+ws.onerror	@	use-pos-websocket.ts:87
+use-device-enrollment.ts:136 [DeviceEnrollment] Validation response: 
+{ok: true, valid: true, message: undefined}
+use-device-enrollment.ts:155 [DeviceEnrollment] Validation successful, device enrolled
+api-client.ts:357 Mixed Content: The page at 'https://8e49bee2-22f3-4969-9c95-44f8f58b140f-00-37cyu2rr9zbrb.worf.replit.dev/pos' was loaded over HTTPS, but requested an insecure resource 'http://service-host.local:3001/health'. This content should also be served over HTTPS.
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+api-client.ts:357 
+ GET http://service-host.local:3001/health net::ERR_NAME_NOT_RESOLVED
+checkHealth	@	api-client.ts:357
+await in checkHealth		
+(anonymous)	@	api-client.ts:322
+﻿
