@@ -1279,6 +1279,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/cal-deployment-targets(\/.*)?$/,    // CAL deployment targets (Service Host updates)
     /^\/service-hosts(\/.*)?$/,             // Service host management (EMC feature)
     /^\/cal-setup(\/.*)?$/,                 // CAL Setup Wizard endpoints (uses EMC auth)
+    /^\/cal-client(\/.*)?$/,                // CAL Client polling endpoints (uses device token auth)
     /^\/dev(\/.*)?$/,                       // Dev-only endpoints (testing)
   ];
 
@@ -14511,6 +14512,246 @@ connect();
     } catch (error) {
       console.error("CAL Setup get config error:", error);
       res.status(500).json({ message: "Failed to get configuration" });
+    }
+  });
+
+  // ============================================================================
+  // CAL CLIENT ENDPOINTS - For workstation CAL Client polling
+  // ============================================================================
+
+  // CAL Client: Get pending deployments for a specific device
+  // Called by CAL Client service running on workstations
+  app.get("/api/cal-client/:deviceId/pending-deployments", async (req, res) => {
+    try {
+      const { deviceId } = req.params;
+      const deviceToken = req.headers["x-device-token"] as string;
+      
+      if (!deviceToken) {
+        return res.status(401).json({ message: "Device token required" });
+      }
+      
+      // Validate device token (storage method takes the hash)
+      const tokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const registeredDevice = await storage.getRegisteredDeviceByToken(tokenHash);
+      
+      if (!registeredDevice) {
+        return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      // Get the workstation or KDS device to determine property
+      let targetWorkstationId: string | null = null;
+      const propertyId: string | null = registeredDevice.propertyId;
+      
+      if (registeredDevice.workstationId) {
+        targetWorkstationId = registeredDevice.workstationId;
+      }
+      
+      if (!propertyId) {
+        return res.status(400).json({ message: "Device not associated with a property" });
+      }
+      
+      // Get property to find enterprise
+      const property = await storage.getProperty(propertyId);
+      if (!property?.enterpriseId) {
+        return res.status(400).json({ message: "Property not associated with an enterprise" });
+      }
+      
+      // Get all deployments for this enterprise
+      const allDeployments = await storage.getCalDeployments(property.enterpriseId);
+      
+      // Filter to only scheduled deployments
+      const scheduledDeployments = allDeployments.filter(d => d.status === "scheduled");
+      
+      // Filter deployments that apply to this device
+      const pendingDeployments = [];
+      
+      for (const deployment of scheduledDeployments) {
+        // Get deployment targets for this deployment
+        const targets = await storage.getCalDeploymentTargets(deployment.id);
+        
+        for (const target of targets) {
+          // Check if target applies to this device
+          // Target type is determined by which ID field is populated
+          let applies = false;
+          let priority = 1000; // Default priority
+          
+          // Check by workstation ID (most specific)
+          if (target.workstationId && target.workstationId === targetWorkstationId) {
+            applies = true;
+            priority = 100; // Highest priority
+          }
+          // Check by property ID
+          else if (target.propertyId && target.propertyId === propertyId && !target.workstationId) {
+            applies = true;
+            priority = 500;
+          }
+          // Enterprise-wide (no property or workstation specified) - applies to all
+          else if (!target.propertyId && !target.workstationId) {
+            applies = true;
+            priority = 1000; // Lowest priority
+          }
+          
+          if (applies && target.status === "pending") {
+            // Get package version details
+            const packageVersion = await storage.getCalPackageVersion(deployment.packageVersionId);
+            const calPackage = packageVersion 
+              ? await storage.getCalPackage(packageVersion.packageId)
+              : null;
+            
+            if (packageVersion && calPackage) {
+              pendingDeployments.push({
+                deploymentId: deployment.id,
+                targetId: target.id,
+                packageName: calPackage.name,
+                packageType: calPackage.packageType,
+                versionNumber: packageVersion.versionNumber,
+                downloadUrl: packageVersion.downloadUrl,
+                checksum: packageVersion.checksum,
+                action: deployment.action || "install",
+                scheduledAt: deployment.scheduledStartTime,
+                priority,
+              });
+            }
+          }
+        }
+      }
+      
+      // Sort by priority (lower = more specific = higher priority)
+      pendingDeployments.sort((a, b) => a.priority - b.priority);
+      
+      // Update last access time
+      await storage.updateRegisteredDevice(registeredDevice.id, {
+        lastAccessAt: new Date(),
+      });
+      
+      res.json(pendingDeployments);
+    } catch (error) {
+      console.error("CAL Client pending deployments error:", error);
+      res.status(500).json({ message: "Failed to get pending deployments" });
+    }
+  });
+
+  // CAL Client: Report deployment status
+  // Called by CAL Client after installing/uninstalling a package
+  app.post("/api/cal-client/:deviceId/deployment-status", async (req, res) => {
+    try {
+      const { deviceId } = req.params;
+      const deviceToken = req.headers["x-device-token"] as string;
+      const { deploymentId, targetId, status, message, logOutput, completedAt } = req.body;
+      
+      if (!deviceToken) {
+        return res.status(401).json({ message: "Device token required" });
+      }
+      
+      // Validate device token
+      const tokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const registeredDevice = await storage.getRegisteredDeviceByToken(tokenHash);
+      
+      if (!registeredDevice) {
+        return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      if (!deploymentId || !status) {
+        return res.status(400).json({ message: "deploymentId and status are required" });
+      }
+      
+      // Map CAL Client status to our deployment target status
+      let targetStatus: string;
+      switch (status) {
+        case "starting":
+        case "downloading":
+        case "extracting":
+        case "installing":
+          targetStatus = "in_progress";
+          break;
+        case "completed":
+          targetStatus = "completed";
+          break;
+        case "failed":
+          targetStatus = "failed";
+          break;
+        default:
+          targetStatus = "pending";
+      }
+      
+      // Update deployment target status if targetId provided
+      if (targetId) {
+        await storage.updateCalDeploymentTarget(targetId, {
+          status: targetStatus,
+          completedAt: completedAt ? new Date(completedAt) : undefined,
+          errorMessage: status === "failed" ? message : undefined,
+        });
+      }
+      
+      console.log(`[CAL Client] Deployment ${deploymentId} status: ${status} - ${message}`);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("CAL Client deployment status error:", error);
+      res.status(500).json({ message: "Failed to update deployment status" });
+    }
+  });
+
+  // CAL Client: Get installed packages registry (for EMC visibility)
+  app.get("/api/cal-client/:deviceId/installed-packages", async (req, res) => {
+    try {
+      const { deviceId } = req.params;
+      const deviceToken = req.headers["x-device-token"] as string;
+      
+      if (!deviceToken) {
+        return res.status(401).json({ message: "Device token required" });
+      }
+      
+      // Validate device token
+      const tokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const registeredDevice = await storage.getRegisteredDeviceByToken(tokenHash);
+      
+      if (!registeredDevice) {
+        return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      // For now, we track installed packages on the client side
+      // This endpoint could be used to sync that data to the cloud
+      // Return empty array - client should POST their registry here
+      res.json([]);
+    } catch (error) {
+      console.error("CAL Client installed packages error:", error);
+      res.status(500).json({ message: "Failed to get installed packages" });
+    }
+  });
+
+  // CAL Client: Sync installed packages registry to cloud
+  app.post("/api/cal-client/:deviceId/installed-packages", async (req, res) => {
+    try {
+      const { deviceId } = req.params;
+      const deviceToken = req.headers["x-device-token"] as string;
+      const { packages } = req.body;
+      
+      if (!deviceToken) {
+        return res.status(401).json({ message: "Device token required" });
+      }
+      
+      // Validate device token
+      const tokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
+      const registeredDevice = await storage.getRegisteredDeviceByToken(tokenHash);
+      
+      if (!registeredDevice) {
+        return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      // Store the package registry in the registered device record
+      // This allows EMC to see what's installed on each workstation
+      await storage.updateRegisteredDevice(registeredDevice.id, {
+        installedPackages: packages,
+        lastAccessAt: new Date(),
+      });
+      
+      console.log(`[CAL Client] Device ${registeredDevice.name} synced ${packages?.length || 0} installed packages`);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("CAL Client sync packages error:", error);
+      res.status(500).json({ message: "Failed to sync installed packages" });
     }
   });
 
