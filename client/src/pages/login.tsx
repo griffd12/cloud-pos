@@ -17,6 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
+import { useDeviceReload } from "@/hooks/use-device-reload";
+import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
 import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle, Monitor, Maximize, Minimize } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +63,10 @@ export default function LoginPage() {
     setWorkstationId,
     setCurrentWorkstation,
   } = usePosContext();
+
+  // Enable remote reload and heartbeat for devices at login screen
+  useDeviceReload();
+  useDeviceHeartbeat(true);
 
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
   const [pin, setPin] = useState("");
