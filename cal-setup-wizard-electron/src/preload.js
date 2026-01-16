@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadCalPackage: (cloudUrl, packageName, rootDir) => 
     ipcRenderer.invoke('download-cal-package', cloudUrl, packageName, rootDir),
   
+  downloadCalClient: (cloudUrl, rootDir) =>
+    ipcRenderer.invoke('download-cal-client', cloudUrl, rootDir),
+  
+  saveCalClientConfig: (rootDir, config) =>
+    ipcRenderer.invoke('save-cal-client-config', rootDir, config),
+  
+  installCalClientService: (rootDir, serviceName) =>
+    ipcRenderer.invoke('install-cal-client-service', rootDir, serviceName),
+  
   openPos: (posUrl) => ipcRenderer.invoke('open-pos', posUrl),
   
   quitApp: () => ipcRenderer.invoke('quit-app'),

@@ -191,6 +191,8 @@ ipcMain.handle('create-directories', async (event, rootDir) => {
     path.join(normalizedRoot, 'ServiceHost'),
     path.join(normalizedRoot, 'ServiceHost', 'data'),
     path.join(normalizedRoot, 'ServiceHost', 'logs'),
+    path.join(normalizedRoot, 'CalClient'),
+    path.join(normalizedRoot, 'CalClient', 'logs'),
     path.join(normalizedRoot, 'Packages'),
     path.join(normalizedRoot, 'PrintAgent'),
     path.join(normalizedRoot, 'Config'),
@@ -402,4 +404,107 @@ ipcMain.handle('open-pos', async (event, posUrl) => {
 
 ipcMain.handle('quit-app', async () => {
   app.quit();
+});
+
+ipcMain.handle('download-cal-client', async (event, cloudUrl, rootDir) => {
+  if (!validateUrl(cloudUrl)) {
+    return { success: false, error: 'Invalid cloud URL' };
+  }
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+
+  const calClientUrl = `${cloudUrl}/downloads/cal-client.exe`;
+  const normalizedRoot = path.normalize(rootDir);
+  const destPath = path.join(normalizedRoot, 'CalClient', 'cal-client.exe');
+  
+  try {
+    if (mainWindow) mainWindow.webContents.send('download-progress', 0);
+    
+    await downloadFile(calClientUrl, destPath, (progress) => {
+      if (mainWindow) mainWindow.webContents.send('download-progress', progress);
+    });
+    
+    const stats = fs.statSync(destPath);
+    if (stats.size < 1000) {
+      throw new Error('Downloaded file is too small - likely an error page');
+    }
+    
+    return { success: true, path: destPath, size: stats.size };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('save-cal-client-config', async (event, rootDir, config) => {
+  writeLog('INFO', 'Saving CAL Client configuration', { rootDir });
+  
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  if (!config || typeof config !== 'object') {
+    return { success: false, error: 'Invalid configuration' };
+  }
+
+  const normalizedRoot = path.normalize(rootDir);
+  const configPath = path.join(normalizedRoot, 'CalClient', 'cal-client-config.json');
+  
+  try {
+    const fullConfig = {
+      deviceId: config.deviceId || '',
+      deviceToken: config.deviceToken || '',
+      propertyId: config.propertyId || '',
+      serviceHostUrl: config.serviceHostUrl || '',
+      emcUrl: config.emcUrl || '',
+      calRootDir: normalizedRoot,
+      pollIntervalMs: 60000,
+      installedAt: new Date().toISOString(),
+    };
+    
+    fs.writeFileSync(configPath, JSON.stringify(fullConfig, null, 2));
+    writeLog('INFO', `CAL Client configuration saved to ${configPath}`);
+    return { success: true, path: configPath };
+  } catch (err) {
+    writeLog('ERROR', 'Failed to save CAL Client configuration', { error: err.message });
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('install-cal-client-service', async (event, rootDir, serviceName = 'OPS-POS-CalClient') => {
+  if (process.platform !== 'win32') {
+    return { success: false, error: 'Windows service installation only available on Windows' };
+  }
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  
+  const sanitizedName = sanitizeServiceName(serviceName);
+  const normalizedRoot = path.normalize(rootDir);
+  const exePath = path.join(normalizedRoot, 'CalClient', 'cal-client.exe');
+  const configPath = path.join(normalizedRoot, 'CalClient', 'cal-client-config.json');
+  
+  if (!fs.existsSync(exePath)) {
+    return { success: false, error: 'CAL Client executable not found' };
+  }
+  
+  return new Promise((resolve) => {
+    const cmd = `sc create "${sanitizedName}" binPath= "\\"${exePath}\\" --config \\"${configPath}\\"" start= auto`;
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        if (stderr && stderr.includes('already exists')) {
+          resolve({ success: true, message: 'Service already exists' });
+        } else {
+          resolve({ success: false, error: stderr || error.message });
+        }
+      } else {
+        exec(`sc start "${sanitizedName}"`, (startErr, startOut, startStderr) => {
+          if (startErr) {
+            resolve({ success: true, message: 'Service installed but not started', startError: startStderr });
+          } else {
+            resolve({ success: true, message: 'Service installed and started' });
+          }
+        });
+      }
+    });
+  });
 });
