@@ -478,6 +478,7 @@
     let registrationData = null;
     let systemInfo = null;
     let rootDir = '';
+    let calClientInstalled = false;
     
     async function init() {
       systemInfo = await window.electronAPI.getSystemInfo();
@@ -761,12 +762,24 @@
             deviceId: registrationData.security.registeredDeviceId,
             deviceToken: registrationData.security.deviceToken,
             propertyId: selectedProperty.id,
-            serviceHostUrl: `http://localhost:8080`,
-            emcUrl: cloudUrl,
+            cloudUrl: cloudUrl,
+            serviceHostUrl: null,
           });
           
           if (calConfigResult.success) {
             log(`CAL Client configuration saved`, 'success');
+            
+            updateProgress(80, 'Installing CAL Client service...');
+            log('Installing CAL Client as Windows service...', 'info');
+            
+            const serviceResult = await window.electronAPI.installCalClientService(rootDir);
+            if (serviceResult.success) {
+              log(`CAL Client service: ${serviceResult.message}`, 'success');
+              calClientInstalled = true;
+            } else {
+              log(`Could not install CAL Client service: ${serviceResult.error}`, 'warning');
+              log('CAL Client can be started manually from command line', 'info');
+            }
           } else {
             log(`Failed to save CAL Client config: ${calConfigResult.error}`, 'warning');
           }
@@ -839,7 +852,7 @@
         </div>
         <div class="row">
           <span class="label">CAL Client</span>
-          <span class="value">Installed (auto-updates enabled)</span>
+          <span class="value">${calClientInstalled ? 'Installed (auto-updates enabled)' : 'Not installed'}</span>
         </div>
         <div class="row">
           <span class="label">Registered At</span>

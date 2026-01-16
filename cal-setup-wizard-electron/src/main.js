@@ -451,14 +451,14 @@ ipcMain.handle('save-cal-client-config', async (event, rootDir, config) => {
   
   try {
     const fullConfig = {
+      cloudUrl: config.cloudUrl || '',
+      serviceHostUrl: config.serviceHostUrl || null,
       deviceId: config.deviceId || '',
       deviceToken: config.deviceToken || '',
       propertyId: config.propertyId || '',
-      serviceHostUrl: config.serviceHostUrl || '',
-      emcUrl: config.emcUrl || '',
       calRootDir: normalizedRoot,
       pollIntervalMs: 60000,
-      installedAt: new Date().toISOString(),
+      logLevel: 'info',
     };
     
     fs.writeFileSync(configPath, JSON.stringify(fullConfig, null, 2));
