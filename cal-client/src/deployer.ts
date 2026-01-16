@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import http from 'http';
+import crypto from 'crypto';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import tar from 'tar';
@@ -206,10 +207,28 @@ export class PackageDeployer {
         }
         
         const fileStream = fs.createWriteStream(filePath);
+        const hash = crypto.createHash('sha256');
+        
+        response.on('data', (chunk) => {
+          hash.update(chunk);
+        });
+        
         response.pipe(fileStream);
         
         fileStream.on('finish', () => {
           fileStream.close();
+          
+          // Verify checksum if provided
+          if (deployment.checksum) {
+            const computedChecksum = hash.digest('hex');
+            if (computedChecksum.toLowerCase() !== deployment.checksum.toLowerCase()) {
+              fs.unlink(filePath, () => {});
+              reject(new Error(`Checksum mismatch: expected ${deployment.checksum}, got ${computedChecksum}`));
+              return;
+            }
+            console.log(`[Deployer] Checksum verified for ${filePath}`);
+          }
+          
           console.log(`[Deployer] Downloaded to ${filePath}`);
           resolve(filePath);
         });

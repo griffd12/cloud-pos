@@ -14538,12 +14538,21 @@ connect();
         return res.status(401).json({ message: "Invalid device token" });
       }
       
-      // Get the workstation or KDS device to determine property
+      // Validate device binding - deviceId in URL must match the registered device
+      if (registeredDevice.id !== deviceId) {
+        return res.status(403).json({ message: "Device ID mismatch - token does not match requested device" });
+      }
+      
+      // Get the target device ID (workstation or KDS) for deployment targeting
       let targetWorkstationId: string | null = null;
+      let targetKdsDeviceId: string | null = null;
       const propertyId: string | null = registeredDevice.propertyId;
       
       if (registeredDevice.workstationId) {
         targetWorkstationId = registeredDevice.workstationId;
+      }
+      if (registeredDevice.kdsDeviceId) {
+        targetKdsDeviceId = registeredDevice.kdsDeviceId;
       }
       
       if (!propertyId) {
@@ -14562,31 +14571,52 @@ connect();
       // Filter to only scheduled deployments
       const scheduledDeployments = allDeployments.filter(d => d.status === "scheduled");
       
-      // Filter deployments that apply to this device
-      const pendingDeployments = [];
+      // Collect all matching deployments with priority
+      const allMatches: Array<{
+        deploymentId: string;
+        targetId: string;
+        packageName: string;
+        packageType: string;
+        versionNumber: string;
+        downloadUrl: string | null;
+        checksum: string | null;
+        action: string;
+        scheduledAt: Date | null;
+        priority: number;
+      }> = [];
       
       for (const deployment of scheduledDeployments) {
         // Get deployment targets for this deployment
         const targets = await storage.getCalDeploymentTargets(deployment.id);
         
         for (const target of targets) {
+          // Skip service host targets - those are for Service Hosts, not workstations
+          if (target.serviceHostId) {
+            continue;
+          }
+          
           // Check if target applies to this device
           // Target type is determined by which ID field is populated
           let applies = false;
           let priority = 1000; // Default priority
           
-          // Check by workstation ID (most specific)
+          // Check by workstation ID (most specific for POS workstations)
           if (target.workstationId && target.workstationId === targetWorkstationId) {
             applies = true;
             priority = 100; // Highest priority
           }
-          // Check by property ID
+          // For KDS devices, check if deployment targets this KDS (workstationId field may be used for KDS too)
+          else if (target.workstationId && target.workstationId === targetKdsDeviceId) {
+            applies = true;
+            priority = 100; // Same priority as workstation-specific
+          }
+          // Check by property ID (applies to all devices at property)
           else if (target.propertyId && target.propertyId === propertyId && !target.workstationId) {
             applies = true;
             priority = 500;
           }
-          // Enterprise-wide (no property or workstation specified) - applies to all
-          else if (!target.propertyId && !target.workstationId) {
+          // Enterprise-wide (no property, workstation, or serviceHost) - applies to all devices
+          else if (!target.propertyId && !target.workstationId && !target.serviceHostId) {
             applies = true;
             priority = 1000; // Lowest priority
           }
@@ -14599,7 +14629,7 @@ connect();
               : null;
             
             if (packageVersion && calPackage) {
-              pendingDeployments.push({
+              allMatches.push({
                 deploymentId: deployment.id,
                 targetId: target.id,
                 packageName: calPackage.name,
@@ -14617,7 +14647,18 @@ connect();
       }
       
       // Sort by priority (lower = more specific = higher priority)
-      pendingDeployments.sort((a, b) => a.priority - b.priority);
+      allMatches.sort((a, b) => a.priority - b.priority);
+      
+      // De-duplicate by packageName - only keep the highest priority (most specific) deployment for each package
+      const seenPackages = new Set<string>();
+      const pendingDeployments = allMatches.filter(d => {
+        const key = `${d.packageName}:${d.packageType}`;
+        if (seenPackages.has(key)) {
+          return false;
+        }
+        seenPackages.add(key);
+        return true;
+      });
       
       // Update last access time
       await storage.updateRegisteredDevice(registeredDevice.id, {
@@ -14649,6 +14690,11 @@ connect();
       
       if (!registeredDevice) {
         return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      // Validate device binding - deviceId in URL must match the registered device
+      if (registeredDevice.id !== deviceId) {
+        return res.status(403).json({ message: "Device ID mismatch - token does not match requested device" });
       }
       
       if (!deploymentId || !status) {
@@ -14710,6 +14756,11 @@ connect();
         return res.status(401).json({ message: "Invalid device token" });
       }
       
+      // Validate device binding - deviceId in URL must match the registered device
+      if (registeredDevice.id !== deviceId) {
+        return res.status(403).json({ message: "Device ID mismatch - token does not match requested device" });
+      }
+      
       // For now, we track installed packages on the client side
       // This endpoint could be used to sync that data to the cloud
       // Return empty array - client should POST their registry here
@@ -14737,6 +14788,11 @@ connect();
       
       if (!registeredDevice) {
         return res.status(401).json({ message: "Invalid device token" });
+      }
+      
+      // Validate device binding - deviceId in URL must match the registered device
+      if (registeredDevice.id !== deviceId) {
+        return res.status(403).json({ message: "Device ID mismatch - token does not match requested device" });
       }
       
       // Store the package registry in the registered device record
