@@ -41,6 +41,14 @@ export default function ItemAvailabilityPage() {
 
   const { data: itemAvailability = [], isLoading: availabilityLoading } = useQuery<ItemAvailability[]>({
     queryKey: ["/api/item-availability", selectedPropertyId],
+    queryFn: async () => {
+      if (!selectedPropertyId) return [];
+      const res = await fetch(`/api/item-availability?propertyId=${selectedPropertyId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
