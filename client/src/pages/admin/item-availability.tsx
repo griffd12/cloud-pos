@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Loader2, AlertTriangle, Check, X, Plus, RefreshCw, UtensilsCrossed } from "lucide-react";
 import type { Property, MenuItem, ItemAvailability, PrepItem } from "@shared/schema";
 
@@ -45,6 +45,7 @@ export default function ItemAvailabilityPage() {
       if (!selectedPropertyId) return [];
       const res = await fetch(`/api/item-availability?propertyId=${selectedPropertyId}`, {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (!res.ok) return [];
       return res.json();
