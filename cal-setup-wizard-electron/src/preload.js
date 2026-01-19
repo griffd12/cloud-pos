@@ -29,6 +29,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installCalClientService: (rootDir, serviceName) =>
     ipcRenderer.invoke('install-cal-client-service', rootDir, serviceName),
   
+  downloadPrintAgent: (cloudUrl, rootDir) =>
+    ipcRenderer.invoke('download-print-agent', cloudUrl, rootDir),
+  
+  savePrintAgentConfig: (rootDir, config) =>
+    ipcRenderer.invoke('save-print-agent-config', rootDir, config),
+  
+  startPrintAgent: (rootDir) =>
+    ipcRenderer.invoke('start-print-agent', rootDir),
+  
   openPos: (posUrl) => ipcRenderer.invoke('open-pos', posUrl),
   
   quitApp: () => ipcRenderer.invoke('quit-app'),

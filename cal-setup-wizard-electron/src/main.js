@@ -508,3 +508,118 @@ ipcMain.handle('install-cal-client-service', async (event, rootDir, serviceName 
     });
   });
 });
+
+// Download Print Agent software
+ipcMain.handle('download-print-agent', async (event, cloudUrl, rootDir) => {
+  if (!validateUrl(cloudUrl)) {
+    return { success: false, error: 'Invalid cloud URL' };
+  }
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+
+  const printAgentUrl = `${cloudUrl}/api/print-agents/download`;
+  const normalizedRoot = path.normalize(rootDir);
+  const destPath = path.join(normalizedRoot, 'PrintAgent', 'print-agent.zip');
+  
+  try {
+    if (mainWindow) mainWindow.webContents.send('download-progress', 0);
+    
+    await downloadFile(printAgentUrl, destPath, (progress) => {
+      if (mainWindow) mainWindow.webContents.send('download-progress', progress);
+    });
+    
+    const stats = fs.statSync(destPath);
+    writeLog('INFO', `Print Agent downloaded: ${destPath} (${stats.size} bytes)`);
+    
+    // Extract the zip file
+    const extractDir = path.join(normalizedRoot, 'PrintAgent');
+    try {
+      const unzipCmd = process.platform === 'win32'
+        ? `powershell -command "Expand-Archive -Force -Path '${destPath}' -DestinationPath '${extractDir}'"`
+        : `unzip -o "${destPath}" -d "${extractDir}"`;
+      
+      await new Promise((resolve, reject) => {
+        exec(unzipCmd, (err, stdout, stderr) => {
+          if (err) {
+            writeLog('WARN', `Unzip warning: ${stderr || err.message}`);
+          }
+          resolve();
+        });
+      });
+      writeLog('INFO', 'Print Agent extracted');
+    } catch (extractErr) {
+      writeLog('WARN', `Extraction warning: ${extractErr.message}`);
+    }
+    
+    return { success: true, path: extractDir, size: stats.size };
+  } catch (err) {
+    writeLog('ERROR', `Print Agent download failed: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+});
+
+// Save Print Agent configuration
+ipcMain.handle('save-print-agent-config', async (event, rootDir, config) => {
+  writeLog('INFO', 'Saving Print Agent configuration', { rootDir, agentName: config?.agentName });
+  
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  if (!config || typeof config !== 'object') {
+    return { success: false, error: 'Invalid configuration' };
+  }
+
+  const normalizedRoot = path.normalize(rootDir);
+  const configPath = path.join(normalizedRoot, 'PrintAgent', 'config.json');
+  
+  try {
+    const printAgentConfig = {
+      server: config.server || '',
+      token: config.token || '',
+      agentId: config.agentId || '',
+      agentName: config.agentName || 'Print Agent',
+      reconnectInterval: 5000,
+      maxReconnectInterval: 60000,
+      heartbeatInterval: 30000,
+      printTimeout: 10000,
+    };
+    
+    fs.writeFileSync(configPath, JSON.stringify(printAgentConfig, null, 2));
+    writeLog('INFO', `Print Agent configuration saved to ${configPath}`);
+    
+    return { success: true, path: configPath };
+  } catch (err) {
+    writeLog('ERROR', 'Failed to save Print Agent configuration', { error: err.message });
+    return { success: false, error: err.message };
+  }
+});
+
+// Start Print Agent as background process
+ipcMain.handle('start-print-agent', async (event, rootDir) => {
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+
+  const normalizedRoot = path.normalize(rootDir);
+  const agentPath = path.join(normalizedRoot, 'PrintAgent', 'print-agent.js');
+  const configPath = path.join(normalizedRoot, 'PrintAgent', 'config.json');
+  
+  if (!fs.existsSync(agentPath)) {
+    return { success: false, error: 'Print Agent script not found' };
+  }
+  
+  try {
+    const child = spawn('node', [agentPath, '--config', configPath], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: path.join(normalizedRoot, 'PrintAgent'),
+    });
+    child.unref();
+    writeLog('INFO', `Print Agent started with PID: ${child.pid}`);
+    return { success: true, pid: child.pid };
+  } catch (err) {
+    writeLog('ERROR', `Failed to start Print Agent: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+});

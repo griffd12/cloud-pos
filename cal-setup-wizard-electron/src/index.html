@@ -638,6 +638,17 @@
       document.getElementById('btn-select-property').disabled = false;
     }
     
+    function getServiceBindingsLabel(bindings) {
+      if (!bindings || bindings.length === 0) return 'No services assigned';
+      const labels = {
+        'caps': 'Order Entry',
+        'print_controller': 'Print Controller',
+        'kds_controller': 'KDS Controller',
+        'payment_controller': 'Payment'
+      };
+      return bindings.map(b => labels[b] || b).join(', ');
+    }
+
     async function loadDevices() {
       const response = await fetch(`${cloudUrl}/api/cal-setup/devices/${selectedProperty.id}`, {
         headers: { 'Authorization': `Bearer ${sessionToken}` }
@@ -649,13 +660,18 @@
       
       [...(data.workstations || []), ...(data.kdsDevices || [])].forEach(device => {
         const isKds = !device.rvcId;
+        const hasPrintController = device.serviceBindings?.includes('print_controller');
+        const hasKdsController = device.serviceBindings?.includes('kds_controller');
+        const bindingsLabel = getServiceBindingsLabel(device.serviceBindings);
+        
         const item = document.createElement('div');
         item.className = 'device-item';
         item.innerHTML = `
-          <div class="icon">${isKds ? '📺' : '💻'}</div>
+          <div class="icon">${isKds ? '&#128250;' : (hasPrintController || hasKdsController ? '&#128424;' : '&#128187;')}</div>
           <div class="info">
             <h4>${device.name}</h4>
             <span>${isKds ? 'KDS Display' : 'Workstation'}</span>
+            ${device.serviceBindings?.length > 0 ? `<div style="margin-top: 4px; font-size: 11px; color: #3b82f6;">${bindingsLabel}</div>` : ''}
           </div>
         `;
         item.onclick = () => selectDevice(device, isKds ? 'kds' : 'workstation', item);
@@ -745,18 +761,91 @@
           throw new Error(`Failed to save config: ${configResult.error}`);
         }
         
-        updateProgress(70, 'Downloading CAL Client...');
-        log('Downloading CAL Client service...', 'info');
+        // Provision services based on workstation service bindings
+        updateProgress(70, 'Provisioning services...');
+        log('Checking workstation service bindings...', 'info');
         
+        let provisionedServices = [];
+        let printAgentConfig = null;
+        
+        if (selectedDevice.serviceBindings && selectedDevice.serviceBindings.length > 0) {
+          log(`Services configured: ${getServiceBindingsLabel(selectedDevice.serviceBindings)}`, 'info');
+          
+          const provResponse = await fetch(`${cloudUrl}/api/cal-setup/provision-services`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({
+              propertyId: selectedProperty.id,
+              workstationId: selectedDevice.id,
+              workstationName: selectedDevice.name,
+              serviceBindings: selectedDevice.serviceBindings,
+            })
+          });
+          
+          if (provResponse.ok) {
+            const provData = await provResponse.json();
+            provisionedServices = provData.provisioned || [];
+            
+            for (const svc of provisionedServices) {
+              if (svc.service === 'print_controller') {
+                if (svc.status === 'created') {
+                  log(`Print Agent created: ${svc.config.agentName}`, 'success');
+                  printAgentConfig = svc.config;
+                } else {
+                  log(`Print Agent already exists: ${svc.config.agentName}`, 'info');
+                }
+              } else if (svc.service === 'kds_controller') {
+                log('KDS Controller will run in Service Host', 'success');
+              } else if (svc.service === 'caps') {
+                log('Order Entry enabled on this workstation', 'success');
+              } else if (svc.service === 'payment_controller') {
+                log('Payment processing enabled', 'success');
+              }
+            }
+          } else {
+            log('Could not auto-provision services', 'warning');
+          }
+        } else {
+          log('No service bindings configured for this workstation', 'info');
+        }
+
+        // If Print Controller is assigned, download and configure Print Agent
+        if (printAgentConfig && printAgentConfig.agentToken) {
+          updateProgress(75, 'Downloading Print Agent...');
+          log('Downloading Print Agent software...', 'info');
+          
+          const printAgentResult = await window.electronAPI.downloadPrintAgent(cloudUrl, rootDir);
+          if (printAgentResult.success) {
+            log(`Print Agent downloaded`, 'success');
+            
+            // Save Print Agent configuration
+            const printConfigResult = await window.electronAPI.savePrintAgentConfig(rootDir, {
+              server: cloudUrl.replace('https://', 'wss://').replace('http://', 'ws://'),
+              token: printAgentConfig.agentToken,
+              agentId: printAgentConfig.agentId,
+              agentName: printAgentConfig.agentName,
+            });
+            
+            if (printConfigResult.success) {
+              log('Print Agent configured with auto-generated token', 'success');
+            } else {
+              log(`Print Agent config failed: ${printConfigResult.error}`, 'warning');
+            }
+          } else {
+            log(`Print Agent download failed: ${printAgentResult.error}`, 'warning');
+          }
+        }
+
+        // Legacy CAL Client download (optional now)
+        updateProgress(80, 'Finalizing setup...');
         const calClientResult = await window.electronAPI.downloadCalClient(cloudUrl, rootDir);
         if (!calClientResult.success) {
-          log(`CAL Client download failed: ${calClientResult.error}`, 'warning');
-          log('Continuing without CAL Client (manual package updates required)', 'warning');
+          log(`CAL Client not installed (optional)`, 'info');
         } else {
-          log(`CAL Client downloaded (${(calClientResult.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
-          
-          updateProgress(75, 'Configuring CAL Client...');
-          log('Saving CAL Client configuration...', 'info');
+          log(`CAL Client downloaded`, 'success');
           
           const calConfigResult = await window.electronAPI.saveCalClientConfig(rootDir, {
             deviceId: registrationData.security.registeredDeviceId,

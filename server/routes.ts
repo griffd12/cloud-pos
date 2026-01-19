@@ -14549,17 +14549,28 @@ connect();
       const allServiceHosts = await storage.getServiceHosts();
       const serviceHosts = allServiceHosts.filter(sh => sh.propertyId === propertyId);
 
+      // Get service bindings for the property
+      const serviceBindings = await storage.getWorkstationServiceBindings(propertyId);
+
       res.json({
-        workstations: workstations.map(w => ({
-          id: w.id,
-          name: w.name,
-          number: w.number,
-          rvcId: w.rvcId,
-          deviceType: "workstation",
-          active: w.active,
-          serviceHostId: w.serviceHostId,
-          serviceHostUrl: w.serviceHostUrl,
-        })),
+        workstations: workstations.map(w => {
+          // Get active bindings for this workstation
+          const wsBindings = serviceBindings
+            .filter(b => b.workstationId === w.id && b.active)
+            .map(b => b.serviceType);
+          
+          return {
+            id: w.id,
+            name: w.name,
+            number: w.number,
+            rvcId: w.rvcId,
+            deviceType: "workstation",
+            active: w.active,
+            serviceHostId: w.serviceHostId,
+            serviceHostUrl: w.serviceHostUrl,
+            serviceBindings: wsBindings, // caps, print_controller, kds_controller, payment_controller
+          };
+        }),
         kdsDevices: kdsDevices.map(k => ({
           id: k.id,
           name: k.name,
@@ -14814,6 +14825,123 @@ connect();
     } catch (error) {
       console.error("CAL Setup register device error:", error);
       res.status(500).json({ message: "Failed to register device" });
+    }
+  });
+
+  // CAL Setup: Provision services based on workstation service bindings
+  // This auto-creates Print Agents, etc. when a workstation is set up
+  app.post("/api/cal-setup/provision-services", async (req, res) => {
+    try {
+      const { propertyId, workstationId, workstationName, serviceBindings } = req.body;
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "No session token provided" });
+      }
+
+      const sessionToken = authHeader.slice(7);
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      const provisioned: { service: string; status: string; config?: any }[] = [];
+
+      // Check for print_controller binding - auto-create Print Agent
+      if (serviceBindings?.includes("print_controller")) {
+        // Check if a Print Agent already exists for this workstation name
+        const existingAgents = await storage.getPrintAgents();
+        let agent = existingAgents.find(a => 
+          a.propertyId === propertyId && 
+          a.name.toLowerCase().includes(workstationName.toLowerCase().replace(/[^a-z0-9]/gi, ''))
+        );
+
+        if (!agent) {
+          // Generate secure token for the Print Agent
+          const rawToken = crypto.randomBytes(32).toString("hex");
+          const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+          agent = await storage.createPrintAgent({
+            name: `${workstationName} Print Agent`,
+            propertyId,
+            description: `Auto-provisioned by CAL wizard for ${workstationName}`,
+            tokenHash,
+            status: "offline",
+          });
+
+          provisioned.push({
+            service: "print_controller",
+            status: "created",
+            config: {
+              agentId: agent.id,
+              agentName: agent.name,
+              agentToken: rawToken, // Only returned during creation
+              propertyId,
+              downloadUrl: "/api/print-agents/download",
+            }
+          });
+        } else {
+          provisioned.push({
+            service: "print_controller",
+            status: "exists",
+            config: {
+              agentId: agent.id,
+              agentName: agent.name,
+              propertyId,
+              downloadUrl: "/api/print-agents/download",
+              message: "Print Agent already exists. Regenerate token in EMC if needed."
+            }
+          });
+        }
+      }
+
+      // Check for kds_controller binding
+      if (serviceBindings?.includes("kds_controller")) {
+        // KDS Controller is handled by the Service Host - just note configuration
+        provisioned.push({
+          service: "kds_controller",
+          status: "configured",
+          config: {
+            message: "KDS Controller runs within Service Host",
+            propertyId,
+          }
+        });
+      }
+
+      // Check for caps binding
+      if (serviceBindings?.includes("caps")) {
+        provisioned.push({
+          service: "caps",
+          status: "configured",
+          config: {
+            message: "CAPS is built into POS client - no separate install needed",
+            propertyId,
+          }
+        });
+      }
+
+      // Check for payment_controller binding
+      if (serviceBindings?.includes("payment_controller")) {
+        provisioned.push({
+          service: "payment_controller",
+          status: "configured",
+          config: {
+            message: "Payment Controller is built into POS client",
+            propertyId,
+          }
+        });
+      }
+
+      res.json({
+        success: true,
+        workstationId,
+        workstationName,
+        provisioned,
+      });
+    } catch (error) {
+      console.error("CAL Setup provision services error:", error);
+      res.status(500).json({ message: "Failed to provision services" });
     }
   });
 
