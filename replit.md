@@ -40,7 +40,12 @@ Preferred communication style: Simple, everyday language.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting.
 - **Hybrid Architecture (V2)**: Introduces an optional on-premise Service Host (Node.js with SQLite) for offline resilience (yellow/red modes) with cloud sync infrastructure.
 - **CAL Package Deployment Pipeline**: Oracle Simphony-style system for distributing software packages (CAL Packages) to Service Hosts and workstations, enabling automatic updates via a CAL Client Background Service.
-- **CAL Setup Wizard**: An Electron Desktop App for device initialization, including directory creation, Service Host installation, and device registration.
+- **CAL Setup Wizard**: An Electron Desktop App for device initialization that automatically provisions services based on workstation configuration in EMC. Features:
+  - Reads workstation service bindings from EMC (CAPS, Print Controller, KDS Controller, Payment Controller)
+  - Auto-creates Print Agents with secure tokens when Print Controller is assigned
+  - Downloads, configures, and starts Print Agent software automatically
+  - Reports setup status (in_progress, completed, failed) back to EMC
+  - Displays setup status badges in device list for easy monitoring
 - **Device Binding Security**: SHA-256 hashed device tokens ensure secure access to POS/KDS functionality via REST API middleware and WebSocket authentication.
 - **Config Sync Service**: Cloud to local SQLite synchronization for all entity types (hierarchy, menu, employees, devices, operations, POS layouts, payments, loyalty) with version tracking and real-time updates.
 - **Service Host SQLite Schema**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations, including configuration, menu, devices, transactions, payments, KDS, cash management, time & attendance, fiscal operations, loyalty, gift cards, and orders.
