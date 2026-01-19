@@ -3202,7 +3202,7 @@ export const configVersions = pgTable("config_versions", {
 
 export const serviceHostTransactions = pgTable("service_host_transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  serviceHostId: varchar("service_host_id").notNull().references(() => serviceHosts.id),
+  serviceHostId: varchar("service_host_id").notNull().references(() => serviceHosts.id, { onDelete: "cascade" }),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
   localId: varchar("local_id").notNull(),
   transactionType: varchar("transaction_type", { length: 50 }).notNull(),
@@ -3424,7 +3424,7 @@ export const calDeploymentTargets = pgTable("cal_deployment_targets", {
   deploymentId: varchar("deployment_id").notNull().references(() => calDeployments.id),
   propertyId: varchar("property_id").references(() => properties.id), // null if enterprise-wide
   workstationId: varchar("workstation_id").references(() => workstations.id), // null if property-wide
-  serviceHostId: varchar("service_host_id").references(() => serviceHosts.id), // Target service host
+  serviceHostId: varchar("service_host_id").references(() => serviceHosts.id, { onDelete: "cascade" }), // Target service host
   status: text("status").default("pending"), // pending, downloading, installing, completed, failed
   statusMessage: text("status_message"),
   startedAt: timestamp("started_at"),
