@@ -18543,14 +18543,20 @@ connect();
   // Service Host WebSocket connections (separate from POS/KDS WebSocket)
   const serviceHostConnections: Map<string, WebSocket> = new Map();
 
-  // POST /api/service-hosts - Create a new service host
+  // POST /api/service-hosts - Create a new service (CAPS, Print, KDS, Payment)
+  // Each service is a separate record linked to a host workstation
   app.post("/api/service-hosts", async (req, res) => {
     try {
-      const { propertyId, name, workstationId, services } = req.body;
+      const { propertyId, name, hostWorkstationId, serviceType, workstationId, services } = req.body;
       
       if (!propertyId || !name) {
         return res.status(400).json({ error: "propertyId and name are required" });
       }
+
+      // Determine the host workstation (new field takes priority over legacy field)
+      const actualHostWorkstationId = hostWorkstationId || workstationId || null;
+      // Determine service type (new field takes priority, default to caps for legacy)
+      const actualServiceType = serviceType || (services && services.length > 0 ? services[0] : "caps");
 
       // Generate registration token (one-time use)
       const registrationToken = crypto.randomBytes(32).toString("hex");
@@ -18559,42 +18565,14 @@ connect();
       const serviceHost = await storage.createServiceHost({
         propertyId,
         name,
-        workstationId: workstationId || null,
-        services: services || ["caps", "print", "kds"],
+        serviceType: actualServiceType,
+        hostWorkstationId: actualHostWorkstationId,
+        workstationId: actualHostWorkstationId, // Keep both for backward compatibility
+        services: [actualServiceType], // Legacy field - single service per record now
         registrationToken,
         encryptionKeyHash: crypto.createHash("sha256").update(encryptionKey).digest("hex"),
         status: "offline",
       });
-
-      // If workstation is specified, sync workstation service bindings with selected services
-      if (workstationId && services && services.length > 0) {
-        // Get existing bindings for this workstation
-        const existingBindings = await storage.getBindingsForWorkstation(workstationId);
-        const existingServiceTypes = existingBindings.map(b => b.serviceType);
-        
-        // Add new bindings for services not already on this workstation
-        for (const serviceType of services) {
-          if (!existingServiceTypes.includes(serviceType)) {
-            // Remove this service type from any OTHER workstation in the property (each service = one workstation)
-            await storage.deleteOtherBindingsForServiceType(propertyId, serviceType, workstationId);
-            
-            // Create binding for this workstation
-            await storage.createWorkstationServiceBinding({
-              propertyId,
-              workstationId,
-              serviceType,
-              active: true,
-            });
-          }
-        }
-        
-        // Remove bindings for services no longer selected for this workstation
-        for (const binding of existingBindings) {
-          if (!services.includes(binding.serviceType)) {
-            await storage.deleteWorkstationServiceBinding(binding.id);
-          }
-        }
-      }
 
       res.status(201).json({
         ...serviceHost,

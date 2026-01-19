@@ -3138,8 +3138,13 @@ export type DescriptorSet = typeof descriptorSets.$inferSelect;
 export type InsertDescriptorSet = z.infer<typeof insertDescriptorSetSchema>;
 
 // ============================================================================
-// V2 SERVICE HOST - CLOUD SYNC INFRASTRUCTURE
+// V2 PROPERTY SERVICES - DISTRIBUTED SERVICE ARCHITECTURE
 // ============================================================================
+// Each service (CAPS, Print, KDS, Payment) is a separate entity linked to a host workstation.
+// When CAL Wizard runs, it provisions the services hosted by the selected workstation.
+
+export const SERVICE_TYPES = ["caps", "print", "kds", "payment"] as const;
+export type ServiceType = typeof SERVICE_TYPES[number];
 
 export const SERVICE_HOST_STATUSES = ["offline", "online", "syncing", "error"] as const;
 export type ServiceHostStatus = typeof SERVICE_HOST_STATUSES[number];
@@ -3148,11 +3153,13 @@ export const serviceHosts = pgTable("service_hosts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
   name: text("name").notNull(),
-  workstationId: varchar("workstation_id").references(() => workstations.id),
+  serviceType: text("service_type").notNull().default("caps"), // caps, print, kds, payment
+  hostWorkstationId: varchar("host_workstation_id").references(() => workstations.id), // The workstation hosting this service
+  workstationId: varchar("workstation_id").references(() => workstations.id), // Legacy: kept for backward compatibility
   status: text("status").default("offline"),
   lastHeartbeatAt: timestamp("last_heartbeat_at"),
   version: varchar("version", { length: 20 }),
-  services: jsonb("services").$type<string[]>().default([]),
+  services: jsonb("services").$type<string[]>().default([]), // Legacy: kept for backward compatibility
   registrationToken: varchar("registration_token", { length: 128 }),
   registrationTokenUsed: boolean("registration_token_used").default(false),
   encryptionKeyHash: varchar("encryption_key_hash", { length: 64 }),
@@ -3161,6 +3168,23 @@ export const serviceHosts = pgTable("service_hosts", {
   activeChecks: integer("active_checks").default(0),
   pendingTransactions: integer("pending_transactions").default(0),
   localConfigVersion: integer("local_config_version").default(0),
+  // Service-specific configuration
+  serviceConfig: jsonb("service_config").$type<{
+    // CAPS config
+    port?: number;
+    dataDir?: string;
+    // Print config
+    agentId?: string;
+    agentToken?: string;
+    printerMappings?: Record<string, string>;
+    // KDS config
+    displayIds?: string[];
+    routingRules?: Record<string, string[]>;
+    // Payment config
+    gatewayType?: string;
+    gatewayConfig?: Record<string, string>;
+    terminalIds?: string[];
+  }>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

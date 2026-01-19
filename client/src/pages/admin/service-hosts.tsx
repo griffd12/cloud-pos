@@ -116,8 +116,8 @@ interface DashboardData {
 const serviceHostFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   propertyId: z.string().min(1, "Property is required"),
-  workstationId: z.string().optional(),
-  services: z.array(z.string()).min(1, "Select at least one service"),
+  hostWorkstationId: z.string().min(1, "Host workstation is required"),
+  serviceType: z.string().min(1, "Service type is required"),
 });
 
 type ServiceHostFormData = z.infer<typeof serviceHostFormSchema>;
@@ -157,29 +157,17 @@ export default function ServiceHostsPage() {
 
   const createServiceHostMutation = useMutation({
     mutationFn: async (data: ServiceHostFormData) => {
-      const res = await apiRequest("POST", "/api/service-hosts", data);
+      const res = await apiRequest("POST", "/api/service-hosts", {
+        name: data.name,
+        propertyId: data.propertyId,
+        hostWorkstationId: data.hostWorkstationId,
+        serviceType: data.serviceType,
+      });
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || "Failed to create service host");
+        throw new Error(error.error || "Failed to create service");
       }
       const createdHost = await res.json() as CreatedServiceHost;
-      
-      // If a workstation was selected, create service bindings for each service
-      if (data.workstationId && data.workstationId !== "__none__" && data.services.length > 0) {
-        for (const serviceType of data.services) {
-          try {
-            await apiRequest("POST", "/api/workstation-service-bindings", {
-              propertyId: data.propertyId,
-              workstationId: data.workstationId,
-              serviceType,
-              active: true,
-            });
-          } catch (e) {
-            console.log(`Could not assign ${serviceType} - may already be assigned`);
-          }
-        }
-      }
-      
       return createdHost;
     },
     onSuccess: (data) => {
@@ -511,18 +499,19 @@ export default function ServiceHostsPage() {
               {serviceHosts.length === 0 ? (
                 <div className="text-center py-8">
                   <Server className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground mb-2">No Service Hosts registered</p>
+                  <p className="text-muted-foreground mb-2">No Services registered</p>
                   <p className="text-sm text-muted-foreground">
-                    Click "Register Service Host" to add your first on-premise host.
+                    Click "Register Service" to add your first service (CAPS, Print, KDS, or Payment).
                   </p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
+                      <TableHead>Service Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Host Workstation</TableHead>
                       <TableHead>Property</TableHead>
-                      <TableHead>Services</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -530,6 +519,7 @@ export default function ServiceHostsPage() {
                   <TableBody>
                     {serviceHosts.map((host) => {
                       const property = properties.find(p => p.id === host.propertyId);
+                      const hostWs = workstations.find(ws => ws.id === (host as any).hostWorkstationId);
                       return (
                         <TableRow key={host.id} data-testid={`row-registered-host-${host.id}`}>
                           <TableCell className="font-medium">
@@ -538,16 +528,19 @@ export default function ServiceHostsPage() {
                               {host.name}
                             </div>
                           </TableCell>
-                          <TableCell>{property?.name || "Unknown"}</TableCell>
                           <TableCell>
-                            <div className="flex gap-1 flex-wrap">
-                              {(host.services as string[] || []).map((service: string) => (
-                                <Badge key={service} variant="secondary" className="text-xs">
-                                  {getServiceLabel(service)}
-                                </Badge>
-                              ))}
-                            </div>
+                            <Badge variant="secondary" className="text-xs">
+                              {getServiceLabel((host as any).serviceType || 'caps')}
+                            </Badge>
                           </TableCell>
+                          <TableCell>
+                            {hostWs ? (
+                              <span className="font-medium">{hostWs.name}</span>
+                            ) : (
+                              <span className="text-muted-foreground">Not assigned</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{property?.name || "Unknown"}</TableCell>
                           <TableCell>
                             {host.status === 'online' ? (
                               <Badge className="bg-green-600">Online</Badge>
@@ -560,7 +553,7 @@ export default function ServiceHostsPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => {
-                                if (confirm(`Delete Service Host "${host.name}"? This cannot be undone.`)) {
+                                if (confirm(`Delete Service "${host.name}"? This cannot be undone.`)) {
                                   deleteServiceHostMutation.mutate(host.id);
                                 }
                               }}
@@ -823,12 +816,13 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
     defaultValues: {
       name: "",
       propertyId: "",
-      workstationId: "",
-      services: ["caps"],
+      hostWorkstationId: "",
+      serviceType: "caps",
     },
   });
 
   const selectedPropertyId = form.watch("propertyId");
+  const selectedServiceType = form.watch("serviceType");
   
   const filteredWorkstations = workstations.filter(ws => ws.propertyId === selectedPropertyId);
 
@@ -836,11 +830,11 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
     onSubmit(data);
   };
 
-  const serviceOptions = [
-    { value: "caps", label: "CAPS (Check & Posting Service)" },
-    { value: "print_controller", label: "Print Controller" },
-    { value: "kds_controller", label: "KDS Controller" },
-    { value: "payment_controller", label: "Payment Controller" },
+  const serviceTypeOptions = [
+    { value: "caps", label: "CAPS - Offline Transaction Processing", description: "The main brain for offline mode. Stores local database, handles transactions when cloud is unavailable." },
+    { value: "print", label: "Print Service", description: "Routes print jobs to network printers. Handles receipts, kitchen tickets, reports." },
+    { value: "kds", label: "KDS Controller", description: "Manages kitchen display routing and order flow." },
+    { value: "payment", label: "Payment Controller", description: "Handles payment terminal communication and authorization." },
   ];
 
   return (
@@ -878,7 +872,7 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                   <FormLabel>Property</FormLabel>
                   <Select onValueChange={(value) => {
                     field.onChange(value);
-                    form.setValue("workstationId", "");
+                    form.setValue("hostWorkstationId", "");
                   }} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-property">
@@ -899,21 +893,49 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="serviceType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Service Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-service-type">
+                        <SelectValue placeholder="Select service type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {serviceTypeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {serviceTypeOptions.find(o => o.value === selectedServiceType)?.description || 
+                     "Select the type of service this host will provide"}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {selectedPropertyId && (
               <FormField
                 control={form.control}
-                name="workstationId"
+                name="hostWorkstationId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Controller Workstation (Optional)</FormLabel>
+                    <FormLabel>Host Workstation</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-workstation">
-                          <SelectValue placeholder="Select a workstation" />
+                        <SelectTrigger data-testid="select-host-workstation">
+                          <SelectValue placeholder="Select host workstation" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="__none__">None - Configure later</SelectItem>
                         {filteredWorkstations.map((ws) => (
                           <SelectItem key={ws.id} value={ws.id}>
                             {ws.name}
@@ -922,55 +944,13 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Select a workstation to automatically assign the services below, or configure later in Workstations.
+                      The workstation that will run this service. CAL Wizard will install the service on this device.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             )}
-
-            <FormField
-              control={form.control}
-              name="services"
-              render={() => (
-                <FormItem>
-                  <FormLabel>Services</FormLabel>
-                  <FormDescription>Select which services this host will provide</FormDescription>
-                  <div className="space-y-2 mt-2">
-                    {serviceOptions.map((service) => (
-                      <FormField
-                        key={service.value}
-                        control={form.control}
-                        name="services"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center gap-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(service.value)}
-                                onCheckedChange={(checked) => {
-                                  const current = field.value || [];
-                                  if (checked) {
-                                    field.onChange([...current, service.value]);
-                                  } else {
-                                    field.onChange(current.filter((v) => v !== service.value));
-                                  }
-                                }}
-                                data-testid={`checkbox-service-${service.value}`}
-                              />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer">
-                              {service.label}
-                            </FormLabel>
-                          </FormItem>
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
