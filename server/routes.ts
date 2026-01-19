@@ -14554,10 +14554,13 @@ connect();
 
       res.json({
         workstations: workstations.map(w => {
-          // Get active bindings for this workstation
-          const wsBindings = serviceBindings
-            .filter(b => b.workstationId === w.id && b.active)
-            .map(b => b.serviceType);
+          // Get active bindings for this workstation - prefer direct field, fallback to bindings table
+          let wsBindings = w.serviceBindings || [];
+          if (!wsBindings.length) {
+            wsBindings = serviceBindings
+              .filter(b => b.workstationId === w.id && b.active)
+              .map(b => b.serviceType);
+          }
           
           return {
             id: w.id,
@@ -14569,6 +14572,10 @@ connect();
             serviceHostId: w.serviceHostId,
             serviceHostUrl: w.serviceHostUrl,
             serviceBindings: wsBindings, // caps, print_controller, kds_controller, payment_controller
+            // Setup status
+            setupStatus: w.setupStatus || 'pending',
+            lastSetupAt: w.lastSetupAt,
+            installedServices: w.installedServices || [],
           };
         }),
         kdsDevices: kdsDevices.map(k => ({
@@ -14949,6 +14956,102 @@ connect();
     } catch (error) {
       console.error("CAL Setup provision services error:", error);
       res.status(500).json({ message: "Failed to provision services" });
+    }
+  });
+
+  // CAL Setup: Update workstation setup status after wizard completion
+  app.post("/api/cal-setup/report-status", async (req, res) => {
+    try {
+      const { 
+        workstationId, 
+        status, 
+        installedServices, 
+        deviceToken,
+        registeredDeviceId 
+      } = req.body;
+      
+      // Validate required fields
+      if (!workstationId || typeof workstationId !== 'string') {
+        return res.status(400).json({ message: "workstationId is required" });
+      }
+      
+      // Validate status enum
+      const validStatuses = ['pending', 'in_progress', 'completed', 'failed'];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ message: `status must be one of: ${validStatuses.join(', ')}` });
+      }
+      
+      // Validate installedServices is an array of known services (or undefined/null)
+      const validServices = ['caps', 'print_controller', 'kds_controller', 'payment_controller'];
+      if (installedServices !== undefined && installedServices !== null) {
+        if (!Array.isArray(installedServices)) {
+          return res.status(400).json({ message: "installedServices must be an array" });
+        }
+        for (const svc of installedServices) {
+          if (typeof svc !== 'string' || !validServices.includes(svc)) {
+            return res.status(400).json({ message: `Invalid service: ${svc}. Must be one of: ${validServices.join(', ')}` });
+          }
+        }
+      }
+      
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ message: "No session token provided" });
+      }
+
+      const sessionToken = authHeader.slice(7);
+      const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+      const session = await storage.getEmcSessionByToken(sessionTokenHash);
+      if (!session || new Date(session.expiresAt) < new Date()) {
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      // Get user for access control
+      const user = await storage.getEmcUser(session.userId);
+      if (!user || !user.active) {
+        return res.status(401).json({ message: "User account is disabled" });
+      }
+
+      // Update workstation with setup status
+      const workstation = await storage.getWorkstation(workstationId);
+      if (!workstation) {
+        return res.status(404).json({ message: "Workstation not found" });
+      }
+
+      // Verify user has access to this workstation's property
+      if (user.accessLevel !== "super_admin" && user.accessLevel !== "enterprise_admin") {
+        if (user.propertyId !== workstation.propertyId) {
+          return res.status(403).json({ message: "Access denied to this workstation" });
+        }
+      }
+
+      // Hash the device token for storage
+      const deviceTokenHash = deviceToken 
+        ? crypto.createHash("sha256").update(deviceToken).digest("hex")
+        : undefined;
+
+      const updated = await storage.updateWorkstation(workstationId, {
+        setupStatus: status,
+        lastSetupAt: new Date(),
+        lastSetupBy: session.employeeId,
+        installedServices: installedServices || [],
+        deviceToken: deviceTokenHash,
+        registeredDeviceId,
+      });
+
+      res.json({
+        success: true,
+        workstation: {
+          id: updated.id,
+          name: updated.name,
+          setupStatus: updated.setupStatus,
+          lastSetupAt: updated.lastSetupAt,
+          installedServices: updated.installedServices,
+        }
+      });
+    } catch (error) {
+      console.error("CAL Setup report status error:", error);
+      res.status(500).json({ message: "Failed to update setup status" });
     }
   });
 

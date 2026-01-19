@@ -247,6 +247,15 @@ export const workstations = pgTable("workstations", {
   // Auto-Logout Settings
   autoLogoutMinutes: integer("auto_logout_minutes"), // null or 0 = disabled
   active: boolean("active").default(true),
+  // Service Bindings (what services should run on this workstation)
+  serviceBindings: text("service_bindings").array(), // ['caps', 'print_controller', 'kds_controller', 'payment_controller']
+  // CAL Setup Status
+  setupStatus: text("setup_status").default("pending"), // pending, in_progress, completed, failed
+  lastSetupAt: timestamp("last_setup_at"),
+  lastSetupBy: varchar("last_setup_by"), // Employee ID who ran the wizard
+  installedServices: text("installed_services").array(), // Services successfully installed
+  deviceToken: text("device_token"), // Hashed token for device authentication
+  registeredDeviceId: varchar("registered_device_id"), // Hardware ID of registered device
 });
 
 // Printers (Physical print devices)

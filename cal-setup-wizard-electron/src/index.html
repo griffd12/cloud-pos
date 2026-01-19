@@ -664,12 +664,22 @@
         const hasKdsController = device.serviceBindings?.includes('kds_controller');
         const bindingsLabel = getServiceBindingsLabel(device.serviceBindings);
         
+        // Setup status badge
+        let statusBadge = '';
+        if (device.setupStatus === 'completed') {
+          statusBadge = '<span style="background:#166534;color:#86efac;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:8px;">SETUP COMPLETE</span>';
+        } else if (device.setupStatus === 'in_progress') {
+          statusBadge = '<span style="background:#854d0e;color:#fef08a;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:8px;">IN PROGRESS</span>';
+        } else if (device.setupStatus === 'failed') {
+          statusBadge = '<span style="background:#991b1b;color:#fca5a5;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:8px;">FAILED</span>';
+        }
+        
         const item = document.createElement('div');
         item.className = 'device-item';
         item.innerHTML = `
           <div class="icon">${isKds ? '&#128250;' : (hasPrintController || hasKdsController ? '&#128424;' : '&#128187;')}</div>
           <div class="info">
-            <h4>${device.name}</h4>
+            <h4>${device.name}${statusBadge}</h4>
             <span>${isKds ? 'KDS Display' : 'Workstation'}</span>
             ${device.serviceBindings?.length > 0 ? `<div style="margin-top: 4px; font-size: 11px; color: #3b82f6;">${bindingsLabel}</div>` : ''}
           </div>
@@ -694,6 +704,22 @@
       
       try {
         log('Starting installation...', 'info');
+        
+        // Report in_progress status
+        try {
+          await fetch(`${cloudUrl}/api/cal-setup/report-status`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({
+              workstationId: selectedDevice.id,
+              status: 'in_progress',
+            })
+          });
+        } catch (e) { /* ignore - offline or pre-registration */ }
+        
         updateProgress(5, 'Creating directories...');
         
         const dirResult = await window.electronAPI.createDirectories(rootDir);
@@ -897,6 +923,41 @@
           }
         }
         
+        // Report setup status to cloud EMC
+        updateProgress(95, 'Reporting setup status...');
+        log('Reporting setup status to EMC...', 'info');
+        
+        const installedServices = [];
+        if (printAgentConfig) installedServices.push('print_controller');
+        if (selectedDevice.serviceBindings?.includes('kds_controller')) installedServices.push('kds_controller');
+        if (selectedDevice.serviceBindings?.includes('caps')) installedServices.push('caps');
+        if (selectedDevice.serviceBindings?.includes('payment_controller')) installedServices.push('payment_controller');
+        
+        try {
+          const statusResponse = await fetch(`${cloudUrl}/api/cal-setup/report-status`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({
+              workstationId: selectedDevice.id,
+              status: 'completed',
+              installedServices,
+              deviceToken: registrationData.security.deviceToken,
+              registeredDeviceId: registrationData.security.registeredDeviceId,
+            })
+          });
+          
+          if (statusResponse.ok) {
+            log('Setup status reported to EMC', 'success');
+          } else {
+            log('Could not report status (EMC will update on next sync)', 'warning');
+          }
+        } catch (statusErr) {
+          log('Status reporting skipped (offline)', 'info');
+        }
+        
         updateProgress(100, 'Complete!');
         log('Installation completed successfully!', 'success');
         
@@ -905,6 +966,22 @@
         
       } catch (err) {
         log(`Error: ${err.message}`, 'error');
+        
+        // Report failed status
+        try {
+          await fetch(`${cloudUrl}/api/cal-setup/report-status`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({
+              workstationId: selectedDevice.id,
+              status: 'failed',
+            })
+          });
+        } catch (e) { /* ignore reporting failure */ }
+        
         showError(5, err.message);
         document.getElementById('install-buttons').style.display = 'flex';
       }
