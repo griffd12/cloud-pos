@@ -6251,8 +6251,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           totalPayments += tenderedTotal;
         }
       });
-      // Tips would need to be tracked separately if the system supports them
-      const totalTips = 0;
+      // Calculate tips from all payments in period
+      const totalTips = paymentsInPeriod.reduce((sum, p) => sum + parseFloat(p.tipAmount || "0"), 0);
       
       // REFUNDS - Subtract refund amounts from payments received
       // Refunds are money going OUT, so they reduce net payments received
