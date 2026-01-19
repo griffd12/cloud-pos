@@ -1266,6 +1266,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
   const deviceTokenExemptRoutes = [
     /^\/emc(\/.*)?$/,                      // EMC routes (session-based auth)
+    /^\/admin(\/.*)?$/,                    // Admin routes (uses own PIN-based auth via EMC)
     /^\/registered-devices\/enroll$/,       // Device enrollment
     /^\/registered-devices\/validate$/,     // Token validation
     /^\/registered-devices\/status-summary$/, // Device status for connectivity dashboard

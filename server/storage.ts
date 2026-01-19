@@ -519,7 +519,7 @@ export interface IStorage {
   }>;
   clearSalesData(propertyId: string): Promise<{ deleted: { 
     checks: number; checkItems: number; payments: number; discounts: number; rounds: number; 
-    kdsTicketItems: number; kdsTickets: number; printJobs: number; auditLogs: number; 
+    kdsTicketItems: number; kdsTickets: number; terminalSessions: number; checkLocks: number; printJobs: number; auditLogs: number; 
     timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; 
     tipAllocations: number; tipPoolRuns: number;
     fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
@@ -3053,10 +3053,24 @@ export class DatabaseStorage implements IStorage {
       const additionalGiftCardTrans = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
       giftCardTransResult = { rowCount: (giftCardTransResult.rowCount || 0) + (additionalGiftCardTrans.rowCount || 0) };
 
-      // 6. Delete print jobs, audit logs and checks
-      console.log('[clearSalesData] Deleting print jobs, audit logs and checks for rvcIds:', rvcIds.length);
+      // 6. Delete terminal sessions, print jobs, audit logs and checks
+      console.log('[clearSalesData] Deleting terminal sessions, print jobs, audit logs and checks for rvcIds:', rvcIds.length);
       
-      // 6a. Delete print jobs first (they reference checks)
+      // 6a. Delete terminal sessions first (they reference checks)
+      let terminalSessionsResult = { rowCount: 0 };
+      if (checkIds.length > 0) {
+        terminalSessionsResult = await tx.delete(terminalSessions).where(inArray(terminalSessions.checkId, checkIds));
+      }
+      console.log('[clearSalesData] Terminal sessions deleted:', terminalSessionsResult.rowCount);
+      
+      // 6a2. Delete check locks (they reference checks)
+      let checkLocksResult = { rowCount: 0 };
+      if (checkIds.length > 0) {
+        checkLocksResult = await tx.delete(checkLocks).where(inArray(checkLocks.checkId, checkIds));
+      }
+      console.log('[clearSalesData] Check locks deleted:', checkLocksResult.rowCount);
+      
+      // 6b. Delete print jobs (they reference checks)
       let printJobsResult = { rowCount: 0 };
       if (checkIds.length > 0) {
         printJobsResult = await tx.delete(printJobs).where(inArray(printJobs.checkId, checkIds));
@@ -3066,11 +3080,11 @@ export class DatabaseStorage implements IStorage {
       printJobsResult = { rowCount: (printJobsResult.rowCount || 0) + (additionalPrintJobs.rowCount || 0) };
       console.log('[clearSalesData] Print jobs deleted:', printJobsResult.rowCount);
       
-      // 6b. Delete audit logs
+      // 6c. Delete audit logs
       const auditResult = await tx.delete(auditLogs).where(inArray(auditLogs.rvcId, rvcIds));
       console.log('[clearSalesData] Audit logs deleted:', auditResult.rowCount);
       
-      // 6c. Delete checks
+      // 6d. Delete checks
       const checksResult = await tx.delete(checks).where(inArray(checks.rvcId, rvcIds));
       console.log('[clearSalesData] Checks deleted:', checksResult.rowCount);
 
@@ -3187,6 +3201,8 @@ export class DatabaseStorage implements IStorage {
           rounds: roundsResult.rowCount || 0,
           kdsTicketItems: kdsItemsResult.rowCount || 0,
           kdsTickets: kdsResult.rowCount || 0,
+          terminalSessions: terminalSessionsResult.rowCount || 0,
+          checkLocks: checkLocksResult.rowCount || 0,
           printJobs: printJobsResult.rowCount || 0,
           auditLogs: auditResult.rowCount || 0,
           timePunches: timePunchesResult.rowCount || 0,
