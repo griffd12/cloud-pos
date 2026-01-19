@@ -33,10 +33,11 @@ Preferred communication style: Simple, everyday language.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting.
 - **Hybrid Architecture (V2)**: Introduces an optional on-premise Service Host (Node.js with SQLite) for offline resilience (yellow/red modes) with cloud sync infrastructure.
 - **CAL Package Deployment Pipeline**: Oracle Simphony-style system for distributing software packages (CAL Packages) to Service Hosts and workstations, enabling automatic updates via a CAL Client Background Service.
-- **CAL Setup Wizard**: An Electron Desktop App for device initialization that automatically provisions services based on workstation configuration in EMC. Features:
+- **CAL Setup Wizard**: An Electron Desktop App for device initialization that automatically provisions services based on workstation configuration in EMC. Uses `C:\OPH-POS` as root directory. Features:
   - Reads workstation service bindings from EMC (CAPS, Print Controller, KDS Controller, Payment Controller)
-  - Auto-creates Print Agents with secure tokens when Print Controller is assigned
-  - Downloads, configures, and starts Print Agent software automatically
+  - **CAPS Provisioning**: Creates Service Host records with secure tokens, saves config.json with cloudUrl/serviceHostId/token/propertyId, initializes ServiceHost/data directory for SQLite database
+  - **Print Controller**: Auto-creates Print Agents with secure tokens, downloads and configures Print Agent software
+  - **Payment Controller**: Saves payment-controller.json with gateway configuration
   - Reports setup status (in_progress, completed, failed) back to EMC
   - Displays setup status badges in device list for easy monitoring
 - **Device Binding Security**: SHA-256 hashed device tokens ensure secure access to POS/KDS functionality via REST API middleware and WebSocket authentication.
