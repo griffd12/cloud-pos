@@ -12198,8 +12198,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
 
         if (paidAmount >= total - 0.01) {
-          // Close the check
-          await storage.updateCheck(payment.checkId, { status: "closed", closedAt: new Date() });
+          // Calculate total tips from all payments for the check
+          const tipTotal = allPayments.reduce((sum, p) => sum + parseFloat(p.tipAmount || "0"), 0);
+          // Close the check with tipTotal
+          await storage.updateCheck(payment.checkId, { 
+            status: "closed", 
+            closedAt: new Date(),
+            tipTotal: tipTotal.toFixed(2),
+          });
         }
       }
 
@@ -15234,9 +15240,13 @@ connect();
       let autoPrintStatus: { success: boolean; message?: string } = { success: false };
       
       if (totalPaid >= checkTotal) {
+        // Calculate total tips from all payments for the check
+        const tipTotal = allPayments.reduce((sum, p) => sum + parseFloat(p.tipAmount || "0"), 0);
+        
         const result = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),
+          tipTotal: tipTotal.toFixed(2),
         });
         if (result) updatedCheck = result;
         
