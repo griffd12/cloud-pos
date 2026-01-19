@@ -14923,26 +14923,84 @@ connect();
         });
       }
 
-      // Check for caps binding
+      // Check for caps binding - create/find Service Host for this workstation
       if (serviceBindings?.includes("caps")) {
-        provisioned.push({
-          service: "caps",
-          status: "configured",
-          config: {
-            message: "CAPS is built into POS client - no separate install needed",
+        // Check if a Service Host already exists for this workstation
+        const existingHosts = await storage.getServiceHosts(propertyId);
+        let serviceHost = existingHosts.find(h => h.workstationId === workstationId);
+
+        if (!serviceHost) {
+          // Generate secure registration token for the Service Host
+          const rawToken = crypto.randomBytes(32).toString("hex");
+          const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+          // Get the services this host will run
+          const hostServices = serviceBindings.filter((s: string) => 
+            ["caps", "kds_controller", "payment_controller"].includes(s)
+          );
+
+          serviceHost = await storage.createServiceHost({
             propertyId,
-          }
-        });
+            name: `${workstationName} Service Host`,
+            workstationId,
+            status: "offline",
+            services: hostServices,
+            registrationToken: tokenHash,
+            registrationTokenUsed: false,
+          });
+
+          provisioned.push({
+            service: "caps",
+            status: "created",
+            config: {
+              serviceHostId: serviceHost.id,
+              serviceHostName: serviceHost.name,
+              serviceHostToken: rawToken, // Only returned during creation
+              propertyId,
+              services: hostServices,
+              port: 3001,
+              dataDir: "./data",
+            }
+          });
+        } else {
+          // Service Host exists - regenerate token for wizard installation
+          const rawToken = crypto.randomBytes(32).toString("hex");
+          const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+          
+          // Update the service host with the new token
+          await storage.updateServiceHost(serviceHost.id, { 
+            registrationToken: tokenHash,
+            registrationTokenUsed: false,
+          });
+
+          provisioned.push({
+            service: "caps",
+            status: "exists",
+            config: {
+              serviceHostId: serviceHost.id,
+              serviceHostName: serviceHost.name,
+              serviceHostToken: rawToken, // Regenerated token for local installation
+              propertyId,
+              services: serviceHost.services || [],
+              port: 3001,
+              dataDir: "./data",
+            }
+          });
+        }
       }
 
       // Check for payment_controller binding
       if (serviceBindings?.includes("payment_controller")) {
+        // Get property to find configured payment gateway
+        const property = await storage.getProperty(propertyId);
+        
         provisioned.push({
           service: "payment_controller",
           status: "configured",
           config: {
-            message: "Payment Controller is built into POS client",
             propertyId,
+            gatewayType: property?.paymentGateway || "stripe",
+            // Payment gateway credentials are handled securely via env vars, not passed here
           }
         });
       }

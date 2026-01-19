@@ -38,6 +38,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startPrintAgent: (rootDir) =>
     ipcRenderer.invoke('start-print-agent', rootDir),
   
+  saveServiceHostConfig: (rootDir, cloudUrl, config) =>
+    ipcRenderer.invoke('save-service-host-config', rootDir, cloudUrl, config),
+  
+  downloadServiceHostExe: (cloudUrl, rootDir) =>
+    ipcRenderer.invoke('download-service-host-exe', cloudUrl, rootDir),
+  
+  savePaymentControllerConfig: (rootDir, config) =>
+    ipcRenderer.invoke('save-payment-controller-config', rootDir, config),
+  
   openPos: (posUrl) => ipcRenderer.invoke('open-pos', posUrl),
   
   quitApp: () => ipcRenderer.invoke('quit-app'),

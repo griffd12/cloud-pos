@@ -1,6 +1,6 @@
-# OPS-POS CAL Setup Wizard (Electron) v2.0.0
+# OPH-POS CAL Setup Wizard (Electron) v2.0.0
 
-A desktop application for provisioning OPS-POS devices with **automatic service provisioning** based on workstation configuration in EMC.
+A desktop application for provisioning OPH-POS devices with **automatic service provisioning** based on workstation configuration in EMC.
 
 ## What's New in v2.0.0
 
@@ -12,7 +12,7 @@ A desktop application for provisioning OPS-POS devices with **automatic service 
 
 ## What This Wizard Does
 
-1. **Connects to Cloud** - Validates connectivity to your OPS-POS cloud environment
+1. **Connects to Cloud** - Validates connectivity to your OPH-POS cloud environment
 2. **Authenticates** - Signs in with EMC administrator credentials
 3. **Selects Property** - Chooses which property this device belongs to
 4. **Displays Workstations** - Shows available devices with their service bindings:
@@ -25,7 +25,7 @@ A desktop application for provisioning OPS-POS devices with **automatic service 
    - Creates Print Agents with secure tokens (if Print Controller assigned)
    - Downloads and configures Print Agent software
    - Starts Print Agent as background service
-   - Creates OPS-POS directory structure
+   - Creates OPH-POS directory structure
    - Registers device with secure token binding
 6. **Reports Status** - Updates EMC with setup progress (in_progress → completed/failed)
 7. **Launches POS** - Opens the POS/KDS in the default browser with device token
@@ -50,7 +50,7 @@ A desktop application for provisioning OPS-POS devices with **automatic service 
 ## Directory Structure Created
 
 ```
-C:\OPS-POS\
+C:\OPH-POS\
 ├── ServiceHost\
 │   ├── service-host.exe     # Service Host executable
 │   ├── data\                # Local SQLite database
@@ -83,8 +83,8 @@ npm start
 npm run build:win
 ```
 This creates (version number from package.json):
-- `dist/OPS-POS CAL Setup Wizard Setup {version}.exe` (installer)
-- `dist/OPS-POS CAL Setup Wizard {version}.exe` (portable)
+- `dist/OPH-POS CAL Setup Wizard Setup {version}.exe` (installer)
+- `dist/OPH-POS CAL Setup Wizard {version}.exe` (portable)
 
 ### Build for macOS
 ```bash
@@ -145,12 +145,12 @@ View status in EMC under the Service Host section. Each workstation displays a s
 
 ### "Print Agent setup failed"
 - Check that Node.js 16.x or later is installed on the terminal (download from https://nodejs.org)
-- Verify write permissions to `C:\OPS-POS\PrintAgent\`
+- Verify write permissions to `C:\OPH-POS\PrintAgent\`
 - Check console output when running the Print Agent manually
 
 ### "Service Host download failed"
 - The installer will continue in browser-only mode
-- Manually download service-host.exe and place in `C:\OPS-POS\ServiceHost\`
+- Manually download service-host.exe and place in `C:\OPH-POS\ServiceHost\`
 
 ### "Permission denied creating directories"
 - Run the wizard as Administrator on Windows

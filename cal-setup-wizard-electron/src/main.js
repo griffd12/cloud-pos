@@ -9,7 +9,7 @@ const os = require('os');
 let mainWindow;
 let logFilePath = null;
 
-const DEFAULT_ROOT_DIR = process.platform === 'win32' ? 'C:\\OPS-POS' : path.join(os.homedir(), 'ops-pos');
+const DEFAULT_ROOT_DIR = process.platform === 'win32' ? 'C:\\OPH-POS' : path.join(os.homedir(), 'oph-pos');
 
 function initLogFile(rootDir) {
   const normalizedRoot = path.normalize(rootDir || DEFAULT_ROOT_DIR);
@@ -19,7 +19,7 @@ function initLogFile(rootDir) {
   }
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   logFilePath = path.join(logsDir, `setup-wizard-${timestamp}.log`);
-  writeLog('INFO', '=== OPS-POS CAL Setup Wizard Started ===');
+  writeLog('INFO', '=== OPH-POS CAL Setup Wizard Started ===');
   writeLog('INFO', `Platform: ${process.platform}, Arch: ${process.arch}`);
   writeLog('INFO', `Hostname: ${os.hostname()}`);
 }
@@ -40,8 +40,8 @@ function writeLog(level, message, data = null) {
   }
 }
 const ALLOWED_ROOT_DIRS = [
-  process.platform === 'win32' ? 'C:\\OPS-POS' : path.join(os.homedir(), 'ops-pos'),
-  process.platform === 'win32' ? 'D:\\OPS-POS' : '/opt/ops-pos',
+  process.platform === 'win32' ? 'C:\\OPH-POS' : path.join(os.homedir(), 'oph-pos'),
+  process.platform === 'win32' ? 'D:\\OPH-POS' : '/opt/oph-pos',
 ];
 
 function validateUrl(url) {
@@ -63,8 +63,8 @@ function validateRootDir(rootDir) {
 }
 
 function sanitizeServiceName(name) {
-  if (!name || typeof name !== 'string') return 'OPS-POS-ServiceHost';
-  return name.replace(/[^a-zA-Z0-9\-_]/g, '').substring(0, 64) || 'OPS-POS-ServiceHost';
+  if (!name || typeof name !== 'string') return 'OPH-POS-ServiceHost';
+  return name.replace(/[^a-zA-Z0-9\-_]/g, '').substring(0, 64) || 'OPH-POS-ServiceHost';
 }
 
 function sanitizePackageName(name) {
@@ -84,7 +84,7 @@ function createWindow() {
       nodeIntegration: false,
     },
     autoHideMenuBar: true,
-    title: 'OPS-POS CAL Setup Wizard',
+    title: 'OPH-POS CAL Setup Wizard',
     backgroundColor: '#0f172a',
   });
 
@@ -325,7 +325,7 @@ ipcMain.handle('start-service-host', async (event, rootDir) => {
   }
 });
 
-ipcMain.handle('install-windows-service', async (event, rootDir, serviceName = 'OPS-POS-ServiceHost') => {
+ipcMain.handle('install-windows-service', async (event, rootDir, serviceName = 'OPH-POS-ServiceHost') => {
   if (process.platform !== 'win32') {
     return { success: false, error: 'Windows service installation only available on Windows' };
   }
@@ -470,7 +470,7 @@ ipcMain.handle('save-cal-client-config', async (event, rootDir, config) => {
   }
 });
 
-ipcMain.handle('install-cal-client-service', async (event, rootDir, serviceName = 'OPS-POS-CalClient') => {
+ipcMain.handle('install-cal-client-service', async (event, rootDir, serviceName = 'OPH-POS-CalClient') => {
   if (process.platform !== 'win32') {
     return { success: false, error: 'Windows service installation only available on Windows' };
   }
@@ -620,6 +620,110 @@ ipcMain.handle('start-print-agent', async (event, rootDir) => {
     return { success: true, pid: child.pid };
   } catch (err) {
     writeLog('ERROR', `Failed to start Print Agent: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+});
+
+// Save Service Host (CAPS) configuration
+ipcMain.handle('save-service-host-config', async (event, rootDir, cloudUrl, config) => {
+  writeLog('INFO', 'Saving Service Host configuration', { rootDir, serviceHostId: config?.serviceHostId });
+  
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  if (!validateUrl(cloudUrl)) {
+    return { success: false, error: 'Invalid cloud URL' };
+  }
+  if (!config || typeof config !== 'object') {
+    return { success: false, error: 'Invalid configuration' };
+  }
+
+  const normalizedRoot = path.normalize(rootDir);
+  const configPath = path.join(normalizedRoot, 'ServiceHost', 'config.json');
+  
+  try {
+    const serviceHostConfig = {
+      cloudUrl: cloudUrl,
+      serviceHostId: config.serviceHostId || '',
+      token: config.serviceHostToken || '',
+      propertyId: config.propertyId || '',
+      port: config.port || 3001,
+      dataDir: config.dataDir || './data',
+      services: config.services || ['caps'],
+      logLevel: 'info',
+      syncIntervalMs: 30000,
+      heartbeatIntervalMs: 15000,
+    };
+    
+    fs.writeFileSync(configPath, JSON.stringify(serviceHostConfig, null, 2));
+    writeLog('INFO', `Service Host configuration saved to ${configPath}`);
+    
+    return { success: true, path: configPath };
+  } catch (err) {
+    writeLog('ERROR', 'Failed to save Service Host configuration', { error: err.message });
+    return { success: false, error: err.message };
+  }
+});
+
+// Download Service Host executable
+ipcMain.handle('download-service-host-exe', async (event, cloudUrl, rootDir) => {
+  if (!validateUrl(cloudUrl)) {
+    return { success: false, error: 'Invalid cloud URL' };
+  }
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+
+  const serviceHostUrl = `${cloudUrl}/api/service-host/download`;
+  const normalizedRoot = path.normalize(rootDir);
+  const destPath = path.join(normalizedRoot, 'ServiceHost', 'service-host.exe');
+  
+  try {
+    if (mainWindow) mainWindow.webContents.send('download-progress', 0);
+    
+    await downloadFile(serviceHostUrl, destPath, (progress) => {
+      if (mainWindow) mainWindow.webContents.send('download-progress', progress);
+    });
+    
+    const stats = fs.statSync(destPath);
+    writeLog('INFO', `Service Host downloaded: ${destPath} (${stats.size} bytes)`);
+    
+    return { success: true, path: destPath, size: stats.size };
+  } catch (err) {
+    writeLog('WARN', `Service Host download skipped: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+});
+
+// Save Payment Controller configuration
+ipcMain.handle('save-payment-controller-config', async (event, rootDir, config) => {
+  writeLog('INFO', 'Saving Payment Controller configuration', { rootDir, gatewayType: config?.gatewayType });
+  
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  if (!config || typeof config !== 'object') {
+    return { success: false, error: 'Invalid configuration' };
+  }
+
+  const normalizedRoot = path.normalize(rootDir);
+  const configPath = path.join(normalizedRoot, 'ServiceHost', 'payment-controller.json');
+  
+  try {
+    const paymentConfig = {
+      propertyId: config.propertyId || '',
+      gatewayType: config.gatewayType || 'stripe',
+      enabled: true,
+      // Gateway credentials are stored in environment variables on the server
+      // This config just tells the controller which gateway to use
+    };
+    
+    fs.writeFileSync(configPath, JSON.stringify(paymentConfig, null, 2));
+    writeLog('INFO', `Payment Controller configuration saved to ${configPath}`);
+    
+    return { success: true, path: configPath };
+  } catch (err) {
+    writeLog('ERROR', 'Failed to save Payment Controller configuration', { error: err.message });
     return { success: false, error: err.message };
   }
 });

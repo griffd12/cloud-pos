@@ -1,7 +1,7 @@
 {
-  "name": "ops-pos-cal-setup-wizard",
+  "name": "oph-pos-cal-setup-wizard",
   "version": "2.0.0",
-  "description": "OPS-POS CAL Setup Wizard - Device provisioning and Service Host installation",
+  "description": "OPH-POS CAL Setup Wizard - Device provisioning and Service Host installation",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -11,8 +11,8 @@
     "build": "electron-builder"
   },
   "build": {
-    "appId": "com.ops-pos.cal-setup-wizard",
-    "productName": "OPS-POS CAL Setup Wizard",
+    "appId": "com.oph-pos.cal-setup-wizard",
+    "productName": "OPH-POS CAL Setup Wizard",
     "directories": {
       "output": "dist"
     },
@@ -44,7 +44,7 @@
       "allowToChangeInstallationDirectory": false
     }
   },
-  "author": "OPS-POS",
+  "author": "OPH-POS",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.0.0",
