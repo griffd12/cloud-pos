@@ -1,7 +1,5 @@
 # Cloud POS System
 
-correct me if i am wrong  the print agen even though its installed on WS02 because its runnig locally the WS01 shod also see it and that terminal can send print jobs?  i
-
 ## Overview
 This project is an enterprise cloud-based Quick Service Restaurant (QSR) Point of Sale system designed for high-volume environments. It features a multi-property hierarchy (Enterprise → Property → Revenue Center), Kitchen Display System (KDS) integration, and comprehensive admin configuration, leveraging a Simphony-class design pattern for configuration inheritance with override capabilities. The system supports device configuration, real-time KDS order flow, robust time & attendance, PCI-compliant payment processing, and extensive enterprise capabilities including fiscal close, cash management, gift cards, loyalty programs, inventory, forecasting, and online ordering integration. An optional Service Host provides a hybrid cloud/on-premise architecture for offline resilience.
 
