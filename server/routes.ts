@@ -12612,6 +12612,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 status: "approved",
                 statusMessage: "Payment approved",
                 completedAt: new Date(),
+                // Store tip amount from EMV terminal (in cents)
+                tipAmount: status.tipAmount || 0,
               });
               await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
               session = updated || session;

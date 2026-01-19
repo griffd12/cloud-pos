@@ -687,11 +687,15 @@ export function PaymentModal({
         if (session.status === "approved") {
           setTerminalPolling(false);
           if (cardTender) {
-            // Use the confirmed tip amount (set when user confirmed overage prompt)
-            // This ensures the tip is exactly what the user approved, not recalculated
-            onPayment(cardTender.id, cardAmount, false, session.paymentTransactionId || undefined, confirmedTipAmount);
+            // Get tip amount: prioritize EMV terminal tip (from session.tipAmount in cents), 
+            // fallback to confirmed overage tip from UI prompt
+            const emvTipDollars = session.tipAmount ? session.tipAmount / 100 : 0;
+            const effectiveTip = emvTipDollars > 0 ? emvTipDollars : confirmedTipAmount;
+            onPayment(cardTender.id, cardAmount, false, session.paymentTransactionId || undefined, effectiveTip);
           }
-          const tipDisplay = confirmedTipAmount ? ` (includes $${confirmedTipAmount.toFixed(2)} tip)` : "";
+          const emvTipDollars = session.tipAmount ? session.tipAmount / 100 : 0;
+          const effectiveTipDisplay = emvTipDollars > 0 ? emvTipDollars : confirmedTipAmount;
+          const tipDisplay = effectiveTipDisplay ? ` (includes $${effectiveTipDisplay.toFixed(2)} tip)` : "";
           resetCardEntry();
           toast({
             title: "Payment Approved",
