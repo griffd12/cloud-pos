@@ -21,7 +21,7 @@ const DEVICE_TYPES = [
   { value: "pos_workstation", label: "POS Workstation", icon: Monitor },
   { value: "kds_display", label: "KDS Display", icon: Tv },
   { value: "controller", label: "Controller", icon: Server },
-  { value: "service_host", label: "Service Host", icon: Server },
+  { value: "service_host", label: "Service", icon: Server },
   { value: "back_office", label: "Back Office", icon: Monitor },
 ];
 

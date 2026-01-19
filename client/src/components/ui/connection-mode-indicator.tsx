@@ -27,7 +27,7 @@ const modeConfig: Record<ConnectionMode, {
   },
   yellow: {
     label: "Offline Mode",
-    description: "Using local Service Host - cloud sync pending",
+    description: "Using local services - cloud sync pending",
     color: "text-yellow-600 dark:text-yellow-400",
     bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
     borderColor: "border-yellow-200 dark:border-yellow-800",
@@ -35,7 +35,7 @@ const modeConfig: Record<ConnectionMode, {
   },
   orange: {
     label: "Limited",
-    description: "Service Host down - using local agents only",
+    description: "Host workstation down - using local agents only",
     color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-100 dark:bg-orange-900/30",
     borderColor: "border-orange-200 dark:border-orange-800",
@@ -126,7 +126,7 @@ export function ConnectionModeIndicator({
                   ) : (
                     <WifiOff className="h-3 w-3 text-muted-foreground" />
                   )}
-                  <span>Service Host</span>
+                  <span>Local Services</span>
                 </div>
                 <div className="flex items-center gap-1">
                   {status.printAgentAvailable ? (

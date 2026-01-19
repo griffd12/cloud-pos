@@ -95,14 +95,14 @@ const modeConfig: Record<ConnectionMode, {
     color: 'text-yellow-600',
     bgColor: 'bg-yellow-500',
     label: 'YELLOW - LAN Only',
-    description: 'Cloud offline, using Service Host. Core POS features work.',
+    description: 'Cloud offline, using local services. Core POS features work.',
     Icon: Signal,
   },
   orange: {
     color: 'text-orange-600',
     bgColor: 'bg-orange-500',
     label: 'ORANGE - Local Agents',
-    description: 'Service Host offline. Print and payment agents available.',
+    description: 'Host workstation offline. Print and payment agents available.',
     Icon: WifiOff,
   },
   red: {
@@ -196,14 +196,14 @@ export default function ConnectivityTestPage() {
         const res = await fetch(`${serviceHostUrl}/health`, { signal: AbortSignal.timeout(5000) });
         const latency = Math.round(performance.now() - startSh);
         addTestResult({
-          testType: 'Service Host Health',
+          testType: 'Service Health',
           target: serviceHostUrl,
           success: res.ok,
           latencyMs: latency,
         });
       } catch (e) {
         addTestResult({
-          testType: 'Service Host Health',
+          testType: 'Service Health',
           target: serviceHostUrl,
           success: false,
           error: (e as Error).message,
@@ -326,7 +326,7 @@ export default function ConnectivityTestPage() {
   const handleServiceHostUrlChange = () => {
     localStorage.setItem('serviceHostUrl', serviceHostUrl);
     apiClient.configure({ serviceHostUrl });
-    toast({ title: "Service Host URL updated" });
+    toast({ title: "Service URL updated" });
     forceCheck();
   };
 
@@ -350,7 +350,7 @@ export default function ConnectivityTestPage() {
             Connectivity Test Dashboard
           </h1>
           <p className="text-muted-foreground text-sm">
-            Test workstation, KDS, and Service Host communications
+            Test workstation, KDS, and service communications
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -435,7 +435,7 @@ export default function ConnectivityTestPage() {
               <div className="text-center p-3 rounded-lg bg-muted/50">
                 <div className="flex items-center justify-center gap-2 mb-1">
                   <Server className="w-4 h-4" />
-                  <span className="text-sm font-medium">Service Host</span>
+                  <span className="text-sm font-medium">Local Services</span>
                 </div>
                 <div className={`flex items-center justify-center gap-1 ${
                   status?.serviceHostReachable ? 'text-green-600' : 'text-red-600'
@@ -540,7 +540,7 @@ export default function ConnectivityTestPage() {
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="service-host-url" className="text-sm">Service Host URL</Label>
+              <Label htmlFor="service-host-url" className="text-sm">Service URL</Label>
               <div className="flex gap-2">
                 <Input
                   id="service-host-url"
@@ -595,9 +595,9 @@ export default function ConnectivityTestPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Server className="w-5 h-5" />
-              Service Hosts
+              Services
             </CardTitle>
-            <CardDescription>On-premise servers for offline resilience</CardDescription>
+            <CardDescription>On-premise services for offline resilience</CardDescription>
           </CardHeader>
           <CardContent>
             {hostsLoading ? (
@@ -607,8 +607,8 @@ export default function ConnectivityTestPage() {
             ) : filteredServiceHosts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Server className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p>No Service Hosts {selectedPropertyId && selectedPropertyId !== "all" ? "for this property" : "registered"}</p>
-                <p className="text-xs">Register a Service Host to enable offline mode</p>
+                <p>No services {selectedPropertyId && selectedPropertyId !== "all" ? "for this property" : "registered"}</p>
+                <p className="text-xs">Register a service to enable offline mode</p>
               </div>
             ) : (
               <div className="space-y-3">

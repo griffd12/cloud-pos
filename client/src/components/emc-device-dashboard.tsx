@@ -313,11 +313,11 @@ function SummaryCard({
 
 function PropertyDeviceDetails({ details }: { details: any }) {
   return (
-    <Tabs defaultValue="service-hosts" className="w-full">
+    <Tabs defaultValue="services" className="w-full">
       <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="service-hosts" className="gap-1">
+        <TabsTrigger value="services" className="gap-1">
           <Server className="h-4 w-4" />
-          <span className="hidden sm:inline">Service Hosts</span>
+          <span className="hidden sm:inline">Services</span>
         </TabsTrigger>
         <TabsTrigger value="workstations" className="gap-1">
           <Monitor className="h-4 w-4" />
@@ -333,7 +333,7 @@ function PropertyDeviceDetails({ details }: { details: any }) {
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="service-hosts" className="mt-4">
+      <TabsContent value="services" className="mt-4">
         <DeviceTable
           devices={details.serviceHosts || []}
           columns={[

@@ -33,7 +33,7 @@ const modeConfig: Record<ConnectionMode, {
     color: 'text-yellow-600',
     bgColor: 'bg-yellow-500',
     label: 'Offline Mode',
-    description: 'Using Service Host',
+    description: 'Using local services',
     Icon: Signal,
   },
   orange: {
@@ -115,7 +115,7 @@ export function ConnectionStatus({
                   "h-2 w-2 rounded-full",
                   status.serviceHostReachable ? "bg-green-500" : "bg-red-500"
                 )} />
-                Service Host: {status.serviceHostReachable ? 'Connected' : 'Disconnected'}
+                Local Services: {status.serviceHostReachable ? 'Connected' : 'Disconnected'}
               </div>
               <div className="flex items-center gap-2">
                 <span className={cn(

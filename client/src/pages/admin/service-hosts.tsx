@@ -177,7 +177,7 @@ export default function ServiceHostsPage() {
       setCreateDialogOpen(false);
       setCreatedHost(data);
       setTokenDialogOpen(true);
-      toast({ title: "Service Host registered successfully" });
+      toast({ title: "Service registered successfully" });
     },
     onError: (error: Error) => {
       toast({ title: error.message, variant: "destructive" });
@@ -191,10 +191,10 @@ export default function ServiceHostsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-hosts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard"] });
-      toast({ title: "Service Host deleted" });
+      toast({ title: "Service deleted" });
     },
     onError: () => {
-      toast({ title: "Failed to delete service host", variant: "destructive" });
+      toast({ title: "Failed to delete service", variant: "destructive" });
     },
   });
 
@@ -268,8 +268,8 @@ export default function ServiceHostsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Service Hosts</h1>
-          <p className="text-muted-foreground">Monitor and manage on-premise Service Hosts</p>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Services</h1>
+          <p className="text-muted-foreground">Monitor and manage on-premise services</p>
         </div>
         <Button 
           variant="outline" 
@@ -348,16 +348,16 @@ export default function ServiceHostsPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Service Host Status</CardTitle>
-                  <CardDescription>Real-time status of all registered Service Hosts</CardDescription>
+                  <CardTitle>Service Status</CardTitle>
+                  <CardDescription>Real-time status of all registered services</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {!dashboardData?.serviceHosts?.length ? (
                     <div className="text-center py-12">
                       <Server className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                      <p className="text-muted-foreground mb-4">No Service Hosts registered</p>
+                      <p className="text-muted-foreground mb-4">No services registered</p>
                       <p className="text-sm text-muted-foreground">
-                        Configure Service Hosts from the Configuration tab.
+                        Configure services from the Configuration tab.
                       </p>
                     </div>
                   ) : (
@@ -485,14 +485,14 @@ export default function ServiceHostsPage() {
           <Card className="mb-6">
             <CardHeader className="flex flex-row items-center justify-between gap-4">
               <div>
-                <CardTitle>Registered Service Hosts</CardTitle>
+                <CardTitle>Registered Services</CardTitle>
                 <CardDescription>
-                  Service Hosts registered for on-premise deployment. Each host receives a unique token for authentication.
+                  Services registered for on-premise deployment. Each service receives a unique token for authentication.
                 </CardDescription>
               </div>
-              <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-add-service-host">
+              <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-add-service">
                 <Plus className="h-4 w-4 mr-2" />
-                Register Service Host
+                Register Service
               </Button>
             </CardHeader>
             <CardContent>
@@ -575,7 +575,7 @@ export default function ServiceHostsPage() {
             <CardHeader>
               <CardTitle>Workstations with Service Controller Bindings</CardTitle>
               <CardDescription>
-                Workstations with CAPS, Print, KDS, or Payment Controller services act as Service Hosts.
+                Workstations with CAPS, Print, KDS, or Payment Controller services act as service hosts.
                 Configure service bindings on the Workstations page.
               </CardDescription>
             </CardHeader>
@@ -585,7 +585,7 @@ export default function ServiceHostsPage() {
               ) : workstationsWithServiceHost.length === 0 ? (
                 <div className="text-center py-12">
                   <Server className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground mb-4">No workstations configured with Service Host capabilities</p>
+                  <p className="text-muted-foreground mb-4">No workstations configured with service hosting capabilities</p>
                   <p className="text-sm text-muted-foreground">
                     Go to Workstations page and assign CAPS, Print, KDS, or Payment Controller services to a workstation.
                   </p>
@@ -641,11 +641,11 @@ export default function ServiceHostsPage() {
           <div className="mt-6 grid grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Service Host Architecture</CardTitle>
+                <CardTitle className="text-lg">Services Architecture</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-muted-foreground">
                 <p>
-                  Service Hosts are workstations configured to run critical services that enable 
+                  Services run on designated workstations (host workstations) to enable 
                   offline operation when cloud connectivity is lost.
                 </p>
                 <div className="space-y-2">
@@ -688,7 +688,7 @@ export default function ServiceHostsPage() {
               <CardContent className="space-y-4 text-sm text-muted-foreground">
                 <p>
                   When a property loses internet connectivity, workstations automatically failover 
-                  to the local Service Host for uninterrupted operations.
+                  to local services for uninterrupted operations.
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -697,11 +697,11 @@ export default function ServiceHostsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-yellow-500 text-black w-16 justify-center">YELLOW</Badge>
-                    <span>Internet down, using local Service Host</span>
+                    <span>Internet down, using local services</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-orange-500 w-16 justify-center">ORANGE</Badge>
-                    <span>Service Host down, local agents active</span>
+                    <span>Host workstation down, local agents active</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-red-600 w-16 justify-center">RED</Badge>
@@ -728,7 +728,7 @@ export default function ServiceHostsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
-              Service Host Registered
+              Service Registered
             </DialogTitle>
             <DialogDescription>
               Save these credentials securely. The token is only shown once and cannot be retrieved later.
@@ -744,13 +744,13 @@ export default function ServiceHostsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Service Host ID</label>
+                <label className="text-sm font-medium">Service ID</label>
                 <div className="flex gap-2">
                   <Input value={createdHost.id} readOnly className="font-mono text-xs" />
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => copyToClipboard(createdHost.id, "Service Host ID")}
+                    onClick={() => copyToClipboard(createdHost.id, "Service ID")}
                     data-testid="button-copy-host-id"
                   >
                     <Copy className="h-4 w-4" />
@@ -841,9 +841,9 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Register Service Host</DialogTitle>
+          <DialogTitle>Register Service</DialogTitle>
           <DialogDescription>
-            Register a new on-premise Service Host. You'll receive authentication credentials and the selected services will be assigned to the workstation.
+            Register a new on-premise service. You'll receive authentication credentials for the service to connect to the cloud.
           </DialogDescription>
         </DialogHeader>
 
@@ -858,7 +858,7 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                   <FormControl>
                     <Input placeholder="e.g., Store-001 Primary Host" {...field} data-testid="input-host-name" />
                   </FormControl>
-                  <FormDescription>A descriptive name for this Service Host</FormDescription>
+                  <FormDescription>A descriptive name for this service</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -887,7 +887,7 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormDescription>The property this Service Host will serve</FormDescription>
+                  <FormDescription>The property this service will serve</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

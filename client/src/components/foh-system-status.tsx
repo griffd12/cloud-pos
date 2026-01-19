@@ -90,7 +90,7 @@ const modeConfig: Record<ConnectionMode, {
     bgColor: 'bg-yellow-500',
     textColor: 'text-yellow-600',
     label: 'Offline Mode',
-    description: 'Using Service Host',
+    description: 'Using local services',
     Icon: Wifi,
   },
   orange: {
@@ -279,7 +279,7 @@ function SystemStatusContent({
         />
         <StatusTile
           icon={Server}
-          label="Service Host"
+          label="Local Services"
           status={status?.serviceHostReachable ? 'online' : 'offline'}
         />
         <StatusTile

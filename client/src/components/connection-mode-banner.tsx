@@ -23,7 +23,7 @@ const modeConfig: Record<ConnectionMode, {
   yellow: {
     bgColor: "bg-yellow-500",
     textColor: "text-black",
-    label: "LAN Only - Using Service Host (Cloud offline)",
+    label: "LAN Only - Using local services (Cloud offline)",
     shortLabel: "LAN",
     Icon: Signal,
   },
@@ -65,7 +65,7 @@ export function ConnectionModeBanner({ className = "" }: ConnectionModeBannerPro
           {status && (
             <div className="text-xs text-muted-foreground space-y-0.5">
               <p>Cloud: {status.cloudReachable ? "Connected" : "Offline"}</p>
-              <p>Service Host: {status.serviceHostReachable ? "Connected" : "Offline"}</p>
+              <p>Local Services: {status.serviceHostReachable ? "Connected" : "Offline"}</p>
               <p>Print Agent: {status.printAgentAvailable ? "Available" : "Unavailable"}</p>
               <p>Last checked: {status.lastChecked?.toLocaleTimeString() || "Never"}</p>
             </div>
