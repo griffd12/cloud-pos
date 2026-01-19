@@ -34,6 +34,7 @@ export default function EmployeesPage() {
   const [employeeNumber, setEmployeeNumber] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [pinHash, setPinHash] = useState("");
   const [roleId, setRoleId] = useState("");
   const [active, setActive] = useState(true);
@@ -60,6 +61,7 @@ export default function EmployeesPage() {
     setEmployeeNumber("");
     setFirstName("");
     setLastName("");
+    setDateOfBirth("");
     setPinHash("");
     setRoleId("");
     setActive(true);
@@ -72,6 +74,7 @@ export default function EmployeesPage() {
       setEmployeeNumber(editingItem.employeeNumber);
       setFirstName(editingItem.firstName);
       setLastName(editingItem.lastName);
+      setDateOfBirth((editingItem as any).dateOfBirth || "");
       setPinHash("");
       setRoleId(editingItem.roleId || "");
       setActive(editingItem.active ?? true);
@@ -204,9 +207,10 @@ export default function EmployeesPage() {
       employeeNumber,
       firstName,
       lastName,
+      dateOfBirth: dateOfBirth || undefined,
       roleId,
       active,
-    };
+    } as any;
 
     if (pinHash) {
       employeeData.pinHash = pinHash;
@@ -320,6 +324,20 @@ export default function EmployeesPage() {
                   placeholder="Last name"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="dateOfBirth">Date of Birth</Label>
+              <Input 
+                id="dateOfBirth"
+                data-testid="input-date-of-birth"
+                type="date"
+                value={dateOfBirth} 
+                onChange={(e) => setDateOfBirth(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Used to identify minor employees (under 18)
+              </p>
             </div>
             
             <div className="space-y-2">

@@ -102,6 +102,7 @@ export const employees = pgTable("employees", {
   employeeNumber: text("employee_number").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
+  dateOfBirth: text("date_of_birth"),
   pinHash: text("pin_hash").notNull(),
   roleId: varchar("role_id").references(() => roles.id),
   active: boolean("active").default(true),

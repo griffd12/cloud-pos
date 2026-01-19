@@ -186,6 +186,11 @@ export default function MinorLaborPage() {
     e => !minorStatuses.some(s => s.employeeId === e.id)
   );
 
+  // Auto-detect minors based on employee DOB (isMinor field from API)
+  const detectedMinorsNeedingCompliance = employees.filter(
+    e => (e as any).isMinor === true && !minorStatuses.some(s => s.employeeId === e.id)
+  );
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -279,13 +284,64 @@ export default function MinorLaborPage() {
                 </Card>
               </div>
 
-              {minorEmployees.length === 0 ? (
+              {detectedMinorsNeedingCompliance.length > 0 && (
+                <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                      <AlertTriangle className="w-5 h-5" />
+                      Detected Minors Needing Compliance Records
+                    </CardTitle>
+                    <CardDescription className="text-yellow-600 dark:text-yellow-500">
+                      These employees are under 18 based on their date of birth but don&apos;t have compliance records yet
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {detectedMinorsNeedingCompliance.map((emp) => (
+                        <div 
+                          key={emp.id}
+                          className="flex items-center justify-between p-3 bg-white dark:bg-background rounded-md border"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Baby className="w-5 h-5 text-yellow-600" />
+                            <div>
+                              <div className="font-medium">{emp.firstName} {emp.lastName}</div>
+                              <div className="text-sm text-muted-foreground">
+                                Age: {(emp as any).age} years | DOB: {(emp as any).dateOfBirth || "Not set"}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedEmployee(emp.id);
+                              setFormData(prev => ({
+                                ...prev,
+                                dateOfBirth: (emp as any).dateOfBirth || "",
+                              }));
+                              setShowAddDialog(true);
+                            }}
+                            data-testid={`button-add-compliance-${emp.id}`}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Compliance Record
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {minorEmployees.length === 0 && detectedMinorsNeedingCompliance.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <Shield className="w-12 h-12 mb-4 opacity-50" />
                   <p className="text-lg font-medium">No Minor Employees</p>
                   <p className="text-sm">Add minor employees to track work permits and restrictions.</p>
                 </div>
-              ) : (
+              )}
+
+              {minorEmployees.length > 0 && (
                 <Table>
                   <TableHeader>
                     <TableRow>

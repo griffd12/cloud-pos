@@ -1778,15 +1778,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // EMPLOYEE ROUTES
   // ============================================================================
 
+  // Helper function to compute age and minor status from DOB
+  function computeEmployeeAge(dateOfBirth: string | null | undefined): { age: number | null; isMinor: boolean } {
+    if (!dateOfBirth) return { age: null, isMinor: false };
+    const dob = new Date(dateOfBirth);
+    if (isNaN(dob.getTime())) return { age: null, isMinor: false };
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return { age, isMinor: age < 18 };
+  }
+
+  // Add computed age and isMinor fields to employee data
+  function enrichEmployee(employee: any) {
+    const { age, isMinor } = computeEmployeeAge(employee.dateOfBirth);
+    return { ...employee, age, isMinor };
+  }
+
   app.get("/api/employees", async (req, res) => {
     const data = await storage.getEmployees();
-    res.json(data);
+    const enrichedData = data.map(enrichEmployee);
+    res.json(enrichedData);
   });
 
   app.get("/api/employees/:id", async (req, res) => {
     const data = await storage.getEmployee(req.params.id);
     if (!data) return res.status(404).json({ message: "Not found" });
-    res.json(data);
+    res.json(enrichEmployee(data));
   });
 
   app.post("/api/employees", async (req, res) => {
@@ -1803,7 +1824,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const validated = insertEmployeeSchema.parse(employeeData);
       const data = await storage.createEmployee(validated);
-      res.status(201).json(data);
+      res.status(201).json(enrichEmployee(data));
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
     }
@@ -1812,7 +1833,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/employees/:id", async (req, res) => {
     const data = await storage.updateEmployee(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
-    res.json(data);
+    res.json(enrichEmployee(data));
   });
 
   app.delete("/api/employees/:id", async (req, res) => {
