@@ -3826,7 +3826,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks/:id/payments", async (req, res) => {
     try {
       const checkId = req.params.id;
-      const { tenderId, amount, employeeId, paymentTransactionId } = req.body;
+      const { tenderId, amount, tipAmount, employeeId, paymentTransactionId } = req.body;
 
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
@@ -3876,6 +3876,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         tenderId,
         tenderName: tender.name,
         amount,
+        tipAmount: tipAmount || undefined,
         employeeId,
         businessDate,
         paymentTransactionId: paymentTransactionId || null,
@@ -15160,6 +15161,7 @@ connect();
         checkId, 
         tenderId, 
         amount, 
+        tipAmount,
         employeeId, 
         cardBrand, 
         cardLast4 
@@ -15192,11 +15194,13 @@ connect();
       }
 
       // Create check payment record (Stripe payment processed directly, no processor record needed)
+      // tipAmount comes from EMV terminal tipping or payment overage
       const checkPayment = await storage.createPayment({
         checkId,
         tenderId,
         tenderName: tender.name,
         amount: amount.toString(),
+        tipAmount: tipAmount ? tipAmount.toString() : undefined,
         employeeId,
         businessDate,
         paymentStatus: "completed",

@@ -186,6 +186,10 @@ export interface TerminalPaymentStatusResponse {
   cardBrand?: string;
   cardLast4?: string;
   authCode?: string;
+  // Tip tracking from EMV terminal
+  totalAmount?: number; // Total amount captured in cents (base + tip)
+  baseAmount?: number; // Original base amount in cents (before tip)
+  tipAmount?: number; // Tip amount in cents (from terminal tipping)
 }
 
 /**

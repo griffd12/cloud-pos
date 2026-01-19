@@ -18,6 +18,7 @@ import type {
   VoidResponse,
   RefundRequest,
   RefundResponse,
+  TerminalPaymentStatusResponse,
   TipAdjustRequest,
   TipAdjustResponse,
   TransactionStatusRequest,
@@ -399,13 +400,7 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
    * Check the status of a terminal payment via PaymentIntent
    * Implements PaymentGatewayAdapter interface
    */
-  async checkTerminalPaymentStatus(processorReference: string): Promise<{
-    status: 'pending' | 'processing' | 'succeeded' | 'declined' | 'cancelled' | 'error';
-    errorMessage?: string;
-    cardBrand?: string;
-    cardLast4?: string;
-    authCode?: string;
-  }> {
+  async checkTerminalPaymentStatus(processorReference: string): Promise<TerminalPaymentStatusResponse> {
     try {
       const paymentIntent = await this.stripe.paymentIntents.retrieve(processorReference, {
         expand: ['latest_charge'],
@@ -446,6 +441,9 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
       let cardBrand: string | undefined;
       let cardLast4: string | undefined;
       let authCode: string | undefined;
+      let totalAmount: number | undefined;
+      let baseAmount: number | undefined;
+      let tipAmount: number | undefined;
 
       if (status === 'succeeded' && paymentIntent.latest_charge) {
         const charge = paymentIntent.latest_charge as Stripe.Charge;
@@ -455,6 +453,21 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
           cardLast4 = cardDetails.last4 || undefined;
         }
         authCode = charge.authorization_code || undefined;
+        
+        // Extract tip from Stripe Terminal tipping
+        // Stripe stores tip in amount_details.tip or in metadata
+        totalAmount = paymentIntent.amount;
+        const amountDetails = paymentIntent.amount_details as { tip?: { amount?: number } } | undefined;
+        if (amountDetails?.tip?.amount) {
+          tipAmount = amountDetails.tip.amount;
+          baseAmount = totalAmount - tipAmount;
+        } else if (paymentIntent.metadata?.tipAmount) {
+          tipAmount = parseInt(paymentIntent.metadata.tipAmount, 10);
+          baseAmount = totalAmount - tipAmount;
+        } else {
+          tipAmount = 0;
+          baseAmount = totalAmount;
+        }
       }
 
       return {
@@ -463,6 +476,9 @@ class StripePaymentAdapter implements PaymentGatewayAdapter {
         cardBrand,
         cardLast4,
         authCode,
+        totalAmount,
+        baseAmount,
+        tipAmount,
       };
     } catch (error) {
       const stripeError = error as Stripe.errors.StripeError;
