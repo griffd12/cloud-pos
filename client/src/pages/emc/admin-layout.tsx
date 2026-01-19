@@ -75,6 +75,10 @@ import ServiceHostsPage from "../admin/service-hosts";
 import ConnectivityTestPage from "../admin/connectivity-test";
 import TipRulesPage from "../admin/tip-rules";
 import TimecardReportPage from "../admin/timecard-report";
+import BreakRulesPage from "../admin/break-rules";
+import BreakMonitoringPage from "../admin/break-monitoring";
+import BreakViolationsPage from "../admin/break-violations";
+import MinorLaborPage from "../admin/minor-labor";
 
 function EmcDashboard() {
   const { data: stats } = useQuery<{
@@ -339,6 +343,10 @@ export default function EmcAdminLayout() {
               <Route path="/emc/overtime-rules" component={OvertimeRulesPage} />
               <Route path="/emc/tip-rules" component={TipRulesPage} />
               <Route path="/emc/timecard-report" component={TimecardReportPage} />
+              <Route path="/emc/break-rules" component={BreakRulesPage} />
+              <Route path="/emc/break-monitoring" component={BreakMonitoringPage} />
+              <Route path="/emc/break-violations" component={BreakViolationsPage} />
+              <Route path="/emc/minor-labor" component={MinorLaborPage} />
               <Route path="/emc/onboarding" component={OnboardingPage} />
               <Route path="/emc/gift-cards" component={GiftCardsPage} />
               <Route path="/emc/loyalty" component={LoyaltyPage} />
