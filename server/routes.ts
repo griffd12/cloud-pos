@@ -8323,6 +8323,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Get currently active (clocked-in) employees' time punches
+  app.get("/api/time-punches/active", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "propertyId is required" });
+      }
+      const activePunches = await storage.getActiveTimePunches(propertyId as string);
+      res.json(activePunches);
+    } catch (error) {
+      console.error("Get active time punches error:", error);
+      res.status(500).json({ message: "Failed to get active time punches" });
+    }
+  });
+
   // Get single time punch
   app.get("/api/time-punches/:id", async (req, res) => {
     try {
@@ -8441,6 +8456,82 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate timecard after clock out punch
       await storage.recalculateTimecard(employeeId, businessDate);
+
+      // Check for break violations
+      try {
+        const breakRules = await storage.getBreakRules({ propertyId });
+        const activeRule = breakRules.find(r => r.active);
+        
+        if (activeRule) {
+          // Calculate shift duration
+          const clockInTime = new Date(lastPunch.actualTimestamp);
+          const clockOutTime = now;
+          const shiftMinutes = Math.round((clockOutTime.getTime() - clockInTime.getTime()) / 60000);
+          const shiftHours = shiftMinutes / 60;
+          
+          // Get break sessions for this shift
+          const breakSessions = await storage.getBreakSessions({ 
+            employeeId, 
+            businessDate: lastPunch.businessDate 
+          });
+          
+          // Check meal break requirement
+          const mealThreshold = parseFloat(activeRule.mealBreakThresholdHours || "5");
+          if (activeRule.enableMealBreakEnforcement && shiftHours >= mealThreshold) {
+            // Check if a meal break was taken (unpaid breaks are typically meal breaks)
+            const mealBreakTaken = breakSessions.some(b => 
+              !b.isPaid && b.actualMinutes && b.actualMinutes >= (activeRule.mealBreakMinutes || 30)
+            );
+            
+            if (!mealBreakTaken) {
+              // Create meal break violation
+              await storage.createBreakViolation({
+                propertyId,
+                employeeId,
+                violationType: "meal_break",
+                businessDate,
+                shiftStartTime: clockInTime,
+                shiftEndTime: clockOutTime,
+                requiredBreakMinutes: activeRule.mealBreakMinutes || 30,
+                actualBreakMinutes: 0,
+                violationDetails: `Employee worked ${shiftHours.toFixed(1)} hours without required meal break`,
+                status: "pending",
+              });
+            }
+          }
+          
+          // Check rest break requirements
+          const restInterval = parseFloat(activeRule.restBreakIntervalHours || "4");
+          const restBreakMinutes = activeRule.restBreakMinutes || 10;
+          if (activeRule.enableRestBreakEnforcement && restInterval > 0) {
+            const requiredRestBreaks = Math.floor(shiftHours / restInterval);
+            const restBreaksTaken = breakSessions.filter(b => 
+              b.isPaid && b.actualMinutes && b.actualMinutes >= restBreakMinutes
+            ).length;
+            
+            if (restBreaksTaken < requiredRestBreaks) {
+              // Create rest break violation for each missed break
+              for (let i = restBreaksTaken; i < requiredRestBreaks; i++) {
+                await storage.createBreakViolation({
+                  propertyId,
+                  employeeId,
+                  violationType: "rest_break",
+                  businessDate,
+                  shiftStartTime: clockInTime,
+                  shiftEndTime: clockOutTime,
+                  requiredBreakMinutes: restBreakMinutes,
+                  actualBreakMinutes: 0,
+                  violationDetails: `Missed rest break ${i + 1} of ${requiredRestBreaks} required`,
+                  status: "pending",
+                });
+              }
+            }
+          }
+        }
+      } catch (violationError) {
+        console.error("Error checking break violations:", violationError);
+        // Don't fail the clock out if violation check fails
+      }
 
       // If cash tips were declared, update the timecard with the tip amount
       if (cashTipsDeclared && cashTipsDeclared > 0) {

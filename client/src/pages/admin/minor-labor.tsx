@@ -66,8 +66,8 @@ export default function MinorLaborPage() {
     workPermitExpirationDate: "",
     maxDailyHours: "8",
     maxWeeklyHours: "40",
-    noWorkAfter: "22:00",
-    noWorkBefore: "06:00",
+    latestEndTime: "22:00",
+    earliestStartTime: "06:00",
     parentGuardianName: "",
     parentGuardianPhone: "",
     schoolName: "",
@@ -129,8 +129,8 @@ export default function MinorLaborPage() {
       workPermitExpirationDate: "",
       maxDailyHours: "8",
       maxWeeklyHours: "40",
-      noWorkAfter: "22:00",
-      noWorkBefore: "06:00",
+      latestEndTime: "22:00",
+      earliestStartTime: "06:00",
       parentGuardianName: "",
       parentGuardianPhone: "",
       schoolName: "",
@@ -352,10 +352,10 @@ export default function MinorLaborPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {minor.minorStatus?.noWorkBefore && minor.minorStatus?.noWorkAfter ? (
+                          {minor.minorStatus?.earliestStartTime && minor.minorStatus?.latestEndTime ? (
                             <Badge variant="outline">
                               <Clock className="w-3 h-3 mr-1" />
-                              {minor.minorStatus.noWorkBefore} - {minor.minorStatus.noWorkAfter}
+                              {minor.minorStatus.earliestStartTime} - {minor.minorStatus.latestEndTime}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -518,22 +518,22 @@ export default function MinorLaborPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="noWorkBefore">No Work Before</Label>
+                <Label htmlFor="earliestStartTime">No Work Before</Label>
                 <Input
-                  id="noWorkBefore"
+                  id="earliestStartTime"
                   type="time"
-                  value={formData.noWorkBefore}
-                  onChange={(e) => setFormData({ ...formData, noWorkBefore: e.target.value })}
+                  value={formData.earliestStartTime}
+                  onChange={(e) => setFormData({ ...formData, earliestStartTime: e.target.value })}
                   data-testid="input-no-work-before"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="noWorkAfter">No Work After</Label>
+                <Label htmlFor="latestEndTime">No Work After</Label>
                 <Input
-                  id="noWorkAfter"
+                  id="latestEndTime"
                   type="time"
-                  value={formData.noWorkAfter}
-                  onChange={(e) => setFormData({ ...formData, noWorkAfter: e.target.value })}
+                  value={formData.latestEndTime}
+                  onChange={(e) => setFormData({ ...formData, latestEndTime: e.target.value })}
                   data-testid="input-no-work-after"
                 />
               </div>

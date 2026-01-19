@@ -590,6 +590,7 @@ export interface IStorage {
   getTimePunches(filters: { propertyId?: string; employeeId?: string; businessDate?: string; startDate?: string; endDate?: string }): Promise<TimePunch[]>;
   getTimePunch(id: string): Promise<TimePunch | undefined>;
   getLastPunch(employeeId: string): Promise<TimePunch | undefined>;
+  getActiveTimePunches(propertyId: string): Promise<TimePunch[]>;
   createTimePunch(data: InsertTimePunch): Promise<TimePunch>;
   updateTimePunch(id: string, data: Partial<InsertTimePunch>, editedById?: string, editReason?: string, editedByEmcUserId?: string, editedByDisplayName?: string): Promise<TimePunch | undefined>;
   voidTimePunch(id: string, voidedById: string, voidReason: string): Promise<TimePunch | undefined>;
@@ -3635,6 +3636,42 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(timePunches.actualTimestamp))
       .limit(1);
     return result;
+  }
+
+  async getActiveTimePunches(propertyId: string): Promise<TimePunch[]> {
+    // Get all punches for today from the property
+    const today = new Date().toISOString().split('T')[0];
+    const allPunches = await db.select().from(timePunches)
+      .where(and(
+        eq(timePunches.propertyId, propertyId),
+        eq(timePunches.voided, false),
+        eq(timePunches.businessDate, today)
+      ))
+      .orderBy(desc(timePunches.actualTimestamp));
+    
+    // Group by employee and find those currently clocked in
+    const employeePunches: Record<string, TimePunch[]> = {};
+    for (const punch of allPunches) {
+      if (!employeePunches[punch.employeeId]) {
+        employeePunches[punch.employeeId] = [];
+      }
+      employeePunches[punch.employeeId].push(punch);
+    }
+    
+    // Return clock_in punches for employees who are currently clocked in
+    const activeClockIns: TimePunch[] = [];
+    for (const [employeeId, punches] of Object.entries(employeePunches)) {
+      const sorted = [...punches].sort((a, b) => 
+        new Date(b.actualTimestamp).getTime() - new Date(a.actualTimestamp).getTime()
+      );
+      const mostRecent = sorted[0];
+      // If most recent is clock_in, they're still clocked in - return that punch
+      if (mostRecent && mostRecent.punchType === "clock_in") {
+        activeClockIns.push(mostRecent);
+      }
+    }
+    
+    return activeClockIns;
   }
 
   async createTimePunch(data: InsertTimePunch): Promise<TimePunch> {
