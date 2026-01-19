@@ -94,6 +94,12 @@ import {
   type TipRuleJobPercentage, type InsertTipRuleJobPercentage,
   type LaborSnapshot, type InsertLaborSnapshot,
   type OvertimeRule, type InsertOvertimeRule,
+  type BreakRule, type InsertBreakRule,
+  type BreakAttestation, type InsertBreakAttestation,
+  type BreakViolation, type InsertBreakViolation,
+  type MinorLaborRule, type InsertMinorLaborRule,
+  type EmployeeMinorStatus, type InsertEmployeeMinorStatus,
+  breakRules, breakAttestations, breakViolations, minorLaborRules, employeeMinorStatus,
   type PaymentProcessor, type InsertPaymentProcessor,
   type PaymentTransaction, type InsertPaymentTransaction,
   type TerminalDevice, type InsertTerminalDevice,
@@ -720,6 +726,38 @@ export interface IStorage {
   createOvertimeRule(data: InsertOvertimeRule): Promise<OvertimeRule>;
   updateOvertimeRule(id: string, data: Partial<InsertOvertimeRule>): Promise<OvertimeRule | undefined>;
   deleteOvertimeRule(id: string): Promise<boolean>;
+
+  // ============================================================================
+  // CALIFORNIA LABOR COMPLIANCE - Break Rules, Attestations, Violations
+  // ============================================================================
+  
+  getBreakRules(propertyId: string): Promise<BreakRule[]>;
+  getBreakRule(id: string): Promise<BreakRule | undefined>;
+  getActiveBreakRule(propertyId: string): Promise<BreakRule | undefined>;
+  createBreakRule(data: InsertBreakRule): Promise<BreakRule>;
+  updateBreakRule(id: string, data: Partial<InsertBreakRule>): Promise<BreakRule | undefined>;
+  deleteBreakRule(id: string): Promise<boolean>;
+  
+  getBreakAttestations(propertyId: string, businessDate?: string): Promise<BreakAttestation[]>;
+  getBreakAttestationsByEmployee(employeeId: string, businessDate?: string): Promise<BreakAttestation[]>;
+  createBreakAttestation(data: InsertBreakAttestation): Promise<BreakAttestation>;
+  
+  getBreakViolations(propertyId: string, options?: { businessDate?: string; startDate?: string; endDate?: string; status?: string }): Promise<BreakViolation[]>;
+  getBreakViolationsByEmployee(employeeId: string): Promise<BreakViolation[]>;
+  createBreakViolation(data: InsertBreakViolation): Promise<BreakViolation>;
+  updateBreakViolation(id: string, data: Partial<InsertBreakViolation>): Promise<BreakViolation | undefined>;
+  acknowledgeBreakViolation(id: string, acknowledgedById: string): Promise<BreakViolation | undefined>;
+  
+  getMinorLaborRules(propertyId: string): Promise<MinorLaborRule[]>;
+  getActiveMinorLaborRule(propertyId: string): Promise<MinorLaborRule | undefined>;
+  createMinorLaborRule(data: InsertMinorLaborRule): Promise<MinorLaborRule>;
+  updateMinorLaborRule(id: string, data: Partial<InsertMinorLaborRule>): Promise<MinorLaborRule | undefined>;
+  
+  getEmployeeMinorStatus(employeeId: string): Promise<EmployeeMinorStatus | undefined>;
+  getEmployeeMinorStatusesByProperty(propertyId: string): Promise<EmployeeMinorStatus[]>;
+  createEmployeeMinorStatus(data: InsertEmployeeMinorStatus): Promise<EmployeeMinorStatus>;
+  updateEmployeeMinorStatus(id: string, data: Partial<InsertEmployeeMinorStatus>): Promise<EmployeeMinorStatus | undefined>;
+  deleteEmployeeMinorStatus(id: string): Promise<boolean>;
 
   // ============================================================================
   // LOYALTY PROGRAMS
@@ -4563,6 +4601,155 @@ export class DatabaseStorage implements IStorage {
   async deleteOvertimeRule(id: string): Promise<boolean> {
     const result = await db.delete(overtimeRules).where(eq(overtimeRules.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // ============================================================================
+  // CALIFORNIA LABOR COMPLIANCE - Break Rules, Attestations, Violations
+  // ============================================================================
+
+  async getBreakRules(propertyId: string): Promise<BreakRule[]> {
+    return db.select().from(breakRules).where(eq(breakRules.propertyId, propertyId));
+  }
+
+  async getBreakRule(id: string): Promise<BreakRule | undefined> {
+    const [result] = await db.select().from(breakRules).where(eq(breakRules.id, id));
+    return result;
+  }
+
+  async getActiveBreakRule(propertyId: string): Promise<BreakRule | undefined> {
+    const [result] = await db.select().from(breakRules)
+      .where(and(eq(breakRules.propertyId, propertyId), eq(breakRules.active, true)))
+      .orderBy(desc(breakRules.createdAt))
+      .limit(1);
+    return result;
+  }
+
+  async createBreakRule(data: InsertBreakRule): Promise<BreakRule> {
+    const [result] = await db.insert(breakRules).values(data).returning();
+    return result;
+  }
+
+  async updateBreakRule(id: string, data: Partial<InsertBreakRule>): Promise<BreakRule | undefined> {
+    const [result] = await db.update(breakRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(breakRules.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteBreakRule(id: string): Promise<boolean> {
+    const result = await db.delete(breakRules).where(eq(breakRules.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getBreakAttestations(propertyId: string, businessDate?: string): Promise<BreakAttestation[]> {
+    const conditions = [eq(breakAttestations.propertyId, propertyId)];
+    if (businessDate) conditions.push(eq(breakAttestations.businessDate, businessDate));
+    return db.select().from(breakAttestations).where(and(...conditions)).orderBy(desc(breakAttestations.attestedAt));
+  }
+
+  async getBreakAttestationsByEmployee(employeeId: string, businessDate?: string): Promise<BreakAttestation[]> {
+    const conditions = [eq(breakAttestations.employeeId, employeeId)];
+    if (businessDate) conditions.push(eq(breakAttestations.businessDate, businessDate));
+    return db.select().from(breakAttestations).where(and(...conditions)).orderBy(desc(breakAttestations.attestedAt));
+  }
+
+  async createBreakAttestation(data: InsertBreakAttestation): Promise<BreakAttestation> {
+    const [result] = await db.insert(breakAttestations).values(data).returning();
+    return result;
+  }
+
+  async getBreakViolations(propertyId: string, options?: { businessDate?: string; startDate?: string; endDate?: string; status?: string }): Promise<BreakViolation[]> {
+    const conditions = [eq(breakViolations.propertyId, propertyId)];
+    if (options?.businessDate) conditions.push(eq(breakViolations.businessDate, options.businessDate));
+    if (options?.startDate) conditions.push(gte(breakViolations.businessDate, options.startDate));
+    if (options?.endDate) conditions.push(lte(breakViolations.businessDate, options.endDate));
+    if (options?.status) conditions.push(eq(breakViolations.status, options.status));
+    return db.select().from(breakViolations).where(and(...conditions)).orderBy(desc(breakViolations.createdAt));
+  }
+
+  async getBreakViolationsByEmployee(employeeId: string): Promise<BreakViolation[]> {
+    return db.select().from(breakViolations)
+      .where(eq(breakViolations.employeeId, employeeId))
+      .orderBy(desc(breakViolations.businessDate));
+  }
+
+  async createBreakViolation(data: InsertBreakViolation): Promise<BreakViolation> {
+    const [result] = await db.insert(breakViolations).values(data).returning();
+    return result;
+  }
+
+  async updateBreakViolation(id: string, data: Partial<InsertBreakViolation>): Promise<BreakViolation | undefined> {
+    const [result] = await db.update(breakViolations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(breakViolations.id, id))
+      .returning();
+    return result;
+  }
+
+  async acknowledgeBreakViolation(id: string, acknowledgedById: string): Promise<BreakViolation | undefined> {
+    const [result] = await db.update(breakViolations)
+      .set({ acknowledgedById, acknowledgedAt: new Date(), status: "acknowledged", updatedAt: new Date() })
+      .where(eq(breakViolations.id, id))
+      .returning();
+    return result;
+  }
+
+  async getMinorLaborRules(propertyId: string): Promise<MinorLaborRule[]> {
+    return db.select().from(minorLaborRules).where(eq(minorLaborRules.propertyId, propertyId));
+  }
+
+  async getActiveMinorLaborRule(propertyId: string): Promise<MinorLaborRule | undefined> {
+    const [result] = await db.select().from(minorLaborRules)
+      .where(and(eq(minorLaborRules.propertyId, propertyId), eq(minorLaborRules.active, true)))
+      .orderBy(desc(minorLaborRules.createdAt))
+      .limit(1);
+    return result;
+  }
+
+  async createMinorLaborRule(data: InsertMinorLaborRule): Promise<MinorLaborRule> {
+    const [result] = await db.insert(minorLaborRules).values(data).returning();
+    return result;
+  }
+
+  async updateMinorLaborRule(id: string, data: Partial<InsertMinorLaborRule>): Promise<MinorLaborRule | undefined> {
+    const [result] = await db.update(minorLaborRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(minorLaborRules.id, id))
+      .returning();
+    return result;
+  }
+
+  async getEmployeeMinorStatus(employeeId: string): Promise<EmployeeMinorStatus | undefined> {
+    const [result] = await db.select().from(employeeMinorStatus).where(eq(employeeMinorStatus.employeeId, employeeId));
+    return result;
+  }
+
+  async createEmployeeMinorStatus(data: InsertEmployeeMinorStatus): Promise<EmployeeMinorStatus> {
+    const [result] = await db.insert(employeeMinorStatus).values(data).returning();
+    return result;
+  }
+
+  async updateEmployeeMinorStatus(id: string, data: Partial<InsertEmployeeMinorStatus>): Promise<EmployeeMinorStatus | undefined> {
+    const [result] = await db.update(employeeMinorStatus)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(employeeMinorStatus.id, id))
+      .returning();
+    return result;
+  }
+
+  async getEmployeeMinorStatusesByProperty(propertyId: string): Promise<EmployeeMinorStatus[]> {
+    // Get all employees for the property, then get their minor statuses
+    const propertyEmployees = await db.select().from(employees).where(eq(employees.propertyId, propertyId));
+    const employeeIds = propertyEmployees.map(e => e.id);
+    if (employeeIds.length === 0) return [];
+    const statuses = await db.select().from(employeeMinorStatus).where(inArray(employeeMinorStatus.employeeId, employeeIds));
+    return statuses;
+  }
+
+  async deleteEmployeeMinorStatus(id: string): Promise<boolean> {
+    const result = await db.delete(employeeMinorStatus).where(eq(employeeMinorStatus.id, id)).returning();
+    return result.length > 0;
   }
 
   // ============================================================================

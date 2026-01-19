@@ -10914,6 +10914,298 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // CALIFORNIA LABOR COMPLIANCE - Break Rules, Attestations, Violations
+  // ============================================================================
+
+  app.get("/api/break-rules", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const rules = await storage.getBreakRules(propertyId as string);
+      res.json(rules);
+    } catch (error) {
+      console.error("Get break rules error:", error);
+      res.status(500).json({ message: "Failed to get break rules" });
+    }
+  });
+
+  app.get("/api/break-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.getBreakRule(req.params.id);
+      if (!rule) {
+        return res.status(404).json({ message: "Break rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Get break rule error:", error);
+      res.status(500).json({ message: "Failed to get break rule" });
+    }
+  });
+
+  app.get("/api/break-rules/active/:propertyId", async (req, res) => {
+    try {
+      const rule = await storage.getActiveBreakRule(req.params.propertyId);
+      res.json(rule || null);
+    } catch (error) {
+      console.error("Get active break rule error:", error);
+      res.status(500).json({ message: "Failed to get active break rule" });
+    }
+  });
+
+  app.post("/api/break-rules", async (req, res) => {
+    try {
+      const rule = await storage.createBreakRule(req.body);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Create break rule error:", error);
+      res.status(500).json({ message: "Failed to create break rule" });
+    }
+  });
+
+  app.patch("/api/break-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.updateBreakRule(req.params.id, req.body);
+      if (!rule) {
+        return res.status(404).json({ message: "Break rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Update break rule error:", error);
+      res.status(500).json({ message: "Failed to update break rule" });
+    }
+  });
+
+  app.delete("/api/break-rules/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteBreakRule(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Break rule not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete break rule error:", error);
+      res.status(500).json({ message: "Failed to delete break rule" });
+    }
+  });
+
+  // Break Attestations
+  app.get("/api/break-attestations", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const attestations = await storage.getBreakAttestations(propertyId as string, businessDate as string | undefined);
+      res.json(attestations);
+    } catch (error) {
+      console.error("Get break attestations error:", error);
+      res.status(500).json({ message: "Failed to get break attestations" });
+    }
+  });
+
+  app.get("/api/break-attestations/employee/:employeeId", async (req, res) => {
+    try {
+      const { businessDate } = req.query;
+      const attestations = await storage.getBreakAttestationsByEmployee(req.params.employeeId, businessDate as string | undefined);
+      res.json(attestations);
+    } catch (error) {
+      console.error("Get employee break attestations error:", error);
+      res.status(500).json({ message: "Failed to get employee break attestations" });
+    }
+  });
+
+  app.post("/api/break-attestations", async (req, res) => {
+    try {
+      const attestation = await storage.createBreakAttestation(req.body);
+      res.status(201).json(attestation);
+    } catch (error) {
+      console.error("Create break attestation error:", error);
+      res.status(500).json({ message: "Failed to create break attestation" });
+    }
+  });
+
+  // Break Violations
+  app.get("/api/break-violations", async (req, res) => {
+    try {
+      const { propertyId, businessDate, startDate, endDate, status } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const violations = await storage.getBreakViolations(propertyId as string, {
+        businessDate: businessDate as string | undefined,
+        startDate: startDate as string | undefined,
+        endDate: endDate as string | undefined,
+        status: status as string | undefined,
+      });
+      res.json(violations);
+    } catch (error) {
+      console.error("Get break violations error:", error);
+      res.status(500).json({ message: "Failed to get break violations" });
+    }
+  });
+
+  app.get("/api/break-violations/employee/:employeeId", async (req, res) => {
+    try {
+      const violations = await storage.getBreakViolationsByEmployee(req.params.employeeId);
+      res.json(violations);
+    } catch (error) {
+      console.error("Get employee break violations error:", error);
+      res.status(500).json({ message: "Failed to get employee break violations" });
+    }
+  });
+
+  app.post("/api/break-violations", async (req, res) => {
+    try {
+      const violation = await storage.createBreakViolation(req.body);
+      res.status(201).json(violation);
+    } catch (error) {
+      console.error("Create break violation error:", error);
+      res.status(500).json({ message: "Failed to create break violation" });
+    }
+  });
+
+  app.patch("/api/break-violations/:id", async (req, res) => {
+    try {
+      const violation = await storage.updateBreakViolation(req.params.id, req.body);
+      if (!violation) {
+        return res.status(404).json({ message: "Break violation not found" });
+      }
+      res.json(violation);
+    } catch (error) {
+      console.error("Update break violation error:", error);
+      res.status(500).json({ message: "Failed to update break violation" });
+    }
+  });
+
+  app.post("/api/break-violations/:id/acknowledge", async (req, res) => {
+    try {
+      const { acknowledgedById } = req.body;
+      if (!acknowledgedById) {
+        return res.status(400).json({ message: "acknowledgedById is required" });
+      }
+      const violation = await storage.acknowledgeBreakViolation(req.params.id, acknowledgedById);
+      if (!violation) {
+        return res.status(404).json({ message: "Break violation not found" });
+      }
+      res.json(violation);
+    } catch (error) {
+      console.error("Acknowledge break violation error:", error);
+      res.status(500).json({ message: "Failed to acknowledge break violation" });
+    }
+  });
+
+  // Minor Labor Rules
+  app.get("/api/minor-labor-rules", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "Property ID is required" });
+      }
+      const rules = await storage.getMinorLaborRules(propertyId as string);
+      res.json(rules);
+    } catch (error) {
+      console.error("Get minor labor rules error:", error);
+      res.status(500).json({ message: "Failed to get minor labor rules" });
+    }
+  });
+
+  app.get("/api/minor-labor-rules/active/:propertyId", async (req, res) => {
+    try {
+      const rule = await storage.getActiveMinorLaborRule(req.params.propertyId);
+      res.json(rule || null);
+    } catch (error) {
+      console.error("Get active minor labor rule error:", error);
+      res.status(500).json({ message: "Failed to get active minor labor rule" });
+    }
+  });
+
+  app.post("/api/minor-labor-rules", async (req, res) => {
+    try {
+      const rule = await storage.createMinorLaborRule(req.body);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Create minor labor rule error:", error);
+      res.status(500).json({ message: "Failed to create minor labor rule" });
+    }
+  });
+
+  app.patch("/api/minor-labor-rules/:id", async (req, res) => {
+    try {
+      const rule = await storage.updateMinorLaborRule(req.params.id, req.body);
+      if (!rule) {
+        return res.status(404).json({ message: "Minor labor rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Update minor labor rule error:", error);
+      res.status(500).json({ message: "Failed to update minor labor rule" });
+    }
+  });
+
+  // Employee Minor Status
+  app.get("/api/employee-minor-status", async (req, res) => {
+    try {
+      const { propertyId } = req.query;
+      if (!propertyId) {
+        return res.status(400).json({ message: "propertyId is required" });
+      }
+      const statuses = await storage.getEmployeeMinorStatusesByProperty(propertyId as string);
+      res.json(statuses);
+    } catch (error) {
+      console.error("Get employee minor statuses error:", error);
+      res.status(500).json({ message: "Failed to get employee minor statuses" });
+    }
+  });
+
+  app.get("/api/employee-minor-status/:employeeId", async (req, res) => {
+    try {
+      const status = await storage.getEmployeeMinorStatus(req.params.employeeId);
+      res.json(status || null);
+    } catch (error) {
+      console.error("Get employee minor status error:", error);
+      res.status(500).json({ message: "Failed to get employee minor status" });
+    }
+  });
+
+  app.post("/api/employee-minor-status", async (req, res) => {
+    try {
+      const status = await storage.createEmployeeMinorStatus(req.body);
+      res.status(201).json(status);
+    } catch (error) {
+      console.error("Create employee minor status error:", error);
+      res.status(500).json({ message: "Failed to create employee minor status" });
+    }
+  });
+
+  app.patch("/api/employee-minor-status/:id", async (req, res) => {
+    try {
+      const status = await storage.updateEmployeeMinorStatus(req.params.id, req.body);
+      if (!status) {
+        return res.status(404).json({ message: "Employee minor status not found" });
+      }
+      res.json(status);
+    } catch (error) {
+      console.error("Update employee minor status error:", error);
+      res.status(500).json({ message: "Failed to update employee minor status" });
+    }
+  });
+
+  app.delete("/api/employee-minor-status/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteEmployeeMinorStatus(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Employee minor status not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete employee minor status error:", error);
+      res.status(500).json({ message: "Failed to delete employee minor status" });
+    }
+  });
+
+  // ============================================================================
   // PAYMENT PROCESSORS (Admin Configuration)
   // ============================================================================
 

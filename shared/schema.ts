@@ -2077,6 +2077,187 @@ export const overtimeRulesRelations = relations(overtimeRules, ({ one }) => ({
 }));
 
 // ============================================================================
+// CALIFORNIA LABOR COMPLIANCE - Break Rules & Attestations
+// ============================================================================
+
+export const breakRules = pgTable("break_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  name: text("name").notNull().default("California Break Rules"),
+  stateCode: text("state_code").notNull().default("CA"),
+  
+  // Meal Break Settings (California: 30-min meal before 5th hour)
+  enableMealBreakEnforcement: boolean("enable_meal_break_enforcement").default(true),
+  mealBreakMinutes: integer("meal_break_minutes").default(30),
+  mealBreakThresholdHours: decimal("meal_break_threshold_hours", { precision: 4, scale: 2 }).default("5.00"),
+  secondMealBreakThresholdHours: decimal("second_meal_break_threshold_hours", { precision: 4, scale: 2 }).default("10.00"),
+  allowMealBreakWaiver: boolean("allow_meal_break_waiver").default(true),
+  mealWaiverMaxShiftHours: decimal("meal_waiver_max_shift_hours", { precision: 4, scale: 2 }).default("6.00"),
+  
+  // Rest Break Settings (California: 10-min paid rest per 4 hours)
+  enableRestBreakEnforcement: boolean("enable_rest_break_enforcement").default(true),
+  restBreakMinutes: integer("rest_break_minutes").default(10),
+  restBreakIntervalHours: decimal("rest_break_interval_hours", { precision: 4, scale: 2 }).default("4.00"),
+  restBreakIsPaid: boolean("rest_break_is_paid").default(true),
+  
+  // Premium Pay Settings (1 hour pay for each missed break)
+  enablePremiumPay: boolean("enable_premium_pay").default(true),
+  mealBreakPremiumHours: decimal("meal_break_premium_hours", { precision: 4, scale: 2 }).default("1.00"),
+  restBreakPremiumHours: decimal("rest_break_premium_hours", { precision: 4, scale: 2 }).default("1.00"),
+  
+  // Attestation Settings
+  requireClockOutAttestation: boolean("require_clock_out_attestation").default(true),
+  attestationMessage: text("attestation_message").default("I confirm that I was provided with all required meal and rest breaks during my shift."),
+  
+  // Alert Settings
+  enableBreakAlerts: boolean("enable_break_alerts").default(true),
+  alertMinutesBeforeDeadline: integer("alert_minutes_before_deadline").default(15),
+  
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const breakRulesRelations = relations(breakRules, ({ one }) => ({
+  property: one(properties, { fields: [breakRules.propertyId], references: [properties.id] }),
+}));
+
+export const breakAttestations = pgTable("break_attestations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  timecardId: varchar("timecard_id").references(() => timecards.id),
+  businessDate: text("business_date").notNull(),
+  
+  // Attestation Details
+  attestationType: text("attestation_type").notNull().default("clock_out"),
+  breaksProvided: boolean("breaks_provided").notNull(),
+  missedMealBreak: boolean("missed_meal_break").default(false),
+  missedRestBreak: boolean("missed_rest_break").default(false),
+  missedBreakReason: text("missed_break_reason"),
+  employeeSignature: text("employee_signature"),
+  
+  // Timestamps
+  attestedAt: timestamp("attested_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const breakAttestationsRelations = relations(breakAttestations, ({ one }) => ({
+  property: one(properties, { fields: [breakAttestations.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [breakAttestations.employeeId], references: [employees.id] }),
+  timecard: one(timecards, { fields: [breakAttestations.timecardId], references: [timecards.id] }),
+}));
+
+export const breakViolations = pgTable("break_violations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  timecardId: varchar("timecard_id").references(() => timecards.id),
+  breakSessionId: varchar("break_session_id").references(() => breakSessions.id),
+  businessDate: text("business_date").notNull(),
+  
+  // Violation Details
+  violationType: text("violation_type").notNull(),
+  violationReason: text("violation_reason"),
+  shiftStartTime: timestamp("shift_start_time"),
+  shiftEndTime: timestamp("shift_end_time"),
+  hoursWorked: decimal("hours_worked", { precision: 6, scale: 2 }),
+  breakDeadlineTime: timestamp("break_deadline_time"),
+  
+  // Premium Pay Calculation
+  premiumPayHours: decimal("premium_pay_hours", { precision: 4, scale: 2 }).default("1.00"),
+  premiumPayRate: decimal("premium_pay_rate", { precision: 8, scale: 2 }),
+  premiumPayAmount: decimal("premium_pay_amount", { precision: 10, scale: 2 }),
+  
+  // Status
+  status: text("status").default("pending"),
+  acknowledgedById: varchar("acknowledged_by_id").references(() => employees.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  paidInPayrollDate: text("paid_in_payroll_date"),
+  
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const breakViolationsRelations = relations(breakViolations, ({ one }) => ({
+  property: one(properties, { fields: [breakViolations.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [breakViolations.employeeId], references: [employees.id] }),
+  timecard: one(timecards, { fields: [breakViolations.timecardId], references: [timecards.id] }),
+  breakSession: one(breakSessions, { fields: [breakViolations.breakSessionId], references: [breakSessions.id] }),
+  acknowledgedBy: one(employees, { fields: [breakViolations.acknowledgedById], references: [employees.id] }),
+}));
+
+export const minorLaborRules = pgTable("minor_labor_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: varchar("property_id").notNull().references(() => properties.id),
+  stateCode: text("state_code").notNull().default("CA"),
+  
+  // Age Groups
+  minorAgeThreshold: integer("minor_age_threshold").default(18),
+  youngMinorAgeThreshold: integer("young_minor_age_threshold").default(16),
+  
+  // Work Hour Restrictions (School in Session)
+  schoolDayMaxHours: decimal("school_day_max_hours", { precision: 4, scale: 2 }).default("4.00"),
+  schoolWeekMaxHours: decimal("school_week_max_hours", { precision: 4, scale: 2 }).default("18.00"),
+  schoolDayStartTime: text("school_day_start_time").default("07:00"),
+  schoolDayEndTime: text("school_day_end_time").default("19:00"),
+  
+  // Work Hour Restrictions (School Not in Session)
+  nonSchoolDayMaxHours: decimal("non_school_day_max_hours", { precision: 4, scale: 2 }).default("8.00"),
+  nonSchoolWeekMaxHours: decimal("non_school_week_max_hours", { precision: 4, scale: 2 }).default("40.00"),
+  nonSchoolDayStartTime: text("non_school_day_start_time").default("07:00"),
+  nonSchoolDayEndTime: text("non_school_day_end_time").default("21:00"),
+  
+  // Work Permit Requirements
+  requireWorkPermit: boolean("require_work_permit").default(true),
+  workPermitExpirationAlertDays: integer("work_permit_expiration_alert_days").default(30),
+  
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const minorLaborRulesRelations = relations(minorLaborRules, ({ one }) => ({
+  property: one(properties, { fields: [minorLaborRules.propertyId], references: [properties.id] }),
+}));
+
+export const employeeMinorStatus = pgTable("employee_minor_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  dateOfBirth: text("date_of_birth").notNull(),
+  isMinor: boolean("is_minor").default(false),
+  ageCategory: text("age_category"),
+  
+  // Work Permit Info
+  workPermitNumber: text("work_permit_number"),
+  workPermitIssueDate: text("work_permit_issue_date"),
+  workPermitExpirationDate: text("work_permit_expiration_date"),
+  workPermitDocumentUrl: text("work_permit_document_url"),
+  
+  // School Info
+  currentlyInSchool: boolean("currently_in_school").default(true),
+  schoolName: text("school_name"),
+  schoolEndDate: text("school_end_date"),
+  
+  // Restrictions
+  maxDailyHours: decimal("max_daily_hours", { precision: 4, scale: 2 }),
+  maxWeeklyHours: decimal("max_weekly_hours", { precision: 4, scale: 2 }),
+  earliestStartTime: text("earliest_start_time"),
+  latestEndTime: text("latest_end_time"),
+  
+  verifiedById: varchar("verified_by_id").references(() => employees.id),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const employeeMinorStatusRelations = relations(employeeMinorStatus, ({ one }) => ({
+  employee: one(employees, { fields: [employeeMinorStatus.employeeId], references: [employees.id] }),
+  verifiedBy: one(employees, { fields: [employeeMinorStatus.verifiedById], references: [employees.id] }),
+}));
+
+// ============================================================================
 // T&A INSERT SCHEMAS AND TYPES
 // ============================================================================
 
@@ -2103,6 +2284,11 @@ export const insertTipRuleSchema = createInsertSchema(tipRules).omit({ id: true,
 export const insertTipRuleJobPercentageSchema = createInsertSchema(tipRuleJobPercentages).omit({ id: true, createdAt: true });
 export const insertLaborSnapshotSchema = createInsertSchema(laborSnapshots).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOvertimeRuleSchema = createInsertSchema(overtimeRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBreakRuleSchema = createInsertSchema(breakRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBreakAttestationSchema = createInsertSchema(breakAttestations).omit({ id: true, createdAt: true });
+export const insertBreakViolationSchema = createInsertSchema(breakViolations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertMinorLaborRuleSchema = createInsertSchema(minorLaborRules).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertEmployeeMinorStatusSchema = createInsertSchema(employeeMinorStatus).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type JobCode = typeof jobCodes.$inferSelect;
 export type InsertJobCode = z.infer<typeof insertJobCodeSchema>;
@@ -2150,6 +2336,16 @@ export type LaborSnapshot = typeof laborSnapshots.$inferSelect;
 export type InsertLaborSnapshot = z.infer<typeof insertLaborSnapshotSchema>;
 export type OvertimeRule = typeof overtimeRules.$inferSelect;
 export type InsertOvertimeRule = z.infer<typeof insertOvertimeRuleSchema>;
+export type BreakRule = typeof breakRules.$inferSelect;
+export type InsertBreakRule = z.infer<typeof insertBreakRuleSchema>;
+export type BreakAttestation = typeof breakAttestations.$inferSelect;
+export type InsertBreakAttestation = z.infer<typeof insertBreakAttestationSchema>;
+export type BreakViolation = typeof breakViolations.$inferSelect;
+export type InsertBreakViolation = z.infer<typeof insertBreakViolationSchema>;
+export type MinorLaborRule = typeof minorLaborRules.$inferSelect;
+export type InsertMinorLaborRule = z.infer<typeof insertMinorLaborRuleSchema>;
+export type EmployeeMinorStatus = typeof employeeMinorStatus.$inferSelect;
+export type InsertEmployeeMinorStatus = z.infer<typeof insertEmployeeMinorStatusSchema>;
 
 // ============================================================================
 // PHASE 1: OFFLINE ORDER QUEUE

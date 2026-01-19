@@ -51,6 +51,9 @@ import {
   Cpu,
   Wifi,
   Server,
+  Coffee,
+  AlertCircle,
+  Baby,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -117,6 +120,7 @@ const menuGroupsTemplate = [
       { title: "Jobs", url: "/admin/jobs", icon: Briefcase },
       { title: "Roles & Privileges", url: "/admin/roles", icon: Shield },
       { title: "Overtime Rules", url: "/admin/overtime-rules", icon: Scale },
+      { title: "Break Rules", url: "/admin/break-rules", icon: Coffee },
       { title: "Tip Rules", url: "/admin/tip-rules", icon: Coins },
     ],
   },
@@ -126,6 +130,9 @@ const menuGroupsTemplate = [
       { title: "Timecards", url: "/admin/timecards", icon: Timer },
       { title: "Scheduling", url: "/admin/scheduling", icon: CalendarDays },
       { title: "Line Up", url: "/admin/line-up", icon: Clock },
+      { title: "Break Monitoring", url: "/admin/break-monitoring", icon: Bell },
+      { title: "Break Violations", url: "/admin/break-violations", icon: AlertCircle },
+      { title: "Minor Labor", url: "/admin/minor-labor", icon: Baby },
     ],
   },
   {

@@ -4,7 +4,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
-import type { Employee, Rvc, Property, Timecard, JobCode, Workstation } from "@shared/schema";
+import BreakAttestationDialog from "@/components/pos/break-attestation-dialog";
+import type { Employee, Rvc, Property, Timecard, JobCode, Workstation, BreakRule } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -79,6 +80,8 @@ export default function LoginPage() {
   const [clockError, setClockError] = useState<string | null>(null);
   const [employeeJobs, setEmployeeJobs] = useState<JobCode[]>([]);
   const [clockStep, setClockStep] = useState<"pin" | "job_select" | "status" | "clock_out_type" | "break_type">("pin");
+  const [showAttestationDialog, setShowAttestationDialog] = useState(false);
+  const [pendingAttestationData, setPendingAttestationData] = useState<any>(null);
 
   // Fetch workstation context (includes property and allowed RVCs) if workstation is set
   const { data: wsContext, isLoading: wsContextLoading, error: wsContextError } = useQuery<WorkstationContext>({
@@ -102,6 +105,13 @@ export default function LoginPage() {
   const rvcs = wsContext?.rvcs ?? allRvcs;
   const rvcsLoading = workstationId ? wsContextLoading : allRvcsLoading;
   const selectedProperty = wsContext?.property;
+
+  // Query break rules for attestation requirements
+  const { data: breakRules = [] } = useQuery<BreakRule[]>({
+    queryKey: ["/api/break-rules?propertyId=" + selectedProperty?.id],
+    enabled: !!selectedProperty?.id,
+  });
+  const activeBreakRule = breakRules.find(r => r.active) || null;
 
   // Update workstation in context when loaded
   useEffect(() => {
@@ -283,11 +293,12 @@ export default function LoginPage() {
   });
 
   const clockOutMutation = useMutation({
-    mutationFn: async (punchType: "end_shift") => {
+    mutationFn: async (data: { punchType: "end_shift"; attestation?: any }) => {
       const selectedRvc = rvcs.find((r) => r.id === selectedRvcId);
       const response = await apiRequest("POST", "/api/time-punches/clock-out", {
         employeeId: clockEmployee?.id,
         propertyId: selectedRvc?.propertyId,
+        attestation: data.attestation,
       });
       return response.json();
     },
@@ -296,12 +307,31 @@ export default function LoginPage() {
         title: "Clocked Out",
         description: `${clockEmployee?.firstName} has ended their shift.`,
       });
+      setShowAttestationDialog(false);
+      setPendingAttestationData(null);
       handleCloseClockModal();
     },
     onError: () => {
       setClockError("Failed to clock out. Please try again.");
     },
   });
+
+  const handleEndShiftClick = () => {
+    if (activeBreakRule?.requireClockOutAttestation && clockStatus?.clockedInAt) {
+      setShowAttestationDialog(true);
+    } else {
+      clockOutMutation.mutate({ punchType: "end_shift" });
+    }
+  };
+
+  const handleAttestationConfirm = (attestationData: any) => {
+    setShowAttestationDialog(false);
+    clockOutMutation.mutate({ punchType: "end_shift", attestation: attestationData });
+  };
+
+  const handleAttestationCancel = () => {
+    setShowAttestationDialog(false);
+  };
 
   const breakStartMutation = useMutation({
     mutationFn: async (breakType: "meal" | "rest") => {
@@ -987,7 +1017,7 @@ export default function LoginPage() {
                 <Button
                   variant="destructive"
                   className="w-full h-12"
-                  onClick={() => clockOutMutation.mutate("end_shift")}
+                  onClick={handleEndShiftClick}
                   disabled={clockOutMutation.isPending}
                   data-testid="button-clock-out-end-shift"
                 >
@@ -1062,6 +1092,18 @@ export default function LoginPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {clockEmployee && selectedProperty && clockStatus?.clockedInAt && (
+        <BreakAttestationDialog
+          open={showAttestationDialog}
+          onOpenChange={setShowAttestationDialog}
+          employee={clockEmployee}
+          propertyId={selectedProperty.id}
+          clockInTime={new Date(clockStatus.clockedInAt)}
+          onConfirm={handleAttestationConfirm}
+          onCancel={handleAttestationCancel}
+        />
+      )}
     </div>
   );
 }

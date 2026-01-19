@@ -53,6 +53,10 @@ import TimecardReportPage from "./timecard-report";
 import LaborAnalyticsPage from "./labor-analytics";
 import JobsPage from "./jobs";
 import OvertimeRulesPage from "./overtime-rules";
+import BreakRulesPage from "./break-rules";
+import BreakMonitoringPage from "./break-monitoring";
+import BreakViolationsPage from "./break-violations";
+import MinorLaborPage from "./minor-labor";
 import TipRulesPage from "./tip-rules";
 import PaymentProcessorsPage from "./payment-processors";
 import TerminalDevicesPage from "./terminal-devices";
@@ -304,6 +308,10 @@ export default function AdminLayout() {
               <Route path="/admin/labor-analytics" component={LaborAnalyticsPage} />
               <Route path="/admin/jobs" component={JobsPage} />
               <Route path="/admin/overtime-rules" component={OvertimeRulesPage} />
+              <Route path="/admin/break-rules" component={BreakRulesPage} />
+              <Route path="/admin/break-monitoring" component={BreakMonitoringPage} />
+              <Route path="/admin/break-violations" component={BreakViolationsPage} />
+              <Route path="/admin/minor-labor" component={MinorLaborPage} />
               <Route path="/admin/tip-rules" component={TipRulesPage} />
               <Route path="/admin/onboarding" component={OnboardingPage} />
               <Route path="/admin/gift-cards" component={GiftCardsPage} />
