@@ -33,10 +33,10 @@ A desktop application for provisioning OPS-POS devices with **automatic service 
 ## Service Binding Workflow
 
 ### In EMC (Before Running Wizard)
-1. Navigate to Device Configuration → Workstations
-2. Select a workstation
-3. Assign service bindings (CAPS, Print Controller, KDS Controller, Payment Controller)
-4. Save the workstation configuration
+1. Navigate to the **Service Host** section in EMC
+2. Select or create a Service Host for your property
+3. Configure workstation service bindings (CAPS, Print Controller, KDS Controller, Payment Controller)
+4. Save the Service Host configuration
 
 ### On Terminal (Running Wizard)
 1. Launch the CAL Setup Wizard
@@ -130,7 +130,7 @@ The wizard reports setup status to EMC throughout the provisioning process:
 | `completed` | Setup finished successfully |
 | `failed` | Setup encountered an error |
 
-View status in EMC under Device Configuration → Workstations. Each device displays a status badge.
+View status in EMC under the Service Host section. Each workstation displays a setup status badge.
 
 ## Troubleshooting
 
@@ -141,7 +141,7 @@ View status in EMC under Device Configuration → Workstations. Each device disp
 
 ### "No service bindings found"
 - Configure service bindings in EMC before running wizard
-- Navigate to Device Configuration → Workstations → Edit → Service Bindings
+- Navigate to Service Host section → Select Service Host → Configure workstation bindings
 
 ### "Print Agent setup failed"
 - Check that Node.js 16.x or later is installed on the terminal (download from https://nodejs.org)
