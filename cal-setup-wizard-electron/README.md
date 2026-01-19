@@ -82,9 +82,9 @@ npm start
 ```bash
 npm run build:win
 ```
-This creates:
-- `dist/OPS-POS CAL Setup Wizard Setup 2.0.0.exe` (installer)
-- `dist/OPS-POS CAL Setup Wizard 2.0.0.exe` (portable)
+This creates (version number from package.json):
+- `dist/OPS-POS CAL Setup Wizard Setup {version}.exe` (installer)
+- `dist/OPS-POS CAL Setup Wizard {version}.exe` (portable)
 
 ### Build for macOS
 ```bash
@@ -103,12 +103,12 @@ The wizard communicates with these EMC endpoints:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/health` | GET | Validate cloud connectivity |
-| `/api/login` | POST | Authenticate with EMC credentials |
-| `/api/properties` | GET | Fetch available properties |
-| `/api/cal-setup/devices` | GET | Fetch workstations with service bindings |
+| `/api/cal-setup/authenticate` | POST | Authenticate with EMC credentials |
+| `/api/cal-setup/properties` | GET | Fetch available properties |
+| `/api/cal-setup/devices/:propertyId` | GET | Fetch workstations with service bindings |
 | `/api/cal-setup/provision-services` | POST | Auto-provision services for workstation |
 | `/api/cal-setup/report-status` | POST | Report setup status to EMC |
-| `/api/devices/register-device` | POST | Register device with secure token |
+| `/api/cal-setup/register-device` | POST | Register device with secure token |
 
 ## Security Features
 
@@ -144,9 +144,9 @@ View status in EMC under Device Configuration → Workstations. Each device disp
 - Navigate to Device Configuration → Workstations → Edit → Service Bindings
 
 ### "Print Agent setup failed"
-- Check that Node.js is installed on the terminal
+- Check that Node.js 16.x or later is installed on the terminal (download from https://nodejs.org)
 - Verify write permissions to `C:\OPS-POS\PrintAgent\`
-- Check Print Agent logs in `C:\OPS-POS\PrintAgent\logs\`
+- Check console output when running the Print Agent manually
 
 ### "Service Host download failed"
 - The installer will continue in browser-only mode
