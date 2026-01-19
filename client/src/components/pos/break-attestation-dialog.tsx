@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import {
   AlertCircle,
   CheckCircle2,
@@ -22,6 +23,7 @@ import {
   Clock,
   AlertTriangle,
   XCircle,
+  DollarSign,
 } from "lucide-react";
 import type { Employee, BreakRule } from "@shared/schema";
 
@@ -43,6 +45,7 @@ interface AttestationData {
   restBreaksTaken: boolean;
   missedBreakReason?: string;
   employeeNotes?: string;
+  cashTipsDeclared?: number;
 }
 
 export default function BreakAttestationDialog({
@@ -62,6 +65,7 @@ export default function BreakAttestationDialog({
   const [missedBreakReason, setMissedBreakReason] = useState("");
   const [employeeNotes, setEmployeeNotes] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [cashTipsDeclared, setCashTipsDeclared] = useState("");
 
   const { data: breakRules = [] } = useQuery<BreakRule[]>({
     queryKey: ["/api/break-rules?propertyId=" + propertyId],
@@ -83,6 +87,7 @@ export default function BreakAttestationDialog({
     (restBreaksRequired > 0 && !restBreaksTaken);
 
   const handleConfirm = () => {
+    const tipAmount = parseFloat(cashTipsDeclared) || 0;
     onConfirm({
       mealBreakProvided,
       mealBreakTaken,
@@ -91,6 +96,7 @@ export default function BreakAttestationDialog({
       restBreaksTaken,
       missedBreakReason: hasIssue ? missedBreakReason : undefined,
       employeeNotes: employeeNotes || undefined,
+      cashTipsDeclared: tipAmount > 0 ? tipAmount : undefined,
     });
   };
 
@@ -252,6 +258,36 @@ export default function BreakAttestationDialog({
               </div>
             </>
           )}
+
+          <Separator />
+
+          <div className="space-y-3">
+            <Label className="text-base font-semibold flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              Cash Tips Declaration
+            </Label>
+            <div className="pl-6 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Enter any cash tips received during your shift for payroll reporting:
+              </p>
+              <div className="flex items-center gap-2 max-w-48">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={cashTipsDeclared}
+                  onChange={(e) => setCashTipsDeclared(e.target.value)}
+                  placeholder="0.00"
+                  className="tabular-nums"
+                  data-testid="input-cash-tips"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Leave empty if no cash tips were received
+              </p>
+            </div>
+          </div>
 
           <Separator />
 

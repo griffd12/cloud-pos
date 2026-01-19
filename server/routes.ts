@@ -3940,12 +3940,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           console.error("Mark tickets paid error:", e);
         }
 
+        // Calculate total tips from all payments for the check
+        const tipTotal = payments.reduce((sum, p) => sum + parseFloat(p.tipAmount || "0"), 0);
+        
         // Totals are already persisted via recalculateCheckTotals, just update status
         // IMPORTANT: Update businessDate to current date when closing (for carried-over checks)
         const updatedCheck = await storage.updateCheck(checkId, {
           status: "closed",
           closedAt: new Date(),
           businessDate, // Close date = current business date
+          tipTotal: tipTotal.toFixed(2), // Store total tips from all payments
         });
 
         // Activate any pending gift cards on this check (sold but not yet activated)
@@ -8392,7 +8396,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Clock Out
   app.post("/api/time-punches/clock-out", async (req, res) => {
     try {
-      const { employeeId, propertyId, workstationId, notes } = req.body;
+      const { employeeId, propertyId, workstationId, notes, cashTipsDeclared } = req.body;
       
       if (!employeeId || !propertyId) {
         return res.status(400).json({ message: "Employee ID and Property ID are required" });
@@ -8437,6 +8441,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Recalculate timecard after clock out punch
       await storage.recalculateTimecard(employeeId, businessDate);
+
+      // If cash tips were declared, update the timecard with the tip amount
+      if (cashTipsDeclared && cashTipsDeclared > 0) {
+        const timecard = await storage.getTimecard({ employeeId, businessDate });
+        if (timecard) {
+          // Add declared cash tips to the timecard
+          const existingTips = parseFloat(timecard.tips || "0");
+          const newTips = (existingTips + parseFloat(cashTipsDeclared)).toFixed(2);
+          await storage.updateTimecard(timecard.id, { tips: newTips });
+        }
+      }
 
       // Broadcast real-time updates for time clock and timecards
       broadcastTimePunchUpdate(propertyId, employeeId);

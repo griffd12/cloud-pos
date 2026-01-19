@@ -19,7 +19,7 @@ import { StripeCardForm } from "./stripe-card-form";
 interface PaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onPayment: (tenderId: string, amount: number, isCashOverTender?: boolean, paymentTransactionId?: string) => void;
+  onPayment: (tenderId: string, amount: number, isCashOverTender?: boolean, paymentTransactionId?: string, tipAmount?: number) => void;
   tenders: Tender[];
   check: Check | null;
   remainingBalance: number;
@@ -116,6 +116,12 @@ export function PaymentModal({
   const [showLoyaltySection, setShowLoyaltySection] = useState(false);
   const [loyaltyPointsEarned, setLoyaltyPointsEarned] = useState(false); // Prevent duplicate earning
   
+  // Overage tip prompt state - when payment exceeds check total
+  const [showOveragePrompt, setShowOveragePrompt] = useState(false);
+  const [overageAmount, setOverageAmount] = useState(0);
+  const [pendingPaymentAmount, setPendingPaymentAmount] = useState(0);
+  const [confirmedTipAmount, setConfirmedTipAmount] = useState<number | undefined>(undefined);
+  
   // Query authorized payments on this check (use distinct key to avoid cache collision with POS page)
   const { data: checkPayments = [], refetch: refetchPayments } = useQuery<CheckPayment[]>({
     queryKey: ["/api/checks", check?.id, "payments-modal"],
@@ -186,6 +192,11 @@ export function PaymentModal({
     setExternalTipAmount("");
     setExternalTotalCharged("");
     setIsRecordingExternal(false);
+    // Reset overage tip prompt
+    setShowOveragePrompt(false);
+    setOverageAmount(0);
+    setPendingPaymentAmount(0);
+    setConfirmedTipAmount(undefined);
   }, []);
   
   const resetGiftCardEntry = useCallback(() => {
@@ -676,12 +687,15 @@ export function PaymentModal({
         if (session.status === "approved") {
           setTerminalPolling(false);
           if (cardTender) {
-            onPayment(cardTender.id, cardAmount, false, session.paymentTransactionId || undefined);
+            // Use the confirmed tip amount (set when user confirmed overage prompt)
+            // This ensures the tip is exactly what the user approved, not recalculated
+            onPayment(cardTender.id, cardAmount, false, session.paymentTransactionId || undefined, confirmedTipAmount);
           }
+          const tipDisplay = confirmedTipAmount ? ` (includes $${confirmedTipAmount.toFixed(2)} tip)` : "";
           resetCardEntry();
           toast({
             title: "Payment Approved",
-            description: `$${cardAmount.toFixed(2)} charged via terminal`,
+            description: `$${cardAmount.toFixed(2)} charged via terminal${tipDisplay}`,
           });
         } else if (session.status === "declined") {
           setTerminalPolling(false);
@@ -712,7 +726,7 @@ export function PaymentModal({
     
     const interval = setInterval(pollSession, 1500);
     return () => clearInterval(interval);
-  }, [terminalSession, terminalPolling, cardTender, cardAmount, onPayment, resetCardEntry, toast]);
+  }, [terminalSession, terminalPolling, cardTender, cardAmount, confirmedTipAmount, onPayment, resetCardEntry, toast]);
   
   // Start terminal payment (from manual selection)
   const startTerminalPayment = async (terminal: TerminalDevice) => {
@@ -878,20 +892,53 @@ export function PaymentModal({
   const handleAmountConfirm = () => {
     const amount = parseFloat(cardPaymentAmount);
     if (amount > 0) {
-      setCardAmount(amount);
-      
-      // Auto-start terminal payment if there's an assigned terminal
-      // This eliminates the extra step of selecting a terminal
-      const terminal = assignedTerminal || (availableTerminals.length === 1 ? availableTerminals[0] : null);
-      if (terminal) {
-        // Directly start terminal payment
-        startTerminalPaymentDirect(terminal, amount);
-      } else {
-        // Show terminal selection if multiple terminals or none assigned
-        setCardPaymentStep("method");
-        setPaymentMethod("select");
+      // Check for overage - if payment exceeds remaining balance, prompt for tip confirmation
+      const overage = Math.round((amount - remainingBalance) * 100) / 100;
+      if (overage > 0) {
+        // Show overage tip prompt
+        setOverageAmount(overage);
+        setPendingPaymentAmount(amount);
+        setShowOveragePrompt(true);
+        return;
       }
+      
+      proceedWithCardPayment(amount);
     }
+  };
+  
+  // Proceed with card payment after any overage confirmation
+  const proceedWithCardPayment = (amount: number) => {
+    setCardAmount(amount);
+    
+    // Auto-start terminal payment if there's an assigned terminal
+    // This eliminates the extra step of selecting a terminal
+    const terminal = assignedTerminal || (availableTerminals.length === 1 ? availableTerminals[0] : null);
+    if (terminal) {
+      // Directly start terminal payment
+      startTerminalPaymentDirect(terminal, amount);
+    } else {
+      // Show terminal selection if multiple terminals or none assigned
+      setCardPaymentStep("method");
+      setPaymentMethod("select");
+    }
+  };
+  
+  // Handle overage tip confirmation
+  const handleOverageTipConfirm = () => {
+    setShowOveragePrompt(false);
+    // Store the confirmed tip amount - use this exact value instead of recalculating later
+    setConfirmedTipAmount(overageAmount);
+    // Proceed with the full payment amount - overage will be recorded as tip
+    proceedWithCardPayment(pendingPaymentAmount);
+  };
+  
+  // Handle overage tip decline - reset and let user re-enter
+  const handleOverageTipDecline = () => {
+    setShowOveragePrompt(false);
+    setOverageAmount(0);
+    setPendingPaymentAmount(0);
+    setConfirmedTipAmount(undefined);
+    setCardPaymentAmount(remainingBalance.toFixed(2));
   };
   
   // Start terminal payment with specified amount (used for auto-start flow)
@@ -1057,14 +1104,17 @@ export function PaymentModal({
 
       if (result.success) {
         // Payment approved - record it on the check
-        onPayment(cardTender.id, cardAmount, false, result.transactionId);
+        // Use the confirmed tip amount (set when user confirmed overage prompt)
+        // This ensures the tip is exactly what the user approved, not recalculated
+        onPayment(cardTender.id, cardAmount, false, result.transactionId, confirmedTipAmount);
         resetCardEntry();
         
         const modeLabel = result.demoMode ? " (Demo)" : result.testMode ? " (Test)" : "";
         const authLabel = isAuthOnly ? " (Pre-Auth)" : "";
+        const tipLabel = confirmedTipAmount ? ` (includes $${confirmedTipAmount.toFixed(2)} tip)` : "";
         toast({ 
           title: isAuthOnly ? "Card Pre-Authorized" : "Card Approved", 
-          description: `$${cardAmount.toFixed(2)} ${isAuthOnly ? "authorized on" : "charged to"} ${result.cardBrand || "card"} ending ${result.cardLast4}${modeLabel}${authLabel}` 
+          description: `$${cardAmount.toFixed(2)} ${isAuthOnly ? "authorized on" : "charged to"} ${result.cardBrand || "card"} ending ${result.cardLast4}${modeLabel}${authLabel}${tipLabel}` 
         });
       } else {
         // Payment declined
@@ -1544,10 +1594,70 @@ export function PaymentModal({
     );
   }
 
+  // Render overage tip confirmation dialog
+  if (showOveragePrompt && cardTender) {
+    return (
+      <Dialog open={open} onOpenChange={() => {}}>
+        <DialogContent className="max-w-sm p-0 gap-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="text-center" data-testid="text-overage-title">
+              Confirm Tip
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-4 space-y-4">
+            <div className="bg-muted rounded-lg p-4 text-center space-y-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Payment Amount</p>
+                <p className="text-2xl font-bold tabular-nums">${pendingPaymentAmount.toFixed(2)}</p>
+              </div>
+              <Separator />
+              <div>
+                <p className="text-sm text-muted-foreground">Check Total</p>
+                <p className="text-lg tabular-nums">${remainingBalance.toFixed(2)}</p>
+              </div>
+              <div className="bg-primary/10 rounded-lg p-3">
+                <p className="text-sm text-primary font-medium">Overage Amount</p>
+                <p className="text-3xl font-bold text-primary tabular-nums" data-testid="text-overage-amount">
+                  ${overageAmount.toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-center text-lg font-medium">
+              Is ${overageAmount.toFixed(2)} your tip?
+            </p>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 h-14"
+                onClick={handleOverageTipDecline}
+                data-testid="button-overage-no"
+              >
+                <X className="w-4 h-4 mr-2" />
+                No, Change Amount
+              </Button>
+              <Button
+                className="flex-1 h-14"
+                onClick={handleOverageTipConfirm}
+                data-testid="button-overage-yes"
+              >
+                <CheckIcon className="w-4 h-4 mr-2" />
+                Yes, Add Tip
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   // Render amount entry screen (first step for card payments)
   if (showCardEntry && cardTender && cardPaymentStep === "amount") {
     const enteredAmount = parseFloat(cardPaymentAmount) || 0;
-    const isValidAmount = enteredAmount > 0 && enteredAmount <= remainingBalance;
+    const isOverage = enteredAmount > remainingBalance;
+    const isValidAmount = enteredAmount > 0; // Allow overage - will prompt for tip confirmation
     
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -1584,7 +1694,6 @@ export function PaymentModal({
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={remainingBalance}
                   value={cardPaymentAmount}
                   onChange={(e) => setCardPaymentAmount(e.target.value)}
                   className="pl-8 text-2xl h-14 tabular-nums text-center font-bold"
@@ -1592,9 +1701,9 @@ export function PaymentModal({
                   data-testid="input-card-payment-amount"
                 />
               </div>
-              {enteredAmount > remainingBalance && (
-                <p className="text-sm text-destructive">
-                  Amount exceeds balance
+              {isOverage && (
+                <p className="text-sm text-primary">
+                  ${(enteredAmount - remainingBalance).toFixed(2)} will be added as tip
                 </p>
               )}
             </div>

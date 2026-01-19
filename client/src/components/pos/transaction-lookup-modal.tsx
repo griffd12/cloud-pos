@@ -139,6 +139,9 @@ export function TransactionLookupModal({
                         <div className="text-lg font-semibold">${parseFloat(check.total || "0").toFixed(2)}</div>
                         <div className="text-xs text-muted-foreground">
                           Tax: ${parseFloat(check.taxTotal || "0").toFixed(2)}
+                          {check.tipTotal && parseFloat(check.tipTotal) > 0 && (
+                            <> | Tip: ${parseFloat(check.tipTotal).toFixed(2)}</>
+                          )}
                         </div>
                       </div>
                       <ArrowRight className="w-5 h-5 text-muted-foreground" />

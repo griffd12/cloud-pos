@@ -608,10 +608,11 @@ export default function PosPage() {
   });
 
   const paymentMutation = useMutation({
-    mutationFn: async (data: { tenderId: string; amount: number; isCashOverTender?: boolean; paymentTransactionId?: string }) => {
+    mutationFn: async (data: { tenderId: string; amount: number; isCashOverTender?: boolean; paymentTransactionId?: string; tipAmount?: number }) => {
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/payments", {
         tenderId: data.tenderId,
         amount: data.amount.toString(),
+        tipAmount: data.tipAmount?.toString(),
         employeeId: currentEmployee?.id,
         paymentTransactionId: data.paymentTransactionId,
       });
@@ -1726,9 +1727,9 @@ export default function PosPage() {
             setShowPaymentModal(false);
           }
         }}
-        onPayment={(tenderId, amount, isCashOverTender, paymentTransactionId) => {
+        onPayment={(tenderId, amount, isCashOverTender, paymentTransactionId, tipAmount) => {
           if (currentCheck?.id && !paymentMutation.isPending) {
-            paymentMutation.mutate({ tenderId, amount, isCashOverTender, paymentTransactionId });
+            paymentMutation.mutate({ tenderId, amount, isCashOverTender, paymentTransactionId, tipAmount });
           }
         }}
         tenders={tenders}

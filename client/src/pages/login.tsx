@@ -299,6 +299,7 @@ export default function LoginPage() {
         employeeId: clockEmployee?.id,
         propertyId: selectedRvc?.propertyId,
         attestation: data.attestation,
+        cashTipsDeclared: data.attestation?.cashTipsDeclared,
       });
       return response.json();
     },

@@ -779,6 +779,7 @@ export const checks = pgTable("checks", {
   taxTotal: decimal("tax_total", { precision: 10, scale: 2 }).default("0"),
   discountTotal: decimal("discount_total", { precision: 10, scale: 2 }).default("0"),
   serviceChargeTotal: decimal("service_charge_total", { precision: 10, scale: 2 }).default("0"),
+  tipTotal: decimal("tip_total", { precision: 10, scale: 2 }).default("0"),
   total: decimal("total", { precision: 10, scale: 2 }).default("0"),
   guestCount: integer("guest_count").default(1),
   tableNumber: text("table_number"),
