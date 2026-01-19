@@ -1,5 +1,14 @@
 # Cloud POS System
 
+> **CRITICAL REQUIREMENT**: All features must be fully completed and tested end-to-end before marking as done. This includes:
+> - Backend endpoints must exist and return data
+> - Database schema must include all required fields
+> - Frontend must successfully fetch and display data
+> - Storage methods must be implemented
+> - Verify by actually navigating to pages and confirming they work
+> 
+> Never leave pages that appear complete but have missing backend pieces. Always test the full user journey.
+
 ## Overview
 This project is an enterprise cloud-based Quick Service Restaurant (QSR) Point of Sale system designed for high-volume environments. It features a multi-property hierarchy (Enterprise → Property → Revenue Center), Kitchen Display System (KDS) integration, and comprehensive admin configuration, leveraging a Simphony-class design pattern for configuration inheritance with override capabilities. The system supports device configuration, real-time KDS order flow, robust time & attendance, PCI-compliant payment processing, and extensive enterprise capabilities including fiscal close, cash management, gift cards, loyalty programs, inventory, forecasting, and online ordering integration. An optional Service Host provides a hybrid cloud/on-premise architecture for offline resilience.
 
