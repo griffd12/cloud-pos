@@ -14882,15 +14882,22 @@ connect();
             }
           });
         } else {
+          // Agent exists - regenerate token for wizard installation
+          const rawToken = crypto.randomBytes(32).toString("hex");
+          const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+          
+          // Update the agent with the new token
+          await storage.updatePrintAgent(agent.id, { tokenHash });
+          
           provisioned.push({
             service: "print_controller",
             status: "exists",
             config: {
               agentId: agent.id,
               agentName: agent.name,
+              agentToken: rawToken, // Regenerated token for local installation
               propertyId,
               downloadUrl: "/api/print-agents/download",
-              message: "Print Agent already exists. Regenerate token in EMC if needed."
             }
           });
         }

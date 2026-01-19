@@ -791,11 +791,12 @@
             
             for (const svc of provisionedServices) {
               if (svc.service === 'print_controller') {
+                // Always set printAgentConfig to download/install locally even if server agent exists
+                printAgentConfig = svc.config;
                 if (svc.status === 'created') {
                   log(`Print Agent created: ${svc.config.agentName}`, 'success');
-                  printAgentConfig = svc.config;
                 } else {
-                  log(`Print Agent already exists: ${svc.config.agentName}`, 'info');
+                  log(`Print Agent exists: ${svc.config.agentName} - will install locally`, 'info');
                 }
               } else if (svc.service === 'kds_controller') {
                 log('KDS Controller will run in Service Host', 'success');
@@ -830,7 +831,17 @@
             });
             
             if (printConfigResult.success) {
-              log('Print Agent configured with auto-generated token', 'success');
+              log('Print Agent configured with token', 'success');
+              
+              // Start Print Agent as background process
+              updateProgress(78, 'Starting Print Agent...');
+              const startResult = await window.electronAPI.startPrintAgent(rootDir);
+              if (startResult.success) {
+                log(`Print Agent started (PID: ${startResult.pid})`, 'success');
+              } else {
+                log(`Print Agent not started: ${startResult.error}`, 'warning');
+                log('You can start it manually later', 'info');
+              }
             } else {
               log(`Print Agent config failed: ${printConfigResult.error}`, 'warning');
             }
