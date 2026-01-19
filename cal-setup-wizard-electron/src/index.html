@@ -867,14 +867,24 @@
             if (printConfigResult.success) {
               log('Print Agent configured with token', 'success');
               
-              // Start Print Agent as background process
-              updateProgress(78, 'Starting Print Agent...');
-              const startResult = await window.electronAPI.startPrintAgent(rootDir);
-              if (startResult.success) {
-                log(`Print Agent started (PID: ${startResult.pid})`, 'success');
+              // Install Print Agent as Windows service and start it
+              updateProgress(78, 'Installing Print Agent service...');
+              log('Installing Print Agent as Windows service...', 'info');
+              const serviceName = `OPH-POS-PrintAgent-${selectedDevice.deviceNumber || 'Default'}`;
+              const installResult = await window.electronAPI.installPrintAgentService(rootDir, serviceName);
+              if (installResult.success) {
+                log(`Print Agent service: ${installResult.message}`, 'success');
               } else {
-                log(`Print Agent not started: ${startResult.error}`, 'warning');
-                log('You can start it manually later', 'info');
+                log(`Print Agent service install failed: ${installResult.error}`, 'warning');
+                // Fallback: start as background process
+                log('Starting Print Agent as background process...', 'info');
+                const startResult = await window.electronAPI.startPrintAgent(rootDir);
+                if (startResult.success) {
+                  log(`Print Agent started (PID: ${startResult.pid})`, 'success');
+                } else {
+                  log(`Print Agent not started: ${startResult.error}`, 'warning');
+                  log('You can start it manually later', 'info');
+                }
               }
             } else {
               log(`Print Agent config failed: ${printConfigResult.error}`, 'warning');
@@ -902,12 +912,26 @@
             log('Service Host configuration saved', 'success');
             
             // Try to download Service Host executable (optional)
+            updateProgress(81, 'Downloading Service Host executable...');
             log('Downloading Service Host executable...', 'info');
             const exeResult = await window.electronAPI.downloadServiceHostExe(cloudUrl, rootDir);
             if (exeResult.success) {
               log(`Service Host executable downloaded (${(exeResult.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+              
+              // Install Service Host as Windows service
+              updateProgress(83, 'Installing CAPS service...');
+              log('Installing Service Host (CAPS) as Windows service...', 'info');
+              const capsServiceName = `OPH-POS-CAPS-${capsConfig.serviceHostId.substring(0, 8)}`;
+              const capsInstallResult = await window.electronAPI.installServiceHostService(rootDir, capsServiceName);
+              if (capsInstallResult.success) {
+                log(`CAPS service: ${capsInstallResult.message}`, 'success');
+              } else {
+                log(`CAPS service install: ${capsInstallResult.error}`, 'warning');
+                log('You can start Service Host manually after setup', 'info');
+              }
             } else {
               log('Service Host executable not available (will use Node.js version)', 'info');
+              log('CAPS will need to be started manually or via Node.js', 'info');
             }
           } else {
             log(`Service Host config failed: ${capsConfigResult.error}`, 'warning');

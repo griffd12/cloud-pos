@@ -38,8 +38,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startPrintAgent: (rootDir) =>
     ipcRenderer.invoke('start-print-agent', rootDir),
   
+  installPrintAgentService: (rootDir, serviceName) =>
+    ipcRenderer.invoke('install-print-agent-service', rootDir, serviceName),
+  
   saveServiceHostConfig: (rootDir, cloudUrl, config) =>
     ipcRenderer.invoke('save-service-host-config', rootDir, cloudUrl, config),
+  
+  installServiceHostService: (rootDir, serviceName) =>
+    ipcRenderer.invoke('install-service-host-service', rootDir, serviceName),
   
   downloadServiceHostExe: (cloudUrl, rootDir) =>
     ipcRenderer.invoke('download-service-host-exe', cloudUrl, rootDir),

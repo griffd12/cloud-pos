@@ -624,6 +624,187 @@ ipcMain.handle('start-print-agent', async (event, rootDir) => {
   }
 });
 
+async function startPrintAgentProcess(rootDir) {
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  const normalizedRoot = path.normalize(rootDir);
+  const agentPath = path.join(normalizedRoot, 'PrintAgent', 'print-agent.js');
+  const configPath = path.join(normalizedRoot, 'PrintAgent', 'config.json');
+  
+  if (!fs.existsSync(agentPath)) {
+    return { success: false, error: 'Print Agent script not found' };
+  }
+  
+  try {
+    const child = spawn('node', [agentPath, '--config', configPath], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: path.join(normalizedRoot, 'PrintAgent'),
+      windowsHide: true,
+    });
+    child.unref();
+    writeLog('INFO', `Print Agent started with PID: ${child.pid}`);
+    return { success: true, pid: child.pid, message: 'Started as background process' };
+  } catch (err) {
+    writeLog('ERROR', `Failed to start Print Agent: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+}
+
+ipcMain.handle('install-print-agent-service', async (event, rootDir, serviceName = 'OPH-POS-PrintAgent') => {
+  writeLog('INFO', 'Installing Print Agent as Windows service', { rootDir, serviceName });
+  
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  
+  const normalizedRoot = path.normalize(rootDir);
+  const agentPath = path.join(normalizedRoot, 'PrintAgent', 'print-agent.js');
+  const configPath = path.join(normalizedRoot, 'PrintAgent', 'config.json');
+  
+  if (!fs.existsSync(agentPath)) {
+    return { success: false, error: 'Print Agent script not found. Download Print Agent first.' };
+  }
+  
+  if (process.platform !== 'win32') {
+    writeLog('WARN', 'Windows service installation only available on Windows, starting as background process');
+    return startPrintAgentProcess(rootDir);
+  }
+  
+  const sanitizedName = sanitizeServiceName(serviceName);
+  const nssm = path.join(normalizedRoot, 'Tools', 'nssm.exe');
+  
+  const nodePath = process.execPath.includes('electron') 
+    ? 'node' 
+    : process.execPath;
+  
+  return new Promise((resolve) => {
+    if (fs.existsSync(nssm)) {
+      writeLog('INFO', 'Using NSSM for service installation');
+      const installCmd = `"${nssm}" install "${sanitizedName}" "${nodePath}" "${agentPath}" --config "${configPath}"`;
+      exec(installCmd, (error, stdout, stderr) => {
+        if (error && !stderr.includes('already exists')) {
+          writeLog('ERROR', 'NSSM install failed', { error: stderr || error.message });
+          resolve(fallbackToScCreate());
+        } else {
+          exec(`"${nssm}" set "${sanitizedName}" AppDirectory "${path.join(normalizedRoot, 'PrintAgent')}"`, () => {
+            exec(`"${nssm}" start "${sanitizedName}"`, (startErr) => {
+              if (startErr) {
+                writeLog('WARN', 'Service installed but start failed, will start on reboot');
+                resolve({ success: true, message: 'Service installed, will start on reboot' });
+              } else {
+                writeLog('INFO', 'Print Agent service installed and started successfully');
+                resolve({ success: true, message: 'Service installed and started' });
+              }
+            });
+          });
+        }
+      });
+    } else {
+      resolve(fallbackToScCreate());
+    }
+    
+    function fallbackToScCreate() {
+      writeLog('INFO', 'Using sc.exe for service installation');
+      const batContent = `@echo off
+cd /d "${path.join(normalizedRoot, 'PrintAgent')}"
+node "${agentPath}" --config "${configPath}"
+`;
+      const batPath = path.join(normalizedRoot, 'PrintAgent', 'start-service.bat');
+      try {
+        fs.writeFileSync(batPath, batContent);
+      } catch (e) {
+        writeLog('ERROR', 'Failed to create batch file', { error: e.message });
+      }
+      
+      const cmd = `sc create "${sanitizedName}" binPath= "cmd.exe /c \\"${batPath}\\"" start= auto`;
+      exec(cmd, (error, stdout, stderr) => {
+        if (error) {
+          if (stderr && stderr.includes('already exists')) {
+            writeLog('INFO', 'Service already exists, starting it');
+            exec(`sc start "${sanitizedName}"`, () => {
+              resolve({ success: true, message: 'Service already exists, started' });
+            });
+          } else {
+            writeLog('WARN', 'sc.exe failed, starting as background process', { error: stderr });
+            const child = spawn('node', [agentPath, '--config', configPath], {
+              detached: true,
+              stdio: 'ignore',
+              cwd: path.join(normalizedRoot, 'PrintAgent'),
+              windowsHide: true,
+            });
+            child.unref();
+            resolve({ success: true, message: 'Started as background process', pid: child.pid });
+          }
+        } else {
+          exec(`sc start "${sanitizedName}"`, (startErr, startOut, startStderr) => {
+            if (startErr) {
+              writeLog('WARN', 'Service installed but not started', { error: startStderr });
+              resolve({ success: true, message: 'Service installed, will start on reboot' });
+            } else {
+              writeLog('INFO', 'Print Agent service installed and started');
+              resolve({ success: true, message: 'Service installed and started' });
+            }
+          });
+        }
+      });
+    }
+  });
+});
+
+ipcMain.handle('install-service-host-service', async (event, rootDir, serviceName = 'OPH-POS-CAPS') => {
+  writeLog('INFO', 'Installing Service Host (CAPS) as Windows service', { rootDir, serviceName });
+  
+  if (process.platform !== 'win32') {
+    writeLog('WARN', 'Windows service installation only available on Windows');
+    return { success: false, error: 'Windows only' };
+  }
+  if (!validateRootDir(rootDir)) {
+    return { success: false, error: 'Invalid root directory' };
+  }
+  
+  const sanitizedName = sanitizeServiceName(serviceName);
+  const normalizedRoot = path.normalize(rootDir);
+  const exePath = path.join(normalizedRoot, 'ServiceHost', 'service-host.exe');
+  const configPath = path.join(normalizedRoot, 'ServiceHost', 'config.json');
+  
+  if (!fs.existsSync(exePath)) {
+    writeLog('WARN', 'Service Host executable not found, skipping service installation');
+    return { success: false, error: 'Service Host executable not found. Download Service Host first.' };
+  }
+  
+  return new Promise((resolve) => {
+    const cmd = `sc create "${sanitizedName}" binPath= "\\"${exePath}\\" --config \\"${configPath}\\" --service" start= auto displayname= "OPH-POS CAPS Service"`;
+    writeLog('INFO', 'Executing sc create command');
+    
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        if (stderr && stderr.includes('already exists')) {
+          writeLog('INFO', 'Service already exists, starting it');
+          exec(`sc start "${sanitizedName}"`, () => {
+            resolve({ success: true, message: 'Service already exists, started' });
+          });
+        } else {
+          writeLog('ERROR', 'Failed to create service', { error: stderr || error.message });
+          resolve({ success: false, error: stderr || error.message });
+        }
+      } else {
+        writeLog('INFO', 'Service created, starting it');
+        exec(`sc start "${sanitizedName}"`, (startErr, startOut, startStderr) => {
+          if (startErr) {
+            writeLog('WARN', 'Service installed but not started', { error: startStderr });
+            resolve({ success: true, message: 'Service installed, will start on reboot' });
+          } else {
+            writeLog('INFO', 'CAPS service installed and started successfully');
+            resolve({ success: true, message: 'Service installed and started' });
+          }
+        });
+      }
+    });
+  });
+});
+
 // Save Service Host (CAPS) configuration
 ipcMain.handle('save-service-host-config', async (event, rootDir, cloudUrl, config) => {
   writeLog('INFO', 'Saving Service Host configuration', { rootDir, serviceHostId: config?.serviceHostId });
