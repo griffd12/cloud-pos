@@ -14873,7 +14873,7 @@ connect();
             name: `${workstationName} Print Agent`,
             propertyId,
             description: `Auto-provisioned by CAL wizard for ${workstationName}`,
-            tokenHash,
+            agentToken: tokenHash, // Store the hash, return the raw token to wizard
             status: "offline",
           });
 
@@ -14894,7 +14894,7 @@ connect();
           const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
           
           // Update the agent with the new token
-          await storage.updatePrintAgent(agent.id, { tokenHash });
+          await storage.updatePrintAgent(agent.id, { agentToken: tokenHash });
           
           provisioned.push({
             service: "print_controller",
