@@ -1,6 +1,12 @@
-# OPH-POS CAL Setup Wizard (Electron) v2.1.0
+# OPH-POS CAL Setup Wizard (Electron) v2.2.0
 
 A desktop application for provisioning OPH-POS devices with **automatic service provisioning** based on workstation configuration in EMC.
+
+## What's New in v2.2.0
+
+- **Print Agent Fix**: Uses existing EMC-configured Print Agent instead of auto-creating new agents
+- **One Agent Per Property**: Correctly follows architecture where one Print Agent serves all workstations
+- **Clear Error Messages**: Shows specific error if no Print Agent is configured in EMC
 
 ## What's New in v2.1.0
 
@@ -180,12 +186,32 @@ Once installed, devices with CAPS can operate offline using the local SQLite dat
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.0 | 2026-01-20 | Fixed Print Agent provisioning to use existing EMC-configured agent instead of auto-creating |
 | 2.1.0 | 2026-01-20 | Terminology update: "Services" in EMC, "CAPS" for service, consistent across all UI and docs |
 | 2.0.0 | 2026-01-15 | Auto-provisioning based on EMC service bindings, Print Agent auto-setup, status reporting |
 | 1.0.3 | 2025-12 | Bug fixes and stability improvements |
 | 1.0.0 | 2025-11 | Initial release with manual CAL package selection |
 
 ## Release Notes
+
+### v2.2.0 (January 20, 2026)
+
+**Critical Bug Fix:**
+- Print Agent provisioning now looks up the existing Print Agent configured in EMC instead of auto-creating new agents
+- Fixed issue where Print Agent was not installed at Newport WS02 deployment
+
+**Architecture Clarification:**
+- ONE Print Agent per property (not per workstation)
+- Service Bindings determine which workstation hosts the Print Agent
+- CAL Wizard now correctly finds and installs the EMC-configured Print Agent
+
+**Improved Error Handling:**
+- Clear error message if no Print Agent is configured in EMC for the property
+- Descriptive logging when Print Agent is found and being installed
+
+**Backend Changes:**
+- `/api/cal-setup/provision-services` now queries existing Print Agents by propertyId
+- Returns "not_configured" status with clear error message if no agent exists
 
 ### v2.1.0 (January 20, 2026)
 
@@ -205,5 +231,5 @@ Once installed, devices with CAPS can operate offline using the local SQLite dat
 - Added terminology section
 
 **Build:**
-- Package version: 2.1.0
-- Compatible with EMC v2.1.0+
+- Package version: 2.2.0
+- Compatible with EMC v2.2.0+

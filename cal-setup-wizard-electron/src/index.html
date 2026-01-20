@@ -331,7 +331,7 @@
     <div class="header">
       <h1>OPH-POS CAL Setup Wizard</h1>
       <p>Device Configuration and Installation</p>
-      <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Version 2.1.0</p>
+      <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Version 2.2.0</p>
     </div>
     
     <div class="progress-bar">
@@ -819,12 +819,14 @@
             
             for (const svc of provisionedServices) {
               if (svc.service === 'print_controller') {
-                // Always set printAgentConfig to download/install locally even if server agent exists
-                printAgentConfig = svc.config;
-                if (svc.status === 'created') {
-                  log(`Print Agent created: ${svc.config.agentName}`, 'success');
-                } else {
-                  log(`Print Agent exists: ${svc.config.agentName} - will install locally`, 'info');
+                if (svc.status === 'not_configured') {
+                  // Print Agent not configured in EMC - show clear error
+                  log(`ERROR: ${svc.error}`, 'error');
+                  log('Please configure a Print Agent in EMC before running the wizard.', 'warning');
+                } else if (svc.config && svc.config.agentToken) {
+                  // Print Agent found - use existing configuration
+                  printAgentConfig = svc.config;
+                  log(`Print Agent found: ${svc.config.agentName} - will install on this host`, 'success');
                 }
               } else if (svc.service === 'kds_controller') {
                 log('KDS Controller will run in CAPS service', 'success');

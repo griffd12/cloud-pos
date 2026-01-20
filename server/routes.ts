@@ -14855,54 +14855,35 @@ connect();
 
       const provisioned: { service: string; status: string; config?: any }[] = [];
 
-      // Check for print_controller binding - auto-create Print Agent
+      // Check for print_controller binding - look up existing Print Agent for this property
       if (serviceBindings?.includes("print_controller")) {
-        // Check if a Print Agent already exists for this workstation name
+        // Look up the existing Print Agent configured in EMC for this property
         const existingAgents = await storage.getPrintAgents();
-        let agent = existingAgents.find(a => 
-          a.propertyId === propertyId && 
-          a.name.toLowerCase().includes(workstationName.toLowerCase().replace(/[^a-z0-9]/gi, ''))
-        );
+        const agent = existingAgents.find(a => a.propertyId === propertyId);
 
         if (!agent) {
-          // Generate secure token for the Print Agent
-          const rawToken = crypto.randomBytes(32).toString("hex");
-          const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-
-          agent = await storage.createPrintAgent({
-            name: `${workstationName} Print Agent`,
-            propertyId,
-            description: `Auto-provisioned by CAL wizard for ${workstationName}`,
-            agentToken: tokenHash, // Store the hash, return the raw token to wizard
-            status: "offline",
-          });
-
+          // No Print Agent configured for this property - return error
           provisioned.push({
             service: "print_controller",
-            status: "created",
-            config: {
-              agentId: agent.id,
-              agentName: agent.name,
-              agentToken: rawToken, // Only returned during creation
-              propertyId,
-              downloadUrl: "/api/print-agents/download",
-            }
+            status: "not_configured",
+            error: "No Print Agent configured for this property. Please create a Print Agent in EMC (Admin > Print Agents) before running the CAL Setup Wizard.",
+            config: null
           });
         } else {
-          // Agent exists - regenerate token for wizard installation
+          // Found existing Print Agent - regenerate token for wizard installation
           const rawToken = crypto.randomBytes(32).toString("hex");
           const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
           
-          // Update the agent with the new token
+          // Update the agent with the new token for this installation
           await storage.updatePrintAgent(agent.id, { agentToken: tokenHash });
           
           provisioned.push({
             service: "print_controller",
-            status: "exists",
+            status: "ready",
             config: {
               agentId: agent.id,
               agentName: agent.name,
-              agentToken: rawToken, // Regenerated token for local installation
+              agentToken: rawToken, // Fresh token for local installation
               propertyId,
               downloadUrl: "/api/print-agents/download",
             }

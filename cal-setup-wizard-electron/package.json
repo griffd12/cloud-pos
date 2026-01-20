@@ -1,6 +1,6 @@
 {
   "name": "oph-pos-cal-setup-wizard",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "OPH-POS CAL Setup Wizard - Device provisioning and Service Host installation",
   "main": "src/main.js",
   "scripts": {
