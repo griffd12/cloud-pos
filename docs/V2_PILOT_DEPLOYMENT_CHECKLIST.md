@@ -8,13 +8,13 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 ## Phase 1: Pre-Deployment Requirements
 
 ### 1.1 Hardware Requirements
-- [ ] Dedicated on-premise server for Service Host
+- [ ] Dedicated on-premise server for CAPS service
   - Minimum: 4GB RAM, 50GB disk, dual-core CPU
   - Operating System: Windows 10/11 or Linux (Ubuntu 20.04+)
   - Static IP address on local network
 - [ ] Network thermal printers identified and accessible
   - Epson TM-T88 series or Star TSP series
-  - Connected to same LAN as Service Host
+  - Connected to same LAN as CAPS host
   - Note IP addresses: ________________
 - [ ] KDS displays identified (if applicable)
   - IP addresses: ________________
@@ -25,7 +25,7 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 - [ ] Local network (LAN) connectivity between all devices
 - [ ] Firewall allows outbound WebSocket connections (wss://)
 - [ ] Local ports available:
-  - Service Host API: 3001
+  - CAPS API: 3001
   - Printer communication: 9100 (TCP)
 
 ### 1.3 Cloud Access
@@ -37,19 +37,19 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 
 ## Phase 2: EMC Cloud Configuration (Do First)
 
-> **Important**: Complete all EMC steps BEFORE installing the Service Host on-premise.
+> **Important**: Complete all EMC steps BEFORE installing CAPS on-premise.
 
-### 2.1 Register Service Host in EMC
+### 2.1 Register Services in EMC
 
-> **Note**: Service Host registration and Workstation Service Bindings are two separate but related steps:
-> - **Step 2.1** registers the on-premise Service Host software and generates authentication credentials
+> **Note**: Service registration and Workstation Service Bindings are two separate but related steps:
+> - **Step 2.1** registers the on-premise services and generates authentication credentials
 > - **Step 2.2** configures which services (CAPS, Print, KDS, Payment) run on which workstations
 > Both steps must be completed for full functionality.
 
 1. [ ] Log into EMC as Enterprise Administrator
-2. [ ] Navigate to **Admin > Service Hosts** (left sidebar under Admin section)
+2. [ ] Navigate to **Admin > Services** (left sidebar under Admin section)
 3. [ ] Click the **Configuration** tab
-4. [ ] Click the **"Register Service Host"** button (top right of Registered Service Hosts card)
+4. [ ] Click the **"Register Service"** button (top right of Registered Services card)
 5. [ ] Fill in the registration form:
    - **Host Name**: e.g., "Store-001 Primary Host"
    - **Property**: Select the pilot property from dropdown
@@ -58,9 +58,9 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
      - [ ] Print Controller - For local network printer routing
      - [ ] KDS Controller - For local kitchen display management
      - [ ] Payment Controller - For local payment device communication
-6. [ ] Click **"Register Host"**
+6. [ ] Click **"Register Service"**
 7. [ ] **CRITICAL**: A dialog will appear with credentials. Copy and save ALL three values:
-   - Service Host ID: ________________________________
+   - Service ID: ________________________________
    - Registration Token: ________________________________
    - Encryption Key: ________________________________
    - **These credentials are shown ONLY ONCE and cannot be retrieved later!**
@@ -68,7 +68,7 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 
 ### 2.2 Configure Workstation Service Bindings
 
-> **Required Step**: After registering the Service Host, you must also configure which workstation runs the services.
+> **Required Step**: After registering the services, you must also configure which workstation runs them.
 
 1. [ ] Navigate to **Admin > Workstations** (left sidebar under Admin section)
 2. [ ] Click on an existing workstation to **Edit** it (or create a new workstation first)
@@ -80,7 +80,7 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
    - [ ] Payment Controller - Processes payment transactions
 5. [ ] Note: Each service can only be assigned to ONE workstation per property
 6. [ ] Click **Save**
-7. [ ] Verify the workstation now appears in the **Service Hosts > Configuration** tab under "Workstations with Service Controller Bindings"
+7. [ ] Verify the workstation now appears in the **Services > Configuration** tab under "Workstations with Service Controller Bindings"
 
 ### 2.3 Configure Print Agents (if using network printers)
 1. [ ] Navigate to **Admin > Print Agents**
@@ -107,19 +107,19 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 6. [ ] Configure routing rules for the property
 
 ### 2.5 Verify Configuration Sync Settings
-1. [ ] Navigate to **Admin > Service Hosts > Status Dashboard**
-2. [ ] Confirm Service Host appears with status "Offline" (expected - not yet installed)
-3. [ ] Note the Service Host ID: ________________
+1. [ ] Navigate to **Admin > Services > Status Dashboard**
+2. [ ] Confirm CAPS appears with status "Offline" (expected - not yet installed)
+3. [ ] Note the Service ID: ________________
 
 ---
 
-## Phase 3: On-Premise Service Host Installation
+## Phase 3: On-Premise CAPS Installation
 
 ### 3.1 Prepare Installation Package
-1. [ ] Download Service Host package from deployment server
-2. [ ] Extract to installation directory (e.g., `C:\CloudPOS\ServiceHost`)
+1. [ ] Download CAPS package from deployment server
+2. [ ] Extract to installation directory (e.g., `C:\OPH-POS\ServiceHost`)
 
-### 3.2 Configure Service Host
+### 3.2 Configure CAPS
 1. [ ] Open configuration file: `config/service-host.json`
 2. [ ] Set required values:
 ```json
@@ -140,25 +140,25 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 ```
 3. [ ] Save configuration file
 
-### 3.3 Initialize Service Host
+### 3.3 Initialize CAPS
 1. [ ] Open terminal/command prompt as Administrator
-2. [ ] Navigate to Service Host directory
+2. [ ] Navigate to CAPS directory
 3. [ ] Run: `npm install` (first time only)
 4. [ ] Run: `npm run init` to initialize local database
 5. [ ] Verify initialization completed without errors
 
-### 3.4 Start Service Host
+### 3.4 Start CAPS
 1. [ ] Run: `npm start`
 2. [ ] Verify console shows:
    - [ ] "Connecting to cloud..."
    - [ ] "Cloud connection established"
    - [ ] "Downloading configuration..."
    - [ ] "Configuration sync complete"
-   - [ ] "Service Host ready"
+   - [ ] "CAPS ready"
 
 ### 3.5 Verify Cloud Connection
-1. [ ] Return to EMC **Admin > Service Hosts > Status Dashboard**
-2. [ ] Confirm Service Host now shows:
+1. [ ] Return to EMC **Admin > Services > Status Dashboard**
+2. [ ] Confirm CAPS now shows:
    - [ ] Status: **Online** (green indicator)
    - [ ] Connection Mode: **GREEN**
    - [ ] Last Heartbeat: Recent timestamp
@@ -169,7 +169,7 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 
 ### 4.1 Install Print Agent
 1. [ ] Download Print Agent package
-2. [ ] Extract to directory (e.g., `C:\CloudPOS\PrintAgent`)
+2. [ ] Extract to directory (e.g., `C:\OPH-POS\PrintAgent`)
 
 ### 4.2 Configure Print Agent
 1. [ ] Open configuration file: `config/print-agent.json`
@@ -215,7 +215,7 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 3. [ ] On first load, device configuration will prompt
 4. [ ] Select **POS Workstation** mode
 5. [ ] Enter workstation credentials/select from list
-6. [ ] Verify connection to Service Host (status indicator green)
+6. [ ] Verify connection to CAPS (status indicator green)
 
 ### 5.2 Configure KDS Displays (If Applicable)
 1. [ ] On each KDS display, open browser
@@ -260,10 +260,10 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 ### 6.4 Test RED Mode (Complete Isolation) - Optional
 > **Warning**: Only test if comfortable with manual recovery procedures.
 
-1. [ ] Stop Service Host application
+1. [ ] Stop CAPS application
 2. [ ] Verify workstations show RED mode
 3. [ ] Verify workstations queue orders locally
-4. [ ] Restart Service Host
+4. [ ] Restart CAPS
 5. [ ] Verify workstations reconnect and sync
 
 ---
@@ -271,9 +271,9 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 ## Phase 7: Go-Live Verification
 
 ### 7.1 EMC Monitoring Setup
-1. [ ] Navigate to **Admin > Service Hosts > Status Dashboard**
+1. [ ] Navigate to **Admin > Services > Status Dashboard**
 2. [ ] Verify all indicators green:
-   - [ ] Service Host: Online
+   - [ ] CAPS: Online
    - [ ] Connection Mode: GREEN
    - [ ] Pending Sync: 0
    - [ ] Active Alerts: 0
@@ -297,7 +297,7 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 ## Phase 8: Post-Deployment Monitoring
 
 ### Daily Checks (First Week)
-- [ ] Morning: Verify Service Host online in EMC
+- [ ] Morning: Verify CAPS online in EMC
 - [ ] Check pending sync count is 0
 - [ ] Review any alerts from previous day
 - [ ] Verify end-of-day close completed successfully
@@ -314,11 +314,11 @@ This checklist guides the deployment of Cloud POS V2 hybrid architecture to a pi
 
 | Symptom | Likely Cause | Solution |
 |---------|--------------|----------|
-| Service Host shows Offline | Network/auth issue | Check internet, verify token |
+| CAPS shows Offline | Network/auth issue | Check internet, verify token |
 | YELLOW mode won't recover | Cloud unreachable | Check firewall, DNS, cloud status |
 | Prints not working | Print Agent offline | Restart Print Agent, check printer IPs |
 | Slow transaction sync | Large queue backlog | Wait, or check network bandwidth |
-| High memory alert | Long uptime | Schedule periodic Service Host restart |
+| High memory alert | Long uptime | Schedule periodic CAPS restart |
 
 ---
 

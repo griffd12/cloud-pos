@@ -6,9 +6,9 @@
 |---------|--------------|----------|
 | POS shows RED mode | No network connectivity | Check network cables, router |
 | POS shows YELLOW mode | Cloud unreachable | Check internet, verify cloud URL |
-| POS shows ORANGE mode | Service Host down | Start Service Host, check logs |
+| POS shows ORANGE mode | CAPS service down | Start CAPS service, check logs |
 | Printing not working | Printer or agent offline | Check printer power, network, agent status |
-| KDS not receiving orders | WebSocket disconnected | Refresh KDS, check Service Host |
+| KDS not receiving orders | WebSocket disconnected | Refresh KDS, check CAPS service |
 | Check locked error | Another workstation editing | Wait for lock expiry or contact holder |
 | Transactions not syncing | Cloud connectivity issue | Check sync queue, verify credentials |
 
@@ -25,7 +25,7 @@
 **Diagnostic Steps:**
 1. Check if browser shows "Offline" in network tab
 2. Verify workstation has network connectivity: `ping 192.168.1.1`
-3. Try accessing Service Host directly: `http://<service-host-ip>:3001/health`
+3. Try accessing CAPS service directly: `http://<caps-host-ip>:3001/health`
 4. Check if other workstations are affected
 
 **Solutions:**
@@ -43,16 +43,16 @@
 
 **Diagnostic Steps:**
 1. From Service Host, test cloud connectivity: `curl https://<cloud-url>/health`
-2. Check Service Host sync queue: Look in Admin → Service Host Status
-3. Verify cloud URL in Service Host config
+2. Check CAPS sync queue: Look in Admin → Services Status
+3. Verify cloud URL in CAPS config
 
 **Solutions:**
 - Verify internet connectivity at property
 - Check if firewall is blocking outbound HTTPS
 - Verify cloud URL is correct in `config.json`
-- Restart Service Host: `npm run service:restart`
+- Restart CAPS service: `npm run service:restart`
 
-### 1.3 POS Stuck in ORANGE Mode (Service Host Down)
+### 1.3 POS Stuck in ORANGE Mode (CAPS Service Down)
 
 **Symptoms:**
 - Connection indicator shows ORANGE  
@@ -60,21 +60,21 @@
 - Check sharing between workstations not available
 
 **Diagnostic Steps:**
-1. Check if Service Host process is running
-2. View Service Host logs: `service-host/data/logs/`
-3. Test Service Host health: `curl http://<service-host-ip>:3001/health`
+1. Check if CAPS process is running
+2. View CAPS logs: `service-host/data/logs/`
+3. Test CAPS health: `curl http://<caps-host-ip>:3001/health`
 
 **Solutions:**
-- Start Service Host: `npm start` or via Windows Service
-- Check Service Host logs for errors
+- Start CAPS: `npm start` or via Windows Service
+- Check CAPS logs for errors
 - Verify port 3001 is not in use by another application
-- Restart the Service Host computer
+- Restart the CAPS host computer
 
 ---
 
-## 2. Service Host Issues
+## 2. CAPS Service Issues
 
-### 2.1 Service Host Won't Start
+### 2.1 CAPS Won't Start
 
 **Symptoms:**
 - Service fails to start
@@ -92,21 +92,21 @@
 - Verify Node.js is installed: `node --version`
 - Reinstall dependencies: `npm install`
 
-### 2.2 Service Host Not Syncing with Cloud
+### 2.2 CAPS Not Syncing with Cloud
 
 **Symptoms:**
 - Sync queue keeps growing
 - Config changes not appearing
-- Cloud shows Service Host offline
+- Cloud shows CAPS service offline
 
 **Diagnostic Steps:**
-1. Check sync queue size in Service Host dashboard
+1. Check sync queue size in CAPS dashboard
 2. View sync errors in logs
 3. Test cloud connectivity manually
 
 **Solutions:**
 - Verify cloud URL is correct
-- Regenerate Service Host token in EMC
+- Regenerate CAPS token in EMC
 - Check internet connectivity
 - Clear stuck transactions (with manager approval)
 
@@ -118,8 +118,8 @@
 - Data not persisting
 
 **Solutions:**
-- Stop Service Host, wait 30 seconds, restart
-- Check disk space: Service Host needs at least 1GB free
+- Stop CAPS service, wait 30 seconds, restart
+- Check disk space: CAPS needs at least 1GB free
 - If corrupt: Backup `data/service-host.db`, delete, restart (will resync from cloud)
 
 ---
@@ -230,8 +230,8 @@
 **Solutions:**
 - Refresh KDS browser
 - Verify KDS is subscribed to correct station
-- Check Service Host WebSocket is working
-- Verify network connectivity between KDS and Service Host
+- Check CAPS WebSocket is working
+- Verify network connectivity between KDS and CAPS host
 
 ### 5.2 KDS Tickets Not Bumping
 
@@ -243,7 +243,7 @@
 - Refresh KDS browser
 - Check WebSocket connection
 - Verify user has bump privileges
-- Check Service Host logs for errors
+- Check CAPS logs for errors
 
 ---
 
@@ -269,7 +269,7 @@
 ### 6.2 Payments Failing in ORANGE Mode
 
 **Symptoms:**
-- Card payments fail when Service Host is down
+- Card payments fail when CAPS is down
 - Only cash accepted
 
 **This is expected behavior:**
@@ -309,7 +309,7 @@
 - Offline transactions not appearing
 
 **Diagnostic Steps:**
-1. Check sync queue size in Service Host
+1. Check sync queue size in CAPS
 2. Review sync error logs
 3. Verify cloud connectivity
 
@@ -317,7 +317,7 @@
 - Check internet connectivity
 - Verify cloud URL and token
 - Review failed transaction errors
-- Manually retry sync from Service Host dashboard
+- Manually retry sync from CAPS dashboard
 
 ---
 
@@ -357,14 +357,14 @@
 
 ### Log Collection
 When contacting support, collect these logs:
-1. Service Host logs: `service-host/data/logs/`
+1. CAPS logs: `service-host/data/logs/`
 2. Browser console: F12 → Console tab → Copy all
 3. Screenshot of error message
 4. Connection mode indicator status
 
 ### Useful Commands
 
-**Check Service Host Status:**
+**Check CAPS Status:**
 ```bash
 curl http://localhost:3001/health
 ```
@@ -395,3 +395,4 @@ curl -X POST http://localhost:3001/api/workstations/<id>/release-locks
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-01-12 | Initial troubleshooting guide |
+| 1.1 | 2026-01-20 | Updated terminology (Services/CAPS) |

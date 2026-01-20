@@ -1,10 +1,10 @@
-# Cloud POS Service Host
+# Cloud POS CAPS (Central Application Processing Service)
 
 On-premise server providing offline operation capabilities for the Cloud POS system.
 
 ## Overview
 
-The Service Host runs at each restaurant property, providing local services when internet connectivity is lost. It enables seamless operation transitions between online (GREEN) and offline (YELLOW/ORANGE/RED) modes.
+CAPS (Central Application Processing Service) runs at each restaurant property, providing local services when internet connectivity is lost. It enables seamless operation transitions between online (GREEN) and offline (YELLOW/ORANGE/RED) modes.
 
 ## Features
 
@@ -29,7 +29,7 @@ The Service Host runs at each restaurant property, providing local services when
 
 2. **Extract and install dependencies**
    ```bash
-   unzip ServiceHost-v1.0.0.zip
+   unzip CAPS-v1.0.0.zip
    cd ServiceHost
    npm install --production
    ```
@@ -172,7 +172,7 @@ GET    /api/config/discounts         Get discounts
 
 ## Check Locking
 
-The Service Host implements check locking to prevent multiple workstations from editing the same check simultaneously:
+CAPS implements check locking to prevent multiple workstations from editing the same check simultaneously:
 
 1. **Acquire lock** before editing: `POST /api/caps/checks/:id/lock`
    ```json
@@ -218,11 +218,11 @@ ws.onmessage = (event) => {
 
 ## Connectivity Modes
 
-| Mode | Cloud | Service Host | Description |
-|------|-------|--------------|-------------|
+| Mode | Cloud | CAPS | Description |
+|------|-------|------|-------------|
 | GREEN | ✓ | ✓ | Normal - cloud primary |
-| YELLOW | ✗ | ✓ | Offline - Service Host primary |
-| ORANGE | ✗ | ✗ | Service Host down, local agents only |
+| YELLOW | ✗ | ✓ | Offline - CAPS primary |
+| ORANGE | ✗ | ✗ | CAPS down, local agents only |
 | RED | ✗ | ✗ | Complete isolation |
 
 ## Testing
@@ -251,11 +251,11 @@ Database location: `./data/service-host.db`
 
 ## Sync Behavior
 
-### Configuration (Cloud → Service Host)
+### Configuration (Cloud → CAPS)
 - Full sync on startup
 - Delta sync via WebSocket for real-time updates
 
-### Transactions (Service Host → Cloud)
+### Transactions (CAPS → Cloud)
 - Queued immediately after local commit
 - Background worker syncs every 5 seconds
 - Retry with backoff on failure
@@ -263,7 +263,7 @@ Database location: `./data/service-host.db`
 
 ## Troubleshooting
 
-### Service Host won't start
+### CAPS won't start
 - Check `config.json` exists and has valid settings
 - Ensure port 3001 is not in use
 - Check logs in the data directory
@@ -274,9 +274,9 @@ Database location: `./data/service-host.db`
 - Ensure token is valid (regenerate in EMC if needed)
 
 ### Workstations can't connect
-- Verify Service Host is running: `curl http://localhost:3001/health`
+- Verify CAPS is running: `curl http://localhost:3001/health`
 - Check firewall allows port 3001
-- Ensure workstations use correct Service Host IP address
+- Ensure workstations use correct CAPS host IP address
 
 ### Print jobs failing
 - Verify printer IP address and port
@@ -327,6 +327,7 @@ service-host/
 
 ## Version History
 
+- **1.1.0** - Updated terminology to Services/CAPS
 - **1.0.0** - Initial release with CAPS, Print, KDS, Payment controllers
 
 ## License
