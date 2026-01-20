@@ -180,7 +180,30 @@ Once installed, devices with CAPS can operate offline using the local SQLite dat
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.1.0 | 2026-01 | Updated terminology (Services), distributed architecture support |
-| 2.0.0 | 2026-01 | Auto-provisioning based on EMC service bindings, Print Agent auto-setup, status reporting |
+| 2.1.0 | 2026-01-20 | Terminology update: "Services" in EMC, "CAPS" for service, consistent across all UI and docs |
+| 2.0.0 | 2026-01-15 | Auto-provisioning based on EMC service bindings, Print Agent auto-setup, status reporting |
 | 1.0.3 | 2025-12 | Bug fixes and stability improvements |
 | 1.0.0 | 2025-11 | Initial release with manual CAL package selection |
+
+## Release Notes
+
+### v2.1.0 (January 20, 2026)
+
+**Terminology Updates:**
+- EMC navigation: "Admin > Services" (previously "Admin > Service Hosts")
+- Service name: "CAPS" (Central Application Processing Service)
+- Host machine: "Host Workstation" for clarity
+
+**UI Changes:**
+- Updated all wizard labels and messages to use "Services" terminology
+- Status messages now reference "CAPS" instead of "Service Host"
+- Consistent messaging across setup steps
+
+**Documentation:**
+- Updated README with v2.1.0 features
+- Clarified service binding workflow
+- Added terminology section
+
+**Build:**
+- Package version: 2.1.0
+- Compatible with EMC v2.1.0+
