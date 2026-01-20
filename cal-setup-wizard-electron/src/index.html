@@ -755,15 +755,15 @@
         registrationData = await regResponse.json();
         log('Device registered successfully', 'success');
         
-        updateProgress(30, 'Downloading Service Host...');
-        log('Downloading Service Host executable...', 'info');
+        updateProgress(30, 'Downloading CAPS...');
+        log('Downloading CAPS executable...', 'info');
         
         const downloadResult = await window.electronAPI.downloadServiceHost(cloudUrl, rootDir);
         if (!downloadResult.success) {
           log(`Download failed: ${downloadResult.error}`, 'warning');
-          log('Continuing without Service Host (browser-only mode)', 'warning');
+          log('Continuing without CAPS (browser-only mode)', 'warning');
         } else {
-          log(`Service Host downloaded (${(downloadResult.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+          log(`CAPS downloaded (${(downloadResult.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
         }
         
         updateProgress(60, 'Saving configuration...');
@@ -827,13 +827,13 @@
                   log(`Print Agent exists: ${svc.config.agentName} - will install locally`, 'info');
                 }
               } else if (svc.service === 'kds_controller') {
-                log('KDS Controller will run in Service Host', 'success');
+                log('KDS Controller will run in CAPS service', 'success');
               } else if (svc.service === 'caps') {
                 capsConfig = svc.config;
                 if (svc.status === 'created') {
-                  log(`Service Host created: ${svc.config.serviceHostName}`, 'success');
+                  log(`CAPS service created: ${svc.config.serviceHostName}`, 'success');
                 } else {
-                  log(`Service Host exists: ${svc.config.serviceHostName} - will configure locally`, 'info');
+                  log(`CAPS service exists: ${svc.config.serviceHostName} - will configure locally`, 'info');
                 }
               } else if (svc.service === 'payment_controller') {
                 paymentControllerConfig = svc.config;
@@ -894,10 +894,10 @@
           }
         }
 
-        // If CAPS (Service Host) is assigned, save configuration
+        // If CAPS is assigned, save configuration
         if (capsConfig && capsConfig.serviceHostToken) {
-          updateProgress(79, 'Configuring Service Host (CAPS)...');
-          log('Saving Service Host configuration...', 'info');
+          updateProgress(79, 'Configuring CAPS service...');
+          log('Saving CAPS configuration...', 'info');
           
           const capsConfigResult = await window.electronAPI.saveServiceHostConfig(rootDir, cloudUrl, {
             serviceHostId: capsConfig.serviceHostId,
@@ -909,32 +909,32 @@
           });
           
           if (capsConfigResult.success) {
-            log('Service Host configuration saved', 'success');
+            log('CAPS configuration saved', 'success');
             
-            // Try to download Service Host executable (optional)
-            updateProgress(81, 'Downloading Service Host executable...');
-            log('Downloading Service Host executable...', 'info');
+            // Try to download CAPS executable (optional)
+            updateProgress(81, 'Downloading CAPS executable...');
+            log('Downloading CAPS executable...', 'info');
             const exeResult = await window.electronAPI.downloadServiceHostExe(cloudUrl, rootDir);
             if (exeResult.success) {
-              log(`Service Host executable downloaded (${(exeResult.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+              log(`CAPS executable downloaded (${(exeResult.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
               
-              // Install Service Host as Windows service
+              // Install CAPS as Windows service
               updateProgress(83, 'Installing CAPS service...');
-              log('Installing Service Host (CAPS) as Windows service...', 'info');
+              log('Installing CAPS as Windows service...', 'info');
               const capsServiceName = `OPH-POS-CAPS-${capsConfig.serviceHostId.substring(0, 8)}`;
               const capsInstallResult = await window.electronAPI.installServiceHostService(rootDir, capsServiceName);
               if (capsInstallResult.success) {
                 log(`CAPS service: ${capsInstallResult.message}`, 'success');
               } else {
                 log(`CAPS service install: ${capsInstallResult.error}`, 'warning');
-                log('You can start Service Host manually after setup', 'info');
+                log('You can start CAPS manually after setup', 'info');
               }
             } else {
-              log('Service Host executable not available (will use Node.js version)', 'info');
+              log('CAPS executable not available (will use Node.js version)', 'info');
               log('CAPS will need to be started manually or via Node.js', 'info');
             }
           } else {
-            log(`Service Host config failed: ${capsConfigResult.error}`, 'warning');
+            log(`CAPS config failed: ${capsConfigResult.error}`, 'warning');
           }
         }
 
@@ -993,12 +993,12 @@
         updateProgress(85, 'Starting services...');
         
         if (downloadResult.success) {
-          log('Starting Service Host...', 'info');
+          log('Starting CAPS service...', 'info');
           const startResult = await window.electronAPI.startServiceHost(rootDir);
           if (startResult.success) {
-            log(`Service Host started (PID: ${startResult.pid})`, 'success');
+            log(`CAPS started (PID: ${startResult.pid})`, 'success');
           } else {
-            log(`Could not start Service Host: ${startResult.error}`, 'warning');
+            log(`Could not start CAPS: ${startResult.error}`, 'warning');
           }
         }
         

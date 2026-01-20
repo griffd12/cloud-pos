@@ -1,12 +1,15 @@
-# OPH-POS CAL Setup Wizard (Electron) v2.0.0
+# OPH-POS CAL Setup Wizard (Electron) v2.1.0
 
 A desktop application for provisioning OPH-POS devices with **automatic service provisioning** based on workstation configuration in EMC.
 
-## What's New in v2.0.0
+## What's New in v2.1.0
 
+- **Distributed Services Architecture**: Each service (CAPS, Print, KDS, Payment) runs on a designated host workstation
+- **Updated Terminology**: "Services" section in EMC replaces the old "Service Host" terminology
 - **Auto-Provisioning**: Wizard automatically provisions services based on EMC workstation bindings
 - **Service Binding Display**: Shows assigned services (CAPS, Print, KDS, Payment) for each workstation
 - **Print Agent Auto-Setup**: Automatically creates, configures, and starts Print Agents
+- **CAPS Service Installation**: Downloads and installs CAPS as a Windows service with SQLite database
 - **Status Reporting**: Reports setup progress back to EMC in real-time
 - **Status Badges**: Device list shows setup status (COMPLETE, IN PROGRESS, FAILED)
 
@@ -16,15 +19,16 @@ A desktop application for provisioning OPH-POS devices with **automatic service 
 2. **Authenticates** - Signs in with EMC administrator credentials
 3. **Selects Property** - Chooses which property this device belongs to
 4. **Displays Workstations** - Shows available devices with their service bindings:
-   - CAPS (Central Application Processing Server)
-   - Print Controller
-   - KDS Controller
-   - Payment Controller
+   - CAPS (Central Application Processing Server) - Provides offline POS capability
+   - Print Controller - Handles receipt and kitchen printing
+   - KDS Controller - Manages Kitchen Display System updates
+   - Payment Controller - Processes payment transactions
 5. **Auto-Provisions Services**:
    - Reads service bindings configured in EMC
    - Creates Print Agents with secure tokens (if Print Controller assigned)
    - Downloads and configures Print Agent software
-   - Starts Print Agent as background service
+   - Configures CAPS with SQLite database for offline operation
+   - Starts services as Windows background services
    - Creates OPH-POS directory structure
    - Registers device with secure token binding
 6. **Reports Status** - Updates EMC with setup progress (in_progress → completed/failed)
@@ -33,10 +37,11 @@ A desktop application for provisioning OPH-POS devices with **automatic service 
 ## Service Binding Workflow
 
 ### In EMC (Before Running Wizard)
-1. Navigate to the **Service Host** section in EMC
-2. Select or create a Service Host for your property
-3. Configure workstation service bindings (CAPS, Print Controller, KDS Controller, Payment Controller)
-4. Save the Service Host configuration
+1. Navigate to the **Services** section in EMC
+2. Create a new Service for your property (CAPS, Print, KDS, or Payment)
+3. Assign the service to a host workstation
+4. Configure any additional service settings
+5. Save the service configuration
 
 ### On Terminal (Running Wizard)
 1. Launch the CAL Setup Wizard
@@ -52,14 +57,18 @@ A desktop application for provisioning OPH-POS devices with **automatic service 
 ```
 C:\OPH-POS\
 ├── ServiceHost\
-│   ├── service-host.exe     # Service Host executable
-│   ├── data\                # Local SQLite database
-│   └── logs\                # Service Host logs
+│   ├── service-host.exe     # CAPS executable (offline processing)
+│   ├── config.json          # CAPS configuration with token
+│   ├── data\                # Local SQLite database for offline operation
+│   └── logs\                # CAPS service logs
 ├── Packages\                # Downloaded CAL packages
 ├── PrintAgent\
-│   ├── index.js             # Print Agent application
+│   ├── print-agent.js       # Print Agent application
 │   ├── config.json          # Auto-generated configuration with token
 │   └── node_modules\        # Dependencies
+├── CalClient\
+│   ├── cal-client.exe       # CAL update client (optional)
+│   └── cal-client-config.json
 ├── Config\
 │   └── service-host.json    # Device configuration
 └── Logs\                    # Application logs
@@ -114,6 +123,7 @@ The wizard communicates with these EMC endpoints:
 
 - **Device Token Binding**: Each device receives a unique cryptographic token during registration
 - **Print Agent Tokens**: Each Print Agent gets a unique secure token for authentication
+- **CAPS Tokens**: Each CAPS service has a unique secure token for cloud sync
 - **Token Storage**: Tokens are stored securely in configuration files and browser localStorage
 - **EMC Authentication**: Administrator credentials are validated against the cloud before installation
 - **Property Access Control**: Status reporting validates user has access to workstation's property
@@ -130,7 +140,7 @@ The wizard reports setup status to EMC throughout the provisioning process:
 | `completed` | Setup finished successfully |
 | `failed` | Setup encountered an error |
 
-View status in EMC under the Service Host section. Each workstation displays a setup status badge.
+View status in EMC under the Services section. Each workstation displays a setup status badge.
 
 ## Troubleshooting
 
@@ -141,16 +151,17 @@ View status in EMC under the Service Host section. Each workstation displays a s
 
 ### "No service bindings found"
 - Configure service bindings in EMC before running wizard
-- Navigate to Service Host section → Select Service Host → Configure workstation bindings
+- Navigate to Services section → Create Service → Assign to host workstation
 
 ### "Print Agent setup failed"
 - Check that Node.js 16.x or later is installed on the terminal (download from https://nodejs.org)
 - Verify write permissions to `C:\OPH-POS\PrintAgent\`
 - Check console output when running the Print Agent manually
 
-### "Service Host download failed"
+### "CAPS download failed"
 - The installer will continue in browser-only mode
 - Manually download service-host.exe and place in `C:\OPH-POS\ServiceHost\`
+- CAPS is optional but enables offline POS operation
 
 ### "Permission denied creating directories"
 - Run the wizard as Administrator on Windows
@@ -158,12 +169,18 @@ View status in EMC under the Service Host section. Each workstation displays a s
 
 ## Offline Mode
 
-Once installed, devices can operate offline using the Service Host's local SQLite database. The Service Host automatically syncs with the cloud when connectivity is restored.
+Once installed, devices with CAPS can operate offline using the local SQLite database. The CAPS service automatically syncs with the cloud when connectivity is restored, including:
+- Menu items and modifiers
+- Employee information
+- Device configuration
+- POS layouts
+- Transactions (uploaded on reconnection)
 
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1.0 | 2026-01 | Updated terminology (Services), distributed architecture support |
 | 2.0.0 | 2026-01 | Auto-provisioning based on EMC service bindings, Print Agent auto-setup, status reporting |
 | 1.0.3 | 2025-12 | Bug fixes and stability improvements |
 | 1.0.0 | 2025-11 | Initial release with manual CAL package selection |

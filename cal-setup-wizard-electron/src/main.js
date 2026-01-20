@@ -63,8 +63,8 @@ function validateRootDir(rootDir) {
 }
 
 function sanitizeServiceName(name) {
-  if (!name || typeof name !== 'string') return 'OPH-POS-ServiceHost';
-  return name.replace(/[^a-zA-Z0-9\-_]/g, '').substring(0, 64) || 'OPH-POS-ServiceHost';
+  if (!name || typeof name !== 'string') return 'OPH-POS-Service';
+  return name.replace(/[^a-zA-Z0-9\-_]/g, '').substring(0, 64) || 'OPH-POS-Service';
 }
 
 function sanitizePackageName(name) {
@@ -309,7 +309,7 @@ ipcMain.handle('start-service-host', async (event, rootDir) => {
   const configPath = path.join(normalizedRoot, 'Config', 'service-host.json');
   
   if (!fs.existsSync(exePath)) {
-    return { success: false, error: 'Service Host executable not found' };
+    return { success: false, error: 'CAPS executable not found' };
   }
   
   try {
@@ -325,7 +325,7 @@ ipcMain.handle('start-service-host', async (event, rootDir) => {
   }
 });
 
-ipcMain.handle('install-windows-service', async (event, rootDir, serviceName = 'OPH-POS-ServiceHost') => {
+ipcMain.handle('install-windows-service', async (event, rootDir, serviceName = 'OPH-POS-CAPS') => {
   if (process.platform !== 'win32') {
     return { success: false, error: 'Windows service installation only available on Windows' };
   }
@@ -339,7 +339,7 @@ ipcMain.handle('install-windows-service', async (event, rootDir, serviceName = '
   const configPath = path.join(normalizedRoot, 'Config', 'service-host.json');
   
   if (!fs.existsSync(exePath)) {
-    return { success: false, error: 'Service Host executable not found' };
+    return { success: false, error: 'CAPS executable not found' };
   }
   
   return new Promise((resolve) => {
@@ -754,7 +754,7 @@ node "${agentPath}" --config "${configPath}"
 });
 
 ipcMain.handle('install-service-host-service', async (event, rootDir, serviceName = 'OPH-POS-CAPS') => {
-  writeLog('INFO', 'Installing Service Host (CAPS) as Windows service', { rootDir, serviceName });
+  writeLog('INFO', 'Installing CAPS as Windows service', { rootDir, serviceName });
   
   if (process.platform !== 'win32') {
     writeLog('WARN', 'Windows service installation only available on Windows');
@@ -770,8 +770,8 @@ ipcMain.handle('install-service-host-service', async (event, rootDir, serviceNam
   const configPath = path.join(normalizedRoot, 'ServiceHost', 'config.json');
   
   if (!fs.existsSync(exePath)) {
-    writeLog('WARN', 'Service Host executable not found, skipping service installation');
-    return { success: false, error: 'Service Host executable not found. Download Service Host first.' };
+    writeLog('WARN', 'CAPS executable not found, skipping service installation');
+    return { success: false, error: 'CAPS executable not found. Download CAPS first.' };
   }
   
   return new Promise((resolve) => {
@@ -805,9 +805,9 @@ ipcMain.handle('install-service-host-service', async (event, rootDir, serviceNam
   });
 });
 
-// Save Service Host (CAPS) configuration
+// Save CAPS configuration
 ipcMain.handle('save-service-host-config', async (event, rootDir, cloudUrl, config) => {
-  writeLog('INFO', 'Saving Service Host configuration', { rootDir, serviceHostId: config?.serviceHostId });
+  writeLog('INFO', 'Saving CAPS configuration', { rootDir, serviceHostId: config?.serviceHostId });
   
   if (!validateRootDir(rootDir)) {
     return { success: false, error: 'Invalid root directory' };
@@ -837,16 +837,16 @@ ipcMain.handle('save-service-host-config', async (event, rootDir, cloudUrl, conf
     };
     
     fs.writeFileSync(configPath, JSON.stringify(serviceHostConfig, null, 2));
-    writeLog('INFO', `Service Host configuration saved to ${configPath}`);
+    writeLog('INFO', `CAPS configuration saved to ${configPath}`);
     
     return { success: true, path: configPath };
   } catch (err) {
-    writeLog('ERROR', 'Failed to save Service Host configuration', { error: err.message });
+    writeLog('ERROR', 'Failed to save CAPS configuration', { error: err.message });
     return { success: false, error: err.message };
   }
 });
 
-// Download Service Host executable
+// Download CAPS executable
 ipcMain.handle('download-service-host-exe', async (event, cloudUrl, rootDir) => {
   if (!validateUrl(cloudUrl)) {
     return { success: false, error: 'Invalid cloud URL' };
@@ -867,11 +867,11 @@ ipcMain.handle('download-service-host-exe', async (event, cloudUrl, rootDir) => 
     });
     
     const stats = fs.statSync(destPath);
-    writeLog('INFO', `Service Host downloaded: ${destPath} (${stats.size} bytes)`);
+    writeLog('INFO', `CAPS downloaded: ${destPath} (${stats.size} bytes)`);
     
     return { success: true, path: destPath, size: stats.size };
   } catch (err) {
-    writeLog('WARN', `Service Host download skipped: ${err.message}`);
+    writeLog('WARN', `CAPS download skipped: ${err.message}`);
     return { success: false, error: err.message };
   }
 });
