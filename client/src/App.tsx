@@ -104,7 +104,7 @@ function Router() {
       <Route path="/pos">
         {() => <DeviceGuardedRoute component={PosPage} allowedTypes={["pos"]} />}
       </Route>
-      <Route path="/pizza-builder/:menuItemId">
+      <Route path="/pos/pizza-builder/:menuItemId">
         {() => <DeviceGuardedRoute component={PizzaBuilderPage} allowedTypes={["pos"]} />}
       </Route>
       {/* Admin routes are not available on POS/KDS devices - use EMC instead */}

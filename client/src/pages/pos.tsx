@@ -1004,7 +1004,7 @@ export default function PosPage() {
         }
       }
       // Navigate to Pizza Builder page
-      navigate(`/pizza-builder/${item.id}`);
+      navigate(`/pos/pizza-builder/${item.id}`);
       return;
     }
     

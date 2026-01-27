@@ -36,7 +36,7 @@ const QUARTER_SECTIONS: PizzaSection[] = ["topLeft", "topRight", "bottomLeft", "
 
 export default function PizzaBuilderPage() {
   const [, navigate] = useLocation();
-  const [, params] = useRoute("/pizza-builder/:menuItemId");
+  const [, params] = useRoute("/pos/pizza-builder/:menuItemId");
   const menuItemId = params?.menuItemId;
   const { toast } = useToast();
 
