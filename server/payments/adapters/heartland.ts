@@ -53,8 +53,6 @@ class HeartlandPaymentAdapter implements PaymentGatewayAdapter {
     this.versionNumber = versionNumber || '0000';
     this.environment = environment;
     this.serviceUrl = environment === 'production' ? PRODUCTION_URL : SANDBOX_URL;
-    
-    console.log('[Heartland] Initialized with DeveloperID length:', this.developerId.length, 'VersionNbr length:', this.versionNumber.length);
   }
 
   private buildSoapEnvelope(transactionXml: string): string {
