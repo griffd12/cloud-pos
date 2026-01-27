@@ -49,13 +49,15 @@ export default function DeviceSetupPage() {
     },
     onSuccess: (data) => {
       if (data.success && data.deviceToken) {
+        const isPosDevice = data.deviceType === "pos_workstation" || data.deviceType === "pos";
+        const isKdsDevice = data.deviceType === "kds_display" || data.deviceType === "kds";
         enrollDevice(data.deviceToken, {
           id: data.registeredDeviceId,
           name: data.deviceName,
-          deviceType: data.deviceType,
+          deviceType: isPosDevice ? "pos_workstation" : isKdsDevice ? "kds_display" : data.deviceType,
           propertyId: data.propertyId,
-          workstationId: data.deviceType === "pos_workstation" ? data.deviceId : null,
-          kdsDeviceId: data.deviceType === "kds_display" ? data.deviceId : null,
+          workstationId: isPosDevice ? data.deviceId : null,
+          kdsDeviceId: isKdsDevice ? data.deviceId : null,
           status: "enrolled",
         });
         setClaimSuccess(data);

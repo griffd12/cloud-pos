@@ -181,12 +181,16 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setDeviceName(device.name);
     setPropertyId(device.propertyId);
 
-    if (device.deviceType === "pos_workstation" && device.workstationId) {
+    // Handle both full names ("pos_workstation") and short names ("pos") from server
+    const isPosDevice = device.deviceType === "pos_workstation" || device.deviceType === "pos";
+    const isKdsDevice = device.deviceType === "kds_display" || device.deviceType === "kds";
+
+    if (isPosDevice && device.workstationId) {
       localStorage.setItem(DEVICE_TYPE_KEY, "pos");
       localStorage.setItem(DEVICE_ID_KEY, device.workstationId);
       setDeviceType("pos");
       setLinkedDeviceId(device.workstationId);
-    } else if (device.deviceType === "kds_display" && device.kdsDeviceId) {
+    } else if (isKdsDevice && device.kdsDeviceId) {
       localStorage.setItem(DEVICE_TYPE_KEY, "kds");
       localStorage.setItem(DEVICE_ID_KEY, device.kdsDeviceId);
       setDeviceType("kds");
