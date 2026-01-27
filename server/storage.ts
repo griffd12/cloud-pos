@@ -487,7 +487,7 @@ export interface IStorage {
   markKdsTicketsPaid(checkId: string): Promise<void>;
 
   // Admin Stats
-  getAdminStats(): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }>;
+  getAdminStats(enterpriseId?: string): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }>;
 
   // POS Layouts
   getPosLayouts(rvcId?: string): Promise<PosLayout[]>;
@@ -2639,7 +2639,58 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Admin Stats
-  async getAdminStats(): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }> {
+  async getAdminStats(enterpriseId?: string): Promise<{ enterprises: number; properties: number; rvcs: number; employees: number; menuItems: number; activeChecks: number }> {
+    if (enterpriseId) {
+      // Get properties for this enterprise
+      const entProps = await db.select().from(properties).where(eq(properties.enterpriseId, enterpriseId));
+      const entPropIdSet = new Set(entProps.map(p => p.id));
+      
+      // If no properties, count just enterprise-level items
+      if (entPropIdSet.size === 0) {
+        const [itemCount] = await db.select({ count: sql<number>`count(*)` }).from(menuItems).where(eq(menuItems.enterpriseId, enterpriseId));
+        return {
+          enterprises: 1,
+          properties: 0,
+          rvcs: 0,
+          employees: 0,
+          menuItems: Number(itemCount?.count || 0),
+          activeChecks: 0,
+        };
+      }
+      
+      // Fetch RVCs for enterprise's properties using in-memory filter
+      const allRvcs = await db.select().from(rvcs);
+      const entRvcs = allRvcs.filter(r => entPropIdSet.has(r.propertyId));
+      const entRvcIdSet = new Set(entRvcs.map(r => r.id));
+      
+      // Count employees in-memory
+      const allEmps = await db.select().from(employees);
+      const entEmps = allEmps.filter(e => e.propertyId && entPropIdSet.has(e.propertyId));
+      
+      // Count menu items in-memory (need to check enterprise, property, or rvc)
+      const allItems = await db.select().from(menuItems);
+      const entItems = allItems.filter(item => {
+        if (item.enterpriseId === enterpriseId) return true;
+        if (item.propertyId && entPropIdSet.has(item.propertyId)) return true;
+        if (item.rvcId && entRvcIdSet.has(item.rvcId)) return true;
+        return false;
+      });
+      
+      // Count open checks in-memory
+      const openChecks = await db.select().from(checks).where(eq(checks.status, 'open'));
+      const entChecks = openChecks.filter(c => c.propertyId && entPropIdSet.has(c.propertyId));
+      
+      return {
+        enterprises: 1,
+        properties: entProps.length,
+        rvcs: entRvcs.length,
+        employees: entEmps.length,
+        menuItems: entItems.length,
+        activeChecks: entChecks.length,
+      };
+    }
+    
+    // No enterprise filter - return global stats
     const [entCount] = await db.select({ count: sql<number>`count(*)` }).from(enterprises);
     const [propCount] = await db.select({ count: sql<number>`count(*)` }).from(properties);
     const [rvcCount] = await db.select({ count: sql<number>`count(*)` }).from(rvcs);

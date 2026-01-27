@@ -5429,7 +5429,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/admin/stats", async (req, res) => {
-    const stats = await storage.getAdminStats();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const stats = await storage.getAdminStats(enterpriseId);
     res.json(stats);
   });
 

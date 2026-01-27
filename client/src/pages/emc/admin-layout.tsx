@@ -82,6 +82,9 @@ import BreakViolationsPage from "../admin/break-violations";
 import MinorLaborPage from "../admin/minor-labor";
 
 function EmcDashboard() {
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  
   const { data: stats } = useQuery<{
     enterprises: number;
     properties: number;
@@ -90,7 +93,12 @@ function EmcDashboard() {
     menuItems: number;
     activeChecks: number;
   }>({
-    queryKey: ["/api/admin/stats"],
+    queryKey: ["/api/admin/stats", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/stats${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
   });
 
   const cards = [
