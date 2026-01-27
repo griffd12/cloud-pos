@@ -2761,9 +2761,16 @@ export class DatabaseStorage implements IStorage {
       return layout;
     }
     
-    // Fallback: check for global default layout
-    const [globalDefault] = await db.select().from(posLayouts).where(eq(posLayouts.isDefault, true));
-    return globalDefault;
+    // Check for a layout with legacy rvcId field set directly
+    const [legacyLayout] = await db.select().from(posLayouts)
+      .where(and(eq(posLayouts.rvcId, rvcId), eq(posLayouts.isDefault, true), eq(posLayouts.active, true)));
+    if (legacyLayout) {
+      return legacyLayout;
+    }
+    
+    // No layout found - return undefined so POS uses built-in SLU/category mode
+    // DO NOT fall back to global default as it may be from a different enterprise
+    return undefined;
   }
 
   async setDefaultLayoutForRvc(rvcId: string, layoutId: string): Promise<void> {
