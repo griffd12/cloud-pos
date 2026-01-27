@@ -2311,6 +2311,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/menu-items/:id", async (req, res) => {
+    const data = await storage.getMenuItem(req.params.id);
+    if (!data) return res.status(404).json({ message: "Menu item not found" });
+    res.json(data);
+  });
+
   app.put("/api/menu-items/:id", async (req, res) => {
     const data = await storage.updateMenuItem(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
