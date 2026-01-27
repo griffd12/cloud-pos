@@ -211,6 +211,7 @@ export default function WorkstationsPage() {
           }
         }}
         isLoading={createMutation.isPending || updateMutation.isPending}
+        contextPropertyId={contextPropertyId}
       />
     </div>
   );
@@ -226,6 +227,7 @@ interface WorkstationFormDialogProps {
   workstations: Workstation[];
   onSubmit: (data: InsertWorkstation) => void;
   isLoading: boolean;
+  contextPropertyId?: string;
 }
 
 const PRINTER_FIELDS = [
@@ -248,7 +250,8 @@ function WorkstationFormDialog({
   printers,
   workstations,
   onSubmit, 
-  isLoading 
+  isLoading,
+  contextPropertyId 
 }: WorkstationFormDialogProps) {
   const { toast } = useToast();
   
