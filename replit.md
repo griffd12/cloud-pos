@@ -77,3 +77,34 @@ Preferred communication style: Simple, everyday language.
   - Card-Not-Present: Secret API Key, Developer ID, Version Number
   - Sandbox URL: https://cert.api2.heartlandportico.com
   - Production URL: https://api2.heartlandportico.com
+
+## Follow-Up / Future Enhancements
+
+### Oracle Simphony-Style Multi-Tenant Architecture (Priority: High)
+The current system uses a shared PostgreSQL database with enterprise ID filtering for data isolation. To match Oracle Simphony's MTU (Multi-Tenant Unit) model for better isolation and disaster recovery:
+
+1. **Company Code Login**
+   - EMC login screen: Enter Company Code + Username + Password
+   - Example: Company Code `BOM` (Blue Oceans Management) → dgriffin → password
+   - User sees only their enterprise's data (properties, employees, sales, reports)
+
+2. **Per-Enterprise URLs**
+   - Subdomain-based: `bom.yourpos.com`, `acme.yourpos.com`
+   - Or tenant-based routing: `yourpos.com/bom/emc`, `yourpos.com/acme/pos`
+
+3. **Separate Databases per Enterprise** (Future)
+   - Each enterprise gets its own PostgreSQL database
+   - If one database crashes, other enterprises continue operating
+   - Enhanced disaster recovery and complete data isolation
+
+4. **Benefits**
+   - Complete data isolation between customers
+   - No single point of failure for all customers
+   - Clear branding/identity per customer
+   - Simphony-familiar login experience
+
+### Current Multi-Tenant Status
+- **Working**: Enterprise ID filtering across all 56+ EMC pages, POS, KDS, reports
+- **Working**: New enterprises start with blank EMC (no shared data)
+- **Working**: CAPS with local SQLite provides offline resilience per property
+- **Needed**: Company code login, per-customer URLs, separate databases
