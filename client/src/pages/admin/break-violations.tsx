@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,8 @@ interface ViolationSummary {
 
 export default function BreakViolationsPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [dateRange, setDateRange] = useState<"this_week" | "last_week" | "custom">("this_week");
   const [startDate, setStartDate] = useState(format(startOfWeek(new Date()), "yyyy-MM-dd"));
@@ -64,7 +67,11 @@ export default function BreakViolationsPage() {
   const [showExportDialog, setShowExportDialog] = useState(false);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      return res.json();
+    },
   });
 
   const { data: breakRules = [] } = useQuery<BreakRule[]>({

@@ -5765,10 +5765,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get aggregated devices hub data (workstations, printers, KDS, order devices)
   app.get("/api/devices-hub", async (req, res) => {
     try {
-      const { propertyId, deviceType } = req.query;
+      const { propertyId, deviceType, enterpriseId } = req.query;
       
       // Fetch all device types in parallel
-      const [workstations, printers, kdsDevices, orderDevices, registeredDevices, properties] = await Promise.all([
+      let [workstations, printers, kdsDevices, orderDevices, registeredDevices, properties] = await Promise.all([
         storage.getWorkstations(),
         storage.getPrinters(),
         storage.getKdsDevices(),
@@ -5776,6 +5776,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         storage.getRegisteredDevices(),
         storage.getProperties(),
       ]);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId) {
+        const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        workstations = filterByEnterprise(workstations, enterpriseId as string, propertyIds, rvcIds);
+        printers = filterByEnterprise(printers, enterpriseId as string, propertyIds, rvcIds);
+        kdsDevices = filterByEnterprise(kdsDevices, enterpriseId as string, propertyIds, rvcIds);
+        orderDevices = filterByEnterprise(orderDevices, enterpriseId as string, propertyIds, rvcIds);
+        registeredDevices = filterByEnterprise(registeredDevices, enterpriseId as string, propertyIds, rvcIds);
+        properties = filterByEnterprise(properties, enterpriseId as string, propertyIds, rvcIds);
+      }
       
       // Build a property lookup map
       const propertyMap = new Map(properties.map(p => [p.id, p]));

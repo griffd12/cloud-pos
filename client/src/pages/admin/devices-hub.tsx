@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ const DEVICE_TYPE_CONFIG = {
 
 export default function DevicesHubPage() {
   const [, navigate] = useLocation();
+  const { selectedEnterpriseId } = useEmc();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPropertyId, setFilterPropertyId] = useState<string>("");
   const [filterDeviceType, setFilterDeviceType] = useState<string>("");
@@ -55,6 +57,7 @@ export default function DevicesHubPage() {
 
   const buildQueryPath = () => {
     const params = new URLSearchParams();
+    if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
     if (filterPropertyId) params.set("propertyId", filterPropertyId);
     if (filterDeviceType) params.set("deviceType", filterDeviceType);
     const queryStr = params.toString();
@@ -64,11 +67,16 @@ export default function DevicesHubPage() {
   const queryPath = buildQueryPath();
 
   const { data: hubData, isLoading } = useQuery<HubResponse>({
-    queryKey: [queryPath],
+    queryKey: [queryPath, { enterpriseId: selectedEnterpriseId }],
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const params = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+      const res = await fetch(`/api/properties${params}`);
+      return res.json();
+    },
   });
 
   const filteredDevices = (hubData?.devices || []).filter((device) => {
