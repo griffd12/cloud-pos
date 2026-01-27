@@ -8531,14 +8531,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get time punches with filters
   app.get("/api/time-punches", async (req, res) => {
     try {
-      const { propertyId, employeeId, businessDate, startDate, endDate } = req.query;
-      const punches = await storage.getTimePunches({
+      const { propertyId, employeeId, businessDate, startDate, endDate, enterpriseId } = req.query;
+      let punches = await storage.getTimePunches({
         propertyId: propertyId as string,
         employeeId: employeeId as string,
         businessDate: businessDate as string,
         startDate: startDate as string,
         endDate: endDate as string,
       });
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        punches = punches.filter(p => p.propertyId && propertyIds.has(p.propertyId));
+      }
+      
       res.json(punches);
     } catch (error) {
       console.error("Get time punches error:", error);
@@ -9096,8 +9103,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get timecards
   app.get("/api/timecards", async (req, res) => {
     try {
-      const { propertyId, employeeId, payPeriodId, businessDate, startDate, endDate } = req.query;
-      const timecards = await storage.getTimecards({
+      const { propertyId, employeeId, payPeriodId, businessDate, startDate, endDate, enterpriseId } = req.query;
+      let timecards = await storage.getTimecards({
         propertyId: propertyId as string,
         employeeId: employeeId as string,
         payPeriodId: payPeriodId as string,
@@ -9105,6 +9112,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         startDate: startDate as string,
         endDate: endDate as string,
       });
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        timecards = timecards.filter(tc => tc.propertyId && propertyIds.has(tc.propertyId));
+      }
       
       // Calculate real-time hours for open shifts (clocked in but not out)
       const now = new Date();
@@ -9851,8 +9864,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get shifts with filters
   app.get("/api/shifts", async (req, res) => {
     try {
-      const { propertyId, rvcId, employeeId, startDate, endDate, status } = req.query;
-      const shifts = await storage.getShifts({
+      const { propertyId, rvcId, employeeId, startDate, endDate, status, enterpriseId } = req.query;
+      let shifts = await storage.getShifts({
         propertyId: propertyId as string,
         rvcId: rvcId as string,
         employeeId: employeeId as string,
@@ -9860,6 +9873,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         endDate: endDate as string,
         status: status as string,
       });
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        shifts = shifts.filter(s => {
+          if (s.propertyId && propertyIds.has(s.propertyId)) return true;
+          if (s.rvcId && rvcIds.has(s.rvcId)) return true;
+          return false;
+        });
+      }
+      
       res.json(shifts);
     } catch (error) {
       console.error("Get shifts error:", error);
@@ -12650,8 +12674,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get all terminal devices for a property
   app.get("/api/terminal-devices", async (req, res) => {
     try {
-      const { propertyId } = req.query;
-      const devices = await storage.getTerminalDevices(propertyId as string);
+      const { propertyId, enterpriseId } = req.query;
+      let devices = await storage.getTerminalDevices(propertyId as string);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        devices = devices.filter(d => d.propertyId && propertyIds.has(d.propertyId));
+      }
+      
       res.json(devices);
     } catch (error) {
       console.error("Get terminal devices error:", error);
@@ -13959,11 +13990,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Agents run on-premises and connect via WebSocket to receive print jobs
   // ============================================================================
 
-  // Get all print agents (optionally filtered by property)
+  // Get all print agents (optionally filtered by property or enterprise)
   app.get("/api/print-agents", async (req, res) => {
     try {
       const propertyId = req.query.propertyId as string | undefined;
-      const agents = await storage.getPrintAgents(propertyId);
+      const enterpriseId = req.query.enterpriseId as string | undefined;
+      let agents = await storage.getPrintAgents(propertyId);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId);
+        agents = agents.filter(a => a.propertyId && propertyIds.has(a.propertyId));
+      }
       
       // Add connection status from connectedAgents map
       const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
@@ -15897,12 +15935,19 @@ connect();
 
   app.get("/api/fiscal-periods", async (req, res) => {
     try {
-      const { propertyId, startDate, endDate } = req.query;
-      const periods = await storage.getFiscalPeriods(
+      const { propertyId, startDate, endDate, enterpriseId } = req.query;
+      let periods = await storage.getFiscalPeriods(
         propertyId as string,
         startDate as string,
         endDate as string
       );
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        periods = periods.filter(p => propertyIds.has(p.propertyId));
+      }
+      
       res.json(periods);
     } catch (error) {
       console.error("Get fiscal periods error:", error);
@@ -16038,8 +16083,15 @@ connect();
 
   app.get("/api/cash-drawers", async (req, res) => {
     try {
-      const { propertyId } = req.query;
-      const drawers = await storage.getCashDrawers(propertyId as string);
+      const { propertyId, enterpriseId } = req.query;
+      let drawers = await storage.getCashDrawers(propertyId as string);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        drawers = drawers.filter(d => propertyIds.has(d.propertyId));
+      }
+      
       res.json(drawers);
     } catch (error) {
       res.status(500).json({ message: "Failed to get cash drawers" });
@@ -16166,8 +16218,15 @@ connect();
 
   app.get("/api/gift-cards", async (req, res) => {
     try {
-      const { propertyId, status } = req.query;
-      const cards = await storage.getGiftCards(propertyId as string, status as string);
+      const { propertyId, status, enterpriseId } = req.query;
+      let cards = await storage.getGiftCards(propertyId as string, status as string);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        cards = cards.filter(c => c.propertyId && propertyIds.has(c.propertyId));
+      }
+      
       res.json(cards);
     } catch (error) {
       res.status(500).json({ message: "Failed to get gift cards" });
@@ -17028,13 +17087,20 @@ connect();
 
   app.get("/api/manager-alerts", async (req, res) => {
     try {
-      const { propertyId, alertType, read, acknowledged } = req.query;
-      const alerts = await storage.getManagerAlerts(
+      const { propertyId, alertType, read, acknowledged, enterpriseId } = req.query;
+      let alerts = await storage.getManagerAlerts(
         propertyId as string,
         alertType as string,
         read === "true" ? true : read === "false" ? false : undefined,
         acknowledged === "true" ? true : acknowledged === "false" ? false : undefined
       );
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        alerts = alerts.filter(a => a.propertyId && propertyIds.has(a.propertyId));
+      }
+      
       res.json(alerts);
     } catch (error) {
       res.status(500).json({ message: "Failed to get manager alerts" });
@@ -18785,8 +18851,15 @@ connect();
   // GET /api/service-hosts - List service hosts
   app.get("/api/service-hosts", async (req, res) => {
     try {
-      const { propertyId } = req.query;
-      const serviceHosts = await storage.getServiceHosts(propertyId as string | undefined);
+      const { propertyId, enterpriseId } = req.query;
+      let serviceHosts = await storage.getServiceHosts(propertyId as string | undefined);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const { propertyIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        serviceHosts = serviceHosts.filter(sh => propertyIds.has(sh.propertyId));
+      }
+      
       res.json(serviceHosts);
     } catch (error: any) {
       console.error("Get service hosts error:", error);
