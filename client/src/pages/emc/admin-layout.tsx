@@ -206,7 +206,7 @@ function EmcDashboard() {
 
 export default function EmcAdminLayout() {
   const [, navigate] = useLocation();
-  const { user, isAuthenticated, logout, isLoading, selectedEnterpriseId, setSelectedEnterpriseId } = useEmc();
+  const { user, isAuthenticated, logout, isLoading, selectedEnterpriseId, setSelectedEnterpriseId, selectedPropertyId, setSelectedPropertyId } = useEmc();
 
   // Real-time sync for all data changes across the system
   usePosWebSocket();
@@ -272,6 +272,38 @@ export default function EmcAdminLayout() {
     }
   }, [effectiveEnterpriseId, enterprises, selectedEnterprise?.id]);
 
+  // Sync selectedProperty with context selectedPropertyId
+  useEffect(() => {
+    if (selectedPropertyId && properties.length > 0) {
+      const prop = properties.find(p => p.id === selectedPropertyId);
+      if (prop && selectedProperty?.id !== prop.id) {
+        setSelectedProperty(prop);
+        setSelectedRvc(null);
+      }
+    }
+  }, [selectedPropertyId, properties, selectedProperty?.id]);
+
+  // Auto-select property: use user's assigned property for property_admin, or first available property
+  useEffect(() => {
+    if (properties.length > 0 && !selectedPropertyId) {
+      // For property_admin, use their assigned property
+      if (user?.accessLevel === "property_admin" && user?.propertyId) {
+        const userProp = properties.find(p => p.id === user.propertyId);
+        if (userProp) {
+          setSelectedPropertyId(userProp.id);
+          setSelectedProperty(userProp);
+          return;
+        }
+      }
+      // Otherwise, auto-select first available property for the enterprise
+      const firstProp = properties[0];
+      if (firstProp) {
+        setSelectedPropertyId(firstProp.id);
+        setSelectedProperty(firstProp);
+      }
+    }
+  }, [properties, selectedPropertyId, user?.accessLevel, user?.propertyId, setSelectedPropertyId]);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate("/emc/login");
@@ -293,6 +325,8 @@ export default function EmcAdminLayout() {
     const prop = properties.find((p) => p.id === id) || null;
     setSelectedProperty(prop);
     setSelectedRvc(null);
+    // Save to EMC context for use across all pages
+    setSelectedPropertyId(id);
   };
 
   const handleRvcChange = (id: string | null) => {

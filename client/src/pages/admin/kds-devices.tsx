@@ -11,7 +11,7 @@ import { useEmc } from "@/lib/emc-context";
 
 export default function KdsDevicesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
@@ -100,6 +100,7 @@ export default function KdsDevicesPage() {
       type: "select",
       options: properties.map((p) => ({ value: p.id, label: p.name })),
       required: true,
+      defaultValue: contextPropertyId || properties[0]?.id || "",
     },
     { name: "showDraftItems", label: "Show Draft (Unsent) Items", type: "switch", defaultValue: false },
     { name: "showSentItemsOnly", label: "Show Sent Items Only", type: "switch", defaultValue: true },

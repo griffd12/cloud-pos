@@ -1896,7 +1896,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const properties = await storage.getProperties(enterpriseId);
       const propertyIds = new Set(properties.map(p => p.id));
-      data = data.filter(emp => emp.propertyId && propertyIds.has(emp.propertyId));
+      // Include employees that:
+      // 1. Have a propertyId that belongs to this enterprise, OR
+      // 2. Have no propertyId but belong directly to the enterprise (enterprise-level employees)
+      data = data.filter(emp => 
+        (emp.propertyId && propertyIds.has(emp.propertyId)) ||
+        (emp.enterpriseId === enterpriseId)
+      );
     }
     
     const enrichedData = data.map(enrichEmployee);

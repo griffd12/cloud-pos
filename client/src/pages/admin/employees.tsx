@@ -25,7 +25,7 @@ interface JobAssignment {
 
 export default function EmployeesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId } = useEmc();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -90,7 +90,8 @@ export default function EmployeesPage() {
     setPinHash("");
     setRoleId("");
     setActive(true);
-    setSelectedPropertyIds([]);
+    // Pre-select the context property if one is selected in EMC
+    setSelectedPropertyIds(selectedPropertyId ? [selectedPropertyId] : []);
     setJobAssignments([]);
   };
 
@@ -243,9 +244,31 @@ export default function EmployeesPage() {
 
     if (editingItem) {
       employeeData.id = editingItem.id;
+      // Set propertyId to first selected property (or keep existing/null for enterprise-level)
+      if (selectedPropertyIds.length > 0) {
+        (employeeData as any).propertyId = selectedPropertyIds[0];
+      }
       updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds, jobAssignments });
     } else {
-      createMutation.mutate({ employee: { ...employeeData, enterpriseId: selectedEnterpriseId! } as Employee, propertyIds: selectedPropertyIds, jobAssignments });
+      // For new employees, use: first selected property > EMC context property > first available property
+      const primaryPropertyId = selectedPropertyIds.length > 0 
+        ? selectedPropertyIds[0] 
+        : (selectedPropertyId || (properties.length > 0 ? properties[0].id : undefined));
+      
+      // Auto-populate property assignments if none selected but we have a context property
+      const propertyIdsToAssign = selectedPropertyIds.length > 0 
+        ? selectedPropertyIds 
+        : (primaryPropertyId ? [primaryPropertyId] : []);
+      
+      createMutation.mutate({ 
+        employee: { 
+          ...employeeData, 
+          enterpriseId: selectedEnterpriseId!,
+          propertyId: primaryPropertyId,
+        } as Employee, 
+        propertyIds: propertyIdsToAssign, 
+        jobAssignments 
+      });
     }
   };
 

@@ -37,7 +37,7 @@ import {
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Workstation | null>(null);
 
@@ -327,10 +327,12 @@ function WorkstationFormDialog({
           active: editingItem.active ?? true,
         });
       } else {
+        // Use EMC context property first, then fall back to first available property
+        const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
         form.reset({
           name: "",
           deviceType: "pos_terminal",
-          propertyId: properties[0]?.id || "",
+          propertyId: defaultPropertyId,
           rvcId: null,
           defaultOrderType: "dine_in",
           fastTransactionEnabled: false,

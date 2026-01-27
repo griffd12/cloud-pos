@@ -90,7 +90,7 @@ const CHARACTER_WIDTHS = [
 
 export default function PrintersPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Printer | null>(null);
 
@@ -345,10 +345,12 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
           active: editingItem.active ?? true,
         });
       } else {
+        // Use EMC context property first, then fall back to first available property
+        const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
         form.reset({
           name: "",
           printerType: "kitchen",
-          propertyId: properties[0]?.id || "",
+          propertyId: defaultPropertyId,
           connectionType: "network",
           ipAddress: "",
           subnetMask: "255.255.255.0",

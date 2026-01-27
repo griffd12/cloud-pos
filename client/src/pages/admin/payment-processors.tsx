@@ -57,7 +57,7 @@ export default function PaymentProcessorsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PaymentProcessor | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const { data: processors = [], isLoading } = useQuery<PaymentProcessor[]>({
@@ -225,10 +225,12 @@ export default function PaymentProcessorsPage() {
 
   const handleAdd = () => {
     setEditingItem(null);
+    // Use EMC context property first, then fall back to first available property
+    const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
     form.reset({
       name: "",
       gatewayType: "stripe",
-      propertyId: properties[0]?.id || "",
+      propertyId: defaultPropertyId,
       credentialKeyPrefix: "",
       environment: "sandbox",
       supportsTipAdjust: true,

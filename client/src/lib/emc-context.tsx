@@ -17,6 +17,8 @@ interface EmcContextType {
   isAuthenticated: boolean;
   selectedEnterpriseId: string | null;
   setSelectedEnterpriseId: (id: string | null) => void;
+  selectedPropertyId: string | null;
+  setSelectedPropertyId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setup: (email: string, password: string, displayName?: string, enterpriseId?: string) => Promise<void>;
@@ -27,12 +29,14 @@ const EmcContext = createContext<EmcContextType | null>(null);
 const EMC_SESSION_KEY = "emc_session_token";
 
 const EMC_SELECTED_ENTERPRISE_KEY = "emc_selected_enterprise_id";
+const EMC_SELECTED_PROPERTY_KEY = "emc_selected_property_id";
 
 export function EmcProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<EmcUser | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEnterpriseId, setSelectedEnterpriseIdState] = useState<string | null>(null);
+  const [selectedPropertyId, setSelectedPropertyIdState] = useState<string | null>(null);
 
   const setSelectedEnterpriseId = useCallback((id: string | null) => {
     setSelectedEnterpriseIdState(id);
@@ -41,12 +45,28 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     } else {
       sessionStorage.removeItem(EMC_SELECTED_ENTERPRISE_KEY);
     }
+    // Clear property selection when enterprise changes
+    setSelectedPropertyIdState(null);
+    sessionStorage.removeItem(EMC_SELECTED_PROPERTY_KEY);
+  }, []);
+
+  const setSelectedPropertyId = useCallback((id: string | null) => {
+    setSelectedPropertyIdState(id);
+    if (id) {
+      sessionStorage.setItem(EMC_SELECTED_PROPERTY_KEY, id);
+    } else {
+      sessionStorage.removeItem(EMC_SELECTED_PROPERTY_KEY);
+    }
   }, []);
 
   useEffect(() => {
     const storedEnterpriseId = sessionStorage.getItem(EMC_SELECTED_ENTERPRISE_KEY);
     if (storedEnterpriseId) {
       setSelectedEnterpriseIdState(storedEnterpriseId);
+    }
+    const storedPropertyId = sessionStorage.getItem(EMC_SELECTED_PROPERTY_KEY);
+    if (storedPropertyId) {
+      setSelectedPropertyIdState(storedPropertyId);
     }
   }, []);
 
@@ -143,6 +163,8 @@ export function EmcProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user && !!sessionToken,
         selectedEnterpriseId,
         setSelectedEnterpriseId,
+        selectedPropertyId,
+        setSelectedPropertyId,
         login,
         logout,
         setup,
