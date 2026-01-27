@@ -371,6 +371,27 @@ function broadcastDeviceReload(deviceId?: string, propertyId?: string) {
   }
 }
 
+// Helper to get enterprise ID from an RVC or property ID
+async function getEnterpriseIdFromContext(options: { rvcId?: string; propertyId?: string }): Promise<string | null> {
+  const { rvcId, propertyId } = options;
+  
+  if (propertyId) {
+    const property = await storage.getProperty(propertyId);
+    return property?.enterpriseId || null;
+  }
+  
+  if (rvcId) {
+    const rvcs = await storage.getRvcs();
+    const rvc = rvcs.find(r => r.id === rvcId);
+    if (rvc?.propertyId) {
+      const property = await storage.getProperty(rvc.propertyId);
+      return property?.enterpriseId || null;
+    }
+  }
+  
+  return null;
+}
+
 // Helper for enterprise-based filtering (multi-tenancy)
 // Filters entities that can belong to enterprise, property, or RVC levels
 async function getEnterpriseFilterSets(enterpriseId: string): Promise<{
@@ -2196,10 +2217,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/slus", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getSlus(rvcId);
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -2210,8 +2238,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Get SLUs by RVC ID (path param version for frontend convenience)
   app.get("/api/slus/:rvcId", async (req, res) => {
-    // Return all active SLUs - in inheritance model, if no RVC-specific SLUs, return global ones
-    const data = await storage.getSlus();
+    const rvcId = req.params.rvcId;
+    
+    // Auto-derive enterpriseId from rvcId for proper filtering
+    const enterpriseId = await getEnterpriseIdFromContext({ rvcId });
+    
+    let data = await storage.getSlus(rvcId);
+    
+    // Filter by enterprise if available (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2242,10 +2281,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/menu-items", async (req, res) => {
     const sluId = req.query.sluId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getMenuItems(sluId);
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -2412,10 +2459,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/modifiers", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getModifiers();
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -2461,10 +2516,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/modifier-groups", async (req, res) => {
     const menuItemId = req.query.menuItemId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getModifierGroups(menuItemId);
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -2596,10 +2659,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/tax-groups", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getTaxGroups();
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -3100,10 +3171,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/tenders", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getTenders(rvcId);
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -3114,7 +3192,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Get tenders by RVC ID (path param version for frontend convenience)
   app.get("/api/tenders/:rvcId", async (req, res) => {
-    const data = await storage.getTenders();
+    const rvcId = req.params.rvcId;
+    
+    // Auto-derive enterpriseId from rvcId for proper filtering
+    const enterpriseId = await getEnterpriseIdFromContext({ rvcId });
+    
+    let data = await storage.getTenders(rvcId);
+    
+    // Filter by enterprise if available (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -3144,10 +3234,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/discounts", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getDiscounts();
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -5658,10 +5756,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/pos-layouts", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
     let data = await storage.getPosLayouts(rvcId);
     
-    // Filter by enterprise if specified (multi-tenancy)
+    // Filter by enterprise if available (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
@@ -5671,8 +5776,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/pos-layouts/default/:rvcId", async (req, res) => {
-    // First try per-RVC default, then fall back to global default
-    const layout = await storage.getDefaultLayoutForRvc(req.params.rvcId);
+    const rvcId = req.params.rvcId;
+    
+    // Auto-derive enterpriseId from rvcId for proper filtering
+    const enterpriseId = await getEnterpriseIdFromContext({ rvcId });
+    
+    // First try per-RVC default, then fall back to global default for this enterprise
+    let layout = await storage.getDefaultLayoutForRvc(rvcId);
+    
+    // Verify the layout belongs to the correct enterprise
+    if (layout && enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      const filtered = filterByEnterprise([layout], enterpriseId, propertyIds, rvcIds);
+      if (filtered.length === 0) {
+        layout = null; // Layout doesn't belong to this enterprise
+      }
+    }
+    
     res.json(layout || null);
   });
 

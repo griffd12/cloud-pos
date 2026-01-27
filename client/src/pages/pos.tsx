@@ -344,43 +344,79 @@ export default function PosPage() {
 
   const { data: slus = [], isLoading: slusLoading } = useQuery<Slu[]>({
     queryKey: ["/api/slus", currentRvc?.id],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetch(`/api/slus?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch SLUs");
+      return res.json();
+    },
     enabled: !!currentRvc,
   });
 
   const { data: menuItems = [], isLoading: itemsLoading } = useQuery<MenuItemWithModifiers[]>({
-    queryKey: ["/api/menu-items", { sluId: selectedSlu?.id }],
+    queryKey: ["/api/menu-items", { sluId: selectedSlu?.id, rvcId: currentRvc?.id }],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-items?sluId=${selectedSlu?.id}`, { credentials: "include", headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      if (selectedSlu?.id) params.append("sluId", selectedSlu.id);
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetch(`/api/menu-items?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
         throw new Error("Failed to fetch menu items");
       }
       return res.json();
     },
-    enabled: !!selectedSlu,
+    enabled: !!selectedSlu && !!currentRvc?.id,
   });
 
   const { data: tenders = [] } = useQuery<Tender[]>({
     queryKey: ["/api/tenders", currentRvc?.id],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetch(`/api/tenders?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch tenders");
+      return res.json();
+    },
     enabled: !!currentRvc,
   });
 
   const [itemModifierGroups, setItemModifierGroups] = useState<(ModifierGroup & { modifiers: Modifier[] })[]>([]);
 
   const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
-    queryKey: ["/api/tax-groups"],
+    queryKey: ["/api/tax-groups", currentRvc?.id],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetch(`/api/tax-groups?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch tax groups");
+      return res.json();
+    },
+    enabled: !!currentRvc?.id,
   });
 
   const { data: discounts = [] } = useQuery<Discount[]>({
-    queryKey: ["/api/discounts"],
+    queryKey: ["/api/discounts", currentRvc?.id],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetch(`/api/discounts?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch discounts");
+      return res.json();
+    },
+    enabled: !!currentRvc?.id,
   });
 
   const { data: allMenuItems = [] } = useQuery<MenuItem[]>({
-    queryKey: ["/api/menu-items", "all"],
+    queryKey: ["/api/menu-items", "all", currentRvc?.id],
     queryFn: async () => {
-      const res = await fetch("/api/menu-items", { credentials: "include", headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetch(`/api/menu-items?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
+    enabled: !!currentRvc?.id,
   });
 
   const { data: activeLayout } = useQuery<PosLayout | null>({
