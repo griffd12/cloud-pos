@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -74,7 +75,8 @@ export default function DevicesHubPage() {
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       const params = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-      const res = await fetch(`/api/properties${params}`);
+      const res = await fetch(`/api/properties${params}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });

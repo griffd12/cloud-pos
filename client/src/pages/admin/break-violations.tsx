@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,8 @@ export default function BreakViolationsPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { format, parseISO, addDays, subDays } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -108,7 +109,8 @@ export default function LineUpPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
@@ -116,7 +118,8 @@ export default function LineUpPage() {
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/employees${enterpriseParam}`);
+      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employees");
       return res.json();
     },
   });

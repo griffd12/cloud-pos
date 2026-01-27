@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -158,7 +159,8 @@ export default function BreakMonitoringPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
