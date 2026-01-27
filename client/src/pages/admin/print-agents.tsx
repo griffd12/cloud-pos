@@ -248,7 +248,7 @@ export default function PrintAgentsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...data, id: editingItem.id });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
     }
   };
 

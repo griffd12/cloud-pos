@@ -185,7 +185,7 @@ export default function PropertiesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
     }
   };
 

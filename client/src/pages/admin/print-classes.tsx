@@ -196,7 +196,7 @@ export default function PrintClassesPage() {
               await updateMutation.mutateAsync({ ...editingItem, ...data });
               printClassId = editingItem.id;
             } else {
-              const result = await createMutation.mutateAsync(data);
+              const result = await createMutation.mutateAsync({ ...data, enterpriseId: selectedEnterpriseId! });
               printClassId = result.id;
             }
 

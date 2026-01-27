@@ -352,7 +352,7 @@ export default function TerminalDevicesPage() {
     if (editingDevice) {
       updateMutation.mutate({ ...data, id: editingDevice.id });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
     }
   }
 

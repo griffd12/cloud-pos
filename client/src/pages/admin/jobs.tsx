@@ -203,7 +203,7 @@ export default function JobsPage() {
       jobData.id = editingItem.id;
       updateMutation.mutate(jobData);
     } else {
-      createMutation.mutate(jobData);
+      createMutation.mutate({ ...jobData, enterpriseId: selectedEnterpriseId! });
     }
   };
 

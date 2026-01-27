@@ -123,7 +123,7 @@ export default function DiscountsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...formattedData });
     } else {
-      createMutation.mutate(formattedData);
+      createMutation.mutate({ ...formattedData, enterpriseId: selectedEnterpriseId! });
     }
   };
 

@@ -173,7 +173,7 @@ export default function OvertimeRulesPage() {
     if (editingRule) {
       updateMutation.mutate({ id: editingRule.id, data });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
     }
   };
 

@@ -94,7 +94,7 @@ export default function FamilyGroupsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
     }
   };
 

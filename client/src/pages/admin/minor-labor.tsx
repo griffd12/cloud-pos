@@ -155,6 +155,7 @@ export default function MinorLaborPage() {
       employeeId: selectedEmployee,
       propertyId: selectedProperty,
       ...formData,
+      enterpriseId: selectedEnterpriseId!,
     });
   };
 

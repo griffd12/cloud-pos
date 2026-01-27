@@ -207,7 +207,7 @@ export default function WorkstationsPage() {
           if (editingItem) {
             updateMutation.mutate({ ...editingItem, ...data } as Workstation);
           } else {
-            createMutation.mutate(data);
+            createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
           }
         }}
         isLoading={createMutation.isPending || updateMutation.isPending}

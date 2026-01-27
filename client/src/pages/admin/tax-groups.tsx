@@ -120,7 +120,7 @@ export default function TaxGroupsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...dataWithDecimalRate });
     } else {
-      createMutation.mutate(dataWithDecimalRate);
+      createMutation.mutate({ ...dataWithDecimalRate, enterpriseId: selectedEnterpriseId! });
     }
   };
 

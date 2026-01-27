@@ -245,7 +245,7 @@ export default function EmployeesPage() {
       employeeData.id = editingItem.id;
       updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds, jobAssignments });
     } else {
-      createMutation.mutate({ employee: employeeData as Employee, propertyIds: selectedPropertyIds, jobAssignments });
+      createMutation.mutate({ employee: { ...employeeData, enterpriseId: selectedEnterpriseId! } as Employee, propertyIds: selectedPropertyIds, jobAssignments });
     }
   };
 

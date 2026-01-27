@@ -176,7 +176,7 @@ export default function RolesPage() {
       roleData.id = editingItem.id;
       updateMutation.mutate({ role: roleData, privileges: selectedPrivileges });
     } else {
-      createMutation.mutate({ role: roleData, privileges: selectedPrivileges });
+      createMutation.mutate({ role: { ...roleData, enterpriseId: selectedEnterpriseId! }, privileges: selectedPrivileges });
     }
   };
 

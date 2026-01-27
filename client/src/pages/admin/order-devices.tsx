@@ -188,7 +188,7 @@ export default function OrderDevicesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...cleanedData });
     } else {
-      createMutation.mutate(cleanedData);
+      createMutation.mutate({ ...cleanedData, enterpriseId: selectedEnterpriseId! });
     }
   };
 

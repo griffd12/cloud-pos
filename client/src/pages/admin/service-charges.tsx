@@ -121,7 +121,7 @@ export default function ServiceChargesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...formattedData });
     } else {
-      createMutation.mutate(formattedData);
+      createMutation.mutate({ ...formattedData, enterpriseId: selectedEnterpriseId! });
     }
   };
 

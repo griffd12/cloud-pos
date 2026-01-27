@@ -495,7 +495,7 @@ export default function PosLayoutsPage() {
         }
       });
     } else {
-      createMutation.mutate(data, {
+      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! }, {
         onSuccess: (newLayout: PosLayout) => {
           // Save RVC assignments for the newly created layout
           if (selectedRvcAssignments.length > 0) {

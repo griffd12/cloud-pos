@@ -240,7 +240,7 @@ export default function KdsDevicesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...processedData } as KdsDevice);
     } else {
-      createMutation.mutate(processedData);
+      createMutation.mutate({ ...processedData, enterpriseId: selectedEnterpriseId! });
     }
   };
 
