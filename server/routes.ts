@@ -1352,6 +1352,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/dev(\/.*)?$/,                       // Dev-only endpoints (testing)
     /^\/menu-items\/[a-f0-9-]{36}$/,        // Single menu item fetch for Pizza Builder (read-only)
     /^\/modifiers$/,                        // Modifiers list for Pizza Builder (read-only)
+    /^\/payment-processors(\/.*)?$/,        // Payment processor management (EMC feature)
   ];
 
   app.use("/api", async (req, res, next) => {

@@ -22,3 +22,4 @@ export {
 import './adapters/stripe';
 import './adapters/elavon';
 import './adapters/square';
+import './adapters/heartland';
