@@ -69,5 +69,11 @@ Preferred communication style: Simple, everyday language.
 - Recharts
 
 ### Payment Gateways
-- Stripe
-- Elavon Converge
+- Stripe (card-not-present / online payments)
+- Elavon Converge (EMV terminal integration)
+- Elavon Fusebox (EMV terminal with multi-processor support)
+- Heartland / Global Payments (EMV terminal + online via Portico gateway)
+  - Card-Present: Site ID, License ID, Device ID, Username, Password, Developer ID, Version Number
+  - Card-Not-Present: Secret API Key, Developer ID, Version Number
+  - Sandbox URL: https://cert.api2.heartlandportico.com
+  - Production URL: https://api2.heartlandportico.com
