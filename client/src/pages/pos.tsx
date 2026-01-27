@@ -1587,7 +1587,7 @@ export default function PosPage() {
 
               <ScrollArea className="flex-1 bg-background">
                 <MenuItemGrid
-                  items={menuItems}
+                  items={[...menuItems].sort((a, b) => a.name.localeCompare(b.name))}
                   onSelectItem={handleSelectItem}
                   isLoading={itemsLoading && !!selectedSlu}
                 />
