@@ -1350,6 +1350,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     /^\/cal-setup(\/.*)?$/,                 // CAL Setup Wizard endpoints (uses EMC auth)
     /^\/cal-client(\/.*)?$/,                // CAL Client polling endpoints (uses device token auth)
     /^\/dev(\/.*)?$/,                       // Dev-only endpoints (testing)
+    /^\/menu-items\/[a-f0-9-]{36}$/,        // Single menu item fetch for Pizza Builder (read-only)
+    /^\/modifiers$/,                        // Modifiers list for Pizza Builder (read-only)
   ];
 
   app.use("/api", async (req, res, next) => {
