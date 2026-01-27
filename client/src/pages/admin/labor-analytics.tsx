@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -81,30 +83,63 @@ interface TipsReport {
 
 export default function LaborAnalyticsPage() {
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      return res.json();
+    },
   });
 
   const { data: laborReport, isLoading: laborLoading } = useQuery<LaborVsSalesReport>({
-    queryKey: [`/api/reports/labor-vs-sales?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`],
+    queryKey: ["/api/reports/labor-vs-sales", { propertyId: selectedProperty, startDate, endDate, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/reports/labor-vs-sales?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch labor report");
+      return res.json();
+    },
     enabled: !!selectedProperty,
   });
 
   const { data: overtimeReport, isLoading: overtimeLoading } = useQuery<OvertimeReport>({
-    queryKey: [`/api/reports/overtime?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`],
+    queryKey: ["/api/reports/overtime", { propertyId: selectedProperty, startDate, endDate, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/reports/overtime?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch overtime report");
+      return res.json();
+    },
     enabled: !!selectedProperty,
   });
 
   const { data: tipsReport, isLoading: tipsLoading } = useQuery<TipsReport>({
-    queryKey: [`/api/reports/tips?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`],
+    queryKey: ["/api/reports/tips", { propertyId: selectedProperty, startDate, endDate, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/reports/tips?propertyId=${selectedProperty}&startDate=${startDate}&endDate=${endDate}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch tips report");
+      return res.json();
+    },
     enabled: !!selectedProperty,
   });
 

@@ -6,16 +6,25 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertModifierSchema, type Modifier, type InsertModifier } from "@shared/schema";
 
 export default function ModifiersPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Modifier | null>(null);
 
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+
   const { data: modifiers = [], isLoading } = useQuery<Modifier[]>({
-    queryKey: ["/api/modifiers"],
+    queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/modifiers${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch modifiers");
+      return res.json();
+    },
   });
 
   const columns: Column<Modifier>[] = [
@@ -62,7 +71,7 @@ export default function ModifiersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifiers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Modifier created" });
     },
@@ -77,7 +86,7 @@ export default function ModifiersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifiers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Modifier updated" });
@@ -92,7 +101,7 @@ export default function ModifiersPage() {
       await apiRequest("DELETE", "/api/modifiers/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifiers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Modifier deleted" });
     },
     onError: () => {

@@ -50,34 +50,24 @@ export function HierarchyBreadcrumb({
     ? rvcs.filter((r) => r.propertyId === selectedProperty.id)
     : [];
 
+  // Don't render if no enterprise is selected (enterprise selector is in the main header)
+  if (!selectedEnterprise) {
+    return null;
+  }
+
   return (
     <div className="flex items-center gap-4 p-4 border-b bg-muted/30">
       <Breadcrumb>
         <BreadcrumbList>
+          {/* Show enterprise name as static text (not a selector - that's in the header) */}
           <BreadcrumbItem>
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-muted-foreground" />
-              <Select
-                value={selectedEnterprise?.id || ""}
-                onValueChange={(val) => onEnterpriseChange(val || null)}
-              >
-                <SelectTrigger
-                  className="w-48 border-0 bg-transparent h-auto p-0 font-medium"
-                  data-testid="select-enterprise"
-                >
-                  <SelectValue placeholder="Select Enterprise" />
-                </SelectTrigger>
-                <SelectContent>
-                  {enterprises.map((ent) => (
-                    <SelectItem key={ent.id} value={ent.id}>
-                      {ent.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className="font-medium">{selectedEnterprise.name}</span>
             </div>
           </BreadcrumbItem>
 
+          {/* Property selector - only shown after enterprise is selected */}
           {selectedEnterprise && (
             <>
               <BreadcrumbSeparator />

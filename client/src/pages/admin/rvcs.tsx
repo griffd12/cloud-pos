@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertRvcSchema, type Rvc, type InsertRvc, type Property, ORDER_TYPES, DOM_SEND_MODES } from "@shared/schema";
 import { FileText, Save, Loader2 } from "lucide-react";
 
@@ -35,6 +36,7 @@ interface DescriptorSet {
 
 export default function RvcsPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Rvc | null>(null);
@@ -45,12 +47,24 @@ export default function RvcsPage() {
   const [overrideHeader, setOverrideHeader] = useState(false);
   const [overrideTrailer, setOverrideTrailer] = useState(false);
 
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+
   const { data: rvcs = [], isLoading } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs"],
+    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/rvcs${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch rvcs");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const columns: Column<Rvc>[] = [
@@ -154,7 +168,7 @@ export default function RvcsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/rvcs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Revenue Center created" });
     },
@@ -169,7 +183,7 @@ export default function RvcsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/rvcs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Revenue Center updated" });
@@ -184,7 +198,7 @@ export default function RvcsPage() {
       await apiRequest("DELETE", "/api/rvcs/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/rvcs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Revenue Center deleted" });
     },
     onError: () => {

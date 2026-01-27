@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { 
   Building2, 
   Store, 
@@ -59,6 +60,8 @@ const MAX_CHARS_PER_LINE = 48;
 
 export default function DescriptorsPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId: emcEnterpriseId } = useEmc();
+  const enterpriseParam = emcEnterpriseId ? `?enterpriseId=${emcEnterpriseId}` : "";
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedEnterpriseId, setSelectedEnterpriseId] = useState<string>("");
@@ -76,15 +79,30 @@ export default function DescriptorsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
-    queryKey: ["/api/enterprises"],
+    queryKey: ["/api/enterprises", { enterpriseId: emcEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/enterprises${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: emcEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs"],
+    queryKey: ["/api/rvcs", { enterpriseId: emcEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/rvcs${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const filteredProperties = properties.filter(p => !selectedEnterpriseId || p.enterpriseId === selectedEnterpriseId);
@@ -179,7 +197,7 @@ export default function DescriptorsPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptors", { enterpriseId: emcEnterpriseId }] });
       setHasChanges(false);
       toast({ title: "Descriptors saved successfully" });
     },
@@ -195,7 +213,7 @@ export default function DescriptorsPage() {
       return apiRequest("DELETE", `/api/descriptors/${activeTab}/${scopeId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptors", { enterpriseId: emcEnterpriseId }] });
       loadDescriptor(undefined);
       toast({ title: "Descriptors reset to inherit from parent" });
     },
@@ -227,7 +245,7 @@ export default function DescriptorsPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos", { enterpriseId: emcEnterpriseId }] });
       toast({ title: "Logo uploaded successfully" });
     },
     onError: (error: Error) => {
@@ -240,7 +258,7 @@ export default function DescriptorsPage() {
       return apiRequest("DELETE", `/api/descriptor-logos/${logoId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos", { enterpriseId: emcEnterpriseId }] });
       toast({ title: "Logo deleted" });
     },
     onError: (error: Error) => {

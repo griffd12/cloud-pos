@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,8 @@ import { type JobCode, type Role } from "@shared/schema";
 
 export default function JobsPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -33,11 +37,21 @@ export default function JobsPage() {
   const [salaryPeriod, setSalaryPeriod] = useState<"weekly" | "biweekly" | "monthly" | "yearly">("yearly");
 
   const { data: jobs = [], isLoading } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes"],
+    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch job codes");
+      return res.json();
+    },
   });
 
   const { data: roles = [] } = useQuery<Role[]>({
-    queryKey: ["/api/roles"],
+    queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/roles${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch roles");
+      return res.json();
+    },
   });
 
   const resetForm = () => {
@@ -124,7 +138,7 @@ export default function JobsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/job-codes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -141,7 +155,7 @@ export default function JobsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/job-codes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -157,7 +171,7 @@ export default function JobsPage() {
       await apiRequest("DELETE", "/api/job-codes/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/job-codes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Job deleted" });
     },
     onError: () => {

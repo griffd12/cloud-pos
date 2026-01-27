@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { 
   type RegisteredDevice, 
   type Property, 
@@ -70,24 +71,46 @@ interface FormData {
 
 export default function RegisteredDevicesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RegisteredDevice | null>(null);
   const [enrollmentCodeDialog, setEnrollmentCodeDialog] = useState<{ device: RegisteredDevice } | null>(null);
 
   const { data: devices = [], isLoading } = useQuery<RegisteredDevice[]>({
-    queryKey: ["/api/registered-devices"],
+    queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/registered-devices${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: workstations = [] } = useQuery<Workstation[]>({
-    queryKey: ["/api/workstations"],
+    queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstations${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
-    queryKey: ["/api/kds-devices"],
+    queryKey: ["/api/kds-devices", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/kds-devices${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<RegisteredDevice>[] = [
@@ -208,7 +231,7 @@ export default function RegisteredDevicesPage() {
       return response.json();
     },
     onSuccess: (newDevice: RegisteredDevice) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       form.reset();
       setEnrollmentCodeDialog({ device: newDevice });
@@ -225,7 +248,7 @@ export default function RegisteredDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       form.reset();
@@ -241,7 +264,7 @@ export default function RegisteredDevicesPage() {
       await apiRequest("DELETE", `/api/registered-devices/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Device deleted successfully" });
     },
     onError: () => {
@@ -255,7 +278,7 @@ export default function RegisteredDevicesPage() {
       return response.json();
     },
     onSuccess: (updatedDevice: RegisteredDevice) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }] });
       setEnrollmentCodeDialog({ device: updatedDevice });
       toast({ title: "New enrollment code generated" });
     },
@@ -270,7 +293,7 @@ export default function RegisteredDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Device status updated" });
     },
     onError: () => {
@@ -284,7 +307,7 @@ export default function RegisteredDevicesPage() {
       return response.json();
     },
     onSuccess: (newDevice: RegisteredDevice) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", { enterpriseId: selectedEnterpriseId }] });
       setEnrollmentCodeDialog({ device: newDevice });
       toast({ title: "Device replaced", description: "A new enrollment code has been generated for the replacement device." });
     },

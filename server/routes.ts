@@ -364,6 +364,46 @@ function broadcastDeviceReload(deviceId?: string, propertyId?: string) {
   }
 }
 
+// Helper for enterprise-based filtering (multi-tenancy)
+// Filters entities that can belong to enterprise, property, or RVC levels
+async function getEnterpriseFilterSets(enterpriseId: string): Promise<{
+  propertyIds: Set<string>;
+  rvcIds: Set<string>;
+}> {
+  const properties = await storage.getProperties(enterpriseId);
+  const propertyIds = new Set(properties.map(p => p.id));
+  
+  // Get all RVCs for enterprise's properties
+  const allRvcs: any[] = [];
+  for (const propId of propertyIds) {
+    const propRvcs = await storage.getRvcs(propId);
+    allRvcs.push(...propRvcs);
+  }
+  const rvcIds = new Set(allRvcs.map(r => r.id));
+  
+  return { propertyIds, rvcIds };
+}
+
+// Filter entities by enterprise - checks enterpriseId, propertyId, and rvcId fields
+function filterByEnterprise<T extends { enterpriseId?: string | null; propertyId?: string | null; rvcId?: string | null }>(
+  data: T[],
+  enterpriseId: string,
+  propertyIds: Set<string>,
+  rvcIds: Set<string>
+): T[] {
+  return data.filter(item => {
+    // Direct enterprise match
+    if (item.enterpriseId === enterpriseId) return true;
+    // Property belongs to enterprise
+    if (item.propertyId && propertyIds.has(item.propertyId)) return true;
+    // RVC belongs to enterprise's properties
+    if (item.rvcId && rvcIds.has(item.rvcId)) return true;
+    // Include global items (no enterprise/property/rvc assignment) if enterprise is specified
+    // Global items (null/undefined at all levels) are excluded when filtering by enterprise
+    return false;
+  });
+}
+
 // Shared helper to send unsent items to KDS with proper round and ticket creation
 async function sendItemsToKds(
   checkId: string,
@@ -1760,7 +1800,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/roles", async (req, res) => {
-    const data = await storage.getRoles();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getRoles();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2041,7 +2089,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/major-groups", async (req, res) => {
-    const data = await storage.getMajorGroups();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getMajorGroups();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2083,7 +2139,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/family-groups", async (req, res) => {
     const majorGroupId = req.query.majorGroupId as string | undefined;
-    const data = await storage.getFamilyGroups(majorGroupId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getFamilyGroups(majorGroupId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2125,7 +2189,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/slus", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    const data = await storage.getSlus(rvcId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getSlus(rvcId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2163,7 +2235,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/menu-items", async (req, res) => {
     const sluId = req.query.sluId as string | undefined;
-    const data = await storage.getMenuItems(sluId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getMenuItems(sluId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2314,7 +2394,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/modifiers", async (req, res) => {
-    const data = await storage.getModifiers();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getModifiers();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2355,7 +2443,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/modifier-groups", async (req, res) => {
     const menuItemId = req.query.menuItemId as string | undefined;
-    const data = await storage.getModifierGroups(menuItemId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getModifierGroups(menuItemId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2482,7 +2578,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/tax-groups", async (req, res) => {
-    const data = await storage.getTaxGroups();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getTaxGroups();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2521,7 +2625,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/print-classes", async (req, res) => {
-    const data = await storage.getPrintClasses();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getPrintClasses();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2561,7 +2673,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/order-devices", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const data = await storage.getOrderDevices(propertyId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getOrderDevices(propertyId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = data.filter(item => item.propertyId && propertyIds.has(item.propertyId));
+    }
+    
     res.json(data);
   });
 
@@ -2962,7 +3082,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/tenders", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    const data = await storage.getTenders(rvcId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getTenders(rvcId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -2998,7 +3126,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/discounts", async (req, res) => {
-    const data = await storage.getDiscounts();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getDiscounts();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -3277,7 +3413,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/service-charges", async (req, res) => {
-    const data = await storage.getServiceCharges();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getServiceCharges();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -5488,7 +5632,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/pos-layouts", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    const data = await storage.getPosLayouts(rvcId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getPosLayouts(rvcId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
     res.json(data);
   });
 
@@ -9458,9 +9610,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get job codes
   app.get("/api/job-codes", async (req, res) => {
     try {
-      const { propertyId } = req.query;
-      const jobCodes = await storage.getJobCodes(propertyId as string);
-      res.json(jobCodes);
+      const { propertyId, enterpriseId } = req.query;
+      let jobCodesData = await storage.getJobCodes(propertyId as string);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId) {
+        const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId as string);
+        jobCodesData = filterByEnterprise(jobCodesData, enterpriseId as string, propertyIds, rvcIds);
+      }
+      
+      res.json(jobCodesData);
     } catch (error) {
       console.error("Get job codes error:", error);
       res.status(500).json({ message: "Failed to get job codes" });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,7 +54,8 @@ interface PunchPair {
 
 export default function TimecardsPage() {
   const { toast } = useToast();
-  const { user: emcUser } = useEmc();
+  const { user: emcUser, selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -67,18 +68,33 @@ export default function TimecardsPage() {
   const [punchEditForm, setPunchEditForm] = useState({ date: "", time: "", reason: "" });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   // Get the selected property's timezone (default to America/New_York if not set)
   const selectedPropertyTimezone = properties.find(p => p.id === selectedProperty)?.timezone || "America/New_York";
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      return res.json();
+    },
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes"],
+    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch job codes");
+      return res.json();
+    },
   });
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
@@ -87,18 +103,39 @@ export default function TimecardsPage() {
   const endDateStr = format(weekEnd, "yyyy-MM-dd");
 
   const { data: timecards = [], isLoading } = useQuery<Timecard[]>({
-    queryKey: [`/api/timecards?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`],
+    queryKey: ["/api/timecards", { propertyId: selectedProperty, startDate: startDateStr, endDate: endDateStr, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/timecards?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch timecards");
+      return res.json();
+    },
     enabled: !!selectedProperty,
   });
 
   // Fetch time punches for detailed view
   const { data: timePunches = [] } = useQuery<TimePunch[]>({
-    queryKey: [`/api/time-punches?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`],
+    queryKey: ["/api/time-punches", { propertyId: selectedProperty, startDate: startDateStr, endDate: endDateStr, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/time-punches?propertyId=${selectedProperty}&startDate=${startDateStr}&endDate=${endDateStr}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch time punches");
+      return res.json();
+    },
     enabled: !!selectedProperty,
   });
 
   const { data: exceptions = [] } = useQuery<TimecardException[]>({
-    queryKey: ["/api/timecard-exceptions", selectedProperty],
+    queryKey: ["/api/timecard-exceptions", { propertyId: selectedProperty, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/timecard-exceptions?propertyId=${selectedProperty}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch exceptions");
+      return res.json();
+    },
     enabled: !!selectedProperty,
   });
 
@@ -116,7 +153,7 @@ export default function TimecardsPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Timecard updated successfully." });
       setEditingTimecard(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/timecards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timecards", { propertyId: selectedProperty, startDate: startDateStr, endDate: endDateStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -134,7 +171,7 @@ export default function TimecardsPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Exception resolved." });
-      queryClient.invalidateQueries({ queryKey: ["/api/timecard-exceptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timecard-exceptions", { propertyId: selectedProperty, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -154,8 +191,8 @@ export default function TimecardsPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Time punch updated successfully." });
       setEditingPunch(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/time-punches"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/timecards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-punches", { propertyId: selectedProperty, startDate: startDateStr, endDate: endDateStr, enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timecards", { propertyId: selectedProperty, startDate: startDateStr, endDate: endDateStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });

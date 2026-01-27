@@ -5,15 +5,23 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertMajorGroupSchema, type MajorGroup, type InsertMajorGroup } from "@shared/schema";
 
 export default function MajorGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MajorGroup | null>(null);
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const { data: majorGroups = [], isLoading } = useQuery<MajorGroup[]>({
-    queryKey: ["/api/major-groups"],
+    queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/major-groups${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<MajorGroup>[] = [
@@ -44,7 +52,7 @@ export default function MajorGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/major-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Major group created" });
     },
@@ -59,7 +67,7 @@ export default function MajorGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/major-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Major group updated" });
@@ -74,7 +82,7 @@ export default function MajorGroupsPage() {
       await apiRequest("DELETE", "/api/major-groups/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/major-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Major group deleted" });
     },
     onError: () => {

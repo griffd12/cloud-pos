@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,8 @@ const ORDER_SOURCE_TYPES = ["doordash", "ubereats", "grubhub", "direct", "other"
 export default function OnlineOrderingPage() {
   const { toast } = useToast();
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [editingSource, setEditingSource] = useState<OnlineOrderSource | null>(null);
@@ -33,16 +36,31 @@ export default function OnlineOrderingPage() {
   const [isActive, setIsActive] = useState(true);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: orderSources = [], isLoading: sourcesLoading } = useQuery<OnlineOrderSource[]>({
-    queryKey: ["/api/online-order-sources", selectedPropertyId],
+    queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/online-order-sources?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch order sources");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
   const { data: onlineOrders = [], isLoading: ordersLoading } = useQuery<OnlineOrder[]>({
-    queryKey: ["/api/online-orders", selectedPropertyId],
+    queryKey: ["/api/online-orders", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/online-orders?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch online orders");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
@@ -52,7 +70,7 @@ export default function OnlineOrderingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
       resetSourceDialog();
       toast({ title: "Source Created", description: "Online order source has been created." });
     },
@@ -67,7 +85,7 @@ export default function OnlineOrderingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
       resetSourceDialog();
       toast({ title: "Source Updated", description: "Online order source has been updated." });
     },
@@ -82,7 +100,7 @@ export default function OnlineOrderingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/online-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/online-orders", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Order Injected", description: "Order has been sent to the POS." });
     },
     onError: (error: Error) => {

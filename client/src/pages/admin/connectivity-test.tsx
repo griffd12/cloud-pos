@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +117,8 @@ const modeConfig: Record<ConnectionMode, {
 
 export default function ConnectivityTestPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const { mode, status, forceCheck } = useConnectionMode();
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunningTest, setIsRunningTest] = useState(false);
@@ -126,16 +129,31 @@ export default function ConnectivityTestPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: serviceHosts = [], isLoading: hostsLoading } = useQuery<ServiceHostStatus[]>({
-    queryKey: ["/api/service-hosts/status-summary"],
+    queryKey: ["/api/service-hosts/status-summary", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/service-hosts/status-summary${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch service hosts");
+      return res.json();
+    },
     refetchInterval: 10000,
   });
 
   const { data: registeredDevices = [] } = useQuery<DeviceStatus[]>({
-    queryKey: ["/api/registered-devices/status-summary"],
+    queryKey: ["/api/registered-devices/status-summary", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/registered-devices/status-summary${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch registered devices");
+      return res.json();
+    },
     refetchInterval: 10000,
   });
 
@@ -153,7 +171,12 @@ export default function ConnectivityTestPage() {
     serviceHosts: { connected: boolean; count: number };
     timestamp: string;
   }>({
-    queryKey: ["/api/connectivity-status"],
+    queryKey: ["/api/connectivity-status", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/connectivity-status${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch connectivity status");
+      return res.json();
+    },
     refetchInterval: 5000,
   });
 

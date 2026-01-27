@@ -6,6 +6,7 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertTenderSchema, type Tender, type InsertTender } from "@shared/schema";
 
 export default function TendersPage() {
@@ -13,9 +14,16 @@ export default function TendersPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Tender | null>(null);
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const { data: tenders = [], isLoading } = useQuery<Tender[]>({
-    queryKey: ["/api/tenders"],
+    queryKey: ["/api/tenders", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/tenders${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<Tender>[] = [
@@ -57,7 +65,7 @@ export default function TendersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tenders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenders", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Tender created" });
     },
@@ -72,7 +80,7 @@ export default function TendersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tenders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenders", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Tender updated" });
@@ -87,7 +95,7 @@ export default function TendersPage() {
       await apiRequest("DELETE", "/api/tenders/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tenders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenders", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Tender deleted" });
     },
     onError: () => {

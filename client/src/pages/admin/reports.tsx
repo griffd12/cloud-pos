@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const EMC_SESSION_KEY = "emc_session_token";
@@ -440,6 +441,8 @@ export default function ReportsPage() {
   // Enable real-time updates via WebSocket
   usePosWebSocket();
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   
   const searchParams = useSearch();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -490,11 +493,21 @@ export default function ReportsPage() {
   }, [searchParams]);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await authFetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs"],
+    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await authFetch(`/api/rvcs${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch rvcs");
+      return res.json();
+    },
   });
 
   // Get timezone for the selected property (used for formatting times)

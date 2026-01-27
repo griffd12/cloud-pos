@@ -7,19 +7,32 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertKdsDeviceSchema, type KdsDevice, type InsertKdsDevice, type Property } from "@shared/schema";
+import { useEmc } from "@/lib/emc-context";
 
 export default function KdsDevicesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<KdsDevice | null>(null);
 
   const { data: kdsDevices = [], isLoading } = useQuery<KdsDevice[]>({
-    queryKey: ["/api/kds-devices"],
+    queryKey: ["/api/kds-devices", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/kds-devices${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<KdsDevice>[] = [
@@ -176,7 +189,7 @@ export default function KdsDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "KDS device created" });
     },
@@ -191,7 +204,7 @@ export default function KdsDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "KDS device updated" });
@@ -206,7 +219,7 @@ export default function KdsDevicesPage() {
       await apiRequest("DELETE", "/api/kds-devices/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "KDS device deleted" });
     },
     onError: () => {

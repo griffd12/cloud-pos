@@ -5,15 +5,23 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertFamilyGroupSchema, type FamilyGroup, type InsertFamilyGroup } from "@shared/schema";
 
 export default function FamilyGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FamilyGroup | null>(null);
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const { data: familyGroups = [], isLoading } = useQuery<FamilyGroup[]>({
-    queryKey: ["/api/family-groups"],
+    queryKey: ["/api/family-groups", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/family-groups${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<FamilyGroup>[] = [
@@ -44,7 +52,7 @@ export default function FamilyGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/family-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/family-groups", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Family group created" });
     },
@@ -59,7 +67,7 @@ export default function FamilyGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/family-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/family-groups", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Family group updated" });
@@ -74,7 +82,7 @@ export default function FamilyGroupsPage() {
       await apiRequest("DELETE", "/api/family-groups/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/family-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/family-groups", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Family group deleted" });
     },
     onError: () => {

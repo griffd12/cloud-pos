@@ -6,6 +6,7 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertDiscountSchema, type Discount, type InsertDiscount } from "@shared/schema";
 
 export default function DiscountsPage() {
@@ -13,9 +14,16 @@ export default function DiscountsPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Discount | null>(null);
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const { data: discounts = [], isLoading } = useQuery<Discount[]>({
-    queryKey: ["/api/discounts"],
+    queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/discounts${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<Discount>[] = [
@@ -68,7 +76,7 @@ export default function DiscountsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Discount created" });
     },
@@ -83,7 +91,7 @@ export default function DiscountsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Discount updated" });
@@ -98,7 +106,7 @@ export default function DiscountsPage() {
       await apiRequest("DELETE", "/api/discounts/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Discount deleted" });
     },
     onError: () => {

@@ -5,15 +5,23 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertServiceChargeSchema, type ServiceCharge, type InsertServiceCharge } from "@shared/schema";
 
 export default function ServiceChargesPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ServiceCharge | null>(null);
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const { data: serviceCharges = [], isLoading } = useQuery<ServiceCharge[]>({
-    queryKey: ["/api/service-charges"],
+    queryKey: ["/api/service-charges", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/service-charges${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<ServiceCharge>[] = [
@@ -66,7 +74,7 @@ export default function ServiceChargesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-charges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-charges", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Service charge created" });
     },
@@ -81,7 +89,7 @@ export default function ServiceChargesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-charges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-charges", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Service charge updated" });
@@ -96,7 +104,7 @@ export default function ServiceChargesPage() {
       await apiRequest("DELETE", "/api/service-charges/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-charges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-charges", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Service charge deleted" });
     },
     onError: () => {

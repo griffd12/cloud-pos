@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ import type { Property, MenuItem, ItemAvailability, PrepItem } from "@shared/sch
 export default function ItemAvailabilityPage() {
   const { toast } = useToast();
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showAvailabilityDialog, setShowAvailabilityDialog] = useState(false);
   const [showPrepDialog, setShowPrepDialog] = useState(false);
@@ -32,18 +35,28 @@ export default function ItemAvailabilityPage() {
   const [prepUnit, setPrepUnit] = useState("each");
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: menuItems = [] } = useQuery<MenuItem[]>({
-    queryKey: ["/api/menu-items"],
+    queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/menu-items${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch menu items");
+      return res.json();
+    },
   });
 
   const { data: itemAvailability = [], isLoading: availabilityLoading } = useQuery<ItemAvailability[]>({
-    queryKey: ["/api/item-availability", selectedPropertyId],
+    queryKey: ["/api/item-availability", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       if (!selectedPropertyId) return [];
-      const res = await fetch(`/api/item-availability?propertyId=${selectedPropertyId}`, {
+      const res = await fetch(`/api/item-availability?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       });
@@ -54,7 +67,12 @@ export default function ItemAvailabilityPage() {
   });
 
   const { data: prepItems = [], isLoading: prepLoading } = useQuery<PrepItem[]>({
-    queryKey: ["/api/prep-items", selectedPropertyId],
+    queryKey: ["/api/prep-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/prep-items?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch prep items");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
@@ -64,7 +82,7 @@ export default function ItemAvailabilityPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/item-availability"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/item-availability", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
       resetAvailabilityDialog();
       toast({ title: "Availability Updated" });
     },
@@ -79,7 +97,7 @@ export default function ItemAvailabilityPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/item-availability"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/item-availability", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Item Marked as 86'd", description: "Item has been marked as sold out." });
     },
     onError: (error: Error) => {
@@ -93,7 +111,7 @@ export default function ItemAvailabilityPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/prep-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/prep-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
       resetPrepDialog();
       toast({ title: "Prep Item Created" });
     },

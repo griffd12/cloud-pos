@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +76,8 @@ type EmployeeJobCodeWithDetails = EmployeeJobCode & { jobCode: JobCode };
 export default function SchedulingPage() {
   const { toast } = useToast();
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [isAddingShift, setIsAddingShift] = useState(false);
@@ -103,29 +106,54 @@ export default function SchedulingPage() {
   );
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      return res.json();
+    },
     staleTime: 0,
     refetchOnMount: "always",
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs"],
+    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch rvcs");
+      return res.json();
+    },
     staleTime: 0,
     refetchOnMount: "always",
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes"],
+    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch job codes");
+      return res.json();
+    },
     staleTime: 0,
     refetchOnMount: "always",
   });
 
   const { data: employeeAssignments = [] } = useQuery<EmployeeAssignment[]>({
-    queryKey: ["/api/employee-assignments"],
+    queryKey: ["/api/employee-assignments", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employee-assignments${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employee assignments");
+      return res.json();
+    },
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -135,10 +163,12 @@ export default function SchedulingPage() {
   const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
   const { data: shifts = [], isLoading } = useQuery<Shift[]>({
-    queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr }],
+    queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       if (!selectedProperty) return [];
-      const res = await fetch(`/api/shifts?propertyId=${selectedProperty}&startDate=${weekStartStr}&endDate=${weekEndStr}`, {
+      const baseUrl = `/api/shifts?propertyId=${selectedProperty}&startDate=${weekStartStr}&endDate=${weekEndStr}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, {
         credentials: "include",
         headers: getAuthHeaders(),
       });
@@ -149,10 +179,12 @@ export default function SchedulingPage() {
   });
 
   const { data: employeeJobCodesMap = {} } = useQuery<Record<string, EmployeeJobCodeWithDetails[]>>({
-    queryKey: ["/api/properties", selectedProperty, "employee-job-codes"],
+    queryKey: ["/api/properties", selectedProperty, "employee-job-codes", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       if (!selectedProperty) return {};
-      const res = await fetch(`/api/properties/${selectedProperty}/employee-job-codes`, { credentials: "include", headers: getAuthHeaders() });
+      const baseUrl = `/api/properties/${selectedProperty}/employee-job-codes`;
+      const url = selectedEnterpriseId ? `${baseUrl}?enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employee job codes");
       return res.json();
     },
@@ -168,7 +200,7 @@ export default function SchedulingPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Shift created successfully." });
       closeDialog();
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -182,7 +214,7 @@ export default function SchedulingPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Shift updated." });
       closeDialog();
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -195,7 +227,7 @@ export default function SchedulingPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Shift deleted." });
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -210,7 +242,7 @@ export default function SchedulingPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Schedule published to employees." });
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -227,7 +259,7 @@ export default function SchedulingPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Previous week schedule copied." });
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -251,7 +283,7 @@ export default function SchedulingPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Shift reassigned successfully." });
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -265,7 +297,7 @@ export default function SchedulingPage() {
     onSuccess: (_, variables) => {
       toast({ title: "Success", description: `${variables.length} shift(s) created successfully.` });
       closeDialog();
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts", { propertyId: selectedProperty, startDate: weekStartStr, endDate: weekEndStr, enterpriseId: selectedEnterpriseId }] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });

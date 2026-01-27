@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useEmc } from "@/lib/emc-context";
 import {
   insertTerminalDeviceSchema,
   type TerminalDevice,
@@ -106,6 +107,8 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function TerminalDevicesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<TerminalDevice | null>(null);
@@ -113,19 +116,39 @@ export default function TerminalDevicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: devices = [], isLoading } = useQuery<TerminalDevice[]>({
-    queryKey: ["/api/terminal-devices"],
+    queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/terminal-devices${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: workstations = [] } = useQuery<Workstation[]>({
-    queryKey: ["/api/workstations"],
+    queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstations${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: processors = [] } = useQuery<PaymentProcessor[]>({
-    queryKey: ["/api/payment-processors"],
+    queryKey: ["/api/payment-processors", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/payment-processors${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const form = useForm<FormData>({
@@ -178,7 +201,7 @@ export default function TerminalDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }] });
       closeDialog();
       toast({ title: "Terminal device created successfully" });
     },
@@ -193,7 +216,7 @@ export default function TerminalDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }] });
       closeDialog();
       toast({ title: "Terminal device updated successfully" });
     },
@@ -207,7 +230,7 @@ export default function TerminalDevicesPage() {
       await apiRequest("DELETE", `/api/terminal-devices/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }] });
       setDeleteDialogOpen(false);
       setDeletingDevice(null);
       toast({ title: "Terminal device deleted" });
@@ -223,7 +246,7 @@ export default function TerminalDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Terminal pinged successfully" });
     },
     onError: (error: Error) => {
@@ -237,7 +260,7 @@ export default function TerminalDevicesPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }] });
       if (data.stripeReader) {
         toast({ 
           title: "Status synced from Stripe", 
@@ -263,7 +286,7 @@ export default function TerminalDevicesPage() {
       return results;
     },
     onSuccess: (results) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }] });
       const totalSynced = results.reduce((sum, r) => sum + (r.synced || 0), 0);
       toast({ title: "Status sync complete", description: `${totalSynced} terminal(s) updated from Stripe` });
     },

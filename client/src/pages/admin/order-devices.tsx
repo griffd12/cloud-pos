@@ -6,22 +6,40 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertOrderDeviceSchema, type OrderDevice, type InsertOrderDevice, type Property, type KdsDevice } from "@shared/schema";
+import { useEmc } from "@/lib/emc-context";
 
 export default function OrderDevicesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderDevice | null>(null);
 
   const { data: orderDevices = [], isLoading } = useQuery<OrderDevice[]>({
-    queryKey: ["/api/order-devices"],
+    queryKey: ["/api/order-devices", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/order-devices${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const { data: kdsDevices = [] } = useQuery<KdsDevice[]>({
-    queryKey: ["/api/kds-devices"],
+    queryKey: ["/api/kds-devices", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/kds-devices${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const columns: Column<OrderDevice>[] = [
@@ -119,7 +137,7 @@ export default function OrderDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-devices", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Order device created" });
     },
@@ -134,7 +152,7 @@ export default function OrderDevicesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-devices", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Order device updated" });
@@ -149,7 +167,7 @@ export default function OrderDevicesPage() {
       await apiRequest("DELETE", "/api/order-devices/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Order device deleted" });
     },
     onError: () => {

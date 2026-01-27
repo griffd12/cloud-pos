@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,8 @@ import type { Property, CashDrawer, DrawerAssignment, CashTransaction, SafeCount
 export default function CashManagementPage() {
   const { toast } = useToast();
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showDrawerDialog, setShowDrawerDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
@@ -37,26 +41,59 @@ export default function CashManagementPage() {
   const [safeNotes, setSafeNotes] = useState("");
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: cashDrawers = [], isLoading: drawersLoading } = useQuery<CashDrawer[]>({
-    queryKey: ["/api/cash-drawers", selectedPropertyId],
+    queryKey: ["/api/cash-drawers", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/cash-drawers?propertyId=${selectedPropertyId}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch cash drawers");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
   const { data: drawerAssignments = [] } = useQuery<DrawerAssignment[]>({
-    queryKey: ["/api/drawer-assignments", selectedPropertyId],
+    queryKey: ["/api/drawer-assignments", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/drawer-assignments?propertyId=${selectedPropertyId}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch drawer assignments");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
   const { data: cashTransactions = [] } = useQuery<CashTransaction[]>({
-    queryKey: ["/api/cash-transactions", selectedPropertyId],
+    queryKey: ["/api/cash-transactions", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/cash-transactions?propertyId=${selectedPropertyId}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch cash transactions");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
   const { data: safeCounts = [] } = useQuery<SafeCount[]>({
-    queryKey: ["/api/safe-counts", selectedPropertyId],
+    queryKey: ["/api/safe-counts", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const baseUrl = `/api/safe-counts?propertyId=${selectedPropertyId}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch safe counts");
+      return res.json();
+    },
     enabled: !!selectedPropertyId,
   });
 
@@ -66,7 +103,7 @@ export default function CashManagementPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cash-drawers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-drawers", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
       resetDrawerDialog();
       toast({ title: "Drawer Created", description: "Cash drawer has been created." });
     },
@@ -81,8 +118,8 @@ export default function CashManagementPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cash-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/cash-drawers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-transactions", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-drawers", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
       resetTransactionDialog();
       toast({ title: "Transaction Recorded", description: "Cash transaction has been recorded." });
     },
@@ -97,7 +134,7 @@ export default function CashManagementPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safe-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/safe-counts", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
       resetSafeCountDialog();
       toast({ title: "Safe Count Recorded", description: "Safe count has been recorded." });
     },

@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,29 +130,56 @@ interface CreatedServiceHost extends ServiceHost {
 
 export default function ServiceHostsPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [activeTab, setActiveTab] = useState("dashboard");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createdHost, setCreatedHost] = useState<CreatedServiceHost | null>(null);
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: workstations = [], isLoading: wsLoading } = useQuery<WorkstationWithProperty[]>({
-    queryKey: ["/api/workstations"],
+    queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstations${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch workstations");
+      return res.json();
+    },
   });
 
   const { data: allBindings = [] } = useQuery<ServiceBinding[]>({
-    queryKey: ["/api/workstation-service-bindings"],
+    queryKey: ["/api/workstation-service-bindings", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstation-service-bindings${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch service bindings");
+      return res.json();
+    },
   });
 
   const { data: serviceHosts = [] } = useQuery<ServiceHost[]>({
-    queryKey: ["/api/service-hosts"],
+    queryKey: ["/api/service-hosts", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/service-hosts${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch service hosts");
+      return res.json();
+    },
   });
 
   const { data: dashboardData, isLoading: dashboardLoading, refetch } = useQuery<DashboardData>({
-    queryKey: ["/api/service-hosts/status-dashboard"],
+    queryKey: ["/api/service-hosts/status-dashboard", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/service-hosts/status-dashboard${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch dashboard");
+      return res.json();
+    },
     refetchInterval: 30000,
   });
 
@@ -171,9 +199,9 @@ export default function ServiceHostsPage() {
       return createdHost;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/workstation-service-bindings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstation-service-bindings", { enterpriseId: selectedEnterpriseId }] });
       setCreateDialogOpen(false);
       setCreatedHost(data);
       setTokenDialogOpen(true);
@@ -189,8 +217,8 @@ export default function ServiceHostsPage() {
       await apiRequest("DELETE", `/api/service-hosts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Service deleted" });
     },
     onError: () => {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
+import { useEmc } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,18 +28,25 @@ interface LiveTotals {
 
 export default function FiscalClosePage() {
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
 
   const { data: properties = [], isLoading: propertiesLoading } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: currentPeriod, isLoading: currentLoading } = useQuery<FiscalPeriod>({
-    queryKey: ["/api/fiscal-periods/current", selectedPropertyId],
+    queryKey: ["/api/fiscal-periods/current", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/fiscal-periods/current/${selectedPropertyId}`, {
-        headers: getAuthHeaders(),
-      });
+      const baseUrl = `/api/fiscal-periods/current/${selectedPropertyId}`;
+      const url = selectedEnterpriseId ? `${baseUrl}?enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch current period");
       return res.json();
     },
@@ -46,11 +54,11 @@ export default function FiscalClosePage() {
   });
 
   const { data: liveTotals } = useQuery<LiveTotals>({
-    queryKey: ["/api/fiscal-periods/totals", selectedPropertyId, currentPeriod?.businessDate],
+    queryKey: ["/api/fiscal-periods/totals", selectedPropertyId, currentPeriod?.businessDate, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/fiscal-periods/totals/${selectedPropertyId}/${currentPeriod?.businessDate}`, {
-        headers: getAuthHeaders(),
-      });
+      const baseUrl = `/api/fiscal-periods/totals/${selectedPropertyId}/${currentPeriod?.businessDate}`;
+      const url = selectedEnterpriseId ? `${baseUrl}?enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch totals");
       return res.json();
     },
@@ -59,11 +67,11 @@ export default function FiscalClosePage() {
   });
 
   const { data: fiscalPeriods = [], isLoading: periodsLoading } = useQuery<FiscalPeriod[]>({
-    queryKey: ["/api/fiscal-periods", selectedPropertyId],
+    queryKey: ["/api/fiscal-periods", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/fiscal-periods?propertyId=${selectedPropertyId}`, {
-        headers: getAuthHeaders(),
-      });
+      const baseUrl = `/api/fiscal-periods?propertyId=${selectedPropertyId}`;
+      const url = selectedEnterpriseId ? `${baseUrl}&enterpriseId=${selectedEnterpriseId}` : baseUrl;
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch fiscal periods");
       return res.json();
     },
