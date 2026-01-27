@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { type Property, type Workstation, type ServiceHost } from "@shared/schema";
 import {
   Dialog,
@@ -140,7 +140,7 @@ export default function ServiceHostsPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -149,7 +149,7 @@ export default function ServiceHostsPage() {
   const { data: workstations = [], isLoading: wsLoading } = useQuery<WorkstationWithProperty[]>({
     queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/workstations${enterpriseParam}`);
+      const res = await fetch(`/api/workstations${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch workstations");
       return res.json();
     },
@@ -158,7 +158,7 @@ export default function ServiceHostsPage() {
   const { data: allBindings = [] } = useQuery<ServiceBinding[]>({
     queryKey: ["/api/workstation-service-bindings", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/workstation-service-bindings${enterpriseParam}`);
+      const res = await fetch(`/api/workstation-service-bindings${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch service bindings");
       return res.json();
     },
@@ -167,7 +167,7 @@ export default function ServiceHostsPage() {
   const { data: serviceHosts = [] } = useQuery<ServiceHost[]>({
     queryKey: ["/api/service-hosts", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/service-hosts${enterpriseParam}`);
+      const res = await fetch(`/api/service-hosts${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch service hosts");
       return res.json();
     },
@@ -176,7 +176,7 @@ export default function ServiceHostsPage() {
   const { data: dashboardData, isLoading: dashboardLoading, refetch } = useQuery<DashboardData>({
     queryKey: ["/api/service-hosts/status-dashboard", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/service-hosts/status-dashboard${enterpriseParam}`);
+      const res = await fetch(`/api/service-hosts/status-dashboard${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch dashboard");
       return res.json();
     },

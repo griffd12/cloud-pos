@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Loader2, Plus, Package, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, RotateCcw, Download } from "lucide-react";
 import type { Property, InventoryItem, InventoryStock, InventoryTransaction, MenuItem } from "@shared/schema";
 
@@ -49,7 +49,7 @@ export default function InventoryPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -58,7 +58,7 @@ export default function InventoryPage() {
   const { data: inventoryItems = [], isLoading: itemsLoading } = useQuery<InventoryItem[]>({
     queryKey: ["/api/inventory-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/inventory-items?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/inventory-items?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch inventory items");
       return res.json();
     },
@@ -68,7 +68,7 @@ export default function InventoryPage() {
   const { data: inventoryStock = [] } = useQuery<InventoryStock[]>({
     queryKey: ["/api/inventory-stock", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/inventory-stock?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/inventory-stock?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch inventory stock");
       return res.json();
     },
@@ -78,7 +78,7 @@ export default function InventoryPage() {
   const { data: inventoryTransactions = [] } = useQuery<InventoryTransaction[]>({
     queryKey: ["/api/inventory-transactions", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/inventory-transactions?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/inventory-transactions?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch inventory transactions");
       return res.json();
     },

@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Loader2, Plus, ShoppingBag, ExternalLink, RefreshCw, Check, X } from "lucide-react";
 import type { Property, OnlineOrderSource, OnlineOrder } from "@shared/schema";
 
@@ -38,7 +38,7 @@ export default function OnlineOrderingPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -47,7 +47,7 @@ export default function OnlineOrderingPage() {
   const { data: orderSources = [], isLoading: sourcesLoading } = useQuery<OnlineOrderSource[]>({
     queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/online-order-sources?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/online-order-sources?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch order sources");
       return res.json();
     },
@@ -57,7 +57,7 @@ export default function OnlineOrderingPage() {
   const { data: onlineOrders = [], isLoading: ordersLoading } = useQuery<OnlineOrder[]>({
     queryKey: ["/api/online-orders", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/online-orders?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/online-orders?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch online orders");
       return res.json();
     },

@@ -33,7 +33,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup, type MajorGroup, type FamilyGroup } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,7 +57,7 @@ export default function MenuItemsPage() {
   const { data: menuItems = [], isLoading } = useQuery<MenuItem[]>({
     queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-items${enterpriseParam}`);
+      const res = await fetch(`/api/menu-items${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
@@ -66,7 +66,7 @@ export default function MenuItemsPage() {
   const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
     queryKey: ["/api/tax-groups", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/tax-groups${enterpriseParam}`);
+      const res = await fetch(`/api/tax-groups${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch tax groups");
       return res.json();
     },
@@ -75,7 +75,7 @@ export default function MenuItemsPage() {
   const { data: printClasses = [] } = useQuery<PrintClass[]>({
     queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/print-classes${enterpriseParam}`);
+      const res = await fetch(`/api/print-classes${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch print classes");
       return res.json();
     },
@@ -84,7 +84,7 @@ export default function MenuItemsPage() {
   const { data: slus = [] } = useQuery<Slu[]>({
     queryKey: ["/api/slus", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/slus${enterpriseParam}`);
+      const res = await fetch(`/api/slus${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch slus");
       return res.json();
     },
@@ -93,7 +93,7 @@ export default function MenuItemsPage() {
   const { data: allMenuItemSlus = [] } = useQuery<MenuItemSlu[]>({
     queryKey: ["/api/menu-item-slus", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-item-slus${enterpriseParam}`);
+      const res = await fetch(`/api/menu-item-slus${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu item slus");
       return res.json();
     },
@@ -102,7 +102,7 @@ export default function MenuItemsPage() {
   const { data: modifierGroups = [] } = useQuery<ModifierGroup[]>({
     queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/modifier-groups${enterpriseParam}`);
+      const res = await fetch(`/api/modifier-groups${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifier groups");
       return res.json();
     },
@@ -111,7 +111,7 @@ export default function MenuItemsPage() {
   const { data: majorGroups = [] } = useQuery<MajorGroup[]>({
     queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/major-groups${enterpriseParam}`);
+      const res = await fetch(`/api/major-groups${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch major groups");
       return res.json();
     },
@@ -120,7 +120,7 @@ export default function MenuItemsPage() {
   const { data: familyGroups = [] } = useQuery<FamilyGroup[]>({
     queryKey: ["/api/family-groups", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/family-groups${enterpriseParam}`);
+      const res = await fetch(`/api/family-groups${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch family groups");
       return res.json();
     },
@@ -495,7 +495,7 @@ function MenuItemFormDialog({
     queryKey: ["/api/menu-items", editingItem?.id, "modifier-groups"],
     queryFn: async () => {
       if (!editingItem) return [];
-      const res = await fetch(`/api/menu-items/${editingItem.id}/modifier-groups`);
+      const res = await fetch(`/api/menu-items/${editingItem.id}/modifier-groups`, { headers: getAuthHeaders() });
       return res.json();
     },
     enabled: !!editingItem,

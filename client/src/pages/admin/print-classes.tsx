@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { 
   insertPrintClassSchema, 
@@ -46,7 +46,7 @@ export default function PrintClassesPage() {
   const { data: printClasses = [], isLoading } = useQuery<PrintClass[]>({
     queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/print-classes${enterpriseParam}`);
+      const res = await fetch(`/api/print-classes${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -55,7 +55,7 @@ export default function PrintClassesPage() {
   const { data: orderDevices = [] } = useQuery<OrderDevice[]>({
     queryKey: ["/api/order-devices", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/order-devices${enterpriseParam}`);
+      const res = await fetch(`/api/order-devices${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -64,7 +64,7 @@ export default function PrintClassesPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -73,7 +73,7 @@ export default function PrintClassesPage() {
   const { data: allRoutings = [] } = useQuery<PrintClassRouting[]>({
     queryKey: ["/api/print-class-routing", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/print-class-routing${enterpriseParam}`);
+      const res = await fetch(`/api/print-class-routing${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

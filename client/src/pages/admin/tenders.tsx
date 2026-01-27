@@ -5,7 +5,7 @@ import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { insertTenderSchema, type Tender, type InsertTender } from "@shared/schema";
 
@@ -20,7 +20,7 @@ export default function TendersPage() {
   const { data: tenders = [], isLoading } = useQuery<Tender[]>({
     queryKey: ["/api/tenders", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/tenders${enterpriseParam}`);
+      const res = await fetch(`/api/tenders${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

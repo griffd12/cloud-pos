@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { type CalPackage, type CalPackageVersion, type CalDeployment, type Enterprise, type Property, type Workstation, CAL_PACKAGE_TYPES, CAL_DEPLOYMENT_ACTIONS, CAL_VERSION_REGEX, CAL_VERSION_FORMAT_MESSAGE } from "@shared/schema";
 import {
   Dialog,
@@ -103,7 +103,7 @@ export default function CalPackagesPage() {
     queryKey: ["/api/cal-packages", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       if (!selectedEnterpriseId) return [];
-      const res = await fetch(`/api/cal-packages${enterpriseParam}`);
+      const res = await fetch(`/api/cal-packages${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch CAL packages");
       return res.json();
     },
@@ -114,7 +114,7 @@ export default function CalPackagesPage() {
     queryKey: ["/api/cal-packages", selectedPackage?.id, "versions", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       if (!selectedPackage) return [];
-      const res = await fetch(`/api/cal-packages/${selectedPackage.id}/versions${enterpriseParam}`);
+      const res = await fetch(`/api/cal-packages/${selectedPackage.id}/versions${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch versions");
       return res.json();
     },
@@ -125,7 +125,7 @@ export default function CalPackagesPage() {
     queryKey: ["/api/cal-deployments", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       if (!selectedEnterpriseId) return [];
-      const res = await fetch(`/api/cal-deployments${enterpriseParam}`);
+      const res = await fetch(`/api/cal-deployments${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch deployments");
       return res.json();
     },

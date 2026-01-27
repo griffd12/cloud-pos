@@ -4,7 +4,7 @@ import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { insertMajorGroupSchema, type MajorGroup, type InsertMajorGroup } from "@shared/schema";
 
@@ -18,7 +18,7 @@ export default function MajorGroupsPage() {
   const { data: majorGroups = [], isLoading } = useQuery<MajorGroup[]>({
     queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/major-groups${enterpriseParam}`);
+      const res = await fetch(`/api/major-groups${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

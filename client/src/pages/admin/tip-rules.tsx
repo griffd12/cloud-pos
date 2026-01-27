@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +107,7 @@ export default function TipRulesPage() {
     retry: false,
     queryFn: async () => {
       const res = await fetch(`/api/tip-rules/property/${selectedPropertyId}`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       });
       if (res.status === 404) {

@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useEmc } from "@/lib/emc-context";
 import {
@@ -118,7 +118,7 @@ export default function TerminalDevicesPage() {
   const { data: devices = [], isLoading } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/terminal-devices${enterpriseParam}`);
+      const res = await fetch(`/api/terminal-devices${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -127,7 +127,7 @@ export default function TerminalDevicesPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -136,7 +136,7 @@ export default function TerminalDevicesPage() {
   const { data: workstations = [] } = useQuery<Workstation[]>({
     queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/workstations${enterpriseParam}`);
+      const res = await fetch(`/api/workstations${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -145,7 +145,7 @@ export default function TerminalDevicesPage() {
   const { data: processors = [] } = useQuery<PaymentProcessor[]>({
     queryKey: ["/api/payment-processors", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/payment-processors${enterpriseParam}`);
+      const res = await fetch(`/api/payment-processors${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

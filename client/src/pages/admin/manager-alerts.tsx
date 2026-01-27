@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Loader2, Bell, AlertTriangle, AlertCircle, Info, Check, CheckCheck, Settings, Trash2 } from "lucide-react";
 import type { Property, ManagerAlert, AlertSubscription } from "@shared/schema";
 
@@ -32,7 +32,7 @@ export default function ManagerAlertsPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -41,7 +41,7 @@ export default function ManagerAlertsPage() {
   const { data: alerts = [], isLoading: alertsLoading } = useQuery<ManagerAlert[]>({
     queryKey: ["/api/manager-alerts", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/manager-alerts?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/manager-alerts?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch alerts");
       return res.json();
     },
@@ -51,7 +51,7 @@ export default function ManagerAlertsPage() {
   const { data: unreadCount = 0 } = useQuery<number>({
     queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/manager-alerts/unread-count?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/manager-alerts/unread-count?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch unread count");
       return res.json();
     },
@@ -61,7 +61,7 @@ export default function ManagerAlertsPage() {
   const { data: subscriptions = [] } = useQuery<AlertSubscription[]>({
     queryKey: ["/api/alert-subscriptions", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/alert-subscriptions?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`);
+      const res = await fetch(`/api/alert-subscriptions?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch subscriptions");
       return res.json();
     },

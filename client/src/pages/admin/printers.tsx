@@ -6,7 +6,7 @@ import { DataTable, type Column, type CustomAction } from "@/components/admin/da
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
 import { Printer as PrinterIcon } from "lucide-react";
@@ -100,7 +100,7 @@ export default function PrintersPage() {
   const { data: printers = [], isLoading } = useQuery<Printer[]>({
     queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/printers${enterpriseParam}`);
+      const res = await fetch(`/api/printers${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch printers");
       return res.json();
     },
@@ -109,7 +109,7 @@ export default function PrintersPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },

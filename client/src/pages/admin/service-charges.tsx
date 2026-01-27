@@ -4,7 +4,7 @@ import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { insertServiceChargeSchema, type ServiceCharge, type InsertServiceCharge } from "@shared/schema";
 
@@ -18,7 +18,7 @@ export default function ServiceChargesPage() {
   const { data: serviceCharges = [], isLoading } = useQuery<ServiceCharge[]>({
     queryKey: ["/api/service-charges", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/service-charges${enterpriseParam}`);
+      const res = await fetch(`/api/service-charges${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

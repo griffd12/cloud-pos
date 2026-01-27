@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
 import { Plus, Edit, Trash2, Monitor, Tv, Server, RefreshCw, CheckCircle, XCircle, Clock, Key, Copy, Cpu, Activity, Download } from "lucide-react";
 import type { Device, DeviceEnrollmentToken, Enterprise, Property } from "@shared/schema";
@@ -77,7 +77,7 @@ export default function DevicesPage() {
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/enterprises${enterpriseParam}`);
+      const res = await fetch(`/api/enterprises${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch enterprises");
       return res.json();
     },
@@ -86,7 +86,7 @@ export default function DevicesPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -116,7 +116,7 @@ export default function DevicesPage() {
   const { data: enrollmentTokens = [], isLoading: tokensLoading } = useQuery<DeviceEnrollmentToken[]>({
     queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/device-enrollment-tokens${enterpriseParam}`);
+      const res = await fetch(`/api/device-enrollment-tokens${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch enrollment tokens");
       return res.json();
     },
@@ -213,7 +213,7 @@ export default function DevicesPage() {
   }>({
     queryKey: ["/api/devices/import-preview", importPropertyId],
     queryFn: async () => {
-      const res = await fetch(`/api/devices/import-preview/${importPropertyId}`);
+      const res = await fetch(`/api/devices/import-preview/${importPropertyId}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch import preview");
       return res.json();
     },

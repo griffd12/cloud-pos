@@ -81,7 +81,7 @@ export default function DescriptorsPage() {
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises", { enterpriseId: emcEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/enterprises${enterpriseParam}`);
+      const res = await fetch(`/api/enterprises${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -90,7 +90,7 @@ export default function DescriptorsPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: emcEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -99,7 +99,7 @@ export default function DescriptorsPage() {
   const { data: rvcs = [] } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs", { enterpriseId: emcEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/rvcs${enterpriseParam}`);
+      const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { apiClient, useConnectionMode, type ConnectionMode } from "@/lib/api-client";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -131,7 +131,7 @@ export default function ConnectivityTestPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -140,7 +140,7 @@ export default function ConnectivityTestPage() {
   const { data: serviceHosts = [], isLoading: hostsLoading } = useQuery<ServiceHostStatus[]>({
     queryKey: ["/api/service-hosts/status-summary", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/service-hosts/status-summary${enterpriseParam}`);
+      const res = await fetch(`/api/service-hosts/status-summary${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch service hosts");
       return res.json();
     },
@@ -150,7 +150,7 @@ export default function ConnectivityTestPage() {
   const { data: registeredDevices = [] } = useQuery<DeviceStatus[]>({
     queryKey: ["/api/registered-devices/status-summary", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/registered-devices/status-summary${enterpriseParam}`);
+      const res = await fetch(`/api/registered-devices/status-summary${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch registered devices");
       return res.json();
     },
@@ -173,7 +173,7 @@ export default function ConnectivityTestPage() {
   }>({
     queryKey: ["/api/connectivity-status", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/connectivity-status${enterpriseParam}`);
+      const res = await fetch(`/api/connectivity-status${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch connectivity status");
       return res.json();
     },

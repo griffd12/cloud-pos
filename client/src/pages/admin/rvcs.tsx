@@ -52,7 +52,7 @@ export default function RvcsPage() {
   const { data: rvcs = [], isLoading } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/rvcs${enterpriseParam}`);
+      const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch rvcs");
       return res.json();
     },
@@ -61,7 +61,7 @@ export default function RvcsPage() {
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`);
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },

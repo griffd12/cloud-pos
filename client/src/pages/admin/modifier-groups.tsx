@@ -26,7 +26,7 @@ export default function ModifierGroupsPage() {
   const { data: modifierGroups = [], isLoading } = useQuery<ModifierGroup[]>({
     queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/modifier-groups${enterpriseParam}`);
+      const res = await fetch(`/api/modifier-groups${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifier groups");
       return res.json();
     },
@@ -35,7 +35,7 @@ export default function ModifierGroupsPage() {
   const { data: allModifiers = [] } = useQuery<Modifier[]>({
     queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/modifiers${enterpriseParam}`);
+      const res = await fetch(`/api/modifiers${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifiers");
       return res.json();
     },
