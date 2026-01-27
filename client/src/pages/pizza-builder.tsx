@@ -223,13 +223,16 @@ export default function PizzaBuilderPage() {
         });
       }
 
+      // Note: priceDelta is set to "0" because the total price (unitPrice) already includes
+      // all topping costs calculated with section fractions and quantity multipliers.
+      // The modifier names show what was added for display purposes only.
       selections.forEach(sel => {
         sel.sections.forEach(section => {
           const sectionLabel = section === "whole" ? "" : ` (${SECTION_LABELS[section]})`;
           modifiersList.push({
             id: sel.modifier.id,
             name: `${sel.modifier.name}${sectionLabel}${sel.quantity > 1 ? ` x${sel.quantity}` : ""}`,
-            priceDelta: sel.modifier.priceDelta || "0",
+            priceDelta: "0", // Price already included in unitPrice
           });
         });
       });
