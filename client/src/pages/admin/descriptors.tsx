@@ -60,11 +60,9 @@ const MAX_CHARS_PER_LINE = 48;
 
 export default function DescriptorsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId: emcEnterpriseId } = useEmc();
-  const enterpriseParam = emcEnterpriseId ? `?enterpriseId=${emcEnterpriseId}` : "";
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [selectedEnterpriseId, setSelectedEnterpriseId] = useState<string>("");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"enterprise" | "property" | "rvc">("enterprise");
@@ -79,7 +77,7 @@ export default function DescriptorsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
-    queryKey: ["/api/enterprises", { enterpriseId: emcEnterpriseId }],
+    queryKey: ["/api/enterprises", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       const res = await fetch(`/api/enterprises${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
@@ -88,7 +86,7 @@ export default function DescriptorsPage() {
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: emcEnterpriseId }],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
@@ -97,13 +95,15 @@ export default function DescriptorsPage() {
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs", { enterpriseId: emcEnterpriseId }],
+    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
       const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
+
+  const selectedEnterprise = enterprises.find(e => e.id === selectedEnterpriseId);
 
   const filteredProperties = properties.filter(p => !selectedEnterpriseId || p.enterpriseId === selectedEnterpriseId);
   const filteredRvcs = rvcs.filter(r => !selectedPropertyId || r.propertyId === selectedPropertyId);
@@ -197,7 +197,7 @@ export default function DescriptorsPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptors", { enterpriseId: emcEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptors", { enterpriseId: selectedEnterpriseId }] });
       setHasChanges(false);
       toast({ title: "Descriptors saved successfully" });
     },
@@ -213,7 +213,7 @@ export default function DescriptorsPage() {
       return apiRequest("DELETE", `/api/descriptors/${activeTab}/${scopeId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptors", { enterpriseId: emcEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptors", { enterpriseId: selectedEnterpriseId }] });
       loadDescriptor(undefined);
       toast({ title: "Descriptors reset to inherit from parent" });
     },
@@ -245,7 +245,7 @@ export default function DescriptorsPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos", { enterpriseId: emcEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Logo uploaded successfully" });
     },
     onError: (error: Error) => {
@@ -258,7 +258,7 @@ export default function DescriptorsPage() {
       return apiRequest("DELETE", `/api/descriptor-logos/${logoId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos", { enterpriseId: emcEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/descriptor-logos", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Logo deleted" });
     },
     onError: (error: Error) => {
@@ -380,24 +380,10 @@ export default function DescriptorsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Enterprise</Label>
-              <Select
-                value={selectedEnterpriseId}
-                onValueChange={(v) => {
-                  setSelectedEnterpriseId(v);
-                  setSelectedPropertyId("");
-                  setSelectedRvcId("");
-                  setActiveTab("enterprise");
-                }}
-              >
-                <SelectTrigger data-testid="select-enterprise">
-                  <SelectValue placeholder="Select enterprise" />
-                </SelectTrigger>
-                <SelectContent>
-                  {enterprises.map(e => (
-                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted text-muted-foreground">
+                <Building2 className="h-4 w-4" />
+                <span data-testid="text-enterprise-name">{selectedEnterprise?.name || "No enterprise selected"}</span>
+              </div>
             </div>
 
             <div className="space-y-2">
