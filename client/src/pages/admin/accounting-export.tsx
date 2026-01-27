@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { Loader2, Plus, Download, FileText, DollarSign, Calculator } from "lucide-react";
 import type { Property, GlMapping, AccountingExport } from "@shared/schema";
 
@@ -20,6 +21,8 @@ const EXPORT_FORMATS = ["csv", "qbo", "iif"];
 
 export default function AccountingExportPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -35,7 +38,12 @@ export default function AccountingExportPage() {
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: glMappings = [], isLoading: mappingsLoading } = useQuery<GlMapping[]>({

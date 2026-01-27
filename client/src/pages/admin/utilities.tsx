@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { AlertTriangle, Trash2, Database, ShieldAlert, FileText, Loader2, Building2, Calendar, ArrowRight } from "lucide-react";
 import {
   Dialog,
@@ -105,6 +106,8 @@ interface ClearResult {
 
 export default function UtilitiesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [pin, setPin] = useState("");
@@ -120,7 +123,12 @@ export default function UtilitiesPage() {
 
   // Fetch all properties for selection
   const { data: properties, isLoading: propertiesLoading } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   // Fetch summary for selected property

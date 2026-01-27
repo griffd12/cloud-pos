@@ -133,7 +133,7 @@ export default function InventoryPage() {
 
   const importFromMenuMutation = useMutation({
     mutationFn: async (propertyId: string) => {
-      const res = await apiRequest("POST", "/api/inventory-items/import-from-menu", { propertyId });
+      const res = await apiRequest("POST", "/api/inventory-items/import-from-menu", { propertyId, enterpriseId: selectedEnterpriseId });
       return res.json();
     },
     onSuccess: (data) => {

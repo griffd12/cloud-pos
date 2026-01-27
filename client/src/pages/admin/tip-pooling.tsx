@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,8 @@ import type { Property, Employee, TipPoolPolicy, TipPoolRun, TipAllocation } fro
 export default function TipPoolingPage() {
   const { toast } = useToast();
   usePosWebSocket();
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [isCreatingPolicy, setIsCreatingPolicy] = useState(false);
   const [isRunningSettlement, setIsRunningSettlement] = useState(false);
@@ -57,11 +60,21 @@ export default function TipPoolingPage() {
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      return res.json();
+    },
   });
 
   const { data: policies = [], isLoading: policiesLoading } = useQuery<TipPoolPolicy[]>({

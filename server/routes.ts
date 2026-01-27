@@ -16868,7 +16868,7 @@ connect();
   // Import menu items as inventory items for a property
   app.post("/api/inventory-items/import-from-menu", async (req, res) => {
     try {
-      const { propertyId } = req.body;
+      const { propertyId, enterpriseId } = req.body;
       if (!propertyId) {
         return res.status(400).json({ message: "propertyId is required" });
       }
@@ -16877,6 +16877,11 @@ connect();
       const property = await storage.getProperty(propertyId);
       if (!property) {
         return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Verify property belongs to the selected enterprise for multi-tenancy
+      if (enterpriseId && property.enterpriseId !== enterpriseId) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
       }
 
       // Get all RVCs for this property

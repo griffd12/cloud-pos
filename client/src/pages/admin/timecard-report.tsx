@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEmc } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,8 @@ interface TimecardReport {
 }
 
 export default function TimecardReportPage() {
+  const { selectedEnterpriseId } = useEmc();
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(() => {
     const now = new Date();
@@ -72,7 +75,12 @@ export default function TimecardReportPage() {
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const startDateStr = format(dateRange.from, "yyyy-MM-dd");
