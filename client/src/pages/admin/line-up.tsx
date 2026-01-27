@@ -127,7 +127,8 @@ export default function LineUpPage() {
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
     queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/job-codes${enterpriseParam}`);
+      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch job codes");
       return res.json();
     },
   });
