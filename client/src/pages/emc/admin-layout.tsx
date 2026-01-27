@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Switch, Route, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -7,6 +7,7 @@ import { HierarchyBreadcrumb } from "@/components/admin/hierarchy-breadcrumb";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEmc } from "@/lib/emc-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import type { Enterprise, Property, Rvc } from "@shared/schema";
@@ -197,29 +198,71 @@ function EmcDashboard() {
 
 export default function EmcAdminLayout() {
   const [, navigate] = useLocation();
-  const { user, isAuthenticated, logout, isLoading } = useEmc();
+  const { user, isAuthenticated, logout, isLoading, selectedEnterpriseId, setSelectedEnterpriseId } = useEmc();
 
   // Real-time sync for all data changes across the system
   usePosWebSocket();
 
-  const { data: enterprises = [] } = useQuery<Enterprise[]>({
+  // Determine the effective enterprise ID to use for filtering
+  // - super_admin: can choose any enterprise, uses selectedEnterpriseId from context
+  // - enterprise_admin: locked to their assigned enterprise
+  // - property_admin: locked to their assigned enterprise (via property)
+  const isSuperAdmin = user?.accessLevel === "super_admin";
+  const effectiveEnterpriseId = isSuperAdmin 
+    ? selectedEnterpriseId 
+    : user?.enterpriseId || null;
+
+  const { data: allEnterprises = [] } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises"],
     enabled: isAuthenticated,
   });
 
-  const { data: properties = [] } = useQuery<Property[]>({
+  // Filter enterprises based on access level
+  const enterprises = useMemo(() => {
+    if (isSuperAdmin) {
+      return allEnterprises;
+    }
+    // Non-super admins only see their assigned enterprise
+    return allEnterprises.filter(e => e.id === user?.enterpriseId);
+  }, [allEnterprises, isSuperAdmin, user?.enterpriseId]);
+
+  const { data: allProperties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
     enabled: isAuthenticated,
   });
 
-  const { data: rvcs = [] } = useQuery<Rvc[]>({
+  // Filter properties by effective enterprise
+  const properties = useMemo(() => {
+    if (!effectiveEnterpriseId) return [];
+    return allProperties.filter(p => p.enterpriseId === effectiveEnterpriseId);
+  }, [allProperties, effectiveEnterpriseId]);
+
+  const { data: allRvcs = [] } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
     enabled: isAuthenticated,
   });
 
+  // Filter RVCs by filtered properties
+  const rvcs = useMemo(() => {
+    const propertyIds = new Set(properties.map(p => p.id));
+    return allRvcs.filter(r => propertyIds.has(r.propertyId));
+  }, [allRvcs, properties]);
+
   const [selectedEnterprise, setSelectedEnterprise] = useState<Enterprise | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [selectedRvc, setSelectedRvc] = useState<Rvc | null>(null);
+
+  // Sync selectedEnterprise with effectiveEnterpriseId
+  useEffect(() => {
+    if (effectiveEnterpriseId && enterprises.length > 0) {
+      const ent = enterprises.find(e => e.id === effectiveEnterpriseId);
+      if (ent && selectedEnterprise?.id !== ent.id) {
+        setSelectedEnterprise(ent);
+        setSelectedProperty(null);
+        setSelectedRvc(null);
+      }
+    }
+  }, [effectiveEnterpriseId, enterprises, selectedEnterprise?.id]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -232,6 +275,10 @@ export default function EmcAdminLayout() {
     setSelectedEnterprise(ent);
     setSelectedProperty(null);
     setSelectedRvc(null);
+    // For super_admin, also update context
+    if (isSuperAdmin) {
+      setSelectedEnterpriseId(id);
+    }
   };
 
   const handlePropertyChange = (id: string | null) => {
@@ -247,6 +294,7 @@ export default function EmcAdminLayout() {
 
   const handleLogout = () => {
     logout();
+    setSelectedEnterpriseId(null);
     navigate("/emc/login");
   };
 
@@ -273,8 +321,28 @@ export default function EmcAdminLayout() {
         <AdminSidebar onLogout={handleLogout} basePath="/emc" />
         <div className="flex flex-col flex-1 overflow-hidden">
           <header className="flex items-center justify-between gap-4 px-4 py-2 border-b">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
+              {isSuperAdmin && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                  <Select
+                    value={selectedEnterpriseId || ""}
+                    onValueChange={(value) => handleEnterpriseChange(value || null)}
+                  >
+                    <SelectTrigger className="w-[220px]" data-testid="select-enterprise">
+                      <SelectValue placeholder="Select Enterprise" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allEnterprises.map((ent) => (
+                        <SelectItem key={ent.id} value={ent.id} data-testid={`select-enterprise-${ent.id}`}>
+                          {ent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">
                 Logged in as <span className="font-medium text-foreground">{user?.email}</span>
               </div>
@@ -300,6 +368,21 @@ export default function EmcAdminLayout() {
           />
 
           <main className="flex-1 overflow-auto">
+            {isSuperAdmin && !effectiveEnterpriseId ? (
+              <div className="flex items-center justify-center h-full">
+                <Card className="max-w-md">
+                  <CardContent className="pt-6 text-center space-y-4">
+                    <Building2 className="w-12 h-12 mx-auto text-muted-foreground" />
+                    <div>
+                      <h2 className="text-xl font-semibold">Select an Enterprise</h2>
+                      <p className="text-muted-foreground mt-2">
+                        As a platform administrator, please select an enterprise from the dropdown above to view and manage its configuration.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
             <Switch>
               <Route path="/emc" component={EmcDashboard} />
               <Route path="/emc/dashboard" component={EmcDashboard} />
@@ -361,6 +444,7 @@ export default function EmcAdminLayout() {
               <Route path="/emc/print-agents" component={PrintAgentsPage} />
               <Route path="/emc/descriptors" component={DescriptorsPage} />
             </Switch>
+            )}
           </main>
         </div>
       </div>
