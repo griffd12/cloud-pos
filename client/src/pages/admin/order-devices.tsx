@@ -10,7 +10,7 @@ import { useEmc } from "@/lib/emc-context";
 
 export default function OrderDevicesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderDevice | null>(null);
@@ -107,6 +107,7 @@ export default function OrderDevicesPage() {
       type: "select",
       options: properties.map((p) => ({ value: p.id, label: p.name })),
       required: true,
+      defaultValue: contextPropertyId || properties[0]?.id || "",
     },
     {
       name: "kdsDeviceId",
@@ -129,7 +130,7 @@ export default function OrderDevicesPage() {
     { name: "sendVoids", label: "Send Voids", type: "switch", defaultValue: true, description: "Send void notifications to this device" },
     { name: "sendReprints", label: "Send Reprints", type: "switch", defaultValue: true, description: "Allow reprints on this device" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ], [properties, kdsOptions]);
+  ], [properties, kdsOptions, contextPropertyId]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertOrderDevice) => {

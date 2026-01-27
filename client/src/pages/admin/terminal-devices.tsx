@@ -6,6 +6,7 @@ import { z } from "zod";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useEmc } from "@/lib/emc-context";
+
 import {
   insertTerminalDeviceSchema,
   type TerminalDevice,
@@ -107,7 +108,7 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function TerminalDevicesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -297,10 +298,11 @@ export default function TerminalDevicesPage() {
 
   function openAddDialog() {
     setEditingDevice(null);
+    const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
     form.reset({
       name: "",
       model: "generic",
-      propertyId: properties[0]?.id || "",
+      propertyId: defaultPropertyId,
       workstationId: undefined,
       paymentProcessorId: undefined,
       serialNumber: "",

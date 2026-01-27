@@ -36,7 +36,7 @@ interface DescriptorSet {
 
 export default function RvcsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Rvc | null>(null);
@@ -125,6 +125,7 @@ export default function RvcsPage() {
       type: "select",
       options: properties.map((p) => ({ value: p.id, label: p.name })),
       required: true,
+      defaultValue: contextPropertyId || properties[0]?.id || "",
     },
     {
       name: "defaultOrderType",

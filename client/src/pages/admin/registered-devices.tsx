@@ -71,7 +71,7 @@ interface FormData {
 
 export default function RegisteredDevicesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RegisteredDevice | null>(null);
@@ -417,7 +417,18 @@ export default function RegisteredDevicesPage() {
         <Button
           onClick={() => {
             setEditingItem(null);
-            form.reset();
+            const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
+            form.reset({
+              name: "",
+              deviceType: "pos_workstation",
+              propertyId: defaultPropertyId,
+              workstationId: undefined,
+              kdsDeviceId: undefined,
+              serialNumber: "",
+              assetTag: "",
+              macAddress: "",
+              notes: "",
+            });
             setFormOpen(true);
           }}
           data-testid="button-add-device"

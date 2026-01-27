@@ -70,9 +70,9 @@ const DEFAULT_FORM = {
 
 export default function OvertimeRulesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<OvertimeRule | null>(null);
   const [ruleForm, setRuleForm] = useState(DEFAULT_FORM);

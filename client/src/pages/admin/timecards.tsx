@@ -54,12 +54,12 @@ interface PunchPair {
 
 export default function TimecardsPage() {
   const { toast } = useToast();
-  const { user: emcUser, selectedEnterpriseId } = useEmc();
+  const { user: emcUser, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [editingTimecard, setEditingTimecard] = useState<Timecard | null>(null);
   const [editForm, setEditForm] = useState({ clockIn: "", clockOut: "", reason: "" });

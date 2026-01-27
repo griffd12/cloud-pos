@@ -42,7 +42,7 @@ import { Download, Upload, Unlink } from "lucide-react";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();

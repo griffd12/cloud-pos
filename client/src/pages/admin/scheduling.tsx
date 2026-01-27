@@ -76,9 +76,9 @@ type EmployeeJobCodeWithDetails = EmployeeJobCode & { jobCode: JobCode };
 export default function SchedulingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [isAddingShift, setIsAddingShift] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);

@@ -58,7 +58,7 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function PrintAgentsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintAgent | null>(null);
@@ -235,9 +235,10 @@ export default function PrintAgentsPage() {
   const handleAdd = () => {
     console.log("handleAdd called - opening form dialog");
     setEditingItem(null);
+    const defaultPropertyId = contextPropertyId || properties[0]?.id || undefined;
     form.reset({
       name: "",
-      propertyId: undefined,
+      propertyId: defaultPropertyId,
       description: "",
     });
     setFormOpen(true);
