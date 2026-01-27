@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmc } from "@/lib/emc-context";
@@ -79,6 +79,13 @@ export default function SchedulingPage() {
   const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
+  
+  useEffect(() => {
+    if (contextPropertyId && !selectedProperty) {
+      setSelectedProperty(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedProperty]);
+  
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [isAddingShift, setIsAddingShift] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);

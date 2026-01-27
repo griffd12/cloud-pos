@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
@@ -60,6 +60,13 @@ export default function TimecardsPage() {
   // Enable real-time updates via WebSocket
   usePosWebSocket();
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
+  
+  useEffect(() => {
+    if (contextPropertyId && !selectedProperty) {
+      setSelectedProperty(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedProperty]);
+  
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [editingTimecard, setEditingTimecard] = useState<Timecard | null>(null);
   const [editForm, setEditForm] = useState({ clockIn: "", clockOut: "", reason: "" });
