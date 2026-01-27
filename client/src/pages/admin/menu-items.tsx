@@ -61,6 +61,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
@@ -70,6 +71,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch tax groups");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: printClasses = [] } = useQuery<PrintClass[]>({
@@ -79,6 +81,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch print classes");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: slus = [] } = useQuery<Slu[]>({
@@ -88,6 +91,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch slus");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: allMenuItemSlus = [] } = useQuery<MenuItemSlu[]>({
@@ -97,6 +101,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch menu item slus");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: modifierGroups = [] } = useQuery<ModifierGroup[]>({
@@ -106,6 +111,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch modifier groups");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: majorGroups = [] } = useQuery<MajorGroup[]>({
@@ -115,6 +121,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch major groups");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const { data: familyGroups = [] } = useQuery<FamilyGroup[]>({
@@ -124,6 +131,7 @@ export default function MenuItemsPage() {
       if (!res.ok) throw new Error("Failed to fetch family groups");
       return res.json();
     },
+    enabled: !!selectedEnterpriseId,
   });
 
   const filteredMenuItems = categoryFilter === "all"
@@ -217,7 +225,7 @@ export default function MenuItemsPage() {
 
   const importMutation = useMutation({
     mutationFn: async (items: any[]) => {
-      const response = await apiRequest("POST", "/api/menu-items/import", items);
+      const response = await apiRequest("POST", `/api/menu-items/import?enterpriseId=${selectedEnterpriseId}`, items);
       return response.json();
     },
     onSuccess: (data) => {
@@ -248,6 +256,16 @@ export default function MenuItemsPage() {
   });
 
   const handleExport = () => {
+    if (!selectedEnterpriseId) {
+      toast({ title: "Please select an enterprise first", variant: "destructive" });
+      return;
+    }
+    
+    if (menuItems.length === 0) {
+      toast({ title: "No menu items to export", variant: "destructive" });
+      return;
+    }
+    
     const headers = ["id", "name", "shortName", "price", "color", "active", "majorGroup", "familyGroup"];
     const csvRows = [headers.join(",")];
     
@@ -277,7 +295,7 @@ export default function MenuItemsPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "Menu items exported to CSV" });
+    toast({ title: `Exported ${menuItems.length} menu items to CSV` });
   };
 
   const parseCSV = (text: string): any[] => {
@@ -326,6 +344,14 @@ export default function MenuItemsPage() {
   };
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedEnterpriseId) {
+      toast({ title: "Please select an enterprise first", variant: "destructive" });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+    
     const file = event.target.files?.[0];
     if (!file) return;
     

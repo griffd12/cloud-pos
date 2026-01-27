@@ -2289,13 +2289,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/menu-items/import", async (req, res) => {
     try {
+      const enterpriseId = req.query.enterpriseId as string | undefined;
+      if (!enterpriseId) {
+        return res.status(400).json({ message: "Enterprise ID is required for import" });
+      }
+      
       const items = req.body;
       if (!Array.isArray(items)) {
         return res.status(400).json({ message: "Expected an array of menu items" });
       }
-      const majorGroups = await storage.getMajorGroups();
-      const familyGroups = await storage.getFamilyGroups();
-      const existingMenuItems = await storage.getMenuItems();
+      
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      let majorGroups = await storage.getMajorGroups();
+      let familyGroups = await storage.getFamilyGroups();
+      let existingMenuItems = await storage.getMenuItems();
+      
+      majorGroups = filterByEnterprise(majorGroups, enterpriseId, propertyIds, rvcIds);
+      familyGroups = filterByEnterprise(familyGroups, enterpriseId, propertyIds, rvcIds);
+      existingMenuItems = filterByEnterprise(existingMenuItems, enterpriseId, propertyIds, rvcIds);
       
       let created = 0;
       let updated = 0;
@@ -2342,7 +2353,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         } else {
           const newItem = await storage.createMenuItem({
             ...itemData,
-            enterpriseId: null,
+            enterpriseId,
             propertyId: null,
             rvcId: null,
           });
