@@ -47,18 +47,30 @@ export default function AccountingExportPage() {
   });
 
   const { data: glMappings = [], isLoading: mappingsLoading } = useQuery<GlMapping[]>({
-    queryKey: ["/api/gl-mappings", selectedPropertyId],
+    queryKey: ["/api/gl-mappings", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     enabled: !!selectedPropertyId,
+    queryFn: async () => {
+      const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";
+      const res = await fetch(`/api/gl-mappings?propertyId=${selectedPropertyId}${entParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch GL mappings");
+      return res.json();
+    },
   });
 
   const { data: exports = [], isLoading: exportsLoading } = useQuery<AccountingExport[]>({
-    queryKey: ["/api/accounting-exports", selectedPropertyId],
+    queryKey: ["/api/accounting-exports", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     enabled: !!selectedPropertyId,
+    queryFn: async () => {
+      const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";
+      const res = await fetch(`/api/accounting-exports?propertyId=${selectedPropertyId}${entParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch exports");
+      return res.json();
+    },
   });
 
   const createMappingMutation = useMutation({
     mutationFn: async (data: Partial<GlMapping>) => {
-      const res = await apiRequest("POST", "/api/gl-mappings", data);
+      const res = await apiRequest("POST", "/api/gl-mappings", { ...data, enterpriseId: selectedEnterpriseId });
       return res.json();
     },
     onSuccess: () => {
@@ -73,7 +85,7 @@ export default function AccountingExportPage() {
 
   const updateMappingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<GlMapping> }) => {
-      const res = await apiRequest("PATCH", `/api/gl-mappings/${id}`, data);
+      const res = await apiRequest("PATCH", `/api/gl-mappings/${id}`, { ...data, enterpriseId: selectedEnterpriseId });
       return res.json();
     },
     onSuccess: () => {
@@ -88,7 +100,7 @@ export default function AccountingExportPage() {
 
   const generateExportMutation = useMutation({
     mutationFn: async (data: { propertyId: string; startDate: string; endDate: string; format: string }) => {
-      const res = await apiRequest("POST", "/api/accounting-exports/generate", data);
+      const res = await apiRequest("POST", "/api/accounting-exports/generate", { ...data, enterpriseId: selectedEnterpriseId });
       return res.json();
     },
     onSuccess: (data) => {

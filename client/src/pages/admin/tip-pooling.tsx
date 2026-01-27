@@ -78,13 +78,25 @@ export default function TipPoolingPage() {
   });
 
   const { data: policies = [], isLoading: policiesLoading } = useQuery<TipPoolPolicy[]>({
-    queryKey: ["/api/tip-pool-policies", selectedProperty],
+    queryKey: ["/api/tip-pool-policies", selectedProperty, { enterpriseId: selectedEnterpriseId }],
     enabled: !!selectedProperty,
+    queryFn: async () => {
+      const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";
+      const res = await fetch(`/api/tip-pool-policies?propertyId=${selectedProperty}${entParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch policies");
+      return res.json();
+    },
   });
 
   const { data: runs = [], isLoading: runsLoading } = useQuery<TipPoolRun[]>({
-    queryKey: ["/api/tip-pool-runs", selectedProperty],
+    queryKey: ["/api/tip-pool-runs", selectedProperty, { enterpriseId: selectedEnterpriseId }],
     enabled: !!selectedProperty,
+    queryFn: async () => {
+      const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";
+      const res = await fetch(`/api/tip-pool-runs?propertyId=${selectedProperty}${entParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch runs");
+      return res.json();
+    },
   });
 
   const [selectedRun, setSelectedRun] = useState<TipPoolRun | null>(null);
@@ -96,7 +108,7 @@ export default function TipPoolingPage() {
 
   const createPolicyMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("POST", "/api/tip-pool-policies", data);
+      return apiRequest("POST", "/api/tip-pool-policies", { ...data, enterpriseId: selectedEnterpriseId });
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Tip pool policy created." });
@@ -112,6 +124,7 @@ export default function TipPoolingPage() {
     mutationFn: async (data: { propertyId: string; businessDate: string; policyId: string }) => {
       return apiRequest("POST", "/api/tip-pool-settlement", {
         ...data,
+        enterpriseId: selectedEnterpriseId,
         runById: "current-manager", // Would come from auth context
       });
     },

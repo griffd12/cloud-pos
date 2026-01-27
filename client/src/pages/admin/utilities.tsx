@@ -133,8 +133,14 @@ export default function UtilitiesPage() {
 
   // Fetch summary for selected property
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<SalesDataSummary>({
-    queryKey: ["/api/admin/sales-data-summary", selectedPropertyId],
+    queryKey: ["/api/admin/sales-data-summary", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
     enabled: !!selectedPropertyId,
+    queryFn: async () => {
+      const entParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+      const res = await fetch(`/api/admin/sales-data-summary/${selectedPropertyId}${entParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch summary");
+      return res.json();
+    },
   });
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);

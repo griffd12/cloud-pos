@@ -83,6 +83,13 @@ async function getPaymentAdapter(processorId: string) {
 // Print agent connection tracking (module scope for access from printCheckReceipt)
 const connectedAgents: Map<string, WebSocket> = new Map(); // agentId -> WebSocket
 
+// Helper to validate property belongs to the specified enterprise (multi-tenant isolation)
+async function validatePropertyEnterprise(propertyId: string, enterpriseId?: string | null): Promise<boolean> {
+  if (!enterpriseId) return true; // No enterprise filter = skip validation
+  const property = await storage.getProperty(propertyId);
+  return property?.enterpriseId === enterpriseId;
+}
+
 // Function to send print job to connected agent (module scope)
 async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
   const agentWs = connectedAgents.get(agentId);
@@ -5442,9 +5449,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/sales-data-summary/:propertyId", async (req, res) => {
     try {
       const { propertyId } = req.params;
+      const { enterpriseId } = req.query;
       if (!propertyId) {
         return res.status(400).json({ message: "Property ID is required" });
       }
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (enterpriseId && !(await validatePropertyEnterprise(propertyId, enterpriseId as string))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
       const summary = await storage.getSalesDataSummary(propertyId);
       res.json(summary);
     } catch (error: any) {
@@ -8267,7 +8281,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Timecard Report - Square-style labor + tips report
   app.get("/api/reports/timecard", async (req, res) => {
     try {
-      const { propertyId, startDate, endDate } = req.query;
+      const { propertyId, startDate, endDate, enterpriseId } = req.query;
       
       if (!propertyId || !startDate || !endDate) {
         return res.status(400).json({ message: "propertyId, startDate, and endDate are required" });
@@ -8276,6 +8290,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const propId = propertyId as string;
       const startDateStr = startDate as string;
       const endDateStr = endDate as string;
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (enterpriseId && !(await validatePropertyEnterprise(propId, enterpriseId as string))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
       
       // Get timecards for the date range
       const timecards = await storage.getTimecards({
@@ -10397,10 +10416,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get tip pool policies
   app.get("/api/tip-pool-policies", async (req, res) => {
     try {
-      const { propertyId } = req.query;
+      const { propertyId, enterpriseId } = req.query;
       if (!propertyId) {
         return res.status(400).json({ message: "Property ID is required" });
       }
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (enterpriseId && !(await validatePropertyEnterprise(propertyId as string, enterpriseId as string))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
       const policies = await storage.getTipPoolPolicies(propertyId as string);
       res.json(policies);
     } catch (error) {
@@ -10426,10 +10451,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Create tip pool policy
   app.post("/api/tip-pool-policies", async (req, res) => {
     try {
-      const parsed = insertTipPoolPolicySchema.safeParse(req.body);
+      const { enterpriseId, ...data } = req.body;
+      const parsed = insertTipPoolPolicySchema.safeParse(data);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid tip pool policy data", errors: parsed.error.issues });
       }
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (parsed.data.propertyId && enterpriseId && !(await validatePropertyEnterprise(parsed.data.propertyId, enterpriseId))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
       const policy = await storage.createTipPoolPolicy(parsed.data);
       res.status(201).json(policy);
     } catch (error) {
@@ -10471,7 +10503,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get tip pool runs
   app.get("/api/tip-pool-runs", async (req, res) => {
     try {
-      const { propertyId, businessDate } = req.query;
+      const { propertyId, businessDate, enterpriseId } = req.query;
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (propertyId && enterpriseId && !(await validatePropertyEnterprise(propertyId as string, enterpriseId as string))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
       const runs = await storage.getTipPoolRuns({
         propertyId: propertyId as string,
         businessDate: businessDate as string,
@@ -17414,6 +17452,12 @@ connect();
   app.get("/api/gl-mappings", async (req, res) => {
     try {
       const { propertyId, enterpriseId } = req.query;
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (propertyId && enterpriseId && !(await validatePropertyEnterprise(propertyId as string, enterpriseId as string))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
       const mappings = await storage.getGlMappings(propertyId as string, enterpriseId as string);
       res.json(mappings);
     } catch (error) {
@@ -17423,7 +17467,14 @@ connect();
 
   app.post("/api/gl-mappings", async (req, res) => {
     try {
-      const mapping = await storage.createGlMapping(req.body);
+      const { enterpriseId, ...data } = req.body;
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (data.propertyId && enterpriseId && !(await validatePropertyEnterprise(data.propertyId, enterpriseId))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
+      const mapping = await storage.createGlMapping(data);
       res.status(201).json(mapping);
     } catch (error) {
       res.status(500).json({ message: "Failed to create GL mapping" });
@@ -17432,7 +17483,13 @@ connect();
 
   app.get("/api/accounting-exports", async (req, res) => {
     try {
-      const { propertyId } = req.query;
+      const { propertyId, enterpriseId } = req.query;
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (propertyId && enterpriseId && !(await validatePropertyEnterprise(propertyId as string, enterpriseId as string))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
+      
       const exports = await storage.getAccountingExports(propertyId as string);
       res.json(exports);
     } catch (error) {
@@ -17442,7 +17499,12 @@ connect();
 
   app.post("/api/accounting-exports/generate", async (req, res) => {
     try {
-      const { propertyId, startDate, endDate, formatType, employeeId } = req.body;
+      const { propertyId, startDate, endDate, formatType, employeeId, enterpriseId } = req.body;
+      
+      // Multi-tenant validation: verify property belongs to selected enterprise
+      if (propertyId && enterpriseId && !(await validatePropertyEnterprise(propertyId, enterpriseId))) {
+        return res.status(403).json({ message: "Property does not belong to selected enterprise" });
+      }
 
       // Create export record
       const exportRecord = await storage.createAccountingExport({

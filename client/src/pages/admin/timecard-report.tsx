@@ -87,12 +87,13 @@ export default function TimecardReportPage() {
   const endDateStr = format(dateRange.to, "yyyy-MM-dd");
 
   const { data: report, isLoading } = useQuery<TimecardReport>({
-    queryKey: ["/api/reports/timecard", selectedPropertyId, startDateStr, endDateStr],
+    queryKey: ["/api/reports/timecard", selectedPropertyId, startDateStr, endDateStr, { enterpriseId: selectedEnterpriseId }],
     enabled: !!selectedPropertyId,
     queryFn: async () => {
       const authHeaders = getAuthHeaders();
+      const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";
       const res = await fetch(
-        `/api/reports/timecard?propertyId=${selectedPropertyId}&startDate=${startDateStr}&endDate=${endDateStr}`,
+        `/api/reports/timecard?propertyId=${selectedPropertyId}&startDate=${startDateStr}&endDate=${endDateStr}${entParam}`,
         { 
           credentials: "include",
           headers: authHeaders,
