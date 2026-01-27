@@ -41,6 +41,14 @@ Preferred communication style: Simple, everyday language.
 - **Device Binding Security**: SHA-256 hashed device tokens ensure secure access to POS/KDS functionality via REST API middleware and WebSocket authentication.
 - **Config Sync Service**: Cloud to local SQLite synchronization for all entity types (hierarchy, menu, employees, devices, operations, POS layouts, payments, loyalty) with version tracking and real-time updates.
 - **CAPS SQLite Schema**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations, including configuration, menu, devices, transactions, payments, KDS, cash management, time & attendance, fiscal operations, loyalty, gift cards, and orders.
+- **Pizza Builder Module**: Full-page visual pizza customization interface at `/pizza-builder/:menuItemId`. Features:
+  - Visual SVG pizza graphic with topping dots using deterministic pseudo-random placement
+  - Section selection modes: Whole pizza, Half (Left/Right), Quarter (4 sections)
+  - Topping selection by category (Proteins, Market, Cheese, Premium) with size-based pricing
+  - Quantity adjustment per topping (1x, 2x, 3x) with section-specific placement
+  - Base sauce selection (Marinara, Alfredo, Olive Oil, BBQ, Ranch)
+  - Auto-detection of pizza items in POS by name pattern ("classic pizza", "gluten crust", "create your own pizza")
+  - Seamless integration with check flow - adds pizza with all selected modifiers to current check
 
 ## Terminology
 - **Services**: User-facing EMC navigation label (Admin > Services)
