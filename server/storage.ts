@@ -1038,8 +1038,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertRole(data: InsertRole): Promise<Role> {
-    // Try to find existing role by code
-    const existing = await db.select().from(roles).where(eq(roles.code, data.code)).limit(1);
+    // Try to find existing role by code AND enterpriseId (each enterprise has their own set of roles)
+    const conditions = [eq(roles.code, data.code)];
+    if (data.enterpriseId) {
+      conditions.push(eq(roles.enterpriseId, data.enterpriseId));
+    } else {
+      conditions.push(sql`${roles.enterpriseId} IS NULL`);
+    }
+    const existing = await db.select().from(roles).where(and(...conditions)).limit(1);
     if (existing.length > 0) {
       const [updated] = await db.update(roles).set(data).where(eq(roles.id, existing[0].id)).returning();
       return updated;

@@ -147,7 +147,10 @@ export default function RolesPage() {
 
   const seedRolesMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/roles/seed", {});
+      if (!selectedEnterpriseId) {
+        throw new Error("No enterprise selected");
+      }
+      await apiRequest("POST", "/api/roles/seed", { enterpriseId: selectedEnterpriseId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }] });

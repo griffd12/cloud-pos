@@ -2026,6 +2026,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/roles/seed", async (req, res) => {
+    const { enterpriseId } = req.body;
+    if (!enterpriseId) {
+      return res.status(400).json({ message: "enterpriseId is required" });
+    }
+    
     // Seed 6 roles from the POS roles matrix with privilege assignments
     // Privilege codes matching the matrix
     const allPrivileges = [
@@ -2087,7 +2092,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const createdRoles = [];
     for (const roleData of rolesData) {
-      const role = await storage.upsertRole({ name: roleData.name, code: roleData.code, active: true });
+      const role = await storage.upsertRole({ name: roleData.name, code: roleData.code, active: true, enterpriseId });
       await storage.setRolePrivileges(role.id, Array.from(new Set(roleData.privileges))); // Remove duplicates
       createdRoles.push(role);
     }
