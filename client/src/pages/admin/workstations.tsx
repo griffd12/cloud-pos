@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
 import {
   Dialog,
@@ -36,23 +37,47 @@ import {
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Workstation | null>(null);
 
+  // Build URLs with enterprise filtering for multi-tenancy
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+
   const { data: workstations = [], isLoading } = useQuery<Workstation[]>({
-    queryKey: ["/api/workstations"],
+    queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstations${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch workstations");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs"],
+    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/rvcs${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch rvcs");
+      return res.json();
+    },
   });
 
   const { data: printers = [] } = useQuery<Printer[]>({
-    queryKey: ["/api/printers"],
+    queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/printers${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch printers");
+      return res.json();
+    },
   });
 
   const columns: Column<Workstation>[] = [

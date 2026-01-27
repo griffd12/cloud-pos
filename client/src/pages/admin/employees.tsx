@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { type Employee, type Role, type Property, type EmployeeAssignment, type JobCode, type EmployeeJobCode } from "@shared/schema";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -24,6 +25,7 @@ interface JobAssignment {
 
 export default function EmployeesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -41,20 +43,43 @@ export default function EmployeesPage() {
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [jobAssignments, setJobAssignments] = useState<JobAssignment[]>([]);
 
+  // Build URLs with enterprise filtering for multi-tenancy
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      return res.json();
+    },
   });
 
   const { data: roles = [] } = useQuery<Role[]>({
-    queryKey: ["/api/roles"],
+    queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/roles${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch roles");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes"],
+    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/job-codes${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch job codes");
+      return res.json();
+    },
   });
 
   const resetForm = () => {

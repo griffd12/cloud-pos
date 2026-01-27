@@ -1705,7 +1705,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/rvcs", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const data = await storage.getRvcs(propertyId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    
+    let data = await storage.getRvcs(propertyId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId && !propertyId) {
+      const properties = await storage.getProperties(enterpriseId);
+      const propertyIds = new Set(properties.map(p => p.id));
+      data = data.filter(rvc => propertyIds.has(rvc.propertyId));
+    }
+    
     res.json(data);
   });
 
@@ -1800,7 +1810,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   app.get("/api/employees", async (req, res) => {
-    const data = await storage.getEmployees();
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    let data = await storage.getEmployees();
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId) {
+      const properties = await storage.getProperties(enterpriseId);
+      const propertyIds = new Set(properties.map(p => p.id));
+      data = data.filter(emp => emp.propertyId && propertyIds.has(emp.propertyId));
+    }
+    
     const enrichedData = data.map(enrichEmployee);
     res.json(enrichedData);
   });
@@ -2623,7 +2642,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/workstations", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const data = await storage.getWorkstations(propertyId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    
+    let data = await storage.getWorkstations(propertyId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId && !propertyId) {
+      const properties = await storage.getProperties(enterpriseId);
+      const propertyIds = new Set(properties.map(p => p.id));
+      data = data.filter(ws => propertyIds.has(ws.propertyId));
+    }
+    
     res.json(data);
   });
 
@@ -2737,7 +2766,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/printers", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const data = await storage.getPrinters(propertyId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    
+    let data = await storage.getPrinters(propertyId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId && !propertyId) {
+      const properties = await storage.getProperties(enterpriseId);
+      const propertyIds = new Set(properties.map(p => p.id));
+      data = data.filter(printer => printer.propertyId && propertyIds.has(printer.propertyId));
+    }
+    
     res.json(data);
   });
 
@@ -2839,7 +2878,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/kds-devices", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const data = await storage.getKdsDevices(propertyId);
+    const enterpriseId = req.query.enterpriseId as string | undefined;
+    
+    let data = await storage.getKdsDevices(propertyId);
+    
+    // Filter by enterprise if specified (multi-tenancy)
+    if (enterpriseId && !propertyId) {
+      const properties = await storage.getProperties(enterpriseId);
+      const propertyIds = new Set(properties.map(p => p.id));
+      data = data.filter(d => d.propertyId && propertyIds.has(d.propertyId));
+    }
+    
     res.json(data);
   });
 
@@ -13079,8 +13128,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get all registered devices (admin view)
   app.get("/api/registered-devices", async (req, res) => {
     try {
-      const { propertyId } = req.query;
-      const devices = await storage.getRegisteredDevices(propertyId as string);
+      const { propertyId, enterpriseId } = req.query;
+      let devices = await storage.getRegisteredDevices(propertyId as string);
+      
+      // Filter by enterprise if specified (multi-tenancy)
+      if (enterpriseId && !propertyId) {
+        const properties = await storage.getProperties(enterpriseId as string);
+        const propertyIds = new Set(properties.map(p => p.id));
+        devices = devices.filter(d => d.propertyId && propertyIds.has(d.propertyId));
+      }
+      
       res.json(devices);
     } catch (error) {
       console.error("Get registered devices error:", error);

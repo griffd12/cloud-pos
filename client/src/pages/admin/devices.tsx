@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { Plus, Edit, Trash2, Monitor, Tv, Server, RefreshCw, CheckCircle, XCircle, Clock, Key, Copy, Cpu, Activity, Download } from "lucide-react";
 import type { Device, DeviceEnrollmentToken, Enterprise, Property } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -35,6 +36,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 
 export default function DevicesPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
   const [tab, setTab] = useState("devices");
   const [formOpen, setFormOpen] = useState(false);
   const [tokenFormOpen, setTokenFormOpen] = useState(false);
@@ -46,6 +48,9 @@ export default function DevicesPage() {
   const [filterPropertyId, setFilterPropertyId] = useState<string>("");
   const [filterDeviceType, setFilterDeviceType] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
+
+  // Build URLs with enterprise filtering for multi-tenancy
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -69,12 +74,29 @@ export default function DevicesPage() {
     expiresInDays: "",
   });
 
-  const { data: enterprises = [] } = useQuery<Enterprise[]>({ queryKey: ["/api/enterprises"] });
-  const { data: properties = [] } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
+  const { data: enterprises = [] } = useQuery<Enterprise[]>({
+    queryKey: ["/api/enterprises", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/enterprises${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch enterprises");
+      return res.json();
+    },
+  });
+
+  const { data: properties = [] } = useQuery<Property[]>({
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
+  });
 
   const buildDevicesQuery = () => {
     const params = new URLSearchParams();
-    if (filterEnterpriseId) params.set("enterpriseId", filterEnterpriseId);
+    // Use selectedEnterpriseId from EMC context, or fall back to local filter
+    const effectiveEnterpriseId = selectedEnterpriseId || filterEnterpriseId;
+    if (effectiveEnterpriseId) params.set("enterpriseId", effectiveEnterpriseId);
     if (filterPropertyId) params.set("propertyId", filterPropertyId);
     if (filterDeviceType) params.set("deviceType", filterDeviceType);
     if (filterStatus) params.set("status", filterStatus);
@@ -83,7 +105,7 @@ export default function DevicesPage() {
   };
 
   const { data: devices = [], isLoading: devicesLoading } = useQuery<Device[]>({
-    queryKey: ["/api/devices", filterEnterpriseId, filterPropertyId, filterDeviceType, filterStatus],
+    queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }, filterEnterpriseId, filterPropertyId, filterDeviceType, filterStatus],
     queryFn: async () => {
       const res = await fetch(buildDevicesQuery());
       if (!res.ok) throw new Error("Failed to fetch devices");
@@ -92,7 +114,12 @@ export default function DevicesPage() {
   });
 
   const { data: enrollmentTokens = [], isLoading: tokensLoading } = useQuery<DeviceEnrollmentToken[]>({
-    queryKey: ["/api/device-enrollment-tokens"],
+    queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/device-enrollment-tokens${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch enrollment tokens");
+      return res.json();
+    },
   });
 
   const createDevice = useMutation({

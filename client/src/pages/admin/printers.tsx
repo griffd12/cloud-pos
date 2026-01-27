@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEmc } from "@/lib/emc-context";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
 import { Printer as PrinterIcon } from "lucide-react";
 import {
@@ -89,15 +90,29 @@ const CHARACTER_WIDTHS = [
 
 export default function PrintersPage() {
   const { toast } = useToast();
+  const { selectedEnterpriseId } = useEmc();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Printer | null>(null);
 
+  // Build URLs with enterprise filtering for multi-tenancy
+  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+
   const { data: printers = [], isLoading } = useQuery<Printer[]>({
-    queryKey: ["/api/printers"],
+    queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/printers${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch printers");
+      return res.json();
+    },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`);
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
   });
 
   const columns: Column<Printer>[] = [
