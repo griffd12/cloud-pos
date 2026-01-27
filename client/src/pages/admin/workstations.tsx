@@ -130,7 +130,7 @@ export default function WorkstationsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Workstation created" });
     },
@@ -149,7 +149,7 @@ export default function WorkstationsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Workstation updated" });
@@ -164,7 +164,7 @@ export default function WorkstationsPage() {
       await apiRequest("DELETE", "/api/workstations/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Workstation deleted" });
     },
     onError: () => {

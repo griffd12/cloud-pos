@@ -125,7 +125,7 @@ export default function DevicesPage() {
   const createDevice = useMutation({
     mutationFn: (data: typeof formData) => apiRequest("POST", "/api/devices", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Device created successfully" });
       setFormOpen(false);
       resetForm();
@@ -137,7 +137,7 @@ export default function DevicesPage() {
     mutationFn: ({ id, data }: { id: string; data: Partial<typeof formData & { status: string }> }) =>
       apiRequest("PATCH", `/api/devices/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Device updated successfully" });
       setFormOpen(false);
       setSelectedDevice(null);
@@ -149,7 +149,7 @@ export default function DevicesPage() {
   const deleteDevice = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/devices/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Device deleted successfully" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete device", description: err.message, variant: "destructive" }),
@@ -173,7 +173,7 @@ export default function DevicesPage() {
       return apiRequest("POST", "/api/device-enrollment-tokens", payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Enrollment token created successfully" });
       setTokenFormOpen(false);
       resetTokenForm();
@@ -184,7 +184,7 @@ export default function DevicesPage() {
   const deleteToken = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/device-enrollment-tokens/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Token deleted successfully" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete token", description: err.message, variant: "destructive" }),
@@ -226,7 +226,7 @@ export default function DevicesPage() {
       return res.json() as Promise<{ imported: number; skipped: number }>;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: `Imported ${data.imported} devices`, description: data.skipped > 0 ? `${data.skipped} already existed` : undefined });
       setImportOpen(false);
       setImportPropertyId("");

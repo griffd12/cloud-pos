@@ -165,7 +165,7 @@ export default function EmployeesPage() {
       return created;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -191,7 +191,7 @@ export default function EmployeesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -207,7 +207,7 @@ export default function EmployeesPage() {
       await apiRequest("DELETE", "/api/employees/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Employee deleted" });
     },
     onError: () => {

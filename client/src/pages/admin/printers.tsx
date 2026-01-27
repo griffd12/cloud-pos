@@ -170,7 +170,7 @@ export default function PrintersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       toast({ title: "Printer created" });
     },
@@ -185,7 +185,7 @@ export default function PrintersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Printer updated" });
@@ -200,7 +200,7 @@ export default function PrintersPage() {
       await apiRequest("DELETE", "/api/printers/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: "Printer deleted" });
     },
     onError: () => {
@@ -214,7 +214,7 @@ export default function PrintersPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
       toast({ title: data.message || "Test print sent successfully" });
     },
     onError: (error: Error) => {
