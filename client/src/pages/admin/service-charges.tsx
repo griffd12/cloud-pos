@@ -63,7 +63,7 @@ export default function ServiceChargesPage() {
       ],
       required: true,
     },
-    { name: "value", label: "Value", type: "number", placeholder: "e.g., 5.00", required: true },
+    { name: "value", label: "Value", type: "decimal", placeholder: "e.g., 5.00", required: true },
     { name: "autoApply", label: "Auto Apply", type: "switch", description: "Automatically apply to applicable orders", defaultValue: false },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];

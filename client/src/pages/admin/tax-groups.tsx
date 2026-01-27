@@ -52,7 +52,7 @@ export default function TaxGroupsPage() {
 
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Tax Group Name", type: "text", placeholder: "e.g., State Sales Tax", required: true },
-    { name: "rate", label: "Tax Rate (%)", type: "number", placeholder: "e.g., 7.25 for 7.25%", required: true },
+    { name: "rate", label: "Tax Rate (%)", type: "decimal", placeholder: "e.g., 7.25 for 7.25%", required: true },
     { 
       name: "taxMode", 
       label: "Tax Type", 

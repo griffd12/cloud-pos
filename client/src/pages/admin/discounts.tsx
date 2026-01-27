@@ -65,7 +65,7 @@ export default function DiscountsPage() {
       ],
       required: true,
     },
-    { name: "value", label: "Value", type: "number", placeholder: "e.g., 10 for 10% or $10", required: true },
+    { name: "value", label: "Value", type: "decimal", placeholder: "e.g., 10 for 10% or $10", required: true },
     { name: "requiresManagerApproval", label: "Requires Manager Approval", type: "switch", defaultValue: false },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
