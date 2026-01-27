@@ -44,7 +44,7 @@ import { useDeviceContext } from "@/lib/device-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
-import { Link, Redirect } from "wouter";
+import { Link, Redirect, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -82,6 +82,7 @@ interface SelectedModifier {
 
 export default function PosPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { isFullscreen, isSupported: fullscreenSupported, toggleFullscreen } = useFullscreen();
   
   // Enable real-time updates via WebSocket for menu changes, gift cards, etc.
@@ -943,6 +944,31 @@ export default function PosPage() {
     // Check availability unless explicitly skipped (e.g., user confirmed sold-out item)
     if (!skipAvailabilityCheck && !isItemAvailable(item.id)) {
       setSoldOutConfirmItem(item);
+      return;
+    }
+    
+    // Detect "Create Your Own Pizza" items and navigate to Pizza Builder
+    const itemName = item.name.toLowerCase();
+    const isPizzaBuilderItem = itemName.includes("classic pizza") || 
+                               (itemName.includes("gluten") && itemName.includes("crust")) ||
+                               itemName.includes("build your own pizza") ||
+                               itemName.includes("create your own pizza");
+    
+    if (isPizzaBuilderItem) {
+      // Ensure we have a check first
+      let checkToUse = currentCheck;
+      if (!checkToUse) {
+        if (hasPrivilege("fast_transaction")) {
+          const defaultOrderType = (currentRvc?.defaultOrderType as OrderType) || "dine_in";
+          checkToUse = await createCheckMutation.mutateAsync(defaultOrderType);
+        } else {
+          setShowOrderTypeModal(true);
+          setPendingItem(item);
+          return;
+        }
+      }
+      // Navigate to Pizza Builder page
+      navigate(`/pizza-builder/${item.id}`);
       return;
     }
     

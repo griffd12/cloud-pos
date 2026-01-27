@@ -11,6 +11,7 @@ import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import PosPage from "@/pages/pos";
+import PizzaBuilderPage from "@/pages/pizza-builder";
 import KdsPage from "@/pages/kds";
 import DeviceSetupPage from "@/pages/device-setup";
 import EmcLoginPage from "@/pages/emc/login";
@@ -102,6 +103,9 @@ function Router() {
       </Route>
       <Route path="/pos">
         {() => <DeviceGuardedRoute component={PosPage} allowedTypes={["pos"]} />}
+      </Route>
+      <Route path="/pizza-builder/:menuItemId">
+        {() => <DeviceGuardedRoute component={PizzaBuilderPage} allowedTypes={["pos"]} />}
       </Route>
       {/* Admin routes are not available on POS/KDS devices - use EMC instead */}
       <Route path="/admin">
