@@ -3254,10 +3254,13 @@ export const serviceHosts = pgTable("service_hosts", {
     // KDS config
     displayIds?: string[];
     routingRules?: Record<string, string[]>;
-    // Payment config
-    gatewayType?: string;
+    // Payment Controller config (ADDITIVE: enhanced for EMV terminal support)
+    gatewayType?: string; // 'heartland_pay_app', 'heartland_opi', 'elavon_fusebox', etc.
     gatewayConfig?: Record<string, string>;
     terminalIds?: string[];
+    apiPort?: number; // Payment Controller REST API port (default: 8090)
+    callbackUrl?: string; // Cloud POS URL for transaction callbacks
+    terminalTimeout?: number; // Seconds to wait for card (default: 120)
   }>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
