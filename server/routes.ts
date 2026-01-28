@@ -2755,13 +2755,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/menu-items/:id/recipe-ingredients", async (req, res) => {
     try {
+      let ingredientName = req.body.ingredientName;
+      
+      // If modifierId is provided but no ingredientName, look up the modifier name
+      if (req.body.modifierId && !ingredientName) {
+        const modifier = await storage.getModifier(req.body.modifierId);
+        if (modifier) {
+          ingredientName = modifier.name;
+        } else {
+          return res.status(400).json({ message: "Modifier not found" });
+        }
+      }
+      
+      // If still no ingredientName, use a default
+      if (!ingredientName) {
+        ingredientName = "Ingredient";
+      }
+      
       const validated = insertMenuItemRecipeIngredientSchema.parse({
         ...req.body,
+        ingredientName,
         menuItemId: req.params.id,
       });
       const data = await storage.createMenuItemRecipeIngredient(validated);
       res.status(201).json(data);
     } catch (error) {
+      console.error("Recipe ingredient creation error:", error);
       res.status(400).json({ message: "Invalid data" });
     }
   });
