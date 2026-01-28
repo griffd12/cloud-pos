@@ -13625,6 +13625,409 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // PAYMENT CONTROLLER CALLBACK API
+  // These endpoints are called by the Payment Controller service (.NET Windows service)
+  // running on CAPS hosts to report terminal transaction results
+  // ============================================================================
+
+  // Payment Controller callback - called when terminal transaction completes
+  // This is the endpoint the .NET Payment Controller service calls with transaction results
+  app.post("/api/payment-controller/callback", async (req, res) => {
+    try {
+      // Extract service token from header (preferred) or body (fallback)
+      const serviceToken = req.headers["x-service-token"] || req.body.apiKey;
+      
+      // REQUIRED: Authenticate Payment Controller service
+      // In production, this validates against stored service host tokens
+      const expectedToken = process.env.MANAGER_APP_API_KEY;
+      if (!expectedToken) {
+        console.error("MANAGER_APP_API_KEY not configured - Payment Controller authentication disabled");
+        return res.status(503).json({ 
+          success: false, 
+          message: "Payment service not configured" 
+        });
+      }
+      
+      if (!serviceToken) {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Missing X-Service-Token header or apiKey" 
+        });
+      }
+      
+      if (serviceToken !== expectedToken) {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Invalid service token" 
+        });
+      }
+      
+      const { 
+        sessionId, 
+        referenceId, // Alternative to sessionId (per spec)
+        status, // "approved", "declined", "error", "cancelled"
+        authCode,
+        cardBrand,
+        cardLast4,
+        entryMode, // "chip", "contactless", "swipe", "manual"
+        transactionId, // Gateway transaction ID from Heartland
+        responseCode,
+        responseMessage,
+        tipAmount,
+        emvData, // EMV chip data for Level 3 processing
+        signatureData, // Base64 signature if collected
+        errorMessage,
+      } = req.body;
+
+      // Support both sessionId and referenceId (per spec)
+      const effectiveSessionId = sessionId || referenceId;
+
+      // Validate required fields
+      if (!effectiveSessionId || !status) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Missing required fields: sessionId/referenceId and status" 
+        });
+      }
+
+      // Get the terminal session
+      const session = await storage.getTerminalSession(effectiveSessionId);
+      if (!session) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "Terminal session not found" 
+        });
+      }
+
+      // Check if session is already completed
+      if (["approved", "declined", "cancelled", "error"].includes(session.status)) {
+        return res.status(409).json({
+          success: false,
+          message: "Session already completed",
+          currentStatus: session.status,
+        });
+      }
+
+      const terminal = await storage.getTerminalDevice(session.terminalDeviceId);
+      const processor = terminal?.paymentProcessorId 
+        ? await storage.getPaymentProcessor(terminal.paymentProcessorId)
+        : null;
+
+      if (status === "approved") {
+        // Create payment transaction record
+        let transaction = null;
+        if (processor) {
+          transaction = await storage.createPaymentTransaction({
+            paymentProcessorId: processor.id,
+            gatewayTransactionId: transactionId || `HLD-${Date.now()}`,
+            authCode: authCode || "000000",
+            cardBrand: cardBrand || "unknown",
+            cardLast4: cardLast4 || "0000",
+            entryMode: entryMode || "chip",
+            authAmount: session.amount,
+            captureAmount: session.amount + (tipAmount || session.tipAmount || 0),
+            tipAmount: tipAmount || session.tipAmount || 0,
+            status: "captured",
+            transactionType: session.transactionType || "sale",
+            responseCode: responseCode || "00",
+            responseMessage: responseMessage || "Approved",
+            workstationId: session.workstationId || undefined,
+            employeeId: session.employeeId || undefined,
+            terminalId: terminal?.terminalId || terminal?.id,
+            metadata: emvData ? { emvData, signatureData } : undefined,
+          });
+        }
+
+        // Create check payment if check was specified
+        let checkPayment = null;
+        if (session.checkId && session.tenderId) {
+          const tender = await storage.getTender(session.tenderId);
+          const amountDollars = (session.amount / 100).toFixed(2);
+          const tipDollars = ((tipAmount || session.tipAmount || 0) / 100).toFixed(2);
+          
+          checkPayment = await storage.createPayment({
+            checkId: session.checkId,
+            tenderId: session.tenderId,
+            tenderName: tender?.name || "Card",
+            amount: amountDollars,
+            tipAmount: tipDollars,
+            paymentStatus: "completed",
+            paymentTransactionId: transaction?.id || `TERM:${authCode}:${cardLast4}`,
+            employeeId: session.employeeId || undefined,
+          });
+
+          // Recalculate check totals and auto-close if fully paid
+          await recalculateCheckTotals(session.checkId);
+          const updatedCheck = await storage.getCheck(session.checkId);
+          if (updatedCheck) {
+            const allPayments = await storage.getPayments(session.checkId);
+            const totalPaid = allPayments
+              .filter(p => p.paymentStatus === "completed")
+              .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+            const checkTotal = parseFloat(updatedCheck.total || "0");
+            if (totalPaid >= checkTotal && checkTotal > 0) {
+              await storage.updateCheck(session.checkId, { status: "closed", closedAt: new Date() });
+            }
+          }
+        }
+
+        // Update terminal session as approved
+        await storage.updateTerminalSession(session.id, {
+          status: "approved",
+          statusMessage: responseMessage || "Payment approved",
+          paymentTransactionId: transaction?.id,
+          processorReference: transactionId,
+          completedAt: new Date(),
+        });
+
+        // Reset terminal status
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+        // Broadcast via WebSocket if available
+        try {
+          const { broadcast } = await import('./websocket');
+          broadcast({
+            type: "terminal_session_update",
+            sessionId: session.id,
+            status: "approved",
+            authCode,
+            cardLast4,
+            cardBrand,
+          });
+        } catch (wsError) {
+          console.warn("WebSocket broadcast failed:", wsError);
+        }
+
+        res.json({
+          success: true,
+          approved: true,
+          transactionId: transaction?.id,
+          checkPaymentId: checkPayment?.id,
+          authCode,
+          cardLast4,
+          cardBrand,
+        });
+      } else if (status === "declined") {
+        await storage.updateTerminalSession(session.id, {
+          status: "declined",
+          statusMessage: responseMessage || errorMessage || "Card declined",
+          processorReference: transactionId,
+          completedAt: new Date(),
+        });
+
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+        // Broadcast via WebSocket
+        try {
+          const { broadcast } = await import('./websocket');
+          broadcast({
+            type: "terminal_session_update",
+            sessionId: session.id,
+            status: "declined",
+            declineReason: responseMessage || errorMessage || "Card declined",
+          });
+        } catch (wsError) {
+          console.warn("WebSocket broadcast failed:", wsError);
+        }
+
+        res.json({
+          success: true,
+          declined: true,
+          declineReason: responseMessage || errorMessage || "Card declined",
+          responseCode,
+        });
+      } else if (status === "cancelled") {
+        await storage.updateTerminalSession(session.id, {
+          status: "cancelled",
+          statusMessage: "Transaction cancelled",
+          completedAt: new Date(),
+        });
+
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+        res.json({
+          success: true,
+          cancelled: true,
+        });
+      } else if (status === "error") {
+        await storage.updateTerminalSession(session.id, {
+          status: "error",
+          statusMessage: errorMessage || "Terminal error",
+          completedAt: new Date(),
+        });
+
+        await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
+
+        res.json({
+          success: true,
+          error: true,
+          errorMessage: errorMessage || "Terminal error",
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: `Invalid status: ${status}`,
+        });
+      }
+    } catch (error) {
+      console.error("Payment Controller callback error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to process callback" 
+      });
+    }
+  });
+
+  // Payment Controller status update - called during transaction to update status
+  // (e.g., "awaiting_card", "card_inserted", "pin_entry", "processing")
+  app.post("/api/payment-controller/status", async (req, res) => {
+    try {
+      // Extract service token from header (preferred) or body (fallback)
+      const serviceToken = req.headers["x-service-token"] || req.body.apiKey;
+      
+      // REQUIRED: Authenticate Payment Controller service
+      const expectedToken = process.env.MANAGER_APP_API_KEY;
+      if (!expectedToken) {
+        return res.status(503).json({ success: false, message: "Payment service not configured" });
+      }
+      if (!serviceToken) {
+        return res.status(401).json({ success: false, message: "Missing X-Service-Token header" });
+      }
+      if (serviceToken !== expectedToken) {
+        return res.status(401).json({ success: false, message: "Invalid service token" });
+      }
+      
+      const { sessionId, referenceId, status, statusMessage } = req.body;
+      const effectiveSessionId = sessionId || referenceId;
+
+      if (!effectiveSessionId || !status) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Missing required fields: sessionId/referenceId and status" 
+        });
+      }
+
+      const session = await storage.getTerminalSession(effectiveSessionId);
+      if (!session) {
+        return res.status(404).json({ success: false, message: "Terminal session not found" });
+      }
+
+      // Only update if session is still active
+      if (["approved", "declined", "cancelled", "error"].includes(session.status)) {
+        return res.status(409).json({
+          success: false,
+          message: "Session already completed",
+          currentStatus: session.status,
+        });
+      }
+
+      // Update session status
+      await storage.updateTerminalSession(session.id, {
+        status,
+        statusMessage: statusMessage || undefined,
+      });
+
+      // Broadcast via WebSocket
+      try {
+        const { broadcast } = await import('./websocket');
+        broadcast({
+          type: "terminal_session_update",
+          sessionId: session.id,
+          status,
+          statusMessage,
+        });
+      } catch (wsError) {
+        console.warn("WebSocket broadcast failed:", wsError);
+      }
+
+      res.json({ success: true, status });
+    } catch (error) {
+      console.error("Payment Controller status update error:", error);
+      res.status(500).json({ success: false, message: "Failed to update status" });
+    }
+  });
+
+  // Get pending terminal sessions for a service host
+  // Called by Payment Controller to poll for new transactions to process
+  app.get("/api/payment-controller/pending-sessions", async (req, res) => {
+    try {
+      // Extract service token from header (preferred) or query param (fallback)
+      const serviceToken = req.headers["x-service-token"] || req.query.apiKey;
+      
+      // REQUIRED: Authenticate Payment Controller service
+      const expectedToken = process.env.MANAGER_APP_API_KEY;
+      if (!expectedToken) {
+        return res.status(503).json({ success: false, message: "Payment service not configured" });
+      }
+      if (!serviceToken) {
+        return res.status(401).json({ success: false, message: "Missing X-Service-Token header" });
+      }
+      if (serviceToken !== expectedToken) {
+        return res.status(401).json({ success: false, message: "Invalid service token" });
+      }
+      
+      const { serviceHostId, propertyId } = req.query;
+
+      // Get pending sessions for terminals
+      const sessions = await storage.getTerminalSessions(undefined, "pending");
+      
+      // For each session, include terminal details needed for processing
+      // Filter by serviceHostId or propertyId if provided
+      const pendingSessions = (await Promise.all(
+        sessions.map(async (session) => {
+          const terminal = await storage.getTerminalDevice(session.terminalDeviceId);
+          if (!terminal) return null;
+          
+          // Filter by property if specified
+          if (propertyId && terminal.propertyId !== propertyId) {
+            return null;
+          }
+          
+          // Filter by service host if specified (terminal's assigned host)
+          // TODO: Add serviceHostId field to terminal devices when Payment Controller 
+          // provisioning is implemented in CAL Setup Wizard
+          
+          const processor = terminal.paymentProcessorId 
+            ? await storage.getPaymentProcessor(terminal.paymentProcessorId)
+            : null;
+          
+          // Only return sessions for Heartland/EMV processors that need Payment Controller
+          const processorType = processor?.gateway_type;
+          const isPaymentControllerProcessor = processorType?.startsWith("heartland") || 
+            processorType === "elavon_fusebox";
+          
+          if (!isPaymentControllerProcessor) {
+            return null; // Skip non-Payment Controller sessions
+          }
+          
+          return {
+            sessionId: session.id,
+            referenceId: session.id, // Per spec
+            terminalId: terminal.terminalId || terminal.id,
+            terminalIp: terminal.ipAddress,
+            terminalPort: terminal.port || 12000,
+            terminalModel: terminal.model,
+            amount: session.amount,
+            tipAmount: session.tipAmount || 0,
+            transactionType: session.transactionType || "sale",
+            currency: session.currency || "usd",
+            processorType,
+            propertyId: terminal.propertyId,
+            checkId: session.checkId,
+            createdAt: session.createdAt,
+            expiresAt: session.expiresAt,
+          };
+        })
+      )).filter(Boolean); // Remove null entries
+
+      res.json({ success: true, sessions: pendingSessions });
+    } catch (error) {
+      console.error("Get pending sessions error:", error);
+      res.status(500).json({ success: false, message: "Failed to get pending sessions" });
+    }
+  });
+
+  // ============================================================================
   // REGISTERED DEVICES - POS/KDS device enrollment and access control
   // ============================================================================
 
