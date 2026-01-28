@@ -174,6 +174,17 @@ export function PaymentModal({
   const useStripeElements = paymentProcessor?.gateway_type === "stripe";
   const hasPaymentProcessor = !!paymentProcessor;
   
+  // Heartland semi-integrated EMV terminal support
+  // These processor types require EMV terminal for card-present transactions
+  const isHeartlandProcessor = paymentProcessor?.gateway_type?.startsWith("heartland") || false;
+  const isHeartlandPayApp = paymentProcessor?.gateway_type === "heartland_pay_app";
+  const isHeartlandOPI = paymentProcessor?.gateway_type === "heartland_opi";
+  const isHeartlandPortico = paymentProcessor?.gateway_type === "heartland_portico";
+  
+  // Processor requires EMV terminal (no manual keyed entry for card-present)
+  // Heartland Pay App and OPI are semi-integrated and must use physical terminals
+  const isTerminalOnlyProcessor = isHeartlandPayApp || isHeartlandOPI;
+  
   // Filter to active terminals (show all active, not just online - display status indicator)
   const availableTerminals = terminalDevices.filter(
     (t) => t.active
@@ -1186,7 +1197,17 @@ export function PaymentModal({
           <DialogHeader className="p-4 pb-0">
             <DialogTitle className="flex items-center gap-2" data-testid="text-terminal-title">
               <Smartphone className="w-5 h-5" />
-              <span>Terminal Payment</span>
+              <span>{isHeartlandProcessor ? "Heartland EMV Payment" : "Terminal Payment"}</span>
+              {isHeartlandPayApp && (
+                <span className="text-xs bg-blue-500/20 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded">
+                  Pay App
+                </span>
+              )}
+              {isHeartlandOPI && (
+                <span className="text-xs bg-purple-500/20 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded">
+                  OPI
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -1889,6 +1910,11 @@ export function PaymentModal({
                   <div className="text-center py-4 text-muted-foreground text-sm">
                     <WifiOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p>No terminals available</p>
+                    {isTerminalOnlyProcessor && (
+                      <p className="text-destructive mt-2 text-xs">
+                        Heartland EMV requires a terminal device. Configure terminals in EMC.
+                      </p>
+                    )}
                   </div>
                 )}
                 
@@ -1911,21 +1937,36 @@ export function PaymentModal({
                   </div>
                 </Button>
                 
-                <Separator />
+                {!isTerminalOnlyProcessor && (
+                  <>
+                    <Separator />
+                    
+                    <Button
+                      variant="secondary"
+                      className="w-full h-12 justify-start gap-3"
+                      onClick={() => setPaymentMethod("manual")}
+                      disabled={isProcessingCard}
+                      data-testid="button-manual-entry"
+                    >
+                      <Monitor className="w-5 h-5" />
+                      <div className="text-left">
+                        <p className="font-medium">Manual Card Entry</p>
+                        <p className="text-xs text-muted-foreground">Type card details</p>
+                      </div>
+                    </Button>
+                  </>
+                )}
                 
-                <Button
-                  variant="secondary"
-                  className="w-full h-12 justify-start gap-3"
-                  onClick={() => setPaymentMethod("manual")}
-                  disabled={isProcessingCard}
-                  data-testid="button-manual-entry"
-                >
-                  <Monitor className="w-5 h-5" />
-                  <div className="text-left">
-                    <p className="font-medium">Manual Card Entry</p>
-                    <p className="text-xs text-muted-foreground">Type card details</p>
+                {isTerminalOnlyProcessor && (
+                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm">
+                    <p className="font-medium text-blue-800 dark:text-blue-200">
+                      {isHeartlandPayApp ? "Heartland Pay App" : isHeartlandOPI ? "Heartland OPI" : "Semi-Integrated EMV"}
+                    </p>
+                    <p className="text-blue-600 dark:text-blue-400 mt-1">
+                      This property uses EMV terminals for card payments. Select a terminal above.
+                    </p>
                   </div>
-                </Button>
+                )}
               </div>
             )}
 
