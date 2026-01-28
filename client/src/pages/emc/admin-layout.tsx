@@ -239,11 +239,18 @@ export default function EmcAdminLayout() {
     enabled: isAuthenticated,
   });
 
-  // Filter properties by effective enterprise
+  // Filter properties by effective enterprise AND user's property assignment for property_admin
   const properties = useMemo(() => {
     if (!effectiveEnterpriseId) return [];
-    return allProperties.filter(p => p.enterpriseId === effectiveEnterpriseId);
-  }, [allProperties, effectiveEnterpriseId]);
+    let filtered = allProperties.filter(p => p.enterpriseId === effectiveEnterpriseId);
+    
+    // property_admin users can ONLY see their assigned property
+    if (user?.accessLevel === "property_admin" && user?.propertyId) {
+      filtered = filtered.filter(p => p.id === user.propertyId);
+    }
+    
+    return filtered;
+  }, [allProperties, effectiveEnterpriseId, user?.accessLevel, user?.propertyId]);
 
   const { data: allRvcs = [] } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs"],
@@ -407,6 +414,7 @@ export default function EmcAdminLayout() {
             onEnterpriseChange={handleEnterpriseChange}
             onPropertyChange={handlePropertyChange}
             onRvcChange={handleRvcChange}
+            isPropertyLocked={user?.accessLevel === "property_admin"}
           />
 
           <main className="flex-1 overflow-auto">

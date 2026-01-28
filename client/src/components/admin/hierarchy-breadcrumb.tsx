@@ -28,6 +28,7 @@ interface HierarchyBreadcrumbProps {
   onPropertyChange: (id: string | null) => void;
   onRvcChange: (id: string | null) => void;
   showOverrideBadge?: boolean;
+  isPropertyLocked?: boolean;
 }
 
 export function HierarchyBreadcrumb({
@@ -41,6 +42,7 @@ export function HierarchyBreadcrumb({
   onPropertyChange,
   onRvcChange,
   showOverrideBadge = false,
+  isPropertyLocked = false,
 }: HierarchyBreadcrumbProps) {
   const filteredProperties = selectedEnterprise
     ? properties.filter((p) => p.enterpriseId === selectedEnterprise.id)
@@ -74,27 +76,31 @@ export function HierarchyBreadcrumb({
               <BreadcrumbItem>
                 <div className="flex items-center gap-2">
                   <Store className="w-4 h-4 text-muted-foreground" />
-                  <Select
-                    value={selectedProperty?.id || "all"}
-                    onValueChange={(val) =>
-                      onPropertyChange(val === "all" ? null : val)
-                    }
-                  >
-                    <SelectTrigger
-                      className="w-48 border-0 bg-transparent h-auto p-0 font-medium"
-                      data-testid="select-property"
+                  {isPropertyLocked && selectedProperty ? (
+                    <span className="font-medium">{selectedProperty.name}</span>
+                  ) : (
+                    <Select
+                      value={selectedProperty?.id || "all"}
+                      onValueChange={(val) =>
+                        onPropertyChange(val === "all" ? null : val)
+                      }
                     >
-                      <SelectValue placeholder="All Properties" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Properties</SelectItem>
-                      {filteredProperties.map((prop) => (
-                        <SelectItem key={prop.id} value={prop.id}>
-                          {prop.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                      <SelectTrigger
+                        className="w-48 border-0 bg-transparent h-auto p-0 font-medium"
+                        data-testid="select-property"
+                      >
+                        <SelectValue placeholder="All Properties" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Properties</SelectItem>
+                        {filteredProperties.map((prop) => (
+                          <SelectItem key={prop.id} value={prop.id}>
+                            {prop.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </BreadcrumbItem>
             </>
