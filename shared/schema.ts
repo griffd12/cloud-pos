@@ -632,7 +632,25 @@ export const TERMINAL_SESSION_STATUSES = ["pending", "processing", "awaiting_car
 export type TerminalSessionStatus = (typeof TERMINAL_SESSION_STATUSES)[number];
 
 // Terminal device models (common EMV terminals)
-export const TERMINAL_MODELS = ["pax_a920", "pax_s300", "verifone_vx520", "verifone_vx820", "verifone_p400", "ingenico_lane_3000", "ingenico_lane_5000", "stripe_s700", "stripe_m2", "stripe_wisepos_e", "bbpos_chipper", "generic"] as const;
+// ADDITIVE: Added Heartland Pay App compatible devices (Verifone Trinity T650c, T650p, P630, PAX A35, A77)
+export const TERMINAL_MODELS = [
+  // Existing PAX models
+  "pax_a920", "pax_s300",
+  // Heartland Pay App PAX models (new)
+  "pax_a35", "pax_a77",
+  // Existing Verifone models
+  "verifone_vx520", "verifone_vx820", "verifone_p400",
+  // Heartland Pay App Verifone Trinity models (new)
+  "verifone_t650c", "verifone_t650p", "verifone_p630",
+  // Existing Ingenico models
+  "ingenico_lane_3000", "ingenico_lane_5000",
+  // Heartland OPI Ingenico models (new)
+  "ingenico_ipp350", "ingenico_isc_touch_250",
+  // Existing Stripe/other models
+  "stripe_s700", "stripe_m2", "stripe_wisepos_e", "bbpos_chipper",
+  // Generic fallback
+  "generic"
+] as const;
 export type TerminalModel = (typeof TERMINAL_MODELS)[number];
 
 // Connection types for terminals
