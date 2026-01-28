@@ -6,6 +6,71 @@ This project is an enterprise cloud-based Quick Service Restaurant (QSR) Point o
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## CRITICAL SYSTEM RULES – READ FIRST
+
+This POS system already has multiple Enterprises configured. There may be:
+- Existing Enterprises
+- Existing Properties
+- Existing RVCs
+- Existing Menu, EMC, and configuration data already in use
+
+### What is NOT Allowed
+- Delete existing configuration
+- Rename existing configuration
+- Change the meaning or behavior of existing configuration
+- Break or invalidate any existing Enterprise setup
+
+### All Changes MUST be NON-DESTRUCTIVE and ADDITIVE ONLY
+
+**Definitions:**
+- **ADDITIVE** = new fields, new options, new configuration records, or new logic that does not alter existing behavior
+- **NON-DESTRUCTIVE** = existing Enterprises continue to work exactly as before without modification
+
+### When Making ANY Change
+1. Assume existing Enterprises are already live and operational
+2. Existing configurations must continue to function without requiring edits
+3. No existing data may be removed or overwritten
+4. No defaults may be changed retroactively
+
+### Enterprise Configuration Rules
+Any new feature, field, or configuration must:
+- Be OPTIONAL for existing Enterprises
+- Default to OFF or NULL for existing Enterprises
+- Be explicitly enabled per Enterprise, Property, or RVC if needed
+
+### EMC (Enterprise Management Console) Rules
+- If a new configuration option is added:
+  - ALL Enterprises must see the new option in EMC
+  - Existing Enterprises must retain their current values
+  - New Enterprises must inherit the new option with safe defaults
+- EMC pages must be UPDATED, not recreated
+- Existing EMC pages must not be replaced or removed
+
+### Multi-Enterprise Rule (CRITICAL)
+- Changes must apply consistently across:
+  - Enterprise A (existing)
+  - Enterprise B (existing)
+  - Any future Enterprise C, D, etc.
+- The system must NEVER assume there is only one Enterprise
+
+### Migration & Versioning Rules
+- If a database change is required:
+  - Use versioned migrations only
+  - Never drop columns or tables used by existing Enterprises
+  - Add new columns as nullable or with safe defaults
+- No migration may require manual intervention for existing Enterprises
+
+### Before Making Any Change, You MUST
+1. State whether the change is additive or destructive
+2. Confirm that no existing Enterprise configuration will be altered
+3. Confirm how the change appears in EMC for:
+   - Existing Enterprises
+   - New Enterprises
+
+### If a Requested Change Would Break Existing Enterprises
+- You must REFUSE the change
+- You must propose a safe alternative that preserves compatibility
+
 ## System Architecture
 
 ### Core Design Principles
