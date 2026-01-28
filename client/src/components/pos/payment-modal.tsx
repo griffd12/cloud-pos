@@ -154,6 +154,26 @@ export function PaymentModal({
     enabled: !!propertyId && open,
   });
   
+  // Query property's active payment processor to determine which gateway to use
+  const { data: paymentProcessor, isLoading: isLoadingProcessor } = useQuery<{ id: string; name: string; gateway_type: string; environment: string } | null>({
+    queryKey: ["/api/payment-processors", { propertyId, active: true }],
+    queryFn: async () => {
+      if (!propertyId) return null;
+      const res = await apiRequest("GET", `/api/payment-processors?propertyId=${propertyId}&active=true`);
+      if (!res.ok) return null;
+      const processors = await res.json();
+      // Return the first active processor for this property
+      return processors.length > 0 ? processors[0] : null;
+    },
+    enabled: !!propertyId && open,
+  });
+  
+  // Determine if we should use Stripe Elements or keyed card entry based on processor type
+  // If no processor is configured or still loading, default to keyed entry (which uses /api/pos/process-card-payment)
+  // The backend will determine the correct processor based on property settings
+  const useStripeElements = paymentProcessor?.gateway_type === "stripe";
+  const hasPaymentProcessor = !!paymentProcessor;
+  
   // Filter to active terminals (show all active, not just online - display status indicator)
   const availableTerminals = terminalDevices.filter(
     (t) => t.active
@@ -1909,7 +1929,32 @@ export function PaymentModal({
               </div>
             )}
 
-            {paymentMethod === "manual" && (
+            {paymentMethod === "manual" && isLoadingProcessor && (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Loading payment processor...</span>
+              </div>
+            )}
+
+            {paymentMethod === "manual" && !isLoadingProcessor && !hasPaymentProcessor && (
+              <div className="space-y-4 text-center p-4">
+                <div className="text-destructive">
+                  <p className="font-medium">No Payment Processor Configured</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Please configure a payment processor for this property in EMC before processing card payments.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setPaymentMethod("select")}
+                  data-testid="button-no-processor-back"
+                >
+                  Go Back
+                </Button>
+              </div>
+            )}
+
+            {paymentMethod === "manual" && !isLoadingProcessor && hasPaymentProcessor && useStripeElements && (
               <StripeCardForm
                 amount={cardAmount}
                 checkId={check?.id || ""}
@@ -1965,6 +2010,111 @@ export function PaymentModal({
                   });
                 }}
               />
+            )}
+
+            {paymentMethod === "manual" && !isLoadingProcessor && hasPaymentProcessor && !useStripeElements && (
+              <div className="space-y-4" data-testid="keyed-card-entry-form">
+                <div className="bg-primary text-primary-foreground rounded-lg p-4 text-center">
+                  <p className="text-sm opacity-90 mb-1">Charging</p>
+                  <p className="text-3xl font-bold tabular-nums" data-testid="text-keyed-charge-amount">
+                    ${cardAmount.toFixed(2)}
+                  </p>
+                  {paymentProcessor && (
+                    <p className="text-xs opacity-75 mt-1">
+                      via {paymentProcessor.name} {paymentProcessor.environment !== "production" ? `(${paymentProcessor.environment})` : ""}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="cardNumber">Card Number</Label>
+                    <Input
+                      id="cardNumber"
+                      placeholder="4111 1111 1111 1111"
+                      value={cardNumber}
+                      onChange={(e) => {
+                        // Format card number with spaces
+                        const value = e.target.value.replace(/\D/g, "").slice(0, 16);
+                        const formatted = value.replace(/(.{4})/g, "$1 ").trim();
+                        setCardNumber(formatted);
+                      }}
+                      className="font-mono text-lg"
+                      data-testid="input-card-number"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="cardExpiry">Expiry (MM/YY)</Label>
+                      <Input
+                        id="cardExpiry"
+                        placeholder="MM/YY"
+                        value={cardExpiry}
+                        onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, "").slice(0, 4);
+                          if (value.length >= 2) {
+                            value = value.slice(0, 2) + "/" + value.slice(2);
+                          }
+                          setCardExpiry(value);
+                        }}
+                        className="font-mono"
+                        data-testid="input-card-expiry"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="cardCvv">CVV</Label>
+                      <Input
+                        id="cardCvv"
+                        type="password"
+                        placeholder="123"
+                        value={cardCvv}
+                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        className="font-mono"
+                        data-testid="input-card-cvv"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="cardName">Cardholder Name (optional)</Label>
+                    <Input
+                      id="cardName"
+                      placeholder="John Smith"
+                      value={cardName}
+                      onChange={(e) => setCardName(e.target.value)}
+                      data-testid="input-card-name"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setPaymentMethod("select")}
+                    disabled={isProcessingCard}
+                    data-testid="button-cancel-keyed-entry"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={processCardPayment}
+                    disabled={isProcessingCard || cardNumber.replace(/\s/g, "").length < 15 || cardExpiry.length < 5 || cardCvv.length < 3}
+                    data-testid="button-process-keyed-payment"
+                  >
+                    {isProcessingCard ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      `Charge $${cardAmount.toFixed(2)}`
+                    )}
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         </DialogContent>
