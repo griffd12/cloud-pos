@@ -32,6 +32,7 @@ import { CustomerModal } from "@/components/pos/customer-modal";
 import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
 import { ItemOptionsPopup } from "@/components/pos/item-options-popup";
+import { ConversationalOrderPanel } from "@/components/pos/conversational-order-panel";
 import { SetAvailabilityDialog } from "@/components/pos/set-availability-dialog";
 import { SoldOutConfirmDialog } from "@/components/pos/sold-out-confirm-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -220,6 +221,9 @@ export default function PosPage() {
   const [soldOutConfirmItem, setSoldOutConfirmItem] = useState<MenuItem | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
+  
+  // Conversational Ordering state (Menu Build)
+  const [conversationalOrderItem, setConversationalOrderItem] = useState<MenuItem | null>(null);
   
   // Item availability hook
   const { getQuantityRemaining, isItemAvailable, setAvailability, decrementQuantity, isUpdating: isAvailabilityUpdating } = useItemAvailability();
@@ -983,6 +987,26 @@ export default function PosPage() {
       return;
     }
     
+    // Conversational Ordering: If RVC has it enabled and item has menu build enabled,
+    // open the conversational order panel instead of normal modifier flow
+    if (currentRvc?.conversationalOrderingEnabled && item.menuBuildEnabled) {
+      // Ensure we have a check first
+      let checkToUse = currentCheck;
+      if (!checkToUse) {
+        if (hasPrivilege("fast_transaction")) {
+          const defaultOrderType = (currentRvc?.defaultOrderType as OrderType) || "dine_in";
+          checkToUse = await createCheckMutation.mutateAsync(defaultOrderType);
+        } else {
+          setShowOrderTypeModal(true);
+          setPendingItem(item);
+          return;
+        }
+      }
+      // Open the conversational order panel
+      setConversationalOrderItem(item);
+      return;
+    }
+    
     // Detect "Create Your Own Pizza" items and navigate to Pizza Builder
     const itemName = item.name.toLowerCase();
     const isPizzaBuilderItem = itemName.includes("classic pizza") || 
@@ -1703,6 +1727,38 @@ export default function PosPage() {
           )}
         </div>
 
+        {currentRvc?.conversationalOrderingEnabled && conversationalOrderItem && (
+          <div className="w-72 flex-shrink-0 border-l bg-muted/30">
+            <ConversationalOrderPanel
+              enterpriseId={wsContext?.property?.enterpriseId || ""}
+              activeMenuItem={conversationalOrderItem}
+              onConfirmItem={async (menuItemId, modifications) => {
+                if (!currentCheck) {
+                  toast({ title: "No check open", description: "Start a new check first", variant: "destructive" });
+                  return;
+                }
+                try {
+                  const modifiersForCheck: SelectedModifier[] = modifications.map(m => ({
+                    id: m.ingredientName,
+                    name: m.prefixName ? `${m.prefixName} ${m.ingredientName}` : m.ingredientName,
+                    priceDelta: "0.00",
+                  }));
+                  
+                  await addItemMutation.mutateAsync({
+                    menuItem: conversationalOrderItem,
+                    modifiers: modifiersForCheck,
+                  });
+                  
+                  setConversationalOrderItem(null);
+                  toast({ title: "Item added to order" });
+                } catch (error: any) {
+                  toast({ title: "Failed to add item", description: error.message, variant: "destructive" });
+                }
+              }}
+              onCancelItem={() => setConversationalOrderItem(null)}
+            />
+          </div>
+        )}
         <div className="w-80 lg:w-96 flex-shrink-0 border-l">
           <CheckPanel
             check={currentCheck}

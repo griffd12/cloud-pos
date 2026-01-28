@@ -46,6 +46,7 @@ export const rvcs = pgTable("rvcs", {
   orderTypeDefault: text("order_type_default").default("dine_in"),
   dynamicOrderMode: boolean("dynamic_order_mode").default(false),
   domSendMode: text("dom_send_mode").default("fire_on_fly"), // 'fire_on_fly', 'fire_on_next', 'fire_on_tender'
+  conversationalOrderingEnabled: boolean("conversational_ordering_enabled").default(false), // Enable MICROS RES 3700-style conversational ordering
   active: boolean("active").default(true),
 });
 
@@ -380,6 +381,7 @@ export const menuItems = pgTable("menu_items", {
   majorGroupId: varchar("major_group_id").references(() => majorGroups.id),
   familyGroupId: varchar("family_group_id").references(() => familyGroups.id),
   color: text("color").default("#3B82F6"),
+  menuBuildEnabled: boolean("menu_build_enabled").default(false), // Enable recipe/ingredient configuration for conversational ordering
   active: boolean("active").default(true),
 });
 
@@ -439,6 +441,54 @@ export const menuItemModifierGroups = pgTable("menu_item_modifier_groups", {
   modifierGroupId: varchar("modifier_group_id").notNull().references(() => modifierGroups.id),
   displayOrder: integer("display_order").default(0),
 });
+
+// ============================================================================
+// MENU BUILD / RECIPE SYSTEM (Conversational Ordering)
+// ============================================================================
+
+// Ingredient Prefixes - configurable prefixes like "No", "Extra", "Sub", "Light", "Add"
+export const ingredientPrefixes = pgTable("ingredient_prefixes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  name: text("name").notNull(), // Display name: "No", "Extra", "Sub", "Light", "Add"
+  code: text("code").notNull(), // Internal code: "NO", "EXTRA", "SUB", "LIGHT", "ADD"
+  printName: text("print_name"), // What prints on kitchen ticket: "NO", "X-TRA", "SUB"
+  priceFactor: decimal("price_factor", { precision: 5, scale: 2 }).default("1.00"), // Price multiplier: 0 for No, 2 for Extra, etc.
+  displayOrder: integer("display_order").default(0),
+  active: boolean("active").default(true),
+});
+
+// Menu Item Recipe Ingredients - default ingredients for menu build
+// When menuBuildEnabled=true on a menu item, these are the default ingredients shown
+export const menuItemRecipeIngredients = pgTable("menu_item_recipe_ingredients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuItemId: varchar("menu_item_id").notNull().references(() => menuItems.id),
+  ingredientName: text("ingredient_name").notNull(), // e.g., "Lettuce", "Tomato", "Pickles", "Onion"
+  ingredientCategory: text("ingredient_category"), // e.g., "Vegetables", "Proteins", "Sauces", "Cheese"
+  defaultQuantity: integer("default_quantity").default(1), // Default amount (1x, 2x, etc.)
+  isDefault: boolean("is_default").default(true), // Is this ingredient included by default?
+  pricePerUnit: decimal("price_per_unit", { precision: 10, scale: 2 }).default("0.00"), // Price for extras
+  displayOrder: integer("display_order").default(0),
+  active: boolean("active").default(true),
+  // Conversational Ordering fields (optional - for modifier-based recipe linking)
+  modifierId: varchar("modifier_id").references(() => modifiers.id), // Link to modifier as ingredient
+  defaultPrefixId: varchar("default_prefix_id").references(() => ingredientPrefixes.id), // Default prefix (No, Extra, Sub, etc.)
+  sortOrder: integer("sort_order").default(0), // Display order for conversational ordering
+});
+
+export const ingredientPrefixesRelations = relations(ingredientPrefixes, ({ one }) => ({
+  enterprise: one(enterprises, { fields: [ingredientPrefixes.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [ingredientPrefixes.propertyId], references: [properties.id] }),
+  rvc: one(rvcs, { fields: [ingredientPrefixes.rvcId], references: [rvcs.id] }),
+}));
+
+export const menuItemRecipeIngredientsRelations = relations(menuItemRecipeIngredients, ({ one }) => ({
+  menuItem: one(menuItems, { fields: [menuItemRecipeIngredients.menuItemId], references: [menuItems.id] }),
+  modifier: one(modifiers, { fields: [menuItemRecipeIngredients.modifierId], references: [modifiers.id] }),
+  defaultPrefix: one(ingredientPrefixes, { fields: [menuItemRecipeIngredients.defaultPrefixId], references: [ingredientPrefixes.id] }),
+}));
 
 // ============================================================================
 // PAYMENT PROCESSING - Gateway-agnostic payment processor configuration
@@ -1110,6 +1160,8 @@ export const insertModifierGroupSchema = createInsertSchema(modifierGroups).omit
 export const insertModifierSchema = createInsertSchema(modifiers).omit({ id: true });
 export const insertModifierGroupModifierSchema = createInsertSchema(modifierGroupModifiers).omit({ id: true });
 export const insertMenuItemModifierGroupSchema = createInsertSchema(menuItemModifierGroups).omit({ id: true });
+export const insertIngredientPrefixSchema = createInsertSchema(ingredientPrefixes).omit({ id: true });
+export const insertMenuItemRecipeIngredientSchema = createInsertSchema(menuItemRecipeIngredients).omit({ id: true });
 export const insertPaymentProcessorSchema = createInsertSchema(paymentProcessors).omit({ id: true, createdAt: true });
 export const insertPaymentTransactionSchema = createInsertSchema(paymentTransactions).omit({ id: true, initiatedAt: true });
 export const insertTerminalDeviceSchema = createInsertSchema(terminalDevices).omit({ id: true, createdAt: true }).extend({
@@ -1202,6 +1254,10 @@ export type ModifierGroupModifier = typeof modifierGroupModifiers.$inferSelect;
 export type InsertModifierGroupModifier = z.infer<typeof insertModifierGroupModifierSchema>;
 export type MenuItemModifierGroup = typeof menuItemModifierGroups.$inferSelect;
 export type InsertMenuItemModifierGroup = z.infer<typeof insertMenuItemModifierGroupSchema>;
+export type IngredientPrefix = typeof ingredientPrefixes.$inferSelect;
+export type InsertIngredientPrefix = z.infer<typeof insertIngredientPrefixSchema>;
+export type MenuItemRecipeIngredient = typeof menuItemRecipeIngredients.$inferSelect;
+export type InsertMenuItemRecipeIngredient = z.infer<typeof insertMenuItemRecipeIngredientSchema>;
 export type PaymentProcessor = typeof paymentProcessors.$inferSelect;
 export type InsertPaymentProcessor = z.infer<typeof insertPaymentProcessorSchema>;
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;

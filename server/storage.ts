@@ -5,6 +5,7 @@ import {
   majorGroups, familyGroups,
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
+  ingredientPrefixes, menuItemRecipeIngredients,
   tenders, discounts, serviceCharges,
   checks, rounds, checkItems, checkPayments, checkDiscounts, checkLocks, auditLogs, kdsTickets, kdsTicketItems,
   paymentProcessors, paymentTransactions, terminalDevices, terminalSessions,
@@ -48,6 +49,8 @@ import {
   type Modifier, type InsertModifier,
   type ModifierGroupModifier, type InsertModifierGroupModifier,
   type MenuItemModifierGroup, type InsertMenuItemModifierGroup,
+  type IngredientPrefix, type InsertIngredientPrefix,
+  type MenuItemRecipeIngredient, type InsertMenuItemRecipeIngredient,
   type Tender, type InsertTender,
   type Discount, type InsertDiscount,
   type ServiceCharge, type InsertServiceCharge,
@@ -324,6 +327,20 @@ export interface IStorage {
   getMenuItemModifierGroups(menuItemId: string): Promise<MenuItemModifierGroup[]>;
   linkModifierGroupToMenuItem(data: InsertMenuItemModifierGroup): Promise<MenuItemModifierGroup>;
   unlinkModifierGroupFromMenuItem(menuItemId: string, modifierGroupId: string): Promise<boolean>;
+
+  // Ingredient Prefixes (Conversational Ordering)
+  getIngredientPrefixes(): Promise<IngredientPrefix[]>;
+  getIngredientPrefix(id: string): Promise<IngredientPrefix | undefined>;
+  createIngredientPrefix(data: InsertIngredientPrefix): Promise<IngredientPrefix>;
+  updateIngredientPrefix(id: string, data: Partial<InsertIngredientPrefix>): Promise<IngredientPrefix | undefined>;
+  deleteIngredientPrefix(id: string): Promise<boolean>;
+
+  // Menu Item Recipe Ingredients (Conversational Ordering)
+  getMenuItemRecipeIngredients(menuItemId: string): Promise<MenuItemRecipeIngredient[]>;
+  getMenuItemRecipeIngredient(id: string): Promise<MenuItemRecipeIngredient | undefined>;
+  createMenuItemRecipeIngredient(data: InsertMenuItemRecipeIngredient): Promise<MenuItemRecipeIngredient>;
+  updateMenuItemRecipeIngredient(id: string, data: Partial<InsertMenuItemRecipeIngredient>): Promise<MenuItemRecipeIngredient | undefined>;
+  deleteMenuItemRecipeIngredient(id: string): Promise<boolean>;
 
   // Tenders
   getTenders(rvcId?: string): Promise<Tender[]>;
@@ -1721,6 +1738,58 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(menuItemModifierGroups).where(
       and(eq(menuItemModifierGroups.menuItemId, menuItemId), eq(menuItemModifierGroups.modifierGroupId, modifierGroupId))
     );
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Ingredient Prefixes (Conversational Ordering)
+  async getIngredientPrefixes(): Promise<IngredientPrefix[]> {
+    return db.select().from(ingredientPrefixes).where(eq(ingredientPrefixes.active, true)).orderBy(ingredientPrefixes.displayOrder);
+  }
+
+  async getIngredientPrefix(id: string): Promise<IngredientPrefix | undefined> {
+    const [result] = await db.select().from(ingredientPrefixes).where(eq(ingredientPrefixes.id, id));
+    return result;
+  }
+
+  async createIngredientPrefix(data: InsertIngredientPrefix): Promise<IngredientPrefix> {
+    const [result] = await db.insert(ingredientPrefixes).values(data).returning();
+    return result;
+  }
+
+  async updateIngredientPrefix(id: string, data: Partial<InsertIngredientPrefix>): Promise<IngredientPrefix | undefined> {
+    const [result] = await db.update(ingredientPrefixes).set(data).where(eq(ingredientPrefixes.id, id)).returning();
+    return result;
+  }
+
+  async deleteIngredientPrefix(id: string): Promise<boolean> {
+    const result = await db.delete(ingredientPrefixes).where(eq(ingredientPrefixes.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Menu Item Recipe Ingredients (Conversational Ordering)
+  async getMenuItemRecipeIngredients(menuItemId: string): Promise<MenuItemRecipeIngredient[]> {
+    return db.select().from(menuItemRecipeIngredients)
+      .where(and(eq(menuItemRecipeIngredients.menuItemId, menuItemId), eq(menuItemRecipeIngredients.active, true)))
+      .orderBy(menuItemRecipeIngredients.displayOrder);
+  }
+
+  async getMenuItemRecipeIngredient(id: string): Promise<MenuItemRecipeIngredient | undefined> {
+    const [result] = await db.select().from(menuItemRecipeIngredients).where(eq(menuItemRecipeIngredients.id, id));
+    return result;
+  }
+
+  async createMenuItemRecipeIngredient(data: InsertMenuItemRecipeIngredient): Promise<MenuItemRecipeIngredient> {
+    const [result] = await db.insert(menuItemRecipeIngredients).values(data).returning();
+    return result;
+  }
+
+  async updateMenuItemRecipeIngredient(id: string, data: Partial<InsertMenuItemRecipeIngredient>): Promise<MenuItemRecipeIngredient | undefined> {
+    const [result] = await db.update(menuItemRecipeIngredients).set(data).where(eq(menuItemRecipeIngredients.id, id)).returning();
+    return result;
+  }
+
+  async deleteMenuItemRecipeIngredient(id: string): Promise<boolean> {
+    const result = await db.delete(menuItemRecipeIngredients).where(eq(menuItemRecipeIngredients.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
 

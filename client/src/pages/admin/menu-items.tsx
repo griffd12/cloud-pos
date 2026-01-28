@@ -35,10 +35,10 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmc } from "@/lib/emc-context";
-import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup, type MajorGroup, type FamilyGroup } from "@shared/schema";
+import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup, type MajorGroup, type FamilyGroup, type IngredientPrefix, type MenuItemRecipeIngredient, type Modifier } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Download, Upload, Unlink } from "lucide-react";
+import { Download, Upload, Unlink, Plus, X } from "lucide-react";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
@@ -197,6 +197,11 @@ export default function MenuItemsPage() {
       key: "familyGroupId",
       header: "Family Group",
       render: (value) => familyGroups.find((g) => g.id === value)?.name || "-",
+    },
+    {
+      key: "menuBuildEnabled",
+      header: "Menu Build",
+      render: (value) => (value ? <Badge>Enabled</Badge> : <Badge variant="secondary">-</Badge>),
     },
     {
       key: "active",
@@ -533,6 +538,51 @@ function MenuItemFormDialog({
     }
   }, [existingModGroupLinks]);
 
+  const [menuBuildEnabled, setMenuBuildEnabled] = useState(editingItem?.menuBuildEnabled ?? false);
+  const [recipeIngredients, setRecipeIngredients] = useState<Array<{modifierId: string; defaultPrefixId: string | null; sortOrder: number}>>([]);
+
+  const { data: ingredientPrefixes = [] } = useQuery<IngredientPrefix[]>({
+    queryKey: ["/api/ingredient-prefixes", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/ingredient-prefixes?enterpriseId=${selectedEnterpriseId}`, { headers: getAuthHeaders() });
+      return res.json();
+    },
+    enabled: !!selectedEnterpriseId && menuBuildEnabled,
+  });
+
+  const { data: modifiers = [] } = useQuery<Modifier[]>({
+    queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/modifiers?enterpriseId=${selectedEnterpriseId}`, { headers: getAuthHeaders() });
+      return res.json();
+    },
+    enabled: !!selectedEnterpriseId && menuBuildEnabled,
+  });
+
+  const { data: existingRecipeIngredients = [] } = useQuery<MenuItemRecipeIngredient[]>({
+    queryKey: ["/api/menu-items", editingItem?.id, "recipe-ingredients"],
+    queryFn: async () => {
+      if (!editingItem) return [];
+      const res = await fetch(`/api/menu-items/${editingItem.id}/recipe-ingredients`, { headers: getAuthHeaders() });
+      return res.json();
+    },
+    enabled: !!editingItem && menuBuildEnabled,
+  });
+
+  useEffect(() => {
+    if (existingRecipeIngredients.length > 0) {
+      setRecipeIngredients(
+        existingRecipeIngredients
+          .filter(r => r.modifierId !== null)
+          .map(r => ({
+            modifierId: r.modifierId!,
+            defaultPrefixId: r.defaultPrefixId,
+            sortOrder: r.sortOrder ?? 0,
+          }))
+      );
+    }
+  }, [existingRecipeIngredients]);
+
   const form = useForm<InsertMenuItem>({
     resolver: zodResolver(insertMenuItemSchema),
     defaultValues: editingItem ? {
@@ -545,6 +595,7 @@ function MenuItemFormDialog({
       familyGroupId: editingItem.familyGroupId || "__none__",
       color: editingItem.color || "#3B82F6",
       active: editingItem.active ?? true,
+      menuBuildEnabled: editingItem.menuBuildEnabled ?? false,
       enterpriseId: editingItem.enterpriseId,
       propertyId: editingItem.propertyId,
       rvcId: editingItem.rvcId,
@@ -558,6 +609,7 @@ function MenuItemFormDialog({
       familyGroupId: "__none__",
       color: "#3B82F6",
       active: true,
+      menuBuildEnabled: false,
     },
   });
 
@@ -579,6 +631,7 @@ function MenuItemFormDialog({
         printClassId: data.printClassId === "__none__" ? null : (data.printClassId || null),
         majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null),
         familyGroupId: data.familyGroupId === "__none__" ? null : (data.familyGroupId || null),
+        menuBuildEnabled,
       };
 
       let menuItemId: string;
@@ -596,9 +649,24 @@ function MenuItemFormDialog({
       await apiRequest("POST", `/api/menu-items/${menuItemId}/slus`, { sluIds: selectedSlus });
       await apiRequest("PUT", `/api/menu-items/${menuItemId}/modifier-groups`, { modifierGroupIds: selectedModifierGroups });
 
+      if (menuBuildEnabled && recipeIngredients.length > 0) {
+        const existingIds = existingRecipeIngredients.map(r => r.id);
+        for (const existingId of existingIds) {
+          await apiRequest("DELETE", `/api/recipe-ingredients/${existingId}`);
+        }
+        for (const ingredient of recipeIngredients) {
+          await apiRequest("POST", `/api/menu-items/${menuItemId}/recipe-ingredients`, {
+            modifierId: ingredient.modifierId,
+            defaultPrefixId: ingredient.defaultPrefixId,
+            sortOrder: ingredient.sortOrder,
+          });
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }] });
       queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", { enterpriseId: selectedEnterpriseId }] });
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items", menuItemId, "modifier-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", menuItemId, "recipe-ingredients"] });
       
       toast({ title: editingItem ? "Menu item updated" : "Menu item created" });
       onClose();
@@ -613,7 +681,29 @@ function MenuItemFormDialog({
     form.reset();
     setSelectedSlus([]);
     setSelectedModifierGroups([]);
+    setMenuBuildEnabled(false);
+    setRecipeIngredients([]);
     onClose();
+  };
+
+  const addRecipeIngredient = (modifierId: string) => {
+    if (!recipeIngredients.find(r => r.modifierId === modifierId)) {
+      setRecipeIngredients(prev => [...prev, {
+        modifierId,
+        defaultPrefixId: null,
+        sortOrder: prev.length,
+      }]);
+    }
+  };
+
+  const removeRecipeIngredient = (modifierId: string) => {
+    setRecipeIngredients(prev => prev.filter(r => r.modifierId !== modifierId));
+  };
+
+  const updateIngredientPrefix = (modifierId: string, prefixId: string | null) => {
+    setRecipeIngredients(prev => prev.map(r => 
+      r.modifierId === modifierId ? { ...r, defaultPrefixId: prefixId } : r
+    ));
   };
 
   const toggleModifierGroup = (groupId: string) => {
@@ -915,6 +1005,101 @@ function MenuItemFormDialog({
                     <p className="text-sm text-muted-foreground mt-2">
                       {selectedModifierGroups.length} modifier group{selectedModifierGroups.length > 1 ? "s" : ""} linked
                     </p>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-base font-semibold">Menu Build / Recipe</Label>
+                    <Switch
+                      checked={menuBuildEnabled}
+                      onCheckedChange={setMenuBuildEnabled}
+                      data-testid="switch-menu-build-enabled"
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Enable conversational ordering with default ingredients that can be modified (No, Extra, Sub).
+                  </p>
+                  
+                  {menuBuildEnabled && (
+                    <>
+                      <div className="mb-3">
+                        <Label className="text-sm mb-2 block">Add Ingredient from Modifiers</Label>
+                        <Select
+                          value=""
+                          onValueChange={(value) => {
+                            if (value) addRecipeIngredient(value);
+                          }}
+                        >
+                          <SelectTrigger data-testid="select-add-ingredient">
+                            <SelectValue placeholder="Select modifier to add as ingredient..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {modifiers
+                              .filter(m => !recipeIngredients.find(r => r.modifierId === m.id))
+                              .map(mod => (
+                                <SelectItem key={mod.id} value={mod.id}>
+                                  {mod.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {recipeIngredients.length === 0 ? (
+                        <p className="text-sm text-muted-foreground italic">
+                          No default ingredients configured. Add modifiers as default ingredients for this item.
+                        </p>
+                      ) : (
+                        <ScrollArea className="h-[180px] border rounded-md p-3">
+                          <div className="space-y-2">
+                            {recipeIngredients.map((ingredient, idx) => {
+                              const mod = modifiers.find(m => m.id === ingredient.modifierId);
+                              return (
+                                <div
+                                  key={ingredient.modifierId}
+                                  className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                                >
+                                  <span className="text-muted-foreground text-sm w-6">{idx + 1}.</span>
+                                  <span className="flex-1">{mod?.name || "Unknown"}</span>
+                                  <Select
+                                    value={ingredient.defaultPrefixId || "__default__"}
+                                    onValueChange={(val) => updateIngredientPrefix(ingredient.modifierId, val === "__default__" ? null : val)}
+                                  >
+                                    <SelectTrigger className="w-28" data-testid={`select-prefix-${ingredient.modifierId}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__default__">Default</SelectItem>
+                                      {ingredientPrefixes.map(prefix => (
+                                        <SelectItem key={prefix.id} value={prefix.id}>
+                                          {prefix.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => removeRecipeIngredient(ingredient.modifierId)}
+                                    data-testid={`button-remove-ingredient-${ingredient.modifierId}`}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </ScrollArea>
+                      )}
+
+                      {recipeIngredients.length > 0 && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          {recipeIngredients.length} default ingredient{recipeIngredients.length > 1 ? "s" : ""} configured
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

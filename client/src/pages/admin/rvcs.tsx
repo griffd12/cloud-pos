@@ -100,6 +100,11 @@ export default function RvcsPage() {
     },
     { key: "defaultOrderType", header: "Default Order Type" },
     {
+      key: "conversationalOrderingEnabled",
+      header: "Conversational",
+      render: (value) => (value ? <Badge>Enabled</Badge> : <Badge variant="secondary">Disabled</Badge>),
+    },
+    {
       key: "id",
       header: "Descriptors",
       render: (_, row) => (
@@ -160,6 +165,13 @@ export default function RvcsPage() {
       })),
       description: "When Dynamic Order Mode is enabled, controls when items are sent to KDS",
       defaultValue: "fire_on_fly",
+    },
+    {
+      name: "conversationalOrderingEnabled",
+      label: "Conversational Ordering",
+      type: "switch",
+      description: "Enable MICROS RES 3700-style conversational ordering with Menu Build support",
+      defaultValue: false,
     },
   ];
 
@@ -287,7 +299,7 @@ export default function RvcsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate(data);
     }
   };
 

@@ -18,6 +18,7 @@ import {
   insertOrderDeviceSchema, insertOrderDevicePrinterSchema, insertOrderDeviceKdsSchema,
   insertPrintClassRoutingSchema, insertMenuItemSchema, insertModifierGroupSchema,
   insertModifierSchema, insertModifierGroupModifierSchema, insertMenuItemModifierGroupSchema,
+  insertIngredientPrefixSchema, insertMenuItemRecipeIngredientSchema,
   insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
   insertPosLayoutSchema, insertPosLayoutCellSchema,
@@ -2672,6 +2673,117 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       res.status(400).json({ message: "Failed to update modifier group linkages" });
     }
+  });
+
+  // ============================================================================
+  // INGREDIENT PREFIX ROUTES (Conversational Ordering)
+  // ============================================================================
+
+  app.get("/api/ingredient-prefixes", async (req, res) => {
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    
+    let data = await storage.getIngredientPrefixes();
+    
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
+    res.json(data);
+  });
+
+  app.get("/api/ingredient-prefixes/:id", async (req, res) => {
+    const data = await storage.getIngredientPrefix(req.params.id);
+    if (!data) {
+      return res.status(404).json({ message: "Ingredient prefix not found" });
+    }
+    res.json(data);
+  });
+
+  app.post("/api/ingredient-prefixes", async (req, res) => {
+    try {
+      const validated = insertIngredientPrefixSchema.parse(req.body);
+      const data = await storage.createIngredientPrefix(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/ingredient-prefixes/:id", async (req, res) => {
+    try {
+      const data = await storage.updateIngredientPrefix(req.params.id, req.body);
+      if (!data) {
+        return res.status(404).json({ message: "Ingredient prefix not found" });
+      }
+      res.json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/ingredient-prefixes/:id", async (req, res) => {
+    const success = await storage.deleteIngredientPrefix(req.params.id);
+    if (!success) {
+      return res.status(404).json({ message: "Ingredient prefix not found" });
+    }
+    res.status(204).send();
+  });
+
+  // ============================================================================
+  // MENU ITEM RECIPE INGREDIENT ROUTES (Conversational Ordering)
+  // ============================================================================
+
+  app.get("/api/menu-items/:id/recipe-ingredients", async (req, res) => {
+    const data = await storage.getMenuItemRecipeIngredients(req.params.id);
+    res.json(data);
+  });
+
+  app.get("/api/recipe-ingredients/:id", async (req, res) => {
+    const data = await storage.getMenuItemRecipeIngredient(req.params.id);
+    if (!data) {
+      return res.status(404).json({ message: "Recipe ingredient not found" });
+    }
+    res.json(data);
+  });
+
+  app.post("/api/menu-items/:id/recipe-ingredients", async (req, res) => {
+    try {
+      const validated = insertMenuItemRecipeIngredientSchema.parse({
+        ...req.body,
+        menuItemId: req.params.id,
+      });
+      const data = await storage.createMenuItemRecipeIngredient(validated);
+      res.status(201).json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.put("/api/recipe-ingredients/:id", async (req, res) => {
+    try {
+      const data = await storage.updateMenuItemRecipeIngredient(req.params.id, req.body);
+      if (!data) {
+        return res.status(404).json({ message: "Recipe ingredient not found" });
+      }
+      res.json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid data" });
+    }
+  });
+
+  app.delete("/api/recipe-ingredients/:id", async (req, res) => {
+    const success = await storage.deleteMenuItemRecipeIngredient(req.params.id);
+    if (!success) {
+      return res.status(404).json({ message: "Recipe ingredient not found" });
+    }
+    res.status(204).send();
   });
 
   // ============================================================================
