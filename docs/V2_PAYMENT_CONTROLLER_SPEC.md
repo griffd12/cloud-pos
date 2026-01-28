@@ -473,3 +473,596 @@ var response = await device.TipAdjust(2.50m)
 - Elavon Converge/Fusebox integration
 - Processor adapter pattern
 - Unified API across gateways
+
+---
+
+## Windows Service Implementation Specification
+
+### Service Overview
+
+The Payment Controller Windows Service is a .NET Windows Service application that:
+1. Polls Cloud POS for pending terminal transactions
+2. Communicates with physical EMV terminals via TCP/IP
+3. Sends encrypted card data to Heartland Portico for authorization
+4. Callbacks to Cloud POS with transaction results
+
+### System Requirements
+
+- **OS**: Windows 10/11 or Windows Server 2016+
+- **.NET Runtime**: .NET 6.0 or later
+- **Network**: TCP/IP access to terminals and Cloud POS
+- **Dependencies**: GlobalPayments.Api NuGet package
+
+### Directory Structure
+
+```
+C:\OPH-POS\
+├── PaymentController\
+│   ├── PaymentController.exe         # Main service executable
+│   ├── PaymentController.exe.config  # Service configuration
+│   ├── appsettings.json              # Runtime configuration
+│   ├── logs\                         # Log files
+│   │   ├── payment-controller.log
+│   │   └── transactions\             # Transaction audit logs
+│   └── data\
+│       └── pending-transactions.db   # SQLite for offline queue
+```
+
+### Configuration File (appsettings.json)
+
+```json
+{
+  "ServiceHost": {
+    "Id": "svc-payment-001",
+    "PropertyId": "prop-123",
+    "Token": "sha256-hashed-token"
+  },
+  "CloudPOS": {
+    "BaseUrl": "https://your-pos.replit.app",
+    "CallbackUrl": "/api/payment-controller/callback",
+    "StatusUrl": "/api/payment-controller/status",
+    "PendingSessionsUrl": "/api/payment-controller/pending-sessions",
+    "PollingIntervalMs": 1000,
+    "TimeoutMs": 30000
+  },
+  "Heartland": {
+    "Environment": "sandbox",
+    "SiteId": "your-site-id",
+    "LicenseId": "your-license-id",
+    "DeviceId": "your-device-id",
+    "Username": "your-username",
+    "Password": "encrypted-password",
+    "DeveloperId": "your-developer-id",
+    "VersionNumber": "your-version"
+  },
+  "Terminals": [
+    {
+      "Id": "term-001",
+      "Model": "verifone_t650c",
+      "IpAddress": "192.168.1.100",
+      "Port": 8081,
+      "TimeoutMs": 60000
+    }
+  ],
+  "Logging": {
+    "Level": "Information",
+    "RetentionDays": 30
+  }
+}
+```
+
+### Service Lifecycle
+
+```csharp
+// Program.cs - .NET 6 Worker Service
+using Microsoft.Extensions.Hosting;
+
+Host.CreateDefaultBuilder(args)
+    .UseWindowsService(options =>
+    {
+        options.ServiceName = "CloudPOS Payment Controller";
+    })
+    .ConfigureServices((context, services) =>
+    {
+        services.AddHostedService<PaymentControllerWorker>();
+        services.AddSingleton<ITerminalManager, HeartlandTerminalManager>();
+        services.AddSingleton<ICloudPosClient, CloudPosHttpClient>();
+    })
+    .Build()
+    .Run();
+```
+
+### Main Worker Loop
+
+```csharp
+// PaymentControllerWorker.cs
+public class PaymentControllerWorker : BackgroundService
+{
+    private readonly ICloudPosClient _cloudPos;
+    private readonly ITerminalManager _terminals;
+    private readonly ILogger<PaymentControllerWorker> _logger;
+    
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                // 1. Poll for pending sessions
+                var sessions = await _cloudPos.GetPendingSessionsAsync();
+                
+                foreach (var session in sessions)
+                {
+                    // 2. Find matching terminal
+                    var terminal = _terminals.GetTerminal(session.TerminalId);
+                    if (terminal == null)
+                    {
+                        _logger.LogWarning("Terminal {TerminalId} not found", session.TerminalId);
+                        continue;
+                    }
+                    
+                    // 3. Process transaction in background
+                    _ = ProcessTransactionAsync(session, terminal, stoppingToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error polling for sessions");
+            }
+            
+            await Task.Delay(1000, stoppingToken); // Poll every 1 second
+        }
+    }
+    
+    private async Task ProcessTransactionAsync(
+        PendingSession session, 
+        ITerminal terminal,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Update status: connecting
+            await _cloudPos.UpdateStatusAsync(session.SessionId, "pending", "Connecting to terminal");
+            
+            // Update status: awaiting card
+            await _cloudPos.UpdateStatusAsync(session.SessionId, "awaiting_card", "Present card or tap to pay");
+            
+            // Execute transaction on terminal
+            // NOTE: Cloud POS API returns amounts in CENTS (integer)
+            // Heartland SDK expects amounts in DOLLARS (decimal)
+            // Example: API returns 2550 cents = $25.50 for terminal
+            var result = await terminal.ExecuteSaleAsync(
+                amount: session.Amount / 100m, // Convert cents → dollars
+                referenceNumber: session.SessionId
+            );
+            
+            // Report result to Cloud POS
+            if (result.IsApproved)
+            {
+                await _cloudPos.CallbackAsync(new TransactionCallback
+                {
+                    SessionId = session.SessionId,
+                    Status = "approved",
+                    AuthCode = result.AuthorizationCode,
+                    CardBrand = result.CardType,
+                    CardLast4 = result.CardLast4,
+                    EntryMode = result.EntryMethod,
+                    TransactionId = result.TransactionId,
+                    ResponseCode = result.ResponseCode,
+                    ResponseMessage = result.ResponseMessage
+                });
+            }
+            else
+            {
+                await _cloudPos.CallbackAsync(new TransactionCallback
+                {
+                    SessionId = session.SessionId,
+                    Status = "declined",
+                    ResponseCode = result.ResponseCode,
+                    ResponseMessage = result.ResponseMessage ?? "Card declined",
+                    ErrorMessage = result.ErrorMessage
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            await _cloudPos.CallbackAsync(new TransactionCallback
+            {
+                SessionId = session.SessionId,
+                Status = "cancelled"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Transaction failed for session {SessionId}", session.SessionId);
+            await _cloudPos.CallbackAsync(new TransactionCallback
+            {
+                SessionId = session.SessionId,
+                Status = "error",
+                ErrorMessage = ex.Message
+            });
+        }
+    }
+}
+```
+
+### Heartland Terminal Manager
+
+```csharp
+// HeartlandTerminalManager.cs
+using GlobalPayments.Api;
+using GlobalPayments.Api.Terminals;
+using GlobalPayments.Api.Terminals.UPA;
+
+public class HeartlandTerminalManager : ITerminalManager
+{
+    private readonly Dictionary<string, IDeviceInterface> _devices = new();
+    private readonly HeartlandConfig _config;
+    
+    public HeartlandTerminalManager(IOptions<HeartlandConfig> config)
+    {
+        _config = config.Value;
+        InitializeDevices();
+    }
+    
+    private void InitializeDevices()
+    {
+        foreach (var terminalConfig in _config.Terminals)
+        {
+            var connectionConfig = new ConnectionConfig
+            {
+                DeviceType = GetDeviceType(terminalConfig.Model),
+                ConnectionMode = ConnectionModes.TCP_IP,
+                IpAddress = terminalConfig.IpAddress,
+                Port = terminalConfig.Port.ToString(),
+                Timeout = terminalConfig.TimeoutMs,
+                RequestIdProvider = new RandomIdProvider()
+            };
+            
+            var device = DeviceService.Create(connectionConfig);
+            _devices[terminalConfig.Id] = device;
+        }
+    }
+    
+    private DeviceType GetDeviceType(string model) => model switch
+    {
+        "verifone_t650c" => DeviceType.UPA_VERIFONE_T650C,
+        "verifone_t650p" => DeviceType.UPA_VERIFONE_T650P,
+        "verifone_p630" => DeviceType.UPA_VERIFONE_P630,
+        "pax_a35" => DeviceType.UPA_PAX_A35,
+        "pax_a77" => DeviceType.UPA_PAX_A77,
+        _ => throw new NotSupportedException($"Unknown terminal model: {model}")
+    };
+    
+    public ITerminal GetTerminal(string terminalId)
+    {
+        return _devices.TryGetValue(terminalId, out var device)
+            ? new HeartlandTerminal(device)
+            : null;
+    }
+}
+
+public class HeartlandTerminal : ITerminal
+{
+    private readonly IDeviceInterface _device;
+    
+    public HeartlandTerminal(IDeviceInterface device) => _device = device;
+    
+    public async Task<TransactionResult> ExecuteSaleAsync(decimal amount, string referenceNumber)
+    {
+        try
+        {
+            var response = await _device.CreditSale(amount)
+                .WithReferenceNumber(referenceNumber)
+                .ExecuteAsync();
+            
+            return new TransactionResult
+            {
+                IsApproved = response.Status == "Success",
+                AuthorizationCode = response.AuthorizationCode,
+                TransactionId = response.TransactionId,
+                CardType = response.CardType,
+                CardLast4 = response.CardLast4,
+                EntryMethod = response.EntryMethod,
+                ResponseCode = response.ResponseCode,
+                ResponseMessage = response.ResponseText
+            };
+        }
+        catch (ApiException ex)
+        {
+            return new TransactionResult
+            {
+                IsApproved = false,
+                ResponseCode = ex.ResponseCode,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+    
+    public async Task<TransactionResult> ExecuteAuthAsync(decimal amount, string referenceNumber)
+    {
+        var response = await _device.CreditAuth(amount)
+            .WithReferenceNumber(referenceNumber)
+            .ExecuteAsync();
+        
+        return MapResponse(response);
+    }
+    
+    public async Task<TransactionResult> CaptureAsync(string transactionId, decimal amount)
+    {
+        var response = await _device.Capture(amount)
+            .WithTransactionId(transactionId)
+            .ExecuteAsync();
+        
+        return MapResponse(response);
+    }
+    
+    public async Task<TransactionResult> VoidAsync(string transactionId)
+    {
+        var response = await _device.Void()
+            .WithTransactionId(transactionId)
+            .ExecuteAsync();
+        
+        return MapResponse(response);
+    }
+    
+    public async Task<TransactionResult> RefundAsync(string transactionId, decimal amount)
+    {
+        var response = await _device.CreditReturn(amount)
+            .WithTransactionId(transactionId)
+            .ExecuteAsync();
+        
+        return MapResponse(response);
+    }
+    
+    public async Task<TransactionResult> TipAdjustAsync(string transactionId, decimal tipAmount)
+    {
+        var response = await _device.TipAdjust(tipAmount)
+            .WithTransactionId(transactionId)
+            .ExecuteAsync();
+        
+        return MapResponse(response);
+    }
+    
+    private TransactionResult MapResponse(IDeviceResponse response) => new()
+    {
+        IsApproved = response.Status == "Success",
+        AuthorizationCode = response.AuthorizationCode,
+        TransactionId = response.TransactionId,
+        CardType = response.CardType,
+        CardLast4 = response.CardLast4,
+        EntryMethod = response.EntryMethod,
+        ResponseCode = response.ResponseCode,
+        ResponseMessage = response.ResponseText
+    };
+}
+```
+
+### Cloud POS HTTP Client
+
+```csharp
+// CloudPosHttpClient.cs
+public class CloudPosHttpClient : ICloudPosClient
+{
+    private readonly HttpClient _http;
+    private readonly ServiceHostConfig _serviceHost;
+    private readonly CloudPosConfig _config;
+    
+    public CloudPosHttpClient(
+        IOptions<ServiceHostConfig> serviceHostConfig,
+        IOptions<CloudPosConfig> cloudPosConfig)
+    {
+        _serviceHost = serviceHostConfig.Value;
+        _config = cloudPosConfig.Value;
+        _http = new HttpClient
+        {
+            BaseAddress = new Uri(_config.BaseUrl),
+            Timeout = TimeSpan.FromMilliseconds(_config.TimeoutMs)
+        };
+    }
+    
+    public async Task<List<PendingSession>> GetPendingSessionsAsync()
+    {
+        // Include serviceHostId and propertyId for host-level scoping
+        var url = $"{_config.PendingSessionsUrl}?serviceHostId={_serviceHost.Id}&propertyId={_serviceHost.PropertyId}";
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("X-Service-Token", _serviceHost.Token);
+        
+        var response = await _http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        
+        var result = await response.Content.ReadFromJsonAsync<PendingSessionsResponse>();
+        return result?.Sessions ?? new List<PendingSession>();
+    }
+    
+    public async Task UpdateStatusAsync(string sessionId, string status, string message = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, _config.StatusUrl);
+        request.Headers.Add("X-Service-Token", _serviceHost.Token);
+        request.Content = JsonContent.Create(new
+        {
+            sessionId,          // Cloud POS session ID
+            referenceId = sessionId, // Alternative field per spec
+            status,
+            statusMessage = message
+        });
+        
+        await _http.SendAsync(request);
+    }
+    
+    public async Task CallbackAsync(TransactionCallback callback)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, _config.CallbackUrl);
+        request.Headers.Add("X-Service-Token", _serviceHost.Token);
+        
+        // Ensure referenceId is set for spec compliance
+        callback.ReferenceId ??= callback.SessionId;
+        request.Content = JsonContent.Create(callback);
+        
+        var response = await _http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+    }
+}
+
+// Configuration classes
+public class ServiceHostConfig
+{
+    public string Id { get; set; }       // Service host unique ID
+    public string PropertyId { get; set; } // Property this host serves
+    public string Token { get; set; }     // SHA-256 hashed service token
+}
+
+public class CloudPosConfig
+{
+    public string BaseUrl { get; set; }
+    public string CallbackUrl { get; set; }
+    public string StatusUrl { get; set; }
+    public string PendingSessionsUrl { get; set; }
+    public int PollingIntervalMs { get; set; }
+    public int TimeoutMs { get; set; }
+}
+
+public class TransactionCallback
+{
+    public string SessionId { get; set; }    // Primary session identifier
+    public string ReferenceId { get; set; }  // Alternative per spec
+    public string Status { get; set; }       // approved, declined, error, cancelled
+    public string AuthCode { get; set; }
+    public string CardBrand { get; set; }
+    public string CardLast4 { get; set; }
+    public string EntryMode { get; set; }    // chip, contactless, swipe
+    public string TransactionId { get; set; } // Gateway transaction ID
+    public string ResponseCode { get; set; }
+    public string ResponseMessage { get; set; }
+    public string ErrorMessage { get; set; }
+    public int? TipAmount { get; set; }      // In cents
+}
+```
+
+### Installation Script (PowerShell)
+
+```powershell
+# install-payment-controller.ps1
+param(
+    [string]$CloudPosUrl = "https://your-pos.replit.app",
+    [string]$ServiceToken = "",
+    [string]$PropertyId = ""
+)
+
+$ServiceName = "CloudPOS Payment Controller"
+$InstallPath = "C:\OPH-POS\PaymentController"
+
+# Create directory structure
+New-Item -ItemType Directory -Force -Path $InstallPath
+New-Item -ItemType Directory -Force -Path "$InstallPath\logs"
+New-Item -ItemType Directory -Force -Path "$InstallPath\logs\transactions"
+New-Item -ItemType Directory -Force -Path "$InstallPath\data"
+
+# Copy files
+Copy-Item ".\publish\*" -Destination $InstallPath -Recurse
+
+# Generate configuration
+$config = @{
+    ServiceHost = @{
+        Id = "svc-payment-$(Get-Random -Maximum 9999)"
+        PropertyId = $PropertyId
+        Token = $ServiceToken
+    }
+    CloudPOS = @{
+        BaseUrl = $CloudPosUrl
+        CallbackUrl = "/api/payment-controller/callback"
+        StatusUrl = "/api/payment-controller/status"
+        PendingSessionsUrl = "/api/payment-controller/pending-sessions"
+        PollingIntervalMs = 1000
+        TimeoutMs = 30000
+    }
+    Heartland = @{
+        Environment = "sandbox"
+    }
+    Terminals = @()
+    Logging = @{
+        Level = "Information"
+        RetentionDays = 30
+    }
+} | ConvertTo-Json -Depth 10
+
+$config | Out-File "$InstallPath\appsettings.json" -Encoding UTF8
+
+# Install as Windows Service
+New-Service -Name $ServiceName `
+    -BinaryPathName "$InstallPath\PaymentController.exe" `
+    -DisplayName "CloudPOS Payment Controller" `
+    -Description "Semi-integrated EMV terminal payment processing for Cloud POS" `
+    -StartupType Automatic
+
+# Start service
+Start-Service -Name $ServiceName
+
+Write-Host "Payment Controller installed successfully!"
+Write-Host "Service Status: $((Get-Service $ServiceName).Status)"
+```
+
+### Logging and Monitoring
+
+The Payment Controller logs all transactions and events:
+
+```
+[2026-01-28 10:15:32.123] [INFO] Service starting...
+[2026-01-28 10:15:32.456] [INFO] Connected to Cloud POS: https://your-pos.replit.app
+[2026-01-28 10:15:33.001] [INFO] Terminal verifone_t650c (192.168.1.100) connected
+[2026-01-28 10:15:45.123] [INFO] Received pending session: sess-abc123, $25.50
+[2026-01-28 10:15:45.234] [INFO] Sending to terminal: verifone_t650c
+[2026-01-28 10:15:45.345] [INFO] Status: awaiting_card
+[2026-01-28 10:15:52.456] [INFO] Card presented: VISA ****4242 (contactless)
+[2026-01-28 10:15:53.567] [INFO] Transaction APPROVED: Auth 123456
+[2026-01-28 10:15:53.678] [INFO] Callback sent to Cloud POS
+```
+
+### Health Check Endpoint
+
+The service exposes a local health check endpoint:
+
+```
+GET http://localhost:8090/health
+
+Response:
+{
+  "status": "healthy",
+  "uptime": "2h 15m 30s",
+  "terminals": {
+    "term-001": "online",
+    "term-002": "offline"
+  },
+  "cloudPosConnected": true,
+  "lastPollTime": "2026-01-28T10:15:45.123Z",
+  "pendingTransactions": 0,
+  "completedToday": 47
+}
+```
+
+---
+
+## Testing and Certification
+
+### Sandbox Testing
+
+1. Configure Heartland sandbox credentials in appsettings.json
+2. Use test card numbers from Heartland documentation
+3. Verify all transaction types: sale, auth, capture, void, refund, tip adjust
+
+### Heartland Test Card Numbers
+
+| Card Type | Number | Response |
+|-----------|--------|----------|
+| Visa Approve | 4012002000060016 | Approved |
+| Visa Decline | 4012002000088881 | Declined |
+| Mastercard | 5473500000000014 | Approved |
+| Amex | 371449635398431 | Approved |
+| Discover | 6011000990156527 | Approved |
+
+### Certification Process
+
+1. Complete Heartland semi-integrated certification questionnaire
+2. Run prescribed test transaction suite
+3. Submit transaction logs for review
+4. Receive production credentials upon approval
