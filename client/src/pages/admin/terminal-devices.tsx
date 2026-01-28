@@ -76,16 +76,28 @@ import {
 } from "lucide-react";
 
 const MODEL_LABELS: Record<string, string> = {
+  // PAX Models
   pax_a920: "PAX A920",
   pax_s300: "PAX S300",
+  pax_a35: "PAX A35 (Heartland)",
+  pax_a77: "PAX A77 (Heartland)",
+  // Verifone Models
   verifone_vx520: "Verifone VX520",
   verifone_vx820: "Verifone VX820",
   verifone_p400: "Verifone P400",
+  verifone_t650c: "Verifone Trinity T650c (Heartland)",
+  verifone_t650p: "Verifone Trinity T650p (Heartland)",
+  verifone_p630: "Verifone P630 (Heartland)",
+  // Ingenico Models
   ingenico_lane_3000: "Ingenico Lane 3000",
   ingenico_lane_5000: "Ingenico Lane 5000",
+  ingenico_ipp350: "Ingenico iPP 350 (Heartland OPI)",
+  ingenico_isc_touch_250: "Ingenico iSC Touch 250 (Heartland OPI)",
+  // Stripe Models
   stripe_s700: "Stripe S700",
   stripe_m2: "Stripe M2",
   stripe_wisepos_e: "Stripe WisePOS E",
+  // Other
   bbpos_chipper: "BBPOS Chipper",
   generic: "Generic Terminal",
 };
