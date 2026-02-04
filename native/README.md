@@ -169,3 +169,123 @@ await unifiedStorage.importData(backup);
 - Business logic in POS/KDS components uses the existing offlineStorage directly
 - For new code, prefer using unifiedStorage which auto-selects the best backend
 - Electron/Windows uses IndexedDB for reliability (no native C++ dependencies)
+
+## Native Hardware Integration (Phase 3) - IMPLEMENTED
+
+Native apps can optionally integrate with Bluetooth/USB hardware for enhanced capabilities.
+
+### Native Printer Service
+
+Supports Bluetooth and USB receipt printers in addition to network TCP/IP printing:
+
+```typescript
+import { nativePrinter } from '@/lib/native-printer';
+
+// Initialize (call once at app startup)
+await nativePrinter.initialize();
+
+// Discover Bluetooth printers
+const printers = await nativePrinter.discoverBluetoothPrinters();
+
+// Connect to a printer
+await nativePrinter.connectPrinter(printers[0].address);
+
+// Print a receipt
+await nativePrinter.print({
+  id: 'receipt-123',
+  type: 'receipt',
+  data: base64EscPosData,
+});
+
+// Check result - if no Bluetooth, use existing print infrastructure
+const result = await nativePrinter.print(job);
+if (!result.success && result.error === 'NO_BLUETOOTH_PRINTER') {
+  // Fall back to existing PrintService for network printing
+}
+```
+
+**Fallback Behavior:**
+- If Bluetooth printer is connected → prints directly via Bluetooth
+- If no Bluetooth printer → returns `error: 'NO_BLUETOOTH_PRINTER'` signal
+- Caller should then use existing PrintService (e.g., `/api/print/check/:checkId`)
+- Web browsers should use existing PrintService directly
+
+### Native EMV Terminal Service
+
+Supports Bluetooth EMV card readers (BBPOS, PAX, etc.) in addition to gateway processing:
+
+```typescript
+import { nativeEMVTerminal } from '@/lib/native-emv-terminal';
+
+// Initialize
+await nativeEMVTerminal.initialize();
+
+// Discover terminals
+const terminals = await nativeEMVTerminal.discoverTerminals();
+
+// Connect to a terminal
+await nativeEMVTerminal.connectTerminal(terminals[0].address);
+
+// Process a transaction
+const result = await nativeEMVTerminal.processTransaction({
+  amount: 1500, // $15.00 in cents
+  transactionType: 'sale',
+  referenceId: 'check-456',
+});
+
+// Check result - if no terminal, use existing payment flow
+if (!result.success && result.error === 'NO_BLUETOOTH_TERMINAL') {
+  // Fall back to existing POS payment components
+}
+```
+
+**Fallback Behavior:**
+- If Bluetooth terminal is connected → processes via EMV terminal SDK
+- If no terminal → returns `error: 'NO_BLUETOOTH_TERMINAL'` signal
+- Caller should then use existing POS payment flow (CheckPayment, etc.)
+- Web browsers should use existing payment components directly
+
+**Note:** Native EMV terminal processing requires vendor SDK integration (BBPOS, PAX, Square, etc.). The current implementation is a stub that signals fallback to existing payment infrastructure.
+
+### Native Services Manager
+
+Coordinates initialization of all native services:
+
+```typescript
+import { nativeServices } from '@/lib/native-services';
+
+// Initialize all services at once
+await nativeServices.initialize();
+
+// Check status
+const status = nativeServices.getStatus();
+console.log(status);
+// {
+//   platform: 'android',
+//   storage: { initialized: true, backend: 'sqlite' },
+//   printer: { initialized: true, nativeAvailable: true, connectedPrinter: 'Star TSP100' },
+//   emvTerminal: { initialized: true, nativeAvailable: false, connectedTerminal: null }
+// }
+```
+
+### Hardware Plugin Dependencies
+
+For Android native hardware support, install the following Capacitor plugins:
+
+```bash
+# Bluetooth Serial for receipt printers
+npm install @nichesoft/capacitor-bluetooth-serial
+npx cap sync android
+
+# For EMV terminals, integrate the vendor's SDK:
+# - BBPOS: Add BBPOS SDK to android/app/libs/
+# - PAX: Add PAX SDK to android/app/libs/
+# - Square: Use Square's Capacitor plugin
+```
+
+### Important Notes
+
+1. **All native hardware is OPTIONAL** - existing Print Agent and payment gateways work without changes
+2. **Web browsers** always use network/API fallbacks
+3. **Electron/Windows** uses Print Agent for receipts and gateway for payments
+4. **Android** can use either Bluetooth hardware OR network/API fallbacks
