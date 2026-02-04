@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.0.0",
     "@capacitor/android": "^8.0.2",
     "@capacitor/cli": "^7.4.5",
     "@capacitor/core": "^8.0.2",
@@ -84,6 +85,7 @@
     "react-icons": "^5.4.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
+    "sql.js": "^1.13.0",
     "square": "^43.2.1",
     "stripe": "^20.1.0",
     "tailwind-merge": "^2.6.0",

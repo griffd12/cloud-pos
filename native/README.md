@@ -121,10 +121,51 @@ All functionality available in the web POS is available in native apps:
 - Receipt printing (via network or native plugins)
 - Employee management and time clock
 
-## Offline Mode (Phase 2)
+## Offline Mode (Phase 2) - IMPLEMENTED
 
-Native apps will include enhanced offline capabilities:
-- SQLite local database for robust data storage
-- Background sync when connection is restored
-- Configurable sync intervals
-- Conflict resolution for concurrent changes
+Native apps include enhanced offline capabilities using a unified storage layer:
+
+### Storage Architecture
+- **Native Android (Capacitor)**: SQLite database via @capacitor-community/sqlite
+- **Web Browsers**: IndexedDB (existing behavior preserved)
+- **Windows (Electron)**: IndexedDB with file-based persistence
+
+### Features
+- **Automatic platform detection**: Storage backend selected based on runtime environment
+- **Same API across all platforms**: No code changes needed in business logic
+- **Data migration**: Import/export between backends for platform transitions
+- **Background sync**: Queued operations sync when connectivity is restored
+- **Conflict resolution**: Last-write-wins with configurable strategies
+
+### Storage Components
+- **Config cache**: Menu items, employees, tax groups cached for offline access
+- **Offline checks**: Full transaction support when cloud is unavailable
+- **Sync queue**: Pending operations queued and retried automatically
+- **Print queue**: Print jobs queued for when printers become available
+- **Session data**: Employee login state persisted across app restarts
+
+### Usage
+The unified storage is automatically initialized when the app starts:
+```typescript
+import { unifiedStorage } from '@/lib/unified-storage';
+
+// Check which backend is active
+const stats = await unifiedStorage.getStorageStats();
+console.log(stats.backend); // 'sqlite' or 'indexeddb'
+console.log(stats.platform); // 'capacitor', 'electron', or 'web'
+
+// Data migration when transitioning platforms
+const { migrated, errors } = await unifiedStorage.migrateFromIndexedDB();
+
+// Export data for backup
+const backup = await unifiedStorage.exportData();
+
+// Import from backup
+await unifiedStorage.importData(backup);
+```
+
+### Integration Notes
+- The unified storage layer provides the same API as existing IndexedDB storage
+- Business logic in POS/KDS components uses the existing offlineStorage directly
+- For new code, prefer using unifiedStorage which auto-selects the best backend
+- Electron/Windows uses IndexedDB for reliability (no native C++ dependencies)

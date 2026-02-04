@@ -210,6 +210,17 @@ class OfflineStorage {
     });
   }
 
+  async getAllConfigKeys(): Promise<string[]> {
+    await this.initialize();
+
+    return new Promise((resolve, reject) => {
+      const store = this.getStore('config');
+      const request = store.getAllKeys();
+      request.onsuccess = () => resolve(request.result as string[]);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // ============================================================================
   // OFFLINE CHECKS
   // ============================================================================
@@ -464,6 +475,17 @@ class OfflineStorage {
       const store = this.getStore('session', 'readwrite');
       const request = store.clear();
       request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getAllSessionKeys(): Promise<string[]> {
+    await this.initialize();
+
+    return new Promise((resolve, reject) => {
+      const store = this.getStore('session');
+      const request = store.getAllKeys();
+      request.onsuccess = () => resolve(request.result as string[]);
       request.onerror = () => reject(request.error);
     });
   }
