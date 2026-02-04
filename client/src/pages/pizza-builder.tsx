@@ -80,6 +80,22 @@ export default function PizzaBuilderPage() {
     enabled: !!currentRvc?.propertyId,
   });
 
+  // Fetch the check item directly from server when editing (don't rely on context)
+  const { data: editingCheckItem } = useQuery<{
+    id: string;
+    menuItemId: string | null;
+    menuItemName: string | null;
+    modifiers: { name: string; priceDelta: string; prefix?: string }[] | null;
+  }>({
+    queryKey: ["/api/check-items", editCheckItemId],
+    queryFn: async () => {
+      const res = await fetch(`/api/check-items/${editCheckItemId}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch check item");
+      return res.json();
+    },
+    enabled: !!editCheckItemId,
+  });
+
   const { toppings, sauces } = useMemo(() => {
     if (!modifiers) return { toppings: [], sauces: [] };
     
@@ -107,25 +123,23 @@ export default function PizzaBuilderPage() {
 
   // Pre-populate selections when editing an existing check item
   useEffect(() => {
-    // Wait until we have all the data needed
+    // Wait until we have all the data needed from the server
     if (!editCheckItemId || !modifiers || modifiers.length === 0 || hasInitializedEditing) {
       return;
     }
     
-    // Find the editing item in checkItems
-    const editingItem = checkItems?.find(i => i.id === editCheckItemId);
-    
-    if (!editingItem?.modifiers || editingItem.modifiers.length === 0) {
-      // If no modifiers found in context, don't block - user can add new ones
-      console.log('[Pizza Builder] Edit item not found or has no modifiers:', editCheckItemId, 'items available:', checkItems?.map(i => i.id));
+    // Use the server-fetched check item data
+    if (!editingCheckItem?.modifiers || editingCheckItem.modifiers.length === 0) {
+      // If no modifiers found, don't block - user can add new ones
+      console.log('[Pizza Builder] Edit item not found or has no modifiers:', editCheckItemId);
       return;
     }
     
-    console.log('[Pizza Builder] Pre-populating from item:', editingItem.menuItemName, 'with modifiers:', editingItem.modifiers);
+    console.log('[Pizza Builder] Pre-populating from item:', editingCheckItem.menuItemName, 'with modifiers:', editingCheckItem.modifiers);
     
     const newSelections = new Map<string, ToppingSelection>();
     
-    editingItem.modifiers.forEach(mod => {
+    editingCheckItem.modifiers.forEach(mod => {
       // Parse section from modifier name (e.g., "Pepperoni (Left Half)")
       const sectionMatch = mod.name.match(/\(([^)]+)\)/);
       let section: PizzaSection = "whole";
@@ -189,7 +203,7 @@ export default function PizzaBuilderPage() {
       console.log('[Pizza Builder] Pre-populated', newSelections.size, 'toppings');
     }
     setHasInitializedEditing(true);
-  }, [editCheckItemId, checkItems, modifiers, hasInitializedEditing]);
+  }, [editCheckItemId, editingCheckItem, modifiers, hasInitializedEditing]);
 
   const sizePriceMultiplier = useMemo(() => {
     if (!menuItem) return 1;

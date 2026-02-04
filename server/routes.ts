@@ -4154,6 +4154,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     unitPrice: z.string().optional(),
   });
 
+  // Get a single check item by ID
+  app.get("/api/check-items/:id", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const item = await storage.getCheckItem(itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Check item not found" });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error("Get check item error:", error);
+      res.status(500).json({ message: "Failed to fetch check item" });
+    }
+  });
+
   app.put("/api/check-items/:id/modifiers", async (req, res) => {
     try {
       const itemId = req.params.id;
