@@ -29,6 +29,25 @@ electron/             # Electron project for Windows (at repo root)
 └── ...
 ```
 
+## Quick Start Build Commands
+
+Use these convenience scripts to build distribution packages:
+
+```bash
+# Build everything (web app + prepare native)
+bash scripts/build-all.sh
+
+# Build Android APK (debug)
+bash scripts/build-android.sh
+
+# Build Windows installer
+bash scripts/build-windows.sh
+
+# Development testing
+npm run build && npx electron electron/main.js  # Windows/Electron
+npm run build && npx cap sync android           # Android sync
+```
+
 ## Building for Android
 
 ### Prerequisites
@@ -57,6 +76,36 @@ electron/             # Electron project for Windows (at repo root)
    - Build > Build Bundle(s) / APK(s) > Build APK(s)
    - Or use Gradle: `./gradlew assembleDebug`
 
+### Quick Build (Command Line)
+
+```bash
+# All-in-one debug APK build
+bash scripts/build-android.sh
+# Output: dist/android/CloudPOS-debug.apk
+```
+
+### Release APK Signing
+
+For production releases, create a signing keystore:
+
+```bash
+# Generate keystore
+keytool -genkey -v -keystore cloudpos.keystore -alias cloudpos -keyalg RSA -keysize 2048 -validity 10000
+
+# Configure in android/app/build.gradle:
+# signingConfigs {
+#     release {
+#         storeFile file('../../cloudpos.keystore')
+#         storePassword 'your-password'
+#         keyAlias 'cloudpos'
+#         keyPassword 'your-password'
+#     }
+# }
+
+# Build signed APK
+cd android && ./gradlew assembleRelease
+```
+
 ### Configuration
 
 The Android app connects to the cloud backend. Configure the server URL:
@@ -79,10 +128,40 @@ The Android app connects to the cloud backend. Configure the server URL:
 
 2. **Build Windows executable:**
    ```bash
-   npx electron-builder --config electron/electron-builder.json
+   npx electron-builder --config electron/electron-builder.json --win
    ```
 
 The output will be in `electron-dist/`.
+
+### Quick Build (Command Line)
+
+```bash
+# All-in-one Windows build
+bash scripts/build-windows.sh
+# Output: electron-dist/CloudPOS-*-Windows.exe
+```
+
+### Output Types
+
+The Electron builder creates two outputs:
+- **NSIS Installer**: `CloudPOS-1.0.0-Windows.exe` - Full installer with Start Menu shortcuts
+- **Portable**: `CloudPOS-1.0.0-Portable.exe` - Single executable, no installation required
+
+### Development Testing
+
+```bash
+# Build web app and run Electron
+npm run build
+npx electron electron/main.js
+```
+
+### Cross-Platform Builds
+
+To build Windows installers from Linux:
+1. Install Wine: `sudo apt install wine`
+2. Run: `bash scripts/build-windows.sh`
+
+For production, use a Windows machine or GitHub Actions CI.
 
 ## Server Connection
 
