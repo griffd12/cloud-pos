@@ -184,32 +184,48 @@ function SwipeableItem({
             </div>
             {item.modifiers && item.modifiers.length > 0 && (
               <div className="mt-1 space-y-0.5">
-                {item.modifiers.map((mod, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className={`block text-left text-xs rounded ${
-                      !item.sent 
-                        ? "cursor-pointer text-muted-foreground hover:text-foreground" 
-                        : "text-muted-foreground/70 cursor-default"
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!item.sent && onEditModifiers) {
-                        onEditModifiers();
-                      }
-                    }}
-                    disabled={!!item.sent}
-                    data-testid={`button-modifier-${item.id}-${idx}`}
-                  >
-                    + {mod.name}
-                    {parseFloat(mod.priceDelta) > 0 && (
-                      <span className="ml-1 text-muted-foreground">
-                        (+{formatPrice(mod.priceDelta)})
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {item.modifiers.map((mod, idx) => {
+                  let prefix = (mod as any).prefix?.toLowerCase() || '';
+                  if (!prefix && mod.name) {
+                    const nameLower = mod.name.toLowerCase();
+                    if (nameLower.startsWith('no ')) prefix = 'no';
+                    else if (nameLower.startsWith('extra ') || nameLower.startsWith('xtr ')) prefix = 'extra';
+                    else if (nameLower.startsWith('lt ') || nameLower.startsWith('light ')) prefix = 'lt';
+                    else if (nameLower.startsWith('sub ')) prefix = 'sub';
+                  }
+                  let symbol = '+';
+                  if (prefix === 'no') symbol = '-';
+                  else if (prefix === 'extra' || prefix === 'xtr') symbol = 'X';
+                  else if (prefix === 'lt' || prefix === 'light') symbol = '/';
+                  else if (prefix === 'sub') symbol = '+';
+                  
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`block text-left text-xs rounded ${
+                        !item.sent 
+                          ? "cursor-pointer text-muted-foreground hover:text-foreground" 
+                          : "text-muted-foreground/70 cursor-default"
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!item.sent && onEditModifiers) {
+                          onEditModifiers();
+                        }
+                      }}
+                      disabled={!!item.sent}
+                      data-testid={`button-modifier-${item.id}-${idx}`}
+                    >
+                      {symbol} {mod.name}
+                      {parseFloat(mod.priceDelta) > 0 && (
+                        <span className="ml-1 text-muted-foreground">
+                          (+{formatPrice(mod.priceDelta)})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

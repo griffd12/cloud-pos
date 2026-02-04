@@ -33,6 +33,7 @@ import { GiftCardModal } from "@/components/pos/gift-card-modal";
 import { DiscountPickerModal } from "@/components/pos/discount-picker-modal";
 import { ItemOptionsPopup } from "@/components/pos/item-options-popup";
 import { ConversationalOrderPanel } from "@/components/pos/conversational-order-panel";
+import { HorizontalCOMPanel } from "@/components/pos/horizontal-com-panel";
 import { SetAvailabilityDialog } from "@/components/pos/set-availability-dialog";
 import { SoldOutConfirmDialog } from "@/components/pos/sold-out-confirm-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -1609,6 +1610,38 @@ export default function PosPage() {
                 </div>
               </div>
 
+              {currentRvc?.conversationalOrderingEnabled && conversationalOrderItem && (
+                <HorizontalCOMPanel
+                  enterpriseId={wsContext?.property?.enterpriseId || ""}
+                  activeMenuItem={conversationalOrderItem}
+                  onConfirmItem={async (menuItemId, modifications) => {
+                    if (!currentCheck) {
+                      toast({ title: "No check open", description: "Start a new check first", variant: "destructive" });
+                      return;
+                    }
+                    try {
+                      const modifiersForCheck: (SelectedModifier & { prefix?: string })[] = modifications.map(m => ({
+                        id: m.ingredientName,
+                        name: m.prefixName ? `${m.prefixName} ${m.ingredientName}` : m.ingredientName,
+                        priceDelta: "0.00",
+                        prefix: m.prefixName || undefined,
+                      }));
+                      
+                      await addItemMutation.mutateAsync({
+                        menuItem: conversationalOrderItem!,
+                        modifiers: modifiersForCheck,
+                      });
+                      
+                      setConversationalOrderItem(null);
+                      toast({ title: "Item added to order" });
+                    } catch (error: any) {
+                      toast({ title: "Failed to add item", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                  onCancelItem={() => setConversationalOrderItem(null)}
+                />
+              )}
+
               <ScrollArea className="flex-1 bg-background">
                 <MenuItemGrid
                   items={[...menuItems].sort((a, b) => a.name.localeCompare(b.name))}
@@ -1727,38 +1760,6 @@ export default function PosPage() {
           )}
         </div>
 
-        {currentRvc?.conversationalOrderingEnabled && conversationalOrderItem && (
-          <div className="w-72 flex-shrink-0 border-l bg-muted/30">
-            <ConversationalOrderPanel
-              enterpriseId={wsContext?.property?.enterpriseId || ""}
-              activeMenuItem={conversationalOrderItem}
-              onConfirmItem={async (menuItemId, modifications) => {
-                if (!currentCheck) {
-                  toast({ title: "No check open", description: "Start a new check first", variant: "destructive" });
-                  return;
-                }
-                try {
-                  const modifiersForCheck: SelectedModifier[] = modifications.map(m => ({
-                    id: m.ingredientName,
-                    name: m.prefixName ? `${m.prefixName} ${m.ingredientName}` : m.ingredientName,
-                    priceDelta: "0.00",
-                  }));
-                  
-                  await addItemMutation.mutateAsync({
-                    menuItem: conversationalOrderItem,
-                    modifiers: modifiersForCheck,
-                  });
-                  
-                  setConversationalOrderItem(null);
-                  toast({ title: "Item added to order" });
-                } catch (error: any) {
-                  toast({ title: "Failed to add item", description: error.message, variant: "destructive" });
-                }
-              }}
-              onCancelItem={() => setConversationalOrderItem(null)}
-            />
-          </div>
-        )}
         <div className="w-80 lg:w-96 flex-shrink-0 border-l">
           <CheckPanel
             check={currentCheck}

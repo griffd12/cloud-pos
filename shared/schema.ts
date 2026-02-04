@@ -901,7 +901,7 @@ export const checkItems = pgTable("check_items", {
   menuItemName: text("menu_item_name").notNull(),
   quantity: integer("quantity").default(1),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
-  modifiers: jsonb("modifiers").$type<{ name: string; priceDelta: string }[]>(),
+  modifiers: jsonb("modifiers").$type<{ name: string; priceDelta: string; prefix?: string }[]>(),
   itemStatus: text("item_status").notNull().default("active"), // 'pending' = awaiting modifiers, 'active' = ready
   sent: boolean("sent").default(false),
   voided: boolean("voided").default(false),
@@ -985,7 +985,7 @@ export const refundItems = pgTable("refund_items", {
   menuItemName: text("menu_item_name").notNull(),
   quantity: integer("quantity").default(1),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
-  modifiers: jsonb("modifiers").$type<{ name: string; priceDelta: string }[]>(),
+  modifiers: jsonb("modifiers").$type<{ name: string; priceDelta: string; prefix?: string }[]>(),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0"),
   refundAmount: decimal("refund_amount", { precision: 10, scale: 2 }).notNull(),
 });
