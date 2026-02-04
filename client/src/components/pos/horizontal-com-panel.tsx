@@ -157,24 +157,12 @@ export function HorizontalCOMPanel({
   }
 
   return (
-    <div className="flex-shrink-0 border-b bg-muted/30">
+    <div className="flex-shrink-0 border-t bg-muted/30">
       <div className="flex items-center gap-3 px-3 py-2 border-b bg-card">
         <span className="font-semibold text-lg">{activeMenuItem.name}</span>
         <Button size="icon" variant="ghost" onClick={onCancelItem} data-testid="button-close-com">
           <X className="w-4 h-4" />
         </Button>
-        <div className="flex gap-1.5 ml-2">
-          {ingredientPrefixes.map(prefix => (
-            <Badge 
-              key={prefix.id} 
-              variant="outline" 
-              className="cursor-default"
-              data-testid={`badge-prefix-legend-${prefix.id}`}
-            >
-              {prefix.code || prefix.name}
-            </Badge>
-          ))}
-        </div>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={onCancelItem} data-testid="button-cancel-com">
           Cancel
@@ -189,7 +177,7 @@ export function HorizontalCOMPanel({
           {activeItemState?.ingredients.map((ingredient, idx) => (
             <div
               key={ingredient.id}
-              className={`flex items-center gap-2 p-2 rounded-md border min-w-fit ${
+              className={`flex flex-col gap-1 p-2 rounded-md border min-w-fit ${
                 ingredient.isIncluded ? "bg-background" : "bg-muted/50 opacity-60"
               }`}
               data-testid={`com-ingredient-${idx}`}

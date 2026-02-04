@@ -1610,6 +1610,14 @@ export default function PosPage() {
                 </div>
               </div>
 
+              <ScrollArea className="flex-1 bg-background">
+                <MenuItemGrid
+                  items={[...menuItems].sort((a, b) => a.name.localeCompare(b.name))}
+                  onSelectItem={handleSelectItem}
+                  isLoading={itemsLoading && !!selectedSlu}
+                />
+              </ScrollArea>
+
               {currentRvc?.conversationalOrderingEnabled && conversationalOrderItem && (
                 <HorizontalCOMPanel
                   enterpriseId={wsContext?.property?.enterpriseId || ""}
@@ -1641,14 +1649,6 @@ export default function PosPage() {
                   onCancelItem={() => setConversationalOrderItem(null)}
                 />
               )}
-
-              <ScrollArea className="flex-1 bg-background">
-                <MenuItemGrid
-                  items={[...menuItems].sort((a, b) => a.name.localeCompare(b.name))}
-                  onSelectItem={handleSelectItem}
-                  isLoading={itemsLoading && !!selectedSlu}
-                />
-              </ScrollArea>
 
               <div className="flex-shrink-0 border-t bg-card p-2">
                 <div className="flex gap-2 flex-wrap">
