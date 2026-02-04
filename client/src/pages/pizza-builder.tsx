@@ -41,7 +41,9 @@ export default function PizzaBuilderPage() {
   const { toast } = useToast();
 
   // Parse editCheckItemId from URL query params
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  // Note: wouter's useLocation only returns the path, not query string
+  // We must use window.location.search for query parameters
+  const urlParams = new URLSearchParams(window.location.search);
   const editCheckItemId = urlParams.get('editCheckItemId');
 
   const {
@@ -131,11 +133,8 @@ export default function PizzaBuilderPage() {
     // Use the server-fetched check item data
     if (!editingCheckItem?.modifiers || editingCheckItem.modifiers.length === 0) {
       // If no modifiers found, don't block - user can add new ones
-      console.log('[Pizza Builder] Edit item not found or has no modifiers:', editCheckItemId);
       return;
     }
-    
-    console.log('[Pizza Builder] Pre-populating from item:', editingCheckItem.menuItemName, 'with modifiers:', editingCheckItem.modifiers);
     
     const newSelections = new Map<string, ToppingSelection>();
     
@@ -164,8 +163,6 @@ export default function PizzaBuilderPage() {
       if (!modifier) {
         modifier = modifiers.find(m => m.name.toLowerCase() === baseName.toLowerCase());
       }
-      
-      console.log('[Pizza Builder] Matching modifier:', mod.name, '-> base:', baseName, '-> found:', modifier?.name);
       
       if (modifier) {
         // Check if it's a sauce
@@ -200,7 +197,6 @@ export default function PizzaBuilderPage() {
     
     if (newSelections.size > 0) {
       setSelections(newSelections);
-      console.log('[Pizza Builder] Pre-populated', newSelections.size, 'toppings');
     }
     setHasInitializedEditing(true);
   }, [editCheckItemId, editingCheckItem, modifiers, hasInitializedEditing]);
@@ -316,6 +312,13 @@ export default function PizzaBuilderPage() {
 
   const handleAddToCheck = async () => {
     if (!menuItem || !currentCheck) return;
+    
+    // Defensive check: if we're in edit mode but the check item data hasn't loaded yet,
+    // prevent premature submission that would fail or cause unexpected behavior
+    if (editCheckItemId && !editingCheckItem) {
+      toast({ title: "Loading pizza details...", variant: "default" });
+      return;
+    }
     
     setIsSubmitting(true);
     try {
@@ -463,8 +466,16 @@ export default function PizzaBuilderPage() {
           <Button variant="outline" onClick={handleCancel} data-testid="button-pizza-cancel">
             Cancel
           </Button>
-          <Button onClick={handleAddToCheck} disabled={isSubmitting} data-testid="button-pizza-add">
-            {isSubmitting ? (editCheckItemId ? "Updating..." : "Adding...") : (editCheckItemId ? "Update" : "Add to Check")}
+          <Button 
+            onClick={handleAddToCheck} 
+            disabled={isSubmitting || (!!editCheckItemId && !hasInitializedEditing)} 
+            data-testid="button-pizza-add"
+          >
+            {isSubmitting 
+              ? (editCheckItemId ? "Updating..." : "Adding...") 
+              : (editCheckItemId && !hasInitializedEditing)
+                ? "Loading..."
+                : (editCheckItemId ? "Update" : "Add to Check")}
           </Button>
         </div>
       </header>
