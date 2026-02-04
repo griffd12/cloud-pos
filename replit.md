@@ -206,7 +206,7 @@ npx cap open android           # Open in Android Studio
 **Windows:**
 ```bash
 npm run build                           # Build web app
-npx electron electron/main.js           # Run in dev mode
+npx electron electron/main.cjs          # Run in dev mode
 npx electron-builder --config electron/electron-builder.json  # Build installer
 ```
 

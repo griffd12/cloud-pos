@@ -1,0 +1,88 @@
+Microsoft Windows [Version 10.0.26200.7623]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\System32>cd C:\OnPoint-PosV2
+
+C:\OnPoint-PosV2>npm install
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: vite@7.3.1
+npm warn Found: @types/node@20.16.11
+npm warn node_modules/@types/node
+npm warn   dev @types/node@"20.16.11" from the root project
+npm warn   17 more (@types/fs-extra, stripe, @types/body-parser, ...)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.3.1
+npm warn node_modules/vitest/node_modules/vite
+npm warn   vite@"^6.0.0 || ^7.0.0" from vitest@4.0.17
+npm warn   node_modules/vitest
+npm warn   1 more (@vitest/mocker)
+npm warn
+npm warn Conflicting peer dependency: @types/node@25.2.0
+npm warn node_modules/@types/node
+npm warn   peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.3.1
+npm warn   node_modules/vitest/node_modules/vite
+npm warn     vite@"^6.0.0 || ^7.0.0" from vitest@4.0.17
+npm warn     node_modules/vitest
+npm warn     1 more (@vitest/mocker)
+npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+
+added 832 packages, and audited 833 packages in 53s
+
+121 packages are looking for funding
+  run `npm fund` for details
+
+11 vulnerabilities (6 moderate, 5 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm notice
+npm notice New minor version of npm available! 11.6.2 -> 11.9.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.9.0
+npm notice To update run: npm install -g npm@11.9.0
+npm notice
+
+C:\OnPoint-PosV2>npm run build
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v5.4.20 building for production...
+transforming (4) src\App.tsx
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+✓ 3612 modules transformed.
+../dist/public/index.html                            2.24 kB │ gzip:   0.89 kB
+../dist/public/assets/index-Dz7MkBE8.css           102.19 kB │ gzip:  16.20 kB
+../dist/public/assets/offline-queue-eN96lbJU.js      2.07 kB │ gzip:   0.82 kB
+../dist/public/assets/index-DXPkMJRe.js          2,158.12 kB │ gzip: 535.01 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 15.27s
+building server...
+
+  dist\index.cjs  1.8mb
+
+Done in 3360ms
+
+C:\OnPoint-PosV2>npx electron electron/main.js
+
+App threw an error during load
+ReferenceError: require is not defined in ES module scope, you can use import instead
+This file is being treated as an ES module because it has a '.js' file extension and 'C:\OnPoint-PosV2\package.json' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.
+    at file:///C:/OnPoint-PosV2/electron/main.js:1:54
+    at ModuleJob.run (node:internal/modules/esm/module_job:377:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:671:26)
+    at async loadApplicationPackage (file:///C:/OnPoint-PosV2/node_modules/electron/dist/resources/default_app.asar/main.js:127:9)
+    at async file:///C:/OnPoint-PosV2/node_modules/electron/dist/resources/default_app.asar/main.js:240:9

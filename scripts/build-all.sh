@@ -23,7 +23,7 @@ echo "Electron is ready. To build installer:"
 echo "  npx electron-builder --config electron/electron-builder.json --win"
 echo ""
 echo "For development testing:"
-echo "  npx electron electron/main.js"
+echo "  npx electron electron/main.cjs"
 
 echo ""
 echo "=== Build Summary ==="

@@ -33,5 +33,5 @@ else
     echo "3. Build directly on a Windows machine"
     echo ""
     echo "For development testing, you can run Electron directly:"
-    echo "  npm run build && npx electron electron/main.js"
+    echo "  npm run build && npx electron electron/main.cjs"
 fi

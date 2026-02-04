@@ -44,7 +44,7 @@ bash scripts/build-android.sh
 bash scripts/build-windows.sh
 
 # Development testing
-npm run build && npx electron electron/main.js  # Windows/Electron
+npm run build && npx electron electron/main.cjs  # Windows/Electron
 npm run build && npx cap sync android           # Android sync
 ```
 
@@ -152,7 +152,7 @@ The Electron builder creates two outputs:
 ```bash
 # Build web app and run Electron
 npm run build
-npx electron electron/main.js
+npx electron electron/main.cjs
 ```
 
 ### Cross-Platform Builds

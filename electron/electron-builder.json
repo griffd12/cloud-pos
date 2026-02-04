@@ -44,6 +44,6 @@
     "artifactName": "${productName}-${version}-Mac.${ext}"
   },
   "extraMetadata": {
-    "main": "electron/main.js"
+    "main": "electron/main.cjs"
   }
 }

@@ -20,7 +20,7 @@
 npm run build
 
 # Start Electron in dev mode
-npx electron electron/main.js
+npx electron electron/main.cjs
 ```
 
 ### Production Build
