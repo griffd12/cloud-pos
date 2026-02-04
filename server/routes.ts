@@ -4144,6 +4144,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Update check item modifiers (for COM/Pizza re-editing)
+  const updateCheckItemModifiersSchema = z.object({
+    modifiers: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      priceDelta: z.string().optional(),
+    })),
+    unitPrice: z.string().optional(),
+  });
+
+  app.put("/api/check-items/:id/modifiers", async (req, res) => {
+    try {
+      const itemId = req.params.id;
+      const parsed = updateCheckItemModifiersSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parsed.error.errors });
+      }
+      const { modifiers, unitPrice } = parsed.data;
+
+      const item = await storage.getCheckItem(itemId);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+
+      if (item.sent) {
+        return res.status(400).json({ message: "Cannot modify sent items" });
+      }
+
+      const updateData: any = { modifiers: modifiers || [] };
+      if (unitPrice !== undefined) {
+        updateData.unitPrice = unitPrice;
+      }
+
+      const updated = await storage.updateCheckItem(itemId, updateData);
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update check item modifiers error:", error);
+      res.status(400).json({ message: "Failed to update modifiers" });
+    }
+  });
+
   app.post("/api/check-items/:id/void", async (req, res) => {
     try {
       const itemId = req.params.id;

@@ -35,16 +35,21 @@ const HALF_SECTIONS: PizzaSection[] = ["left", "right"];
 const QUARTER_SECTIONS: PizzaSection[] = ["topLeft", "topRight", "bottomLeft", "bottomRight"];
 
 export default function PizzaBuilderPage() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [, params] = useRoute("/pos/pizza-builder/:menuItemId");
   const menuItemId = params?.menuItemId;
   const { toast } = useToast();
+
+  // Parse editCheckItemId from URL query params
+  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  const editCheckItemId = urlParams.get('editCheckItemId');
 
   const {
     currentEmployee,
     currentCheck,
     currentRvc,
     setCheckItems,
+    checkItems,
   } = usePosContext();
 
   const [sectionMode, setSectionMode] = useState<SectionMode>("whole");
@@ -53,6 +58,7 @@ export default function PizzaBuilderPage() {
   const [selectedSauce, setSelectedSauce] = useState<Modifier | null>(null);
   const [toppingTab, setToppingTab] = useState("proteins");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasInitializedEditing, setHasInitializedEditing] = useState(false);
 
   const { data: menuItem, isLoading: menuItemLoading } = useQuery<MenuItem>({
     queryKey: ["/api/menu-items", menuItemId],
@@ -98,6 +104,71 @@ export default function PizzaBuilderPage() {
       setSelectedSauce(pizzaSauce || sauces[0]);
     }
   }, [sauces, selectedSauce]);
+
+  // Pre-populate selections when editing an existing check item
+  useEffect(() => {
+    if (editCheckItemId && checkItems && modifiers && !hasInitializedEditing) {
+      const editingItem = checkItems.find(i => i.id === editCheckItemId);
+      if (editingItem?.modifiers) {
+        const newSelections = new Map<string, ToppingSelection>();
+        
+        editingItem.modifiers.forEach(mod => {
+          // Parse section from modifier name (e.g., "Pepperoni (Left Half)")
+          const sectionMatch = mod.name.match(/\(([^)]+)\)/);
+          let section: PizzaSection = "whole";
+          
+          if (sectionMatch) {
+            const sectionLabel = sectionMatch[1];
+            const sectionEntry = Object.entries(SECTION_LABELS).find(([, label]) => label === sectionLabel);
+            if (sectionEntry) {
+              section = sectionEntry[0] as PizzaSection;
+            }
+          }
+          
+          // Parse quantity from modifier name (e.g., "Pepperoni x2")
+          const quantityMatch = mod.name.match(/x(\d+)$/);
+          const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+          
+          // Find the base modifier
+          const baseName = mod.name.replace(/\s*\([^)]+\)/, '').replace(/\s*x\d+$/, '').trim();
+          const modifier = modifiers.find(m => m.name.toLowerCase() === baseName.toLowerCase());
+          
+          if (modifier) {
+            // Check if it's a sauce
+            if (baseName.toLowerCase().includes('sauce')) {
+              setSelectedSauce(modifier);
+            } else {
+              // It's a topping
+              const existing = newSelections.get(modifier.id);
+              if (existing) {
+                if (!existing.sections.includes(section)) {
+                  existing.sections.push(section);
+                }
+              } else {
+                newSelections.set(modifier.id, {
+                  modifier,
+                  sections: [section],
+                  quantity,
+                });
+              }
+            }
+          }
+        });
+        
+        // Determine section mode from selections
+        const allSections = new Set<PizzaSection>();
+        newSelections.forEach(sel => sel.sections.forEach(s => allSections.add(s)));
+        if (allSections.has('topLeft') || allSections.has('topRight') || allSections.has('bottomLeft') || allSections.has('bottomRight')) {
+          setSectionMode('quarter');
+        } else if (allSections.has('left') || allSections.has('right')) {
+          setSectionMode('half');
+        }
+        
+        setSelections(newSelections);
+        setHasInitializedEditing(true);
+      }
+    }
+  }, [editCheckItemId, checkItems, modifiers, hasInitializedEditing]);
 
   const sizePriceMultiplier = useMemo(() => {
     if (!menuItem) return 1;
@@ -237,21 +308,32 @@ export default function PizzaBuilderPage() {
         });
       });
 
-      const response = await apiRequest("POST", "/api/checks/" + currentCheck.id + "/items", {
-        menuItemId: menuItem.id,
-        menuItemName: menuItem.name,
-        unitPrice: calculatePrice.toFixed(2),
-        modifiers: modifiersList,
-        quantity: 1,
-      });
+      if (editCheckItemId) {
+        // Update existing check item with new modifiers and recalculated price
+        const response = await apiRequest("PUT", `/api/check-items/${editCheckItemId}/modifiers`, {
+          modifiers: modifiersList,
+          unitPrice: calculatePrice.toFixed(2),
+        });
+        const updatedItem = await response.json();
+        setCheckItems((prev: any[]) => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
+        toast({ title: "Pizza updated" });
+      } else {
+        // Add new item
+        const response = await apiRequest("POST", "/api/checks/" + currentCheck.id + "/items", {
+          menuItemId: menuItem.id,
+          menuItemName: menuItem.name,
+          unitPrice: calculatePrice.toFixed(2),
+          modifiers: modifiersList,
+          quantity: 1,
+        });
+        const newItem = await response.json();
+        setCheckItems((prev: any[]) => [...prev, newItem]);
+        toast({ title: "Pizza added to check" });
+      }
       
-      const newItem = await response.json();
-      setCheckItems((prev: any[]) => [...prev, newItem]);
-      
-      toast({ title: "Pizza added to check" });
       navigate("/pos");
     } catch (error) {
-      toast({ title: "Failed to add pizza", variant: "destructive" });
+      toast({ title: editCheckItemId ? "Failed to update pizza" : "Failed to add pizza", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -347,7 +429,7 @@ export default function PizzaBuilderPage() {
             Cancel
           </Button>
           <Button onClick={handleAddToCheck} disabled={isSubmitting} data-testid="button-pizza-add">
-            {isSubmitting ? "Adding..." : "Add to Check"}
+            {isSubmitting ? (editCheckItemId ? "Updating..." : "Adding...") : (editCheckItemId ? "Update" : "Add to Check")}
           </Button>
         </div>
       </header>

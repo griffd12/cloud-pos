@@ -225,6 +225,7 @@ export default function PosPage() {
   
   // Conversational Ordering state (Menu Build)
   const [conversationalOrderItem, setConversationalOrderItem] = useState<MenuItem | null>(null);
+  const [editingCOMCheckItem, setEditingCOMCheckItem] = useState<CheckItem | null>(null);
   
   // Item availability hook
   const { getQuantityRemaining, isItemAvailable, setAvailability, decrementQuantity, isUpdating: isAvailabilityUpdating } = useItemAvailability();
@@ -1156,6 +1157,27 @@ export default function PosPage() {
       toast({ title: "Menu item not found", variant: "destructive" });
       return;
     }
+    
+    // Check if this is a COM item (Menu Build enabled)
+    if (currentRvc?.conversationalOrderingEnabled && menuItem.menuBuildEnabled) {
+      setEditingCOMCheckItem(item);
+      setConversationalOrderItem(menuItem);
+      return;
+    }
+    
+    // Check if this is a Pizza item
+    const itemName = menuItem.name.toLowerCase();
+    const isPizzaBuilderItem = itemName.includes("classic pizza") || 
+                               itemName.includes("gluten crust") ||
+                               itemName.includes("build your own pizza") ||
+                               itemName.includes("create your own pizza");
+    if (isPizzaBuilderItem) {
+      // Navigate to pizza builder with the check item ID for editing
+      navigate(`/pos/pizza-builder/${menuItem.id}?editCheckItemId=${item.id}`);
+      return;
+    }
+    
+    // Standard modifier editing flow
     setEditingItem(item);
     try {
       // Fetch the link records for this menu item
@@ -1622,6 +1644,7 @@ export default function PosPage() {
                 <HorizontalCOMPanel
                   enterpriseId={wsContext?.property?.enterpriseId || ""}
                   activeMenuItem={conversationalOrderItem}
+                  editingCheckItem={editingCOMCheckItem}
                   onConfirmItem={async (menuItemId, modifications) => {
                     if (!currentCheck) {
                       toast({ title: "No check open", description: "Start a new check first", variant: "destructive" });
@@ -1635,18 +1658,36 @@ export default function PosPage() {
                         prefix: m.prefixName || undefined,
                       }));
                       
-                      await addItemMutation.mutateAsync({
-                        menuItem: conversationalOrderItem!,
-                        modifiers: modifiersForCheck,
-                      });
+                      if (editingCOMCheckItem) {
+                        // Update existing check item
+                        const res = await fetch(`/api/check-items/${editingCOMCheckItem.id}/modifiers`, {
+                          method: "PUT",
+                          headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+                          body: JSON.stringify({ modifiers: modifiersForCheck }),
+                        });
+                        if (!res.ok) throw new Error("Failed to update item");
+                        const updatedItem = await res.json();
+                        setCheckItems(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
+                        toast({ title: "Item updated" });
+                      } else {
+                        // Add new item
+                        await addItemMutation.mutateAsync({
+                          menuItem: conversationalOrderItem!,
+                          modifiers: modifiersForCheck,
+                        });
+                        toast({ title: "Item added to order" });
+                      }
                       
                       setConversationalOrderItem(null);
-                      toast({ title: "Item added to order" });
+                      setEditingCOMCheckItem(null);
                     } catch (error: any) {
-                      toast({ title: "Failed to add item", description: error.message, variant: "destructive" });
+                      toast({ title: "Failed to save item", description: error.message, variant: "destructive" });
                     }
                   }}
-                  onCancelItem={() => setConversationalOrderItem(null)}
+                  onCancelItem={() => {
+                    setConversationalOrderItem(null);
+                    setEditingCOMCheckItem(null);
+                  }}
                 />
               )}
 

@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { getAuthHeaders } from "@/lib/queryClient";
-import type { MenuItem, MenuItemRecipeIngredient, IngredientPrefix, Modifier } from "@shared/schema";
-import { Check, X } from "lucide-react";
+import type { MenuItem, MenuItemRecipeIngredient, IngredientPrefix, Modifier, CheckItem } from "@shared/schema";
+import { X } from "lucide-react";
 
 interface ActiveItemState {
   menuItem: MenuItem;
@@ -22,6 +21,7 @@ interface ActiveItemState {
 interface HorizontalCOMPanelProps {
   enterpriseId: string;
   activeMenuItem: MenuItem | null;
+  editingCheckItem?: CheckItem | null;
   onConfirmItem: (menuItemId: string, modifications: Array<{ingredientName: string; prefixName: string | null; quantity: number}>) => void;
   onCancelItem: () => void;
 }
@@ -29,6 +29,7 @@ interface HorizontalCOMPanelProps {
 export function HorizontalCOMPanel({
   enterpriseId,
   activeMenuItem,
+  editingCheckItem,
   onConfirmItem,
   onCancelItem,
 }: HorizontalCOMPanelProps) {
@@ -64,18 +65,58 @@ export function HorizontalCOMPanel({
 
   useEffect(() => {
     if (activeMenuItem && recipeIngredients.length > 0) {
-      setActiveItemState({
-        menuItem: activeMenuItem,
-        ingredients: recipeIngredients.map(r => ({
+      // Build the base ingredients from recipe
+      const baseIngredients = recipeIngredients.map(r => {
+        const ingredientName = r.modifierId 
+          ? (modifiers.find(m => m.id === r.modifierId)?.name || r.ingredientName)
+          : r.ingredientName;
+        
+        // If editing, find existing modifier for this ingredient
+        let prefixId = r.defaultPrefixId;
+        let quantity = r.defaultQuantity ?? 1;
+        let isIncluded = r.isDefault ?? true;
+        
+        if (editingCheckItem?.modifiers) {
+          // Look for a modifier that matches this ingredient
+          const existingMod = editingCheckItem.modifiers.find(m => {
+            const modName = m.name?.toLowerCase() || '';
+            const ingName = ingredientName.toLowerCase();
+            return modName.includes(ingName) || ingName.includes(modName.split(' ').pop() || '');
+          });
+          
+          if (existingMod) {
+            // Parse the prefix from the existing modifier
+            const prefix = existingMod.prefix || (existingMod.name?.split(' ')[0] || '');
+            const matchingPrefix = ingredientPrefixes.find(p => 
+              p.name?.toLowerCase() === prefix.toLowerCase() || 
+              p.code?.toLowerCase() === prefix.toLowerCase()
+            );
+            if (matchingPrefix) {
+              prefixId = matchingPrefix.id;
+              const prefixName = matchingPrefix.name?.toLowerCase() || '';
+              if (prefixName === 'no') {
+                isIncluded = false;
+                quantity = 0;
+              } else if (prefixName === 'extra' || prefixName === 'xtr') {
+                quantity = 2;
+              }
+            }
+          }
+        }
+        
+        return {
           id: r.id,
           modifierId: r.modifierId,
-          ingredientName: r.modifierId 
-            ? (modifiers.find(m => m.id === r.modifierId)?.name || r.ingredientName)
-            : r.ingredientName,
-          prefixId: r.defaultPrefixId,
-          quantity: r.defaultQuantity ?? 1,
-          isIncluded: r.isDefault ?? true,
-        })),
+          ingredientName,
+          prefixId,
+          quantity,
+          isIncluded,
+        };
+      });
+      
+      setActiveItemState({
+        menuItem: activeMenuItem,
+        ingredients: baseIngredients,
       });
     } else if (activeMenuItem && !activeMenuItem.menuBuildEnabled) {
       setActiveItemState({
@@ -85,7 +126,7 @@ export function HorizontalCOMPanel({
     } else {
       setActiveItemState(null);
     }
-  }, [activeMenuItem, recipeIngredients, modifiers]);
+  }, [activeMenuItem, recipeIngredients, modifiers, editingCheckItem, ingredientPrefixes]);
 
   const applyPrefix = (ingredientId: string, prefixId: string | null) => {
     if (!activeItemState) return;
@@ -168,7 +209,7 @@ export function HorizontalCOMPanel({
           Cancel
         </Button>
         <Button size="sm" onClick={handleConfirm} data-testid="button-add-to-order-com">
-          Add to Order
+          {editingCheckItem ? "Update" : "Add to Order"}
         </Button>
       </div>
       
