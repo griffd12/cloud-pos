@@ -170,3 +170,51 @@ The current system uses a shared PostgreSQL database with enterprise ID filterin
 - **Working**: New enterprises start with blank EMC (no shared data)
 - **Working**: CAPS with local SQLite provides offline resilience per property
 - **Needed**: Company code login, per-customer URLs, separate databases
+
+## Native Applications (Android & Windows)
+
+The Cloud POS system can be deployed as native applications for Android and Windows while maintaining 100% feature parity with the web version.
+
+### Architecture
+- **Web App**: The existing React frontend runs unchanged
+- **Native Wrappers**: Capacitor (Android) and Electron (Windows) wrap the web app in native containers
+- **Cloud Backend**: EMC remains fully cloud-based; POS connects to cloud or on-premise CAPS
+
+### Project Structure
+```
+native/           # Documentation and native-specific configs
+├── android/      # Android configuration docs
+├── windows/      # Windows/Electron configuration docs
+└── README.md     # Native apps overview
+
+android/          # Capacitor Android project (auto-generated)
+electron/         # Electron main process and config
+├── main.js       # Electron main process
+├── preload.js    # Secure IPC bridge
+└── electron-builder.json
+```
+
+### Building Native Apps
+
+**Android:**
+```bash
+npm run build                  # Build web app
+npx cap sync android           # Sync to Android
+npx cap open android           # Open in Android Studio
+```
+
+**Windows:**
+```bash
+npm run build                           # Build web app
+npx electron electron/main.js           # Run in dev mode
+npx electron-builder --config electron/electron-builder.json  # Build installer
+```
+
+### Feature Parity Guarantee
+All POS functionality is preserved:
+- Menu display, ordering, modifiers, pizza builder
+- Check management and payment processing
+- KDS integration and real-time updates
+- Receipt printing (network printers or native plugins)
+- Employee auth, time clock, manager approvals
+- Full EMC access via cloud

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.cloudpos.desktop",
+  "productName": "Cloud POS",
+  "copyright": "Copyright © 2024",
+  "directories": {
+    "output": "electron-dist"
+  },
+  "files": [
+    "dist/public/**/*",
+    "electron/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-Windows.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Cloud POS"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-Portable.${ext}"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Office",
+    "artifactName": "${productName}-${version}-Linux.${ext}"
+  },
+  "mac": {
+    "target": ["dmg"],
+    "category": "public.app-category.business",
+    "artifactName": "${productName}-${version}-Mac.${ext}"
+  },
+  "extraMetadata": {
+    "main": "electron/main.js"
+  }
+}
