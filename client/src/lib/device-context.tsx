@@ -144,7 +144,8 @@ export function getAutoEnrollRedirect(): string | null {
 const urlCredsProcessed = processUrlCredentials();
 
 export function DeviceProvider({ children }: { children: ReactNode }) {
-  const [deviceType, setDeviceType] = useState<DeviceType>(getStoredDeviceType);
+  // Security disabled - default to "pos" if no device type is stored
+  const [deviceType, setDeviceType] = useState<DeviceType>(getStoredDeviceType() || "pos");
   const [linkedDeviceId, setLinkedDeviceId] = useState<string | null>(getStoredDeviceId);
   const [deviceName, setDeviceName] = useState<string | null>(getStoredDeviceName);
   const [deviceToken, setDeviceToken] = useState<string | null>(getStoredDeviceToken);
