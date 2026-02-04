@@ -107,67 +107,88 @@ export default function PizzaBuilderPage() {
 
   // Pre-populate selections when editing an existing check item
   useEffect(() => {
-    if (editCheckItemId && checkItems && modifiers && !hasInitializedEditing) {
-      const editingItem = checkItems.find(i => i.id === editCheckItemId);
-      if (editingItem?.modifiers) {
-        const newSelections = new Map<string, ToppingSelection>();
-        
-        editingItem.modifiers.forEach(mod => {
-          // Parse section from modifier name (e.g., "Pepperoni (Left Half)")
-          const sectionMatch = mod.name.match(/\(([^)]+)\)/);
-          let section: PizzaSection = "whole";
-          
-          if (sectionMatch) {
-            const sectionLabel = sectionMatch[1];
-            const sectionEntry = Object.entries(SECTION_LABELS).find(([, label]) => label === sectionLabel);
-            if (sectionEntry) {
-              section = sectionEntry[0] as PizzaSection;
-            }
-          }
-          
-          // Parse quantity from modifier name (e.g., "Pepperoni x2")
-          const quantityMatch = mod.name.match(/x(\d+)$/);
-          const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
-          
-          // Find the base modifier
-          const baseName = mod.name.replace(/\s*\([^)]+\)/, '').replace(/\s*x\d+$/, '').trim();
-          const modifier = modifiers.find(m => m.name.toLowerCase() === baseName.toLowerCase());
-          
-          if (modifier) {
-            // Check if it's a sauce
-            if (baseName.toLowerCase().includes('sauce')) {
-              setSelectedSauce(modifier);
-            } else {
-              // It's a topping
-              const existing = newSelections.get(modifier.id);
-              if (existing) {
-                if (!existing.sections.includes(section)) {
-                  existing.sections.push(section);
-                }
-              } else {
-                newSelections.set(modifier.id, {
-                  modifier,
-                  sections: [section],
-                  quantity,
-                });
-              }
-            }
-          }
-        });
-        
-        // Determine section mode from selections
-        const allSections = new Set<PizzaSection>();
-        newSelections.forEach(sel => sel.sections.forEach(s => allSections.add(s)));
-        if (allSections.has('topLeft') || allSections.has('topRight') || allSections.has('bottomLeft') || allSections.has('bottomRight')) {
-          setSectionMode('quarter');
-        } else if (allSections.has('left') || allSections.has('right')) {
-          setSectionMode('half');
-        }
-        
-        setSelections(newSelections);
-        setHasInitializedEditing(true);
-      }
+    // Wait until we have all the data needed
+    if (!editCheckItemId || !modifiers || modifiers.length === 0 || hasInitializedEditing) {
+      return;
     }
+    
+    // Find the editing item in checkItems
+    const editingItem = checkItems?.find(i => i.id === editCheckItemId);
+    
+    if (!editingItem?.modifiers || editingItem.modifiers.length === 0) {
+      // If no modifiers found in context, don't block - user can add new ones
+      console.log('[Pizza Builder] Edit item not found or has no modifiers:', editCheckItemId, 'items available:', checkItems?.map(i => i.id));
+      return;
+    }
+    
+    console.log('[Pizza Builder] Pre-populating from item:', editingItem.menuItemName, 'with modifiers:', editingItem.modifiers);
+    
+    const newSelections = new Map<string, ToppingSelection>();
+    
+    editingItem.modifiers.forEach(mod => {
+      // Parse section from modifier name (e.g., "Pepperoni (Left Half)")
+      const sectionMatch = mod.name.match(/\(([^)]+)\)/);
+      let section: PizzaSection = "whole";
+      
+      if (sectionMatch) {
+        const sectionLabel = sectionMatch[1];
+        const sectionEntry = Object.entries(SECTION_LABELS).find(([, label]) => label === sectionLabel);
+        if (sectionEntry) {
+          section = sectionEntry[0] as PizzaSection;
+        }
+      }
+      
+      // Parse quantity from modifier name (e.g., "Pepperoni x2")
+      const quantityMatch = mod.name.match(/x(\d+)$/);
+      const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+      
+      // Find the base modifier - strip section label and quantity
+      const baseName = mod.name.replace(/\s*\([^)]+\)/, '').replace(/\s*x\d+$/, '').trim();
+      
+      // Try exact match first, then case-insensitive
+      let modifier = modifiers.find(m => m.name === baseName);
+      if (!modifier) {
+        modifier = modifiers.find(m => m.name.toLowerCase() === baseName.toLowerCase());
+      }
+      
+      console.log('[Pizza Builder] Matching modifier:', mod.name, '-> base:', baseName, '-> found:', modifier?.name);
+      
+      if (modifier) {
+        // Check if it's a sauce
+        if (baseName.toLowerCase().includes('sauce')) {
+          setSelectedSauce(modifier);
+        } else {
+          // It's a topping
+          const existing = newSelections.get(modifier.id);
+          if (existing) {
+            if (!existing.sections.includes(section)) {
+              existing.sections.push(section);
+            }
+          } else {
+            newSelections.set(modifier.id, {
+              modifier,
+              sections: [section],
+              quantity,
+            });
+          }
+        }
+      }
+    });
+    
+    // Determine section mode from selections
+    const allSections = new Set<PizzaSection>();
+    newSelections.forEach(sel => sel.sections.forEach(s => allSections.add(s)));
+    if (allSections.has('topLeft') || allSections.has('topRight') || allSections.has('bottomLeft') || allSections.has('bottomRight')) {
+      setSectionMode('quarter');
+    } else if (allSections.has('left') || allSections.has('right')) {
+      setSectionMode('half');
+    }
+    
+    if (newSelections.size > 0) {
+      setSelections(newSelections);
+      console.log('[Pizza Builder] Pre-populated', newSelections.size, 'toppings');
+    }
+    setHasInitializedEditing(true);
   }, [editCheckItemId, checkItems, modifiers, hasInitializedEditing]);
 
   const sizePriceMultiplier = useMemo(() => {
