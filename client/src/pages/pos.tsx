@@ -1148,6 +1148,7 @@ export default function PosPage() {
   };
 
   const handleEditModifiers = async (item: CheckItem) => {
+    console.log('[POS] handleEditModifiers called for item:', item.menuItemName, 'id:', item.id);
     if (item.sent) {
       toast({ title: "Cannot modify sent items", variant: "destructive" });
       return;
@@ -1158,6 +1159,8 @@ export default function PosPage() {
       return;
     }
     
+    console.log('[POS] Found menu item:', menuItem.name, 'menuBuildEnabled:', menuItem.menuBuildEnabled, 'conversationalOrderingEnabled:', currentRvc?.conversationalOrderingEnabled);
+    
     // Check if this is a COM item (Menu Build enabled)
     if (currentRvc?.conversationalOrderingEnabled && menuItem.menuBuildEnabled) {
       setEditingCOMCheckItem(item);
@@ -1167,12 +1170,15 @@ export default function PosPage() {
     
     // Check if this is a Pizza item
     const itemName = menuItem.name.toLowerCase();
+    console.log('[POS] Checking pizza detection for:', itemName);
     const isPizzaBuilderItem = itemName.includes("classic pizza") || 
                                itemName.includes("gluten crust") ||
                                itemName.includes("build your own pizza") ||
                                itemName.includes("create your own pizza");
+    console.log('[POS] isPizzaBuilderItem:', isPizzaBuilderItem);
     if (isPizzaBuilderItem) {
       // Navigate to pizza builder with the check item ID for editing
+      console.log('[POS] Navigating to pizza builder with editCheckItemId:', item.id);
       navigate(`/pos/pizza-builder/${menuItem.id}?editCheckItemId=${item.id}`);
       return;
     }
