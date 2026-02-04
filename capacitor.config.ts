@@ -5,9 +5,8 @@ const config: CapacitorConfig = {
   appName: 'Cloud POS',
   webDir: 'dist/public',
   server: {
-    // In development, connect to the cloud backend
-    // In production, this will be configured per deployment
-    url: process.env.CAPACITOR_SERVER_URL || undefined,
+    // Default to cloud backend - update for production deployment
+    url: process.env.CAPACITOR_SERVER_URL || 'https://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev',
     cleartext: true,
   },
   android: {

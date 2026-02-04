@@ -172,15 +172,21 @@ Both native apps connect to the same cloud backend as the web version:
 
 ### Connection Modes
 
-**Remote Mode (Recommended)**
-Set the server URL to connect to cloud or on-premise CAPS:
+**Cloud Mode (Default)**
+Both Windows and Android apps connect to the cloud backend by default:
+- The default server URL is configured in the app
+- No environment variables needed for normal operation
+- Apps work immediately after installation
+
+**Custom Server (Optional)**
+To connect to a different server (e.g., on-premise CAPS):
 - Android: Set `CAPACITOR_SERVER_URL` environment variable before building
 - Windows: Set `ELECTRON_SERVER_URL` environment variable before running
 
-**Standalone Mode (Offline Testing)**
-If no server URL is set, apps load from `dist/public/`:
-- Useful for demos, training, or situations where network is unavailable at startup
-- Note: In standalone mode, no backend sync occurs until server URL is configured
+**Updating the Default Server**
+When publishing to production, update the default URLs:
+- Electron: Edit `DEFAULT_SERVER_URL` in `electron/main.cjs`
+- Android: Edit the URL in `capacitor.config.ts`
 
 ### App Icons
 

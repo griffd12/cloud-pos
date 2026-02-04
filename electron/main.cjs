@@ -4,8 +4,10 @@ const path = require('path');
 // Keep a global reference of the window object
 let mainWindow = null;
 
-// Server URL - configure for your environment
-const SERVER_URL = process.env.ELECTRON_SERVER_URL || null;
+// Server URL - defaults to cloud backend, can be overridden via environment variable
+// For production, update DEFAULT_SERVER_URL to your published domain
+const DEFAULT_SERVER_URL = 'https://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev';
+const SERVER_URL = process.env.ELECTRON_SERVER_URL || DEFAULT_SERVER_URL;
 
 function createWindow() {
   // Create the browser window with POS-optimized settings
