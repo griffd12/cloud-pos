@@ -44,7 +44,6 @@ import FamilyGroupsPage from "./family-groups";
 import UtilitiesPage from "./utilities";
 import ReportsPage from "./reports";
 import DevicesPage from "./devices";
-import DevicesHubPage from "./devices-hub";
 import TimecardsPage from "./timecards";
 import SchedulingPage from "./scheduling";
 import LineUpPage from "./line-up";
@@ -60,7 +59,6 @@ import MinorLaborPage from "./minor-labor";
 import TipRulesPage from "./tip-rules";
 import PaymentProcessorsPage from "./payment-processors";
 import TerminalDevicesPage from "./terminal-devices";
-import RegisteredDevicesPage from "./registered-devices";
 import OnboardingPage from "./onboarding";
 import GiftCardsPage from "./gift-cards";
 import LoyaltyPage from "./loyalty";
@@ -72,8 +70,6 @@ import ForecastingPage from "./forecasting";
 import ManagerAlertsPage from "./manager-alerts";
 import ItemAvailabilityPage from "./item-availability";
 import AccountingExportPage from "./accounting-export";
-import CalPackagesPage from "./cal-packages";
-import ServiceHostsPage from "./service-hosts";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -288,7 +284,6 @@ export default function AdminLayout() {
               <Route path="/admin/order-devices" component={OrderDevicesPage} />
               <Route path="/admin/workstations" component={WorkstationsPage} />
               <Route path="/admin/terminal-devices" component={TerminalDevicesPage} />
-              <Route path="/admin/registered-devices" component={RegisteredDevicesPage} />
               <Route path="/admin/printers" component={PrintersPage} />
               <Route path="/admin/kds-devices" component={KdsDevicesPage} />
               <Route path="/admin/pos-layouts" component={PosLayoutsPage} />
@@ -297,9 +292,6 @@ export default function AdminLayout() {
               <Route path="/admin/utilities" component={UtilitiesPage} />
               <Route path="/admin/reports" component={ReportsPage} />
               <Route path="/admin/devices" component={DevicesPage} />
-              <Route path="/admin/devices-hub" component={DevicesHubPage} />
-              <Route path="/admin/cal-packages" component={CalPackagesPage} />
-              <Route path="/admin/service-hosts" component={ServiceHostsPage} />
               <Route path="/admin/timecards" component={TimecardsPage} />
               <Route path="/admin/scheduling" component={SchedulingPage} />
               <Route path="/admin/line-up" component={LineUpPage} />

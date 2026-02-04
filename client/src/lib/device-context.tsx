@@ -248,13 +248,15 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     }
   }, [clearDeviceConfig]);
 
-  useEffect(() => {
-    if (deviceToken) {
-      validateDeviceToken();
-    }
-  }, []);
+  // Security disabled - skip automatic token validation
+  // useEffect(() => {
+  //   if (deviceToken) {
+  //     validateDeviceToken();
+  //   }
+  // }, []);
 
-  const isConfigured = deviceType !== null && linkedDeviceId !== null && deviceToken !== null;
+  // Security disabled - always consider device as configured
+  const isConfigured = true;
 
   return (
     <DeviceContext.Provider

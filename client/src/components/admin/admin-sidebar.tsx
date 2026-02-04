@@ -25,7 +25,6 @@ import {
   DollarSign,
   Percent,
   CreditCard,
-  Shield,
   LogOut,
   ChefHat,
   MonitorSmartphone,
@@ -48,12 +47,11 @@ import {
   Bell,
   CheckCircle,
   FileText,
-  Cpu,
   Wifi,
-  Server,
   Coffee,
   AlertCircle,
   Baby,
+  Shield,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -84,7 +82,6 @@ const menuGroupsTemplate = [
     items: [
       { title: "Workstations", url: "/admin/workstations", icon: MonitorSmartphone },
       { title: "Terminal Devices", url: "/admin/terminal-devices", icon: CreditCard },
-      { title: "Registered Devices", url: "/admin/registered-devices", icon: Shield },
       { title: "Printers", url: "/admin/printers", icon: Printer },
       { title: "Print Agents", url: "/admin/print-agents", icon: Wifi },
       { title: "KDS Devices", url: "/admin/kds-devices", icon: Tv2 },
@@ -160,10 +157,6 @@ const menuGroupsTemplate = [
   {
     label: "System",
     items: [
-      { title: "Devices Hub", url: "/admin/devices-hub", icon: Cpu },
-      { title: "CAL Packages", url: "/admin/cal-packages", icon: Package },
-      { title: "Services", url: "/admin/service-hosts", icon: Server },
-      { title: "Connectivity Test", url: "/admin/connectivity-test", icon: Wifi },
       { title: "Utilities", url: "/admin/utilities", icon: Wrench },
       { title: "Onboarding Checklist", url: "/admin/onboarding", icon: ClipboardCheck },
     ],

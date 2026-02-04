@@ -1014,30 +1014,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         const data = JSON.parse(message.toString());
         
-        // Authenticate helper - validates device token or EMC session
+        // Authenticate helper - SECURITY DISABLED
+        // All WebSocket connections are now allowed without authentication
         async function authenticateConnection(deviceToken?: string, emcSessionToken?: string): Promise<boolean> {
-          // Check device token first
-          if (deviceToken) {
-            const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
-            const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
-            if (device && device.status === "enrolled") {
-              isDeviceAuthenticated = true;
-              await storage.updateRegisteredDevice(device.id, { lastAccessAt: new Date() });
-              return true;
-            }
-          }
-          
-          // Check EMC session token
-          if (emcSessionToken) {
-            const sessionTokenHash = crypto.createHash("sha256").update(emcSessionToken).digest("hex");
-            const session = await storage.getEmcSessionByToken(sessionTokenHash);
-            if (session && new Date(session.expiresAt) > new Date()) {
-              isEmcAuthenticated = true;
-              return true;
-            }
-          }
-          
-          return false;
+          // Security disabled - always return true
+          return true;
         }
         
         // General "all" channel subscription for POS/KDS events
@@ -1202,15 +1183,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         const data = JSON.parse(message.toString());
 
-        // Handle HELLO - authentication handshake
-        if (data.type === "HELLO" && data.token) {
-          const tokenHash = crypto.createHash("sha256").update(data.token).digest("hex");
-          const agent = await storage.getPrintAgentByToken(tokenHash);
+        // Handle HELLO - authentication handshake (SECURITY DISABLED)
+        // Now accepts either token or agentId for simplified operation
+        if (data.type === "HELLO") {
+          let agent = null;
+          
+          // Try token-based lookup first (backwards compatible)
+          if (data.token) {
+            const tokenHash = crypto.createHash("sha256").update(data.token).digest("hex");
+            agent = await storage.getPrintAgentByToken(tokenHash);
+          }
+          
+          // Fall back to agentId lookup if no token or token invalid
+          if (!agent && data.agentId) {
+            agent = await storage.getPrintAgent(data.agentId);
+          }
 
-          // Reject if agent not found or explicitly disabled
-          // Valid statuses for connection: "offline", "online", "error" (not "disabled")
+          // Still require agent to exist (just not strict token validation)
           if (!agent) {
-            ws.send(JSON.stringify({ type: "AUTH_FAIL", message: "Invalid agent token" }));
+            ws.send(JSON.stringify({ type: "AUTH_FAIL", message: "Agent not found" }));
             ws.close(4001, "Authentication failed");
             return;
           }
@@ -1325,93 +1316,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   (app as any).connectedAgents = connectedAgents;
 
   // ============================================================================
-  // DEVICE TOKEN MIDDLEWARE - Protects POS/KDS routes from unenrolled browsers
-  // Routes exempt from device token validation:
-  // - /emc/* (EMC uses session-based auth)
-  // - /registered-devices/enroll (device enrollment process)
-  // - /registered-devices/validate (token validation)
-  // - Requests with valid EMC session token (X-EMC-Session header)
-  // Note: req.path inside app.use('/api') omits the /api prefix
+  // DEVICE TOKEN MIDDLEWARE - SECURITY DISABLED
+  // 
+  // Device enrollment and token validation have been disabled.
+  // All API routes are now accessible without device tokens.
+  // This allows POS and KDS to work directly in any web browser.
   // ============================================================================
-  const deviceTokenExemptRoutes = [
-    /^\/emc(\/.*)?$/,                      // EMC routes (session-based auth)
-    /^\/admin(\/.*)?$/,                    // Admin routes (uses own PIN-based auth via EMC)
-    /^\/registered-devices\/enroll$/,       // Device enrollment
-    /^\/registered-devices\/validate$/,     // Token validation
-    /^\/registered-devices\/status-summary$/, // Device status for connectivity dashboard
-    /^\/connectivity-status$/,              // Connectivity dashboard status endpoint
-    /^\/kds-tickets\/test$/,                // KDS test ticket from connectivity dashboard
-    /^\/health$/,                           // Health check endpoint
-    /^\/print-agents(\/.*)?$/,              // Print agent management (EMC feature)
-    /^\/cal-packages(\/.*)?$/,              // CAL package management (EMC feature)
-    /^\/cal-package-versions(\/.*)?$/,      // CAL package versions (EMC feature)
-    /^\/cal-deployments(\/.*)?$/,           // CAL deployments (EMC feature)
-    /^\/cal-deployment-targets(\/.*)?$/,    // CAL deployment targets (Service Host updates)
-    /^\/service-hosts(\/.*)?$/,             // Service host management (EMC feature)
-    /^\/cal-setup(\/.*)?$/,                 // CAL Setup Wizard endpoints (uses EMC auth)
-    /^\/cal-client(\/.*)?$/,                // CAL Client polling endpoints (uses device token auth)
-    /^\/dev(\/.*)?$/,                       // Dev-only endpoints (testing)
-    /^\/menu-items\/[a-f0-9-]{36}$/,        // Single menu item fetch for Pizza Builder (read-only)
-    /^\/modifiers$/,                        // Modifiers list for Pizza Builder (read-only)
-    /^\/payment-processors(\/.*)?$/,        // Payment processor management (EMC feature)
-  ];
-
   app.use("/api", async (req, res, next) => {
-    // Check if route is exempt from device token validation
-    const isExempt = deviceTokenExemptRoutes.some(pattern => pattern.test(req.path));
-    if (isExempt) {
-      return next();
-    }
-
-    // Check for valid Manager App API key - external integrations bypass device token
-    const apiKey = req.headers["x-api-key"] as string;
-    const validApiKey = process.env.MANAGER_APP_API_KEY;
-    if (apiKey && validApiKey && apiKey === validApiKey) {
-      // Valid API key - allow access without device token
-      (req as any).apiKeyAuth = true;
-      return next();
-    }
-
-    // Check for EMC session token - EMC users can access all APIs without device token
-    const emcSessionToken = req.headers["x-emc-session"] as string;
-    if (emcSessionToken) {
-      // Validate EMC session token
-      const sessionTokenHash = crypto.createHash("sha256").update(emcSessionToken).digest("hex");
-      const session = await storage.getEmcSessionByToken(sessionTokenHash);
-      
-      if (session && new Date(session.expiresAt) > new Date()) {
-        const emcUser = await storage.getEmcUser(session.userId);
-        if (emcUser && emcUser.active) {
-          // Valid EMC session - allow access
-          (req as any).emcUser = emcUser;
-          return next();
-        }
-      }
-    }
-
-    // Get device token from header
-    const deviceToken = req.headers["x-device-token"] as string;
-    if (!deviceToken) {
-      // Block requests without device token for POS/KDS routes
-      return res.status(401).json({ 
-        message: "Device not enrolled. Please complete device enrollment.",
-        code: "DEVICE_TOKEN_REQUIRED"
-      });
-    }
-
-    // Validate device token
-    const deviceTokenHash = crypto.createHash("sha256").update(deviceToken).digest("hex");
-    const device = await storage.getRegisteredDeviceByToken(deviceTokenHash);
-    
-    if (!device || device.status !== "enrolled") {
-      return res.status(401).json({ 
-        message: "Invalid or revoked device token. Please re-enroll this device.",
-        code: "DEVICE_TOKEN_INVALID"
-      });
-    }
-
-    // Attach device info to request for downstream use
-    (req as any).enrolledDevice = device;
+    // Security disabled - allow all requests without device token validation
     next();
   });
 

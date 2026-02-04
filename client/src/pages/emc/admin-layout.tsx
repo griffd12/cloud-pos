@@ -47,7 +47,6 @@ import FamilyGroupsPage from "../admin/family-groups";
 import UtilitiesPage from "../admin/utilities";
 import ReportsPage from "../admin/reports";
 import DevicesPage from "../admin/devices";
-import DevicesHubPage from "../admin/devices-hub";
 import TimecardsPage from "../admin/timecards";
 import SchedulingPage from "../admin/scheduling";
 import LineUpPage from "../admin/line-up";
@@ -57,7 +56,6 @@ import JobsPage from "../admin/jobs";
 import OvertimeRulesPage from "../admin/overtime-rules";
 import PaymentProcessorsPage from "../admin/payment-processors";
 import TerminalDevicesPage from "../admin/terminal-devices";
-import RegisteredDevicesPage from "../admin/registered-devices";
 import OnboardingPage from "../admin/onboarding";
 import GiftCardsPage from "../admin/gift-cards";
 import LoyaltyPage from "../admin/loyalty";
@@ -71,9 +69,6 @@ import ItemAvailabilityPage from "../admin/item-availability";
 import AccountingExportPage from "../admin/accounting-export";
 import PrintAgentsPage from "../admin/print-agents";
 import DescriptorsPage from "../admin/descriptors";
-import CalPackagesPage from "../admin/cal-packages";
-import ServiceHostsPage from "../admin/service-hosts";
-import ConnectivityTestPage from "../admin/connectivity-test";
 import TipRulesPage from "../admin/tip-rules";
 import TimecardReportPage from "../admin/timecard-report";
 import BreakRulesPage from "../admin/break-rules";
@@ -454,7 +449,6 @@ export default function EmcAdminLayout() {
               <Route path="/emc/order-devices" component={OrderDevicesPage} />
               <Route path="/emc/workstations" component={WorkstationsPage} />
               <Route path="/emc/terminal-devices" component={TerminalDevicesPage} />
-              <Route path="/emc/registered-devices" component={RegisteredDevicesPage} />
               <Route path="/emc/printers" component={PrintersPage} />
               <Route path="/emc/kds-devices" component={KdsDevicesPage} />
               <Route path="/emc/pos-layouts" component={PosLayoutsPage} />
@@ -463,10 +457,6 @@ export default function EmcAdminLayout() {
               <Route path="/emc/utilities" component={UtilitiesPage} />
               <Route path="/emc/reports" component={ReportsPage} />
               <Route path="/emc/devices" component={DevicesPage} />
-              <Route path="/emc/devices-hub" component={DevicesHubPage} />
-              <Route path="/emc/cal-packages" component={CalPackagesPage} />
-              <Route path="/emc/service-hosts" component={ServiceHostsPage} />
-              <Route path="/emc/connectivity-test" component={ConnectivityTestPage} />
               <Route path="/emc/timecards" component={TimecardsPage} />
               <Route path="/emc/scheduling" component={SchedulingPage} />
               <Route path="/emc/line-up" component={LineUpPage} />

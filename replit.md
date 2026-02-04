@@ -94,18 +94,6 @@ Preferred communication style: Simple, everyday language.
 - **Payment Processing**: PCI-compliant, gateway-agnostic framework.
 - **Printing System**: Comprehensive receipt and report printing with network printer support (ESC/POS) via a database-backed print queue and a standalone Print Agent System.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting.
-- **Hybrid Architecture (V2)**: Introduces an optional on-premise CAPS (Node.js with SQLite) for offline resilience (yellow/red modes) with cloud sync infrastructure.
-- **CAL Package Deployment Pipeline**: Oracle Simphony-style system for distributing software packages (CAL Packages) to CAPS hosts and workstations, enabling automatic updates via a CAL Client Background Service.
-- **CAL Setup Wizard**: An Electron Desktop App for device initialization that automatically provisions services based on workstation configuration in EMC. Uses `C:\OPH-POS` as root directory. Features:
-  - Reads workstation service bindings from EMC (CAPS, Print Controller, KDS Controller, Payment Controller)
-  - **CAPS Provisioning**: Creates CAPS service records with secure tokens, saves config.json with cloudUrl/serviceHostId/token/propertyId, initializes ServiceHost/data directory for SQLite database
-  - **Print Controller**: Auto-creates Print Agents with secure tokens, downloads and configures Print Agent software
-  - **Payment Controller**: Saves payment-controller.json with gateway configuration
-  - Reports setup status (in_progress, completed, failed) back to EMC
-  - Displays setup status badges in device list for easy monitoring
-- **Device Binding Security**: SHA-256 hashed device tokens ensure secure access to POS/KDS functionality via REST API middleware and WebSocket authentication.
-- **Config Sync Service**: Cloud to local SQLite synchronization for all entity types (hierarchy, menu, employees, devices, operations, POS layouts, payments, loyalty) with version tracking and real-time updates.
-- **CAPS SQLite Schema**: Comprehensive local database schema mirroring cloud PostgreSQL for full offline POS operations, including configuration, menu, devices, transactions, payments, KDS, cash management, time & attendance, fiscal operations, loyalty, gift cards, and orders.
 - **Pizza Builder Module**: Full-page visual pizza customization interface at `/pizza-builder/:menuItemId`. Features:
   - Visual SVG pizza graphic with topping dots using deterministic pseudo-random placement
   - Section selection modes: Whole pizza, Half (Left/Right), Quarter (4 sections)
@@ -115,10 +103,19 @@ Preferred communication style: Simple, everyday language.
   - Auto-detection of pizza items in POS by name pattern ("classic pizza", "gluten crust", "create your own pizza")
   - Seamless integration with check flow - adds pizza with all selected modifiers to current check
 
+## Security Mode Status
+
+**SECURITY FEATURES DISABLED** - The system currently operates in an open-access mode:
+- Device enrollment/token validation is bypassed
+- POS and KDS are accessible directly from any web browser without CAL Setup Wizard
+- WebSocket connections don't require device or EMC authentication
+- Print agents can connect without strict token validation (just need agent ID)
+- The following EMC pages have been removed: Device Hub, CAL Packages, Services, Connectivity Test, Registered Devices
+
+This simplified mode allows the system to work as a standard web-based POS without on-premise security requirements. All payment functionality remains fully operational.
+
 ## Terminology
-- **Services**: User-facing EMC navigation label (Admin > Services)
-- **CAPS**: Central Application Processing Service - the core on-premise service handling checks, transactions, and local database
-- **Host Workstation**: The PC/workstation designated to run a service (CAPS, Print, KDS, or Payment)
+- **Print Agent**: Software running on a local machine that handles network printer communication
 
 ## External Dependencies
 
