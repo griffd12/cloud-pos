@@ -319,9 +319,14 @@ export default function PosPage() {
   // Mutation to void a payment
   const voidPaymentMutation = useMutation({
     mutationFn: async (payment: CheckPayment) => {
-      const res = await apiRequest("PATCH", `/api/check-payments/${payment.id}/void`, {
-        reason: "Payment voided",
-        employeeId: currentEmployee?.id,
+      const res = await fetch(`/api/check-payments/${payment.id}/void`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          reason: "Payment voided",
+          employeeId: currentEmployee?.id,
+        }),
       });
       if (!res.ok) {
         const error = await res.json();
