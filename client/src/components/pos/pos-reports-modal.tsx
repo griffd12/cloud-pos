@@ -212,37 +212,37 @@ export function POSReportsModal({
   };
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", rvcId],
+    queryKey: [`/api/employees?rvcId=${rvcId}`],
     enabled: open,
   });
 
   const { data: salesSummary } = useQuery<SalesSummary>({
-    queryKey: ["/api/reports/sales-summary", { rvcId, startDate: fromDate, endDate: toDate }],
+    queryKey: [`/api/reports/sales-summary?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
     enabled: open && !!rvcId,
   });
 
   const { data: tenderBreakdown } = useQuery<{ tenders: TenderBreakdown[] }>({
-    queryKey: ["/api/reports/tender-mix", { rvcId, startDate: fromDate, endDate: toDate }],
+    queryKey: [`/api/reports/tender-mix?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
     enabled: open && !!rvcId && activeTab === "tender",
   });
 
   const { data: employeeBalances } = useQuery<{ employees: EmployeeBalance[] }>({
-    queryKey: ["/api/reports/employee-balance", { rvcId, startDate: fromDate, endDate: toDate }],
+    queryKey: [`/api/reports/employee-balance?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
     enabled: open && !!rvcId && (activeTab === "employee-balance" || activeTab === "system-balance"),
   });
 
   const { data: openChecksData } = useQuery<{ checks: OpenCheck[] }>({
-    queryKey: ["/api/reports/open-checks", { rvcId }],
+    queryKey: [`/api/reports/open-checks?rvcId=${rvcId}`],
     enabled: open && !!rvcId && activeTab === "open-checks",
   });
 
   const { data: closedChecksData } = useQuery<{ checks: ClosedCheck[] }>({
-    queryKey: ["/api/reports/closed-checks", { rvcId, startDate: fromDate, endDate: toDate }],
+    queryKey: [`/api/reports/closed-checks?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
     enabled: open && !!rvcId && activeTab === "closed-checks",
   });
 
   const { data: menuItemSales } = useQuery<{ items: MenuItemSale[] }>({
-    queryKey: ["/api/reports/menu-item-sales", { rvcId, startDate: fromDate, endDate: toDate }],
+    queryKey: [`/api/reports/menu-item-sales?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
     enabled: open && !!rvcId && activeTab === "menu-items",
   });
 
