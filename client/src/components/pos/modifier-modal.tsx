@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,8 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Check, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { MenuItem, ModifierGroup, Modifier } from "@shared/schema";
@@ -188,12 +186,31 @@ export function ModifierModal({
     return numPrice > 0 ? `+$${numPrice.toFixed(2)}` : `-$${Math.abs(numPrice).toFixed(2)}`;
   };
 
+  // Sort modifiers alphabetically within each group
+  const sortedModifierGroups = useMemo(() => {
+    return modifierGroups.map(group => ({
+      ...group,
+      modifiers: [...group.modifiers].sort((a, b) => 
+        a.name.localeCompare(b.name)
+      )
+    }));
+  }, [modifierGroups]);
+
+  // Calculate dynamic width based on number of columns
+  const dialogMaxWidth = useMemo(() => {
+    const numGroups = sortedModifierGroups.length;
+    if (numGroups <= 2) return "max-w-3xl";
+    if (numGroups <= 3) return "max-w-4xl";
+    if (numGroups <= 4) return "max-w-5xl";
+    return "max-w-6xl";
+  }, [sortedModifierGroups.length]);
+
   if (!menuItem || !modifierGroups || modifierGroups.length === 0) return null;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className={`${dialogMaxWidth}`}>
+        <DialogHeader className="text-center pb-2">
           <DialogTitle className="text-xl" data-testid="text-modifier-modal-title">
             {menuItem.name}
           </DialogTitle>
@@ -202,32 +219,40 @@ export function ModifierModal({
           </p>
         </DialogHeader>
 
-        <div className="max-h-[60vh] overflow-y-auto -mx-6 px-6">
-          <div className="space-y-6 py-4">
-            {modifierGroups.map((group) => {
+        {/* Horizontal column layout - each modifier group is a column with horizontal scroll fallback */}
+        <div className="overflow-x-auto">
+          <div className="flex gap-4 min-h-[200px] min-w-max">
+            {sortedModifierGroups.map((group) => {
               const groupSelected = selectedModifiers.get(group.id) || [];
               const minSelect = group.minSelect || 0;
               const maxSelect = group.maxSelect || 99;
               const isRequired = group.required || minSelect > 0;
               const isSatisfied = groupSelected.length >= minSelect;
+              const modifiers = group.modifiers;
+              const needsSubColumns = modifiers.length > 5;
 
               return (
-                <div key={group.id} className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{group.name}</span>
+                <div 
+                  key={group.id} 
+                  className="flex-1 min-w-[180px] flex flex-col border-r last:border-r-0 pr-4 last:pr-0"
+                >
+                  {/* Column header */}
+                  <div className="flex items-center justify-between gap-2 pb-2 border-b mb-3">
+                    <div className="flex items-center gap-1">
+                      <span className="font-semibold text-sm">{group.name}</span>
                       {isRequired && !isSatisfied && (
                         <AlertCircle className="w-4 h-4 text-amber-500" />
                       )}
                     </div>
                     <Badge variant="outline" className="text-xs">
-                      {groupSelected.length}/{maxSelect === 99 ? "any" : maxSelect}
-                      {minSelect > 0 && ` (min ${minSelect})`}
+                      {groupSelected.length}/{maxSelect === 99 ? "∞" : maxSelect}
+                      {minSelect > 0 && ` min ${minSelect}`}
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {group.modifiers.map((modifier) => {
+                  {/* Modifiers - vertical list, split to sub-columns if >5 */}
+                  <div className={`flex-1 ${needsSubColumns ? "grid grid-cols-2 gap-x-2 gap-y-1 content-start" : "flex flex-col gap-1"}`}>
+                    {modifiers.map((modifier) => {
                       const isSelected = groupSelected.some((m) => m.id === modifier.id);
                       const priceStr = formatPrice(modifier.priceDelta);
 
@@ -235,39 +260,39 @@ export function ModifierModal({
                         <Button
                           key={modifier.id}
                           variant={isSelected ? "default" : "outline"}
-                          className="h-auto py-3 justify-between"
+                          size="sm"
+                          className="justify-start text-left w-full"
                           onClick={() => toggleModifier(group, modifier)}
                           data-testid={`button-modifier-${modifier.id}`}
                         >
-                          <div className="flex items-center gap-2">
-                            {isSelected && <Check className="w-4 h-4" />}
-                            <span>{modifier.name}</span>
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                            <span className="truncate">{modifier.name}</span>
                           </div>
                           {priceStr && (
-                            <span className="text-xs opacity-70">{priceStr}</span>
+                            <span className="text-xs opacity-70 shrink-0 ml-1">{priceStr}</span>
                           )}
                         </Button>
                       );
                     })}
                   </div>
-
-                  <Separator />
                 </div>
               );
             })}
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={onClose} data-testid="button-modifier-cancel">
-            Cancel
-          </Button>
+        {/* Footer with Add to Check on the left */}
+        <DialogFooter className="flex justify-start gap-2 pt-4 border-t sm:justify-start">
           <Button
             onClick={handleConfirm}
             disabled={!isValid()}
             data-testid="button-modifier-confirm"
           >
             Add to Check
+          </Button>
+          <Button variant="outline" onClick={onClose} data-testid="button-modifier-cancel">
+            Cancel
           </Button>
         </DialogFooter>
       </DialogContent>
