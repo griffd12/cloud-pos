@@ -24,6 +24,8 @@ import { OpenChecksModal } from "@/components/pos/open-checks-modal";
 import { TransactionLookupModal } from "@/components/pos/transaction-lookup-modal";
 import { RefundModal } from "@/components/pos/refund-modal";
 import { FunctionsModal } from "@/components/pos/functions-modal";
+import { EditClosedCheckModal } from "@/components/pos/edit-closed-check-modal";
+import { POSReportsModal } from "@/components/pos/pos-reports-modal";
 import { TransferCheckModal } from "@/components/pos/transfer-check-modal";
 import { AdvancedSplitCheckModal } from "@/components/pos/advanced-split-check-modal";
 import { MergeChecksModal } from "@/components/pos/merge-checks-modal";
@@ -223,7 +225,11 @@ export default function PosPage() {
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
+  const [showEditClosedCheckModal, setShowEditClosedCheckModal] = useState(false);
+  const [showReportsModal, setShowReportsModal] = useState(false);
   const [pendingReopenCheckId, setPendingReopenCheckId] = useState<string | null>(null);
+  const [editingClosedCheckId, setEditingClosedCheckId] = useState<string | null>(null);
+  const [originalPaymentState, setOriginalPaymentState] = useState<{ paymentId: string; amount: string } | null>(null);
   const [isLoadingClosedCheck, setIsLoadingClosedCheck] = useState(false);
   const [showPriceOverrideModal, setShowPriceOverrideModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -2136,6 +2142,14 @@ export default function PosPage() {
           setShowFunctionsModal(false);
           setShowReopenModal(true);
         }}
+        onEditClosedCheck={() => {
+          setShowFunctionsModal(false);
+          setShowEditClosedCheckModal(true);
+        }}
+        onOpenReports={() => {
+          setShowFunctionsModal(false);
+          setShowReportsModal(true);
+        }}
         onPriceOverride={() => {
           setShowFunctionsModal(false);
           if (selectedItemId) {
@@ -2221,6 +2235,28 @@ export default function PosPage() {
           }}
           isReopening={isLoadingClosedCheck}
           timezone={wsContext?.property?.timezone || "America/New_York"}
+        />
+      )}
+
+      {currentRvc && (
+        <EditClosedCheckModal
+          open={showEditClosedCheckModal}
+          onClose={() => setShowEditClosedCheckModal(false)}
+          rvcId={currentRvc.id}
+          onSelectCheck={(checkId) => {
+            setEditingClosedCheckId(checkId);
+            loadClosedCheckForViewing(checkId);
+          }}
+        />
+      )}
+
+      {currentRvc && (
+        <POSReportsModal
+          open={showReportsModal}
+          onClose={() => setShowReportsModal(false)}
+          rvcId={currentRvc.id}
+          rvcName={currentRvc.name}
+          propertyId={currentRvc.propertyId}
         />
       )}
 

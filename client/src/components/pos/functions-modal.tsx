@@ -13,7 +13,9 @@ import {
   Lock,
   Activity,
   RotateCw,
-  AlertTriangle
+  AlertTriangle,
+  FileEdit,
+  BarChart3
 } from "lucide-react";
 import { SystemStatusModal } from "./system-status-modal";
 
@@ -30,9 +32,11 @@ interface FunctionsModalProps {
   onSplitCheck: () => void;
   onMergeChecks: () => void;
   onReopenCheck: () => void;
+  onEditClosedCheck: () => void;
   onPriceOverride: () => void;
   onAssignTable: () => void;
   onResetDevice?: () => void;
+  onOpenReports?: () => void;
   privileges: {
     canTransfer: boolean;
     canSplit: boolean;
@@ -94,9 +98,11 @@ export function FunctionsModal({
   onSplitCheck,
   onMergeChecks,
   onReopenCheck,
+  onEditClosedCheck,
   onPriceOverride,
   onAssignTable,
   onResetDevice,
+  onOpenReports,
   privileges,
   propertyId,
   workstation,
@@ -196,6 +202,13 @@ export function FunctionsModal({
                 locked={!privileges.canReopen}
               />
               <FunctionButton
+                icon={<FileEdit className="w-5 h-5" />}
+                label="Edit Closed Check"
+                description="Void payment & repay"
+                onClick={onEditClosedCheck}
+                locked={!privileges.canReopen}
+              />
+              <FunctionButton
                 icon={<Grid3X3 className="w-5 h-5" />}
                 label="Assign Table"
                 description="Set or change table"
@@ -215,6 +228,18 @@ export function FunctionsModal({
                 onClick={onPriceOverride}
                 disabled={!hasActiveCheck}
                 locked={!privileges.canPriceOverride}
+              />
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">Reports</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <FunctionButton
+                icon={<BarChart3 className="w-5 h-5" />}
+                label="Reports"
+                description="View sales reports"
+                onClick={() => onOpenReports?.()}
               />
             </div>
           </div>

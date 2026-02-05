@@ -38,6 +38,7 @@ interface ChecklistItem {
 }
 
 const STORAGE_KEY = "pos-onboarding-checklist";
+const IGNORE_AUTO_KEY = "pos-onboarding-ignore-auto";
 
 export default function OnboardingPage() {
   const { data: stats } = useQuery<{
@@ -334,9 +335,18 @@ export default function OnboardingPage() {
     return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
   });
 
+  const [ignoreAutoCheck, setIgnoreAutoCheck] = useState<boolean>(() => {
+    const saved = localStorage.getItem(IGNORE_AUTO_KEY);
+    return saved === "true";
+  });
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(checkedItems)));
   }, [checkedItems]);
+
+  useEffect(() => {
+    localStorage.setItem(IGNORE_AUTO_KEY, ignoreAutoCheck ? "true" : "false");
+  }, [ignoreAutoCheck]);
 
   const toggleItem = (id: string) => {
     setCheckedItems((prev) => {
@@ -352,7 +362,7 @@ export default function OnboardingPage() {
 
   const isItemChecked = (item: ChecklistItem) => {
     if (checkedItems.has(item.id)) return true;
-    if (item.autoCheck && item.autoCheck()) return true;
+    if (!ignoreAutoCheck && item.autoCheck && item.autoCheck()) return true;
     return false;
   };
 
@@ -386,6 +396,7 @@ export default function OnboardingPage() {
 
   const resetChecklist = () => {
     setCheckedItems(new Set());
+    setIgnoreAutoCheck(true);
   };
 
   const exportChecklist = () => {
