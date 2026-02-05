@@ -17548,11 +17548,11 @@ connect();
     try {
       const { search } = req.query;
       const members = await storage.getLoyaltyMembers(search as string);
-      // Augment with enrollments for each member
+      // Augment with enrollments including program data for each member
       const membersWithEnrollments = await Promise.all(
         members.map(async (member) => {
-          const enrollments = await storage.getLoyaltyEnrollments(member.id);
-          return { ...member, enrollments };
+          const memberWithEnrollments = await storage.getLoyaltyMemberWithEnrollments(member.id);
+          return memberWithEnrollments || { ...member, enrollments: [] };
         })
       );
       res.json(membersWithEnrollments);
