@@ -20,7 +20,96 @@ import {
   TrendingUp,
   Clock,
   FileText,
+  Calendar,
 } from "lucide-react";
+
+// Date range preset helpers
+function getDatePreset(preset: string): { fromDate: string; toDate: string } {
+  const today = new Date();
+  const toDate = today.toISOString().split("T")[0];
+  let fromDate = toDate;
+
+  switch (preset) {
+    case "today":
+      fromDate = toDate;
+      break;
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      fromDate = yesterday.toISOString().split("T")[0];
+      break;
+    }
+    case "this-week": {
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      fromDate = startOfWeek.toISOString().split("T")[0];
+      break;
+    }
+    case "last-week": {
+      const endOfLastWeek = new Date(today);
+      endOfLastWeek.setDate(today.getDate() - today.getDay() - 1);
+      const startOfLastWeek = new Date(endOfLastWeek);
+      startOfLastWeek.setDate(endOfLastWeek.getDate() - 6);
+      fromDate = startOfLastWeek.toISOString().split("T")[0];
+      return { fromDate, toDate: endOfLastWeek.toISOString().split("T")[0] };
+    }
+    case "this-month": {
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      fromDate = startOfMonth.toISOString().split("T")[0];
+      break;
+    }
+    case "last-month": {
+      const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+      fromDate = startOfLastMonth.toISOString().split("T")[0];
+      return { fromDate, toDate: endOfLastMonth.toISOString().split("T")[0] };
+    }
+    case "this-quarter": {
+      const quarter = Math.floor(today.getMonth() / 3);
+      const startOfQuarter = new Date(today.getFullYear(), quarter * 3, 1);
+      fromDate = startOfQuarter.toISOString().split("T")[0];
+      break;
+    }
+    case "last-quarter": {
+      const currentQuarter = Math.floor(today.getMonth() / 3);
+      const lastQuarter = currentQuarter === 0 ? 3 : currentQuarter - 1;
+      const lastQuarterYear = currentQuarter === 0 ? today.getFullYear() - 1 : today.getFullYear();
+      const startOfLastQuarter = new Date(lastQuarterYear, lastQuarter * 3, 1);
+      const endOfLastQuarter = new Date(lastQuarterYear, lastQuarter * 3 + 3, 0);
+      fromDate = startOfLastQuarter.toISOString().split("T")[0];
+      return { fromDate, toDate: endOfLastQuarter.toISOString().split("T")[0] };
+    }
+    case "this-year": {
+      const startOfYear = new Date(today.getFullYear(), 0, 1);
+      fromDate = startOfYear.toISOString().split("T")[0];
+      break;
+    }
+    case "last-year": {
+      const startOfLastYear = new Date(today.getFullYear() - 1, 0, 1);
+      const endOfLastYear = new Date(today.getFullYear() - 1, 11, 31);
+      fromDate = startOfLastYear.toISOString().split("T")[0];
+      return { fromDate, toDate: endOfLastYear.toISOString().split("T")[0] };
+    }
+    default:
+      break;
+  }
+
+  return { fromDate, toDate };
+}
+
+const DATE_PRESETS = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "this-week", label: "This Week" },
+  { value: "last-week", label: "Last Week" },
+  { value: "this-month", label: "This Month" },
+  { value: "last-month", label: "Last Month" },
+  { value: "this-quarter", label: "This Quarter" },
+  { value: "last-quarter", label: "Last Quarter" },
+  { value: "this-year", label: "This Year" },
+  { value: "last-year", label: "Last Year" },
+  { value: "custom", label: "Custom Range" },
+];
 
 interface Employee {
   id: string;
@@ -106,9 +195,21 @@ export function POSReportsModal({
   propertyId,
 }: POSReportsModalProps) {
   const today = new Date().toISOString().split("T")[0];
-  const [businessDate, setBusinessDate] = useState(today);
+  const [datePreset, setDatePreset] = useState("today");
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate, setToDate] = useState(today);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("rvc-balance");
+
+  // Handle preset changes
+  const handlePresetChange = (preset: string) => {
+    setDatePreset(preset);
+    if (preset !== "custom") {
+      const { fromDate: from, toDate: to } = getDatePreset(preset);
+      setFromDate(from);
+      setToDate(to);
+    }
+  };
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees", rvcId],
@@ -116,17 +217,17 @@ export function POSReportsModal({
   });
 
   const { data: salesSummary } = useQuery<SalesSummary>({
-    queryKey: ["/api/reports/sales-summary", { rvcId, businessDate }],
+    queryKey: ["/api/reports/sales-summary", { rvcId, startDate: fromDate, endDate: toDate }],
     enabled: open && !!rvcId,
   });
 
   const { data: tenderBreakdown } = useQuery<{ tenders: TenderBreakdown[] }>({
-    queryKey: ["/api/reports/tender-mix", { rvcId, businessDate }],
+    queryKey: ["/api/reports/tender-mix", { rvcId, startDate: fromDate, endDate: toDate }],
     enabled: open && !!rvcId && activeTab === "tender",
   });
 
   const { data: employeeBalances } = useQuery<{ employees: EmployeeBalance[] }>({
-    queryKey: ["/api/reports/employee-balance", { rvcId, businessDate }],
+    queryKey: ["/api/reports/employee-balance", { rvcId, startDate: fromDate, endDate: toDate }],
     enabled: open && !!rvcId && (activeTab === "employee-balance" || activeTab === "system-balance"),
   });
 
@@ -136,12 +237,12 @@ export function POSReportsModal({
   });
 
   const { data: closedChecksData } = useQuery<{ checks: ClosedCheck[] }>({
-    queryKey: ["/api/reports/closed-checks", { rvcId, businessDate }],
+    queryKey: ["/api/reports/closed-checks", { rvcId, startDate: fromDate, endDate: toDate }],
     enabled: open && !!rvcId && activeTab === "closed-checks",
   });
 
   const { data: menuItemSales } = useQuery<{ items: MenuItemSale[] }>({
-    queryKey: ["/api/reports/menu-item-sales", { rvcId, businessDate }],
+    queryKey: ["/api/reports/menu-item-sales", { rvcId, startDate: fromDate, endDate: toDate }],
     enabled: open && !!rvcId && activeTab === "menu-items",
   });
 
@@ -203,16 +304,48 @@ export function POSReportsModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-center gap-4 pb-4 border-b">
+        <div className="flex flex-wrap items-center gap-4 pb-4 border-b">
           <div className="flex items-center gap-2">
-            <Label htmlFor="business-date">Date:</Label>
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <Select value={datePreset} onValueChange={handlePresetChange}>
+              <SelectTrigger className="w-36" data-testid="select-date-preset">
+                <SelectValue placeholder="Select range" />
+              </SelectTrigger>
+              <SelectContent>
+                {DATE_PRESETS.map((preset) => (
+                  <SelectItem key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="from-date" className="text-muted-foreground">From:</Label>
             <Input
-              id="business-date"
+              id="from-date"
               type="date"
-              value={businessDate}
-              onChange={(e) => setBusinessDate(e.target.value)}
-              className="w-40"
-              data-testid="input-report-date"
+              value={fromDate}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setDatePreset("custom");
+              }}
+              className="w-36"
+              data-testid="input-report-from-date"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="to-date" className="text-muted-foreground">To:</Label>
+            <Input
+              id="to-date"
+              type="date"
+              value={toDate}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setDatePreset("custom");
+              }}
+              className="w-36"
+              data-testid="input-report-to-date"
             />
           </div>
         </div>
