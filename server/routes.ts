@@ -6850,7 +6850,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // PAYMENTS - Based on businessDate (operating day when payment was applied)
       // Important: p.amount is the TENDERED amount (what customer handed over).
       // For over-tender (cash), we need to cap at the check total to get the actual payment applied.
+      // Only include completed payments - voided payments should not count toward sales
       const paymentsInPeriod = allPayments.filter(p => {
+        // Only include completed payments (exclude voided)
+        if (p.paymentStatus !== "completed") return false;
         // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
@@ -7194,7 +7197,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter payments by businessDate or paidAt timestamp
+      // Only include completed payments - voided payments should not count
       const paymentsInPeriod = allPayments.filter(p => {
+        // Only include completed payments (exclude voided)
+        if (p.paymentStatus !== "completed") return false;
         // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
@@ -7612,7 +7618,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter payments by businessDate or paidAt timestamp
+      // Only include completed payments - voided payments should not count
       let payments = allPayments.filter(p => {
+        // Only include completed payments (exclude voided)
+        if (p.paymentStatus !== "completed") return false;
         // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
@@ -8107,7 +8116,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = closedChecks.map(check => {
         const emp = employees.find(e => e.id === check.employeeId);
         const rvc = allRvcs.find(r => r.id === check.rvcId);
-        const checkPayments = allPayments.filter(p => p.checkId === check.id);
+        // Only include completed payments - voided payments should not count
+        const checkPayments = allPayments.filter(p => p.checkId === check.id && p.paymentStatus === "completed");
         const checkTotal = parseFloat(check.total || "0");
         const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
         // Cap totalPaid at check total - for cash over-tender, we show what was applied to the check, not what customer handed over
@@ -8290,7 +8300,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           employeeData[empId].total += checkTotal;
           
           // Get payments for closed checks - cap at check total for over-tender
-          const checkPayments = allPayments.filter(p => p.checkId === check.id);
+          // Only include completed payments - voided payments should not count
+          const checkPayments = allPayments.filter(p => p.checkId === check.id && p.paymentStatus === "completed");
           const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
           const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
           
