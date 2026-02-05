@@ -31,7 +31,7 @@ export function EditClosedCheckModal({
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: closedChecks = [], isLoading } = useQuery<ClosedCheck[]>({
-    queryKey: [`/api/rvcs/${rvcId}/closed-checks`],
+    queryKey: ["/api/rvcs", rvcId, "closed-checks"],
     enabled: open && !!rvcId,
   });
 

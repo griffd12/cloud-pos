@@ -361,13 +361,20 @@ export default function PosPage() {
         const error = await res.json();
         throw new Error(error.message || "Failed to void payment");
       }
-      return res.json();
+      // Return payment info so onSuccess can use it
+      return { ...await res.json(), voidedPaymentId: payment.id, voidedAmount: payment.amount };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast({ title: "Payment Voided", description: "Payment has been voided and balance restored" });
       setSelectedPaymentId(null);
       // Clear pending reopen state (should already be cleared in mutationFn, but just in case)
       setPendingReopenCheckId(null);
+      
+      // Track original payment for potential restore only AFTER successful void
+      if (editingClosedCheckId && currentCheck?.id === editingClosedCheckId) {
+        setOriginalPaymentState({ paymentId: result.voidedPaymentId, amount: result.voidedAmount });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
@@ -803,6 +810,9 @@ export default function PosPage() {
             return;
           }
         }
+        // Clear edit closed check state if payment completed
+        setEditingClosedCheckId(null);
+        setOriginalPaymentState(null);
         setShowPaymentModal(false);
         releaseCurrentCheckLock();
         setCurrentCheck(null);
@@ -819,6 +829,9 @@ export default function PosPage() {
 
   const handleReadyForNextOrder = () => {
     setCashChangeDue(null);
+    // Clear edit closed check state
+    setEditingClosedCheckId(null);
+    setOriginalPaymentState(null);
     setShowPaymentModal(false);
     releaseCurrentCheckLock();
     setCurrentCheck(null);
@@ -866,6 +879,41 @@ export default function PosPage() {
       return;
     }
     
+    // Handle Edit Closed Check mode - if payment was voided but no new payment, restore it
+    if (editingClosedCheckId && originalPaymentState) {
+      // Check if there's still a balance due (no new payment was added)
+      const balanceDue = paymentInfo?.balanceDue || 0;
+      if (balanceDue > 0) {
+        try {
+          // Restore the voided payment using apiRequest
+          const res = await apiRequest("PATCH", `/api/check-payments/${originalPaymentState.paymentId}/restore`, {
+            employeeId: currentEmployee?.id,
+          });
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.message || "Failed to restore payment");
+          }
+          toast({ title: "Edit Cancelled", description: "Original payment has been restored" });
+          // Clear edit mode state
+          setEditingClosedCheckId(null);
+          setOriginalPaymentState(null);
+          setCurrentCheck(null);
+          setCheckItems([]);
+          queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+          return;
+        } catch (error: any) {
+          toast({ title: "Error", description: error.message || "Failed to restore payment", variant: "destructive" });
+          // Keep user in edit mode so they can try again or add a payment
+          return;
+        }
+      } else {
+        // Payment was replaced, clear edit mode state and proceed normally
+        setEditingClosedCheckId(null);
+        setOriginalPaymentState(null);
+      }
+    }
+    
     // If there are unsent items on a pending reopen check, actually reopen it first
     if (pendingReopenCheckId && unsentItems.length > 0) {
       try {
@@ -884,7 +932,7 @@ export default function PosPage() {
     
     // Proceed with normal send
     sendCheckMutation.mutate();
-  }, [pendingReopenCheckId, checkItems, clearPendingReopenCheck, currentEmployee?.id, toast, currentRvc?.id, sendCheckMutation]);
+  }, [pendingReopenCheckId, checkItems, clearPendingReopenCheck, currentEmployee?.id, toast, currentRvc?.id, sendCheckMutation, editingClosedCheckId, originalPaymentState, paymentInfo]);
 
   const transferCheckMutation = useMutation({
     mutationFn: async (toEmployeeId: string) => {

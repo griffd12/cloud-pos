@@ -121,7 +121,7 @@ export function POSReportsModal({
   });
 
   const { data: tenderBreakdown } = useQuery<{ tenders: TenderBreakdown[] }>({
-    queryKey: ["/api/reports/tender-breakdown", { rvcId, businessDate }],
+    queryKey: ["/api/reports/tender-mix", { rvcId, businessDate }],
     enabled: open && !!rvcId && activeTab === "tender",
   });
 

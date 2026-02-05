@@ -4634,6 +4634,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Restore a voided payment (cancel void)
+  app.patch("/api/check-payments/:id/restore", async (req, res) => {
+    try {
+      const paymentId = req.params.id;
+      
+      // Get the payment
+      const payments = await storage.getAllPayments();
+      const payment = payments.find(p => p.id === paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      
+      if (payment.paymentStatus !== "voided") {
+        return res.status(400).json({ message: "Payment is not voided" });
+      }
+      
+      // Restore payment status to completed
+      const updatedPayment = await storage.updateCheckPayment(paymentId, {
+        paymentStatus: "completed",
+      });
+      
+      // Get the check and recalculate totals
+      const check = await storage.getCheck(payment.checkId);
+      if (check) {
+        // Get all payments for this check to recalculate paid amount
+        const allPayments = await storage.getPayments(payment.checkId);
+        const newPaidAmount = allPayments
+          .filter(p => p.paymentStatus === "completed")
+          .reduce((sum, p) => sum + parseFloat(p.amount || "0") + parseFloat(p.tipAmount || "0"), 0);
+        
+        // Check if the check is now fully paid
+        const total = parseFloat(check.total || "0");
+        const isFullyPaid = newPaidAmount >= total;
+        
+        // If check was open and is now fully paid, close it
+        if (check.status === "open" && isFullyPaid) {
+          await storage.updateCheck(check.id, { status: "closed", closedAt: new Date() });
+          broadcastCheckUpdate(check.id, "closed", check.rvcId);
+        }
+        
+        // Log the restore action
+        await storage.createAuditLog({
+          rvcId: check.rvcId,
+          action: "restore_payment",
+          targetType: "payment",
+          targetId: paymentId,
+          employeeId: req.body.employeeId || null,
+          managerApprovalId: null,
+          details: {
+            checkId: payment.checkId,
+            amount: payment.amount,
+            newPaidAmount: newPaidAmount.toFixed(2),
+            reason: "Payment restored (void cancelled)",
+            checkClosed: check.status === "open" && isFullyPaid,
+          },
+        });
+      }
+      
+      // Broadcast payment update
+      broadcastPaymentUpdate(payment.checkId);
+      
+      res.json({ 
+        ...updatedPayment, 
+        message: "Payment restored successfully" 
+      });
+    } catch (error) {
+      console.error("Restore payment error:", error);
+      res.status(500).json({ message: "Failed to restore payment" });
+    }
+  });
+
   // Helper function to print check receipt - routes through print agents for local network printing
   async function printCheckReceipt(checkId: string, rvcId?: string | null) {
     // Get RVC to find property
