@@ -176,9 +176,9 @@ function SwipeableItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1">
               {item.quantity && item.quantity > 1 && (
-                <span className="text-xs font-semibold text-primary">{item.quantity}x</span>
+                <span className="text-sm font-semibold text-primary">{item.quantity}x</span>
               )}
-              <span className="font-medium text-sm truncate">
+              <span className="font-medium text-base truncate">
                 {item.menuItemName}
               </span>
             </div>
@@ -203,7 +203,7 @@ function SwipeableItem({
                     <button
                       key={idx}
                       type="button"
-                      className={`block text-left text-xs rounded ${
+                      className={`block text-left text-sm rounded ${
                         !item.sent 
                           ? "cursor-pointer text-muted-foreground hover:text-foreground" 
                           : "text-muted-foreground/70 cursor-default"
@@ -229,7 +229,7 @@ function SwipeableItem({
               </div>
             )}
           </div>
-          <span className="text-sm font-semibold tabular-nums flex-shrink-0">
+          <span className="text-base font-semibold tabular-nums flex-shrink-0">
             {formatPrice(itemTotal)}
           </span>
         </div>
@@ -446,35 +446,35 @@ export function CheckPanel({
 
       <div className="flex-shrink-0 border-t bg-muted/30">
         <div className="px-4 py-3 space-y-1">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-base">
             <span className="text-muted-foreground">Subtotal</span>
             <span className="tabular-nums font-medium">{formatPrice(subtotal + discountTotal)}</span>
           </div>
           {discountTotal > 0 && (
-            <div className="flex justify-between text-sm text-purple-600 dark:text-purple-400">
+            <div className="flex justify-between text-base text-purple-600 dark:text-purple-400">
               <span className="flex items-center gap-1">
-                <Percent className="w-3 h-3" />
+                <Percent className="w-4 h-4" />
                 Discounts
               </span>
               <span className="tabular-nums">-{formatPrice(discountTotal)}</span>
             </div>
           )}
           {tax > 0 && (
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between text-base">
               <span className="text-muted-foreground">Tax</span>
               <span className="tabular-nums">{formatPrice(tax)}</span>
             </div>
           )}
           {paidAmount > 0 && (
-            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+            <div className="flex justify-between text-base text-green-600 dark:text-green-400">
               <span>Paid</span>
               <span className="tabular-nums">-{formatPrice(paidAmount)}</span>
             </div>
           )}
         </div>
         <div className="px-4 py-3 border-t bg-card flex justify-between items-center">
-          <span className="font-semibold">{paidAmount > 0 ? "Balance" : "Total"}</span>
-          <span className="text-2xl font-bold tabular-nums" data-testid="text-check-total">
+          <span className="text-lg font-semibold">{paidAmount > 0 ? "Balance" : "Total"}</span>
+          <span className="text-3xl font-bold tabular-nums" data-testid="text-check-total">
             {formatPrice(paidAmount > 0 ? balanceDue : total)}
           </span>
         </div>

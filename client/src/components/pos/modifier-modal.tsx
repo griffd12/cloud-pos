@@ -282,17 +282,17 @@ export function ModifierModal({
           </div>
         </div>
 
-        {/* Footer with Add to Check on the left */}
-        <DialogFooter className="flex justify-start gap-2 pt-4 border-t sm:justify-start">
+        {/* Footer with Add to Check on the right */}
+        <DialogFooter className="flex justify-end gap-2 pt-4 border-t sm:justify-end">
+          <Button variant="outline" onClick={onClose} data-testid="button-modifier-cancel">
+            Cancel
+          </Button>
           <Button
             onClick={handleConfirm}
             disabled={!isValid()}
             data-testid="button-modifier-confirm"
           >
             Add to Check
-          </Button>
-          <Button variant="outline" onClick={onClose} data-testid="button-modifier-cancel">
-            Cancel
           </Button>
         </DialogFooter>
       </DialogContent>
