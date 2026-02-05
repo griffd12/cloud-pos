@@ -235,6 +235,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(DEVICE_TOKEN_KEY);
     localStorage.removeItem(REGISTERED_DEVICE_ID_KEY);
     localStorage.removeItem(DEVICE_PROPERTY_ID_KEY);
+    // Also clear POS-related state so workstation selection is fresh
+    localStorage.removeItem("pos_workstation_id");
+    localStorage.removeItem("pos_selected_rvc");
     setDeviceType(null);
     setHasExplicitDeviceType(false);
     setLinkedDeviceId(null);
