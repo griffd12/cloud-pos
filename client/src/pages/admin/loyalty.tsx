@@ -50,6 +50,7 @@ export default function LoyaltyPage() {
   const [editingProgram, setEditingProgram] = useState<LoyaltyProgram | null>(null);
   const [programFormData, setProgramFormData] = useState({
     name: "",
+    propertyId: "",
     programType: "points" as "points" | "visits" | "spend" | "tiered",
     pointsPerDollar: "1",
     visitsForReward: "10",
@@ -137,6 +138,14 @@ export default function LoyaltyPage() {
   const programColumns: Column<LoyaltyProgram>[] = [
     { key: "name", header: "Program Name", sortable: true },
     {
+      key: "propertyId",
+      header: "Property",
+      render: (value) => {
+        const property = properties.find(p => p.id === value);
+        return property?.name || <span className="text-muted-foreground">Not assigned</span>;
+      },
+    },
+    {
       key: "programType",
       header: "Type",
       render: (value) => {
@@ -211,6 +220,14 @@ export default function LoyaltyPage() {
   const rewardColumns: Column<LoyaltyReward>[] = [
     { key: "name", header: "Reward Name", sortable: true },
     {
+      key: "propertyId",
+      header: "Property",
+      render: (value) => {
+        const property = properties.find(p => p.id === value);
+        return property?.name || <span className="text-muted-foreground">Not assigned</span>;
+      },
+    },
+    {
       key: "programId",
       header: "Program",
       render: (value) => {
@@ -265,9 +282,12 @@ export default function LoyaltyPage() {
       name: "programId",
       label: "Loyalty Program",
       type: "select",
-      options: programs.map(p => ({ value: p.id, label: p.name })),
+      options: programs.map(p => ({ 
+        value: p.id, 
+        label: `${p.name} (${properties.find(prop => prop.id === p.propertyId)?.name || 'No property'})` 
+      })),
       required: true,
-      description: "Which program this reward belongs to",
+      description: "Which program this reward belongs to (property is inherited from program)",
     },
     { name: "name", label: "Reward Name", type: "text", placeholder: "Free Appetizer", required: true },
     { name: "description", label: "Description", type: "textarea", placeholder: "Redeem for any appetizer" },
@@ -343,11 +363,17 @@ export default function LoyaltyPage() {
 
   const rewardMutation = useMutation({
     mutationFn: async (data: InsertLoyaltyReward) => {
+      // Auto-set propertyId from the selected program
+      const selectedProgram = programs.find(p => p.id === data.programId);
+      const enrichedData = {
+        ...data,
+        propertyId: selectedProgram?.propertyId || null,
+      };
       if (editingReward) {
-        const response = await apiRequest("PUT", `/api/loyalty-rewards/${editingReward.id}`, data);
+        const response = await apiRequest("PUT", `/api/loyalty-rewards/${editingReward.id}`, enrichedData);
         return response.json();
       }
-      const response = await apiRequest("POST", "/api/loyalty-rewards", data);
+      const response = await apiRequest("POST", "/api/loyalty-rewards", enrichedData);
       return response.json();
     },
     onSuccess: () => {
@@ -543,6 +569,7 @@ export default function LoyaltyPage() {
               setEditingProgram(null); 
               setProgramFormData({
                 name: "",
+                propertyId: "",
                 programType: "points",
                 pointsPerDollar: "1",
                 visitsForReward: "10",
@@ -557,6 +584,7 @@ export default function LoyaltyPage() {
               setEditingProgram(item); 
               setProgramFormData({
                 name: item.name || "",
+                propertyId: item.propertyId || "",
                 programType: (item.programType as "points" | "visits" | "spend" | "tiered") || "points",
                 pointsPerDollar: item.pointsPerDollar || "1",
                 visitsForReward: String(item.visitsForReward || 10),
@@ -699,6 +727,25 @@ export default function LoyaltyPage() {
             <DialogDescription>Configure your loyalty program settings</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="prog-property">Property</Label>
+              <Select
+                value={programFormData.propertyId}
+                onValueChange={(value) => setProgramFormData({ ...programFormData, propertyId: value })}
+              >
+                <SelectTrigger data-testid="select-program-property">
+                  <SelectValue placeholder="Select property" />
+                </SelectTrigger>
+                <SelectContent>
+                  {properties.map((property) => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {property.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Property where this program is available</p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="prog-name">Program Name</Label>
               <Input
@@ -855,6 +902,7 @@ export default function LoyaltyPage() {
               onClick={() => {
                 const data: any = {
                   name: programFormData.name,
+                  propertyId: programFormData.propertyId || null,
                   programType: programFormData.programType,
                   active: programFormData.active,
                 };
@@ -868,7 +916,7 @@ export default function LoyaltyPage() {
                 }
                 programMutation.mutate(data);
               }}
-              disabled={!programFormData.name || programMutation.isPending}
+              disabled={!programFormData.name || !programFormData.propertyId || programMutation.isPending}
               data-testid="button-save-program"
             >
               {editingProgram ? "Update Program" : "Create Program"}

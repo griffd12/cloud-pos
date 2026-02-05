@@ -2700,6 +2700,7 @@ export type LoyaltyProgramType = typeof LOYALTY_PROGRAM_TYPES[number];
 export const loyaltyPrograms = pgTable("loyalty_programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
   name: text("name").notNull(),
   programType: text("program_type").notNull().default("points"),
   // Points earning rules
@@ -2785,6 +2786,7 @@ export const loyaltyTransactions = pgTable("loyalty_transactions", {
 export const loyaltyRewards = pgTable("loyalty_rewards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   programId: varchar("program_id").notNull().references(() => loyaltyPrograms.id),
+  propertyId: varchar("property_id").references(() => properties.id),
   name: text("name").notNull(),
   description: text("description"),
   rewardType: text("reward_type").notNull().default("discount"), // discount, free_item, points_multiplier
