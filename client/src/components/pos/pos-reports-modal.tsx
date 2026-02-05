@@ -157,7 +157,7 @@ interface EmployeeBalance {
   cashCollected: number;
   creditCollected: number;
   otherCollected: number;
-  tipTotal: number;
+  tips: number;
 }
 
 interface OpenCheck {
@@ -277,7 +277,7 @@ export function POSReportsModal({
         cashCollected: acc.cashCollected + emp.cashCollected,
         creditCollected: acc.creditCollected + emp.creditCollected,
         otherCollected: acc.otherCollected + emp.otherCollected,
-        tipTotal: acc.tipTotal + emp.tipTotal,
+        tipTotal: acc.tipTotal + (emp.tips || 0),
       }),
       {
         checkCount: 0,
@@ -585,7 +585,7 @@ export function POSReportsModal({
                           </div>
                           <div>
                             <div className="text-muted-foreground">Tips</div>
-                            <div className="font-semibold">{formatPrice(emp.tipTotal)}</div>
+                            <div className="font-semibold">{formatPrice(emp.tips || 0)}</div>
                           </div>
                         </div>
                       </CardContent>
