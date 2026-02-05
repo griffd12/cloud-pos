@@ -189,6 +189,23 @@ function broadcastMenuUpdate() {
   broadcastPosEvent({ type: "menu_update" });
 }
 
+// Broadcast EMC configuration changes for real-time sync to POS/KDS devices
+// Categories: menu, employees, rvcs, tenders, discounts, service_charges, page_layouts, printers, taxes, properties
+function broadcastConfigUpdate(category: string, action: "create" | "update" | "delete", entityId?: string | number, enterpriseId?: string | number) {
+  const event = {
+    type: "config_update",
+    payload: {
+      category,
+      action,
+      entityId,
+      enterpriseId,
+      timestamp: new Date().toISOString()
+    }
+  };
+  // Broadcast to all connected clients (POS, KDS, EMC)
+  broadcastPosEvent(event, "all");
+}
+
 // Send device status event directly to WebSocket channel (flat format for frontend)
 function broadcastDeviceStatusDirect(channel: string, event: Record<string, any>) {
   const channelClients = clients.get(channel);
@@ -1722,6 +1739,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertRvcSchema.parse(req.body);
       const data = await storage.createRvc(validated);
+      broadcastConfigUpdate("rvcs", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -1731,11 +1749,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/rvcs/:id", async (req, res) => {
     const data = await storage.updateRvc(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("rvcs", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
   app.delete("/api/rvcs/:id", async (req, res) => {
     await storage.deleteRvc(req.params.id);
+    broadcastConfigUpdate("rvcs", "delete", req.params.id);
     res.status(204).send();
   });
 
@@ -1842,6 +1862,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const validated = insertEmployeeSchema.parse(employeeData);
       const data = await storage.createEmployee(validated);
+      broadcastConfigUpdate("employees", "create", data.id, data.enterpriseId);
       res.status(201).json(enrichEmployee(data));
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -1851,11 +1872,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/employees/:id", async (req, res) => {
     const data = await storage.updateEmployee(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("employees", "update", data.id, data.enterpriseId);
     res.json(enrichEmployee(data));
   });
 
   app.delete("/api/employees/:id", async (req, res) => {
     await storage.deleteEmployee(req.params.id);
+    broadcastConfigUpdate("employees", "delete", req.params.id);
     res.status(204).send();
   });
 
@@ -2185,6 +2208,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertSluSchema.parse(req.body);
       const data = await storage.createSlu(validated);
+      broadcastConfigUpdate("slus", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -2194,11 +2218,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/slus/:id", async (req, res) => {
     const data = await storage.updateSlu(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("slus", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
   app.delete("/api/slus/:id", async (req, res) => {
     await storage.deleteSlu(req.params.id);
+    broadcastConfigUpdate("slus", "delete", req.params.id);
     res.status(204).send();
   });
 
@@ -2232,6 +2258,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertMenuItemSchema.parse(req.body);
       const data = await storage.createMenuItem(validated);
+      broadcastConfigUpdate("menu", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -2247,6 +2274,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/menu-items/:id", async (req, res) => {
     const data = await storage.updateMenuItem(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("menu", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
@@ -3062,6 +3090,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertPrinterSchema.parse(req.body);
       const data = await storage.createPrinter(validated);
+      broadcastConfigUpdate("printers", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -3071,11 +3100,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/printers/:id", async (req, res) => {
     const data = await storage.updatePrinter(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("printers", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
   app.delete("/api/printers/:id", async (req, res) => {
     await storage.deletePrinter(req.params.id);
+    broadcastConfigUpdate("printers", "delete", req.params.id);
     res.status(204).send();
   });
 
@@ -3275,6 +3306,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertTenderSchema.parse(req.body);
       const data = await storage.createTender(validated);
+      broadcastConfigUpdate("tenders", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -3284,11 +3316,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/tenders/:id", async (req, res) => {
     const data = await storage.updateTender(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("tenders", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
   app.delete("/api/tenders/:id", async (req, res) => {
     await storage.deleteTender(req.params.id);
+    broadcastConfigUpdate("tenders", "delete", req.params.id);
     res.status(204).send();
   });
 
@@ -3321,6 +3355,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertDiscountSchema.parse(req.body);
       const data = await storage.createDiscount(validated);
+      broadcastConfigUpdate("discounts", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -3330,11 +3365,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/discounts/:id", async (req, res) => {
     const data = await storage.updateDiscount(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("discounts", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
   app.delete("/api/discounts/:id", async (req, res) => {
     await storage.deleteDiscount(req.params.id);
+    broadcastConfigUpdate("discounts", "delete", req.params.id);
     res.status(204).send();
   });
 
@@ -3608,6 +3645,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const validated = insertServiceChargeSchema.parse(req.body);
       const data = await storage.createServiceCharge(validated);
+      broadcastConfigUpdate("service_charges", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
     } catch (error) {
       res.status(400).json({ message: "Invalid data" });
@@ -3617,11 +3655,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/service-charges/:id", async (req, res) => {
     const data = await storage.updateServiceCharge(req.params.id, req.body);
     if (!data) return res.status(404).json({ message: "Not found" });
+    broadcastConfigUpdate("service_charges", "update", data.id, data.enterpriseId);
     res.json(data);
   });
 
   app.delete("/api/service-charges/:id", async (req, res) => {
     await storage.deleteServiceCharge(req.params.id);
+    broadcastConfigUpdate("service_charges", "delete", req.params.id);
     res.status(204).send();
   });
 

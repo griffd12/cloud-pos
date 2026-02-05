@@ -6,6 +6,7 @@ import { useWorkstationHeartbeat } from "@/hooks/use-workstation-heartbeat";
 import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
 import { useCalUpdates } from "@/hooks/use-cal-updates";
 import { useDeviceReload } from "@/hooks/use-device-reload";
+import { useConfigSync } from "@/hooks/use-config-sync";
 import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import { CalUpdateOverlay } from "@/components/cal-update-overlay";
@@ -98,6 +99,9 @@ export default function PosPage() {
   
   // Send periodic device heartbeats to maintain online status
   useDeviceHeartbeat(true);
+  
+  // Real-time EMC config sync - invalidates React Query cache when EMC changes
+  useConfigSync();
   
   const {
     currentEmployee,
