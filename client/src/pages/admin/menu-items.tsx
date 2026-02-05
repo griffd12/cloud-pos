@@ -632,6 +632,7 @@ function MenuItemFormDialog({
         majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null),
         familyGroupId: data.familyGroupId === "__none__" ? null : (data.familyGroupId || null),
         menuBuildEnabled,
+        enterpriseId: selectedEnterpriseId!,
       };
 
       let menuItemId: string;
