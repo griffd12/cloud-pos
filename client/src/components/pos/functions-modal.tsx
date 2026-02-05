@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,9 +11,13 @@ import {
   DollarSign, 
   Grid3X3,
   Lock,
-  Activity
+  Activity,
+  RotateCw,
+  AlertTriangle
 } from "lucide-react";
 import { SystemStatusModal } from "./system-status-modal";
+import { useDeviceContext } from "@/lib/device-context";
+import { useLocation } from "wouter";
 
 interface WorkstationInfo {
   name: string;
@@ -36,6 +40,7 @@ interface FunctionsModalProps {
     canMerge: boolean;
     canReopen: boolean;
     canPriceOverride: boolean;
+    canResetDevice: boolean;
   };
   propertyId?: string;
   workstation?: WorkstationInfo | null;
@@ -97,6 +102,16 @@ export function FunctionsModal({
   workstation,
 }: FunctionsModalProps) {
   const [showSystemStatus, setShowSystemStatus] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const { clearDeviceConfig } = useDeviceContext();
+  const [, navigate] = useLocation();
+
+  const handleResetDevice = () => {
+    setShowResetConfirm(false);
+    clearDeviceConfig();
+    navigate("/device-type");
+    onClose();
+  };
 
   return (
     <>
@@ -106,6 +121,37 @@ export function FunctionsModal({
       propertyId={propertyId}
       workstation={workstation}
     />
+    
+    <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            Reset Device Settings
+          </DialogTitle>
+          <DialogDescription>
+            This action will reset all device settings for this terminal.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to reset this device? You will need to select the device type (POS or KDS) and workstation again.
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Any open checks will remain in the system and can be accessed after reconfiguration by selecting the same workstation.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setShowResetConfirm(false)} data-testid="button-cancel-reset">
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={handleResetDevice} data-testid="button-confirm-reset">
+            Reset Device
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -183,6 +229,15 @@ export function FunctionsModal({
                 description="View connectivity status"
                 onClick={() => setShowSystemStatus(true)}
               />
+              {privileges.canResetDevice && (
+                <FunctionButton
+                  icon={<RotateCw className="w-5 h-5" />}
+                  label="Reset Device"
+                  description="Reset device settings"
+                  onClick={() => setShowResetConfirm(true)}
+                  variant="destructive"
+                />
+              )}
             </div>
           </div>
         </div>

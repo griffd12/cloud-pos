@@ -2007,6 +2007,7 @@ export default function PosPage() {
           canMerge: hasPrivilege("merge_checks"),
           canReopen: hasPrivilege("reopen_check"),
           canPriceOverride: hasPrivilege("modify_price"),
+          canResetDevice: hasPrivilege("reopen_check") || hasPrivilege("void_sent"),
         }}
         propertyId={currentRvc?.propertyId}
         workstation={wsContext?.workstation ? {
