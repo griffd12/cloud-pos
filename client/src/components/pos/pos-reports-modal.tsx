@@ -221,7 +221,7 @@ export function POSReportsModal({
     enabled: open && !!rvcId,
   });
 
-  const { data: tenderBreakdown } = useQuery<{ tenders: TenderBreakdown[] }>({
+  const { data: tenderBreakdown } = useQuery<TenderBreakdown[]>({
     queryKey: [`/api/reports/tender-mix?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
     enabled: open && !!rvcId && activeTab === "tender",
   });
@@ -686,8 +686,8 @@ export function POSReportsModal({
 
             <TabsContent value="tender" className="mt-0">
               <div className="space-y-4">
-                {tenderBreakdown?.tenders && tenderBreakdown.tenders.length > 0 ? (
-                  tenderBreakdown.tenders.map((tender) => (
+                {tenderBreakdown && tenderBreakdown.length > 0 ? (
+                  tenderBreakdown.map((tender) => (
                     <Card key={tender.name}>
                       <CardContent className="py-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
