@@ -187,7 +187,7 @@ export default function KdsPage() {
 
   const handleChangeDevice = () => {
     clearDeviceConfig();
-    navigate("/setup");
+    navigate("/device-type");
   };
 
   const deviceSettings = selectedDevice ? {

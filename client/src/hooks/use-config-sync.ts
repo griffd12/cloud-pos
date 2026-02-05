@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { queryClient } from "@/lib/queryClient";
+import { useDeviceContext } from "@/lib/device-context";
 
 interface ConfigUpdateEvent {
   type: "config_update";
@@ -31,8 +32,16 @@ export function useConfigSync() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false);
+  
+  // Get enterprise ID from device context
+  const { enterpriseId } = useDeviceContext();
 
-  const invalidateQueriesForCategory = useCallback((category: string) => {
+  const invalidateQueriesForCategory = useCallback((category: string, eventEnterpriseId?: string | number) => {
+    // Only invalidate if the event is for our enterprise or no enterprise filter is set
+    if (enterpriseId && eventEnterpriseId && String(eventEnterpriseId) !== String(enterpriseId)) {
+      return; // Skip updates for other enterprises
+    }
+    
     const queryKeys = CATEGORY_TO_QUERY_KEYS[category] || [];
     queryKeys.forEach((key) => {
       queryClient.invalidateQueries({ queryKey: [key] });
@@ -40,7 +49,7 @@ export function useConfigSync() {
     if (queryKeys.length === 0) {
       queryClient.invalidateQueries();
     }
-  }, []);
+  }, [enterpriseId]);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -54,7 +63,12 @@ export function useConfigSync() {
 
       ws.onopen = () => {
         isConnectedRef.current = true;
-        ws.send(JSON.stringify({ type: "subscribe", channel: "all" }));
+        // Subscribe with enterprise ID if available
+        ws.send(JSON.stringify({ 
+          type: "subscribe", 
+          channel: "all",
+          enterpriseId: enterpriseId || undefined
+        }));
       };
 
       ws.onmessage = (event) => {
@@ -62,7 +76,7 @@ export function useConfigSync() {
           const data = JSON.parse(event.data);
           if (data.type === "config_update") {
             const configEvent = data as ConfigUpdateEvent;
-            invalidateQueriesForCategory(configEvent.payload.category);
+            invalidateQueriesForCategory(configEvent.payload.category, configEvent.payload.enterpriseId);
           }
         } catch {
         }
@@ -79,7 +93,7 @@ export function useConfigSync() {
       };
     } catch {
     }
-  }, [invalidateQueriesForCategory]);
+  }, [invalidateQueriesForCategory, enterpriseId]);
 
   useEffect(() => {
     connect();

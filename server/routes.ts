@@ -1619,6 +1619,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
+  // Get enterprise by code (for native app setup)
+  app.get("/api/enterprises/by-code/:code", async (req, res) => {
+    const code = req.params.code.toUpperCase();
+    const enterprises = await storage.getEnterprises();
+    const enterprise = enterprises.find(e => e.code.toUpperCase() === code);
+    if (!enterprise) return res.status(404).json({ message: "Enterprise not found" });
+    res.json(enterprise);
+  });
+
   app.post("/api/enterprises", async (req, res) => {
     try {
       const validated = insertEnterpriseSchema.parse(req.body);

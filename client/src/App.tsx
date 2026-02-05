@@ -15,6 +15,8 @@ import PizzaBuilderPage from "@/pages/pizza-builder";
 import KdsPage from "@/pages/kds";
 import DeviceSetupPage from "@/pages/device-setup";
 import DeviceTypeSelectPage from "@/pages/device-type-select";
+import ServerSetupPage from "@/pages/server-setup";
+import KdsDeviceSelectPage from "@/pages/kds-device-select";
 import EmcLoginPage from "@/pages/emc/login";
 import EmcSetupPage from "@/pages/emc/setup";
 import EmcAdminLayout from "@/pages/emc/admin-layout";
@@ -53,7 +55,7 @@ function DeviceGuardedRoute({
 }
 
 function Router() {
-  const { deviceType, isConfigured, hasExplicitDeviceType } = useDeviceContext();
+  const { deviceType, isConfigured, hasExplicitDeviceType, hasServerConfig, linkedDeviceId } = useDeviceContext();
   const [location] = useLocation();
   
   // Check for auto-enroll redirect from CAL wizard - handle FIRST before any other routing
@@ -76,25 +78,48 @@ function Router() {
       </EmcProvider>
     );
   }
+
+  // Server setup - first screen for native apps (optional for web preview)
+  // Skip server setup check for web preview (when accessing via browser directly)
+  const isWebPreview = typeof window !== 'undefined' && window.location.hostname.includes('replit');
+  
+  // Native apps must complete server setup first (only /server-setup is allowed)
+  if (!isWebPreview && !hasServerConfig) {
+    if (location !== "/server-setup") {
+      return <Redirect to="/server-setup" />;
+    }
+  }
+  
+  // Allowed setup routes for device configuration (after server is set)
+  const setupRoutes = ["/server-setup", "/device-type", "/kds-device-select", "/setup"];
   
   // Device type selection - show if user hasn't explicitly chosen a device type
   // This is the FIRST screen a new device sees (POS Terminal or KDS Display)
   if (!hasExplicitDeviceType && !deviceType) {
-    if (location !== "/device-type" && location !== "/setup") {
+    if (!setupRoutes.includes(location)) {
       return <Redirect to="/device-type" />;
     }
   }
   
-  // Handle KDS devices - they can only access /kds, /device-type, and /setup
-  if (hasExplicitDeviceType && deviceType === "kds") {
-    if (location !== "/kds" && location !== "/device-type" && location !== "/setup") {
+  // KDS device selection - show if KDS type selected but no device linked
+  if (hasExplicitDeviceType && deviceType === "kds" && !linkedDeviceId) {
+    if (location !== "/kds-device-select" && !setupRoutes.includes(location)) {
+      return <Redirect to="/kds-device-select" />;
+    }
+  }
+  
+  // Handle KDS devices - they can only access /kds and setup routes
+  if (hasExplicitDeviceType && deviceType === "kds" && linkedDeviceId) {
+    if (location !== "/kds" && !setupRoutes.includes(location)) {
       return <Redirect to="/kds" />;
     }
   }
 
   return (
     <Switch>
+      <Route path="/server-setup" component={ServerSetupPage} />
       <Route path="/device-type" component={DeviceTypeSelectPage} />
+      <Route path="/kds-device-select" component={KdsDeviceSelectPage} />
       <Route path="/setup" component={DeviceSetupPage} />
       <Route path="/kds">
         {() => <DeviceGuardedRoute component={KdsPage} allowedTypes={["pos", "kds"]} />}

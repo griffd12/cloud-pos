@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
+import { useDeviceContext } from "@/lib/device-context";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import BreakAttestationDialog from "@/components/pos/break-attestation-dialog";
@@ -95,9 +96,20 @@ export default function LoginPage() {
     enabled: !workstationId,
   });
 
-  // Fetch all workstations for selection when no workstation is set
+  // Get enterprise ID from device context for filtering
+  const { enterpriseId } = useDeviceContext();
+
+  // Fetch all workstations for selection when no workstation is set (filtered by enterprise if set)
   const { data: allWorkstations = [], isLoading: workstationsLoading } = useQuery<Workstation[]>({
-    queryKey: ["/api/workstations"],
+    queryKey: ["/api/workstations", { enterpriseId }],
+    queryFn: async () => {
+      const url = enterpriseId 
+        ? `/api/workstations?enterpriseId=${enterpriseId}` 
+        : "/api/workstations";
+      const response = await fetch(url, { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error("Failed to fetch workstations");
+      return response.json();
+    },
     enabled: !workstationId,
   });
 

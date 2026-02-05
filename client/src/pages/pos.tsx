@@ -117,6 +117,7 @@ export default function PosPage() {
     setSelectedSlu,
     setPendingItem,
     setCurrentRvc,
+    setWorkstationId,
     hasPrivilege,
     logout,
   } = usePosContext();
@@ -180,9 +181,11 @@ export default function PosPage() {
       await releaseCurrentCheckLock();
     }
     logout();
+    setWorkstationId(null);
+    setCurrentRvc(null);
     clearDeviceConfig();
     navigate("/device-type");
-  }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout, clearDeviceConfig, navigate]);
+  }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout, setWorkstationId, setCurrentRvc, clearDeviceConfig, navigate]);
 
   // Auto-set RVC from workstation if not already set
   useEffect(() => {

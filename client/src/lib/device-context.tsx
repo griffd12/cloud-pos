@@ -7,6 +7,9 @@ const DEVICE_NAME_KEY = "pos_device_name";
 const DEVICE_TOKEN_KEY = "pos_device_token";
 const REGISTERED_DEVICE_ID_KEY = "pos_registered_device_id";
 const DEVICE_PROPERTY_ID_KEY = "pos_device_property_id";
+const SERVER_URL_KEY = "pos_server_url";
+const ENTERPRISE_CODE_KEY = "pos_enterprise_code";
+const ENTERPRISE_ID_KEY = "pos_enterprise_id";
 
 export type DeviceType = "pos" | "kds" | null;
 
@@ -31,13 +34,19 @@ interface DeviceContextType {
   isValidating: boolean;
   validationError: string | null;
   hasExplicitDeviceType: boolean; // True if user explicitly selected device type
+  serverUrl: string | null; // Server URL for native apps
+  enterpriseCode: string | null; // Enterprise code from URL (e.g., BOM)
+  enterpriseId: string | null; // Enterprise ID from server
+  hasServerConfig: boolean; // True if server URL is configured
   
   setDeviceTypeOnly: (type: "pos" | "kds") => void; // Set device type without linking to specific device
   configureAsPos: (workstationId: string, name: string) => void;
   configureAsKds: (kdsDeviceId: string, name: string) => void;
   enrollDevice: (token: string, device: RegisteredDeviceInfo) => void;
   clearDeviceConfig: () => void;
+  clearDeviceTypeOnly: () => void; // Clear device type/link but keep server config
   validateDeviceToken: () => Promise<boolean>;
+  setServerConfig: (serverUrl: string, enterpriseCode: string, enterpriseId: string) => void;
 }
 
 const DeviceContext = createContext<DeviceContextType | null>(null);
@@ -77,6 +86,21 @@ function getStoredPropertyId(): string | null {
 function getStoredExplicitDeviceType(): boolean {
   if (typeof window === 'undefined') return false;
   return localStorage.getItem(DEVICE_TYPE_EXPLICIT_KEY) === "true";
+}
+
+function getStoredServerUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(SERVER_URL_KEY);
+}
+
+function getStoredEnterpriseCode(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(ENTERPRISE_CODE_KEY);
+}
+
+function getStoredEnterpriseId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(ENTERPRISE_ID_KEY);
 }
 
 const AUTO_ENROLL_REDIRECT_KEY = "pos_auto_enroll_redirect";
@@ -164,6 +188,20 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [propertyId, setPropertyId] = useState<string | null>(getStoredPropertyId);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [serverUrl, setServerUrl] = useState<string | null>(getStoredServerUrl);
+  const [enterpriseCode, setEnterpriseCode] = useState<string | null>(getStoredEnterpriseCode);
+  const [enterpriseId, setEnterpriseId] = useState<string | null>(getStoredEnterpriseId);
+
+  const setServerConfig = useCallback((url: string, code: string, id: string) => {
+    localStorage.setItem(SERVER_URL_KEY, url);
+    localStorage.setItem(ENTERPRISE_CODE_KEY, code);
+    localStorage.setItem(ENTERPRISE_ID_KEY, id);
+    setServerUrl(url);
+    setEnterpriseCode(code);
+    setEnterpriseId(id);
+  }, []);
+
+  const hasServerConfig = Boolean(serverUrl && enterpriseCode && enterpriseId);
 
   // Set device type only (without linking to a specific workstation/kds device)
   const setDeviceTypeOnly = useCallback((type: "pos" | "kds") => {
@@ -227,6 +265,18 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setValidationError(null);
   }, []);
 
+  // Clear only device type and link, preserving server configuration
+  const clearDeviceTypeOnly = useCallback(() => {
+    localStorage.removeItem(DEVICE_TYPE_KEY);
+    localStorage.removeItem(DEVICE_TYPE_EXPLICIT_KEY);
+    localStorage.removeItem(DEVICE_ID_KEY);
+    localStorage.removeItem(DEVICE_NAME_KEY);
+    setDeviceType(null);
+    setHasExplicitDeviceType(false);
+    setLinkedDeviceId(null);
+    setDeviceName(null);
+  }, []);
+
   const clearDeviceConfig = useCallback(() => {
     localStorage.removeItem(DEVICE_TYPE_KEY);
     localStorage.removeItem(DEVICE_TYPE_EXPLICIT_KEY);
@@ -235,6 +285,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(DEVICE_TOKEN_KEY);
     localStorage.removeItem(REGISTERED_DEVICE_ID_KEY);
     localStorage.removeItem(DEVICE_PROPERTY_ID_KEY);
+    localStorage.removeItem(SERVER_URL_KEY);
+    localStorage.removeItem(ENTERPRISE_CODE_KEY);
+    localStorage.removeItem(ENTERPRISE_ID_KEY);
     // Also clear POS-related state so workstation selection is fresh
     localStorage.removeItem("pos_workstation_id");
     localStorage.removeItem("pos_selected_rvc");
@@ -246,6 +299,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setRegisteredDeviceId(null);
     setPropertyId(null);
     setValidationError(null);
+    setServerUrl(null);
+    setEnterpriseCode(null);
+    setEnterpriseId(null);
   }, []);
 
   const validateDeviceToken = useCallback(async (): Promise<boolean> => {
@@ -304,12 +360,18 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         isValidating,
         validationError,
         hasExplicitDeviceType,
+        serverUrl,
+        enterpriseCode,
+        enterpriseId,
+        hasServerConfig,
         setDeviceTypeOnly,
         configureAsPos,
         configureAsKds,
         enrollDevice,
         clearDeviceConfig,
+        clearDeviceTypeOnly,
         validateDeviceToken,
+        setServerConfig,
       }}
     >
       {children}

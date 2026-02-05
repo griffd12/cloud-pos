@@ -14,7 +14,7 @@ export default function DeviceTypeSelectPage() {
   // If device type is already explicitly set, redirect to appropriate page
   if (hasExplicitDeviceType && deviceType) {
     if (deviceType === "kds") {
-      navigate("/kds");
+      navigate("/kds-device-select");
       return null;
     } else {
       navigate("/login");
@@ -29,7 +29,7 @@ export default function DeviceTypeSelectPage() {
 
   const handleSelectKDS = () => {
     setDeviceTypeOnly("kds");
-    navigate("/kds");
+    navigate("/kds-device-select");
   };
 
   return (
