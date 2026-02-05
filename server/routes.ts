@@ -4599,20 +4599,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         // Log the void action
         await storage.createAuditLog({
+          rvcId: check.rvcId,
           action: "void_payment",
-          tableName: "check_payments",
-          recordId: paymentId,
+          targetType: "payment",
+          targetId: paymentId,
           employeeId: employeeId || null,
-          managerId: managerId || null,
-          details: JSON.stringify({
+          managerApprovalId: managerId || null,
+          details: {
             checkId: payment.checkId,
             amount: payment.amount,
             previousPaidAmount: check.total,
             newPaidAmount: newPaidAmount.toFixed(2),
             reason: reason || "Payment voided",
             checkReopened: wasClosedWithBalanceDue,
-          }),
-          businessDate: check.businessDate || new Date().toISOString().split("T")[0],
+          },
         });
         
         // Broadcast the check update for status change
