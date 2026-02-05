@@ -18744,11 +18744,9 @@ connect();
   // Search for customers (loyalty members) - filter by property for POS
   app.get("/api/pos/customers/search", async (req, res) => {
     try {
-      const { query, programId, propertyId } = req.query;
-      let members = await storage.getLoyaltyMembers(
-        programId as string | undefined,
-        query as string | undefined
-      );
+      const { query, propertyId } = req.query;
+      // Pass search query to storage - filter by name/email/phone/member number
+      let members = await storage.getLoyaltyMembers(query as string | undefined);
       // Filter by property if provided (for POS lookup)
       if (propertyId && propertyId !== "all") {
         members = members.filter(m => m.propertyId === propertyId);
