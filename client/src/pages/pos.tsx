@@ -1903,7 +1903,7 @@ export default function PosPage() {
             selectedPaymentId={selectedPaymentId}
             onSelectPayment={(payment) => setSelectedPaymentId(payment?.id || null)}
             onVoidPayment={(payment) => voidPaymentMutation.mutate(payment)}
-            canVoidPayment={hasPrivilege("void_payment") || hasPrivilege("void_sent")}
+            canVoidPayment={hasPrivilege("void_sent") || hasPrivilege("void_unsent")}
             tenderNames={tenderNames}
           />
         </div>
