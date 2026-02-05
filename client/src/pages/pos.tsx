@@ -223,6 +223,8 @@ export default function PosPage() {
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
+  const [pendingReopenCheckId, setPendingReopenCheckId] = useState<string | null>(null);
+  const [isLoadingClosedCheck, setIsLoadingClosedCheck] = useState(false);
   const [showPriceOverrideModal, setShowPriceOverrideModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showGiftCardModal, setShowGiftCardModal] = useState(false);
@@ -319,6 +321,17 @@ export default function PosPage() {
   // Mutation to void a payment
   const voidPaymentMutation = useMutation({
     mutationFn: async (payment: CheckPayment) => {
+      // If this is a pending reopen check and the payment belongs to this check, reopen it first
+      if (pendingReopenCheckId && currentCheck?.id === pendingReopenCheckId) {
+        try {
+          await apiRequest("POST", `/api/checks/${pendingReopenCheckId}/reopen`, {
+            employeeId: currentEmployee?.id,
+          });
+        } catch (reopenError: any) {
+          throw new Error(`Failed to reopen check: ${reopenError.message}`);
+        }
+      }
+      
       const res = await fetch(`/api/check-payments/${payment.id}/void`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -337,8 +350,14 @@ export default function PosPage() {
     onSuccess: () => {
       toast({ title: "Payment Voided", description: "Payment has been voided and balance restored" });
       setSelectedPaymentId(null);
+      // Clear pending reopen state since check is now actually reopened
+      if (pendingReopenCheckId && currentCheck?.id === pendingReopenCheckId) {
+        setPendingReopenCheckId(null);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -347,6 +366,11 @@ export default function PosPage() {
 
   // Handler for opening tip capture dialog
   const handleTipCapture = (payment: CheckPayment) => {
+    // Block tip capture on a closed check being viewed
+    if (pendingReopenCheckId) {
+      toast({ title: "Cannot capture tip", description: "Void a payment first to reopen this check", variant: "destructive" });
+      return;
+    }
     setTipCapturePayment(payment);
     setTipAmount("");
     setShowTipCaptureDialog(true);
@@ -787,33 +811,66 @@ export default function PosPage() {
     setCheckItems([]);
   };
 
-  const reopenCheckMutation = useMutation({
-    mutationFn: async (checkId: string) => {
-      const response = await apiRequest("POST", `/api/checks/${checkId}/reopen`, {
-        employeeId: currentEmployee?.id,
-      });
-      return response.json();
-    },
-    onSuccess: async (reopenedCheck: Check) => {
-      setShowReopenModal(false);
-      toast({ title: "Check Reopened", description: `Check #${reopenedCheck.checkNumber} is now open` });
-      try {
-        const res = await fetch(`/api/checks/${reopenedCheck.id}`, { credentials: "include", headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setCurrentCheck(data.check);
-          setCheckItems(data.items);
-        }
-      } catch (e) {
-        console.error("Error loading reopened check:", e);
+  // Load closed check for viewing (does NOT reopen it yet)
+  const loadClosedCheckForViewing = useCallback(async (checkId: string) => {
+    setIsLoadingClosedCheck(true);
+    try {
+      const res = await fetch(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentCheck(data.check);
+        setCheckItems(data.items);
+        setPendingReopenCheckId(checkId);
+        setShowReopenModal(false);
+      } else {
+        toast({ title: "Failed to load check", variant: "destructive" });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
-    },
-    onError: (error: any) => {
-      toast({ title: "Failed to reopen check", description: error.message, variant: "destructive" });
-    },
-  });
+    } catch (e) {
+      console.error("Error loading closed check:", e);
+      toast({ title: "Failed to load check", variant: "destructive" });
+    } finally {
+      setIsLoadingClosedCheck(false);
+    }
+  }, [toast]);
+
+  // Clear pending reopen state - used when exiting without changes
+  const clearPendingReopenCheck = useCallback(() => {
+    if (pendingReopenCheckId) {
+      setPendingReopenCheckId(null);
+      setCurrentCheck(null);
+      setCheckItems([]);
+    }
+  }, [pendingReopenCheckId]);
+
+  // Smart send handler - handles pending reopen checks specially
+  const handleSmartSend = useCallback(async () => {
+    const unsentItems = checkItems.filter(item => !item.sent && !item.voided);
+    
+    // If viewing a pending reopen check with no unsent items, just exit without changes
+    if (pendingReopenCheckId && unsentItems.length === 0) {
+      clearPendingReopenCheck();
+      return;
+    }
+    
+    // If there are unsent items on a pending reopen check, actually reopen it first
+    if (pendingReopenCheckId && unsentItems.length > 0) {
+      try {
+        await apiRequest("POST", `/api/checks/${pendingReopenCheckId}/reopen`, {
+          employeeId: currentEmployee?.id,
+        });
+        toast({ title: "Check Reopened", description: "Check has been reopened for editing" });
+        setPendingReopenCheckId(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+      } catch (error: any) {
+        toast({ title: "Failed to reopen check", description: error.message, variant: "destructive" });
+        return; // Don't proceed with send if reopen failed
+      }
+    }
+    
+    // Proceed with normal send
+    sendCheckMutation.mutate();
+  }, [pendingReopenCheckId, checkItems, clearPendingReopenCheck, currentEmployee?.id, toast, currentRvc?.id, sendCheckMutation]);
 
   const transferCheckMutation = useMutation({
     mutationFn: async (toEmployeeId: string) => {
@@ -1039,6 +1096,12 @@ export default function PosPage() {
   };
 
   const handleSelectItem = async (item: MenuItemWithModifiers, skipAvailabilityCheck?: boolean) => {
+    // Prevent adding items when viewing a closed check (pending reopen mode)
+    if (pendingReopenCheckId) {
+      toast({ title: "Cannot add items", description: "Void a payment first to reopen this check", variant: "destructive" });
+      return;
+    }
+    
     // Check availability unless explicitly skipped (e.g., user confirmed sold-out item)
     if (!skipAvailabilityCheck && !isItemAvailable(item.id)) {
       setSoldOutConfirmItem(item);
@@ -1184,6 +1247,12 @@ export default function PosPage() {
   };
 
   const handleVoidItem = (item: CheckItem) => {
+    // Block voiding items on a closed check being viewed (use void payment to reopen first)
+    if (pendingReopenCheckId) {
+      toast({ title: "Cannot void items", description: "Void a payment first to reopen this check", variant: "destructive" });
+      return;
+    }
+    
     if (item.sent) {
       setPendingVoidItem(item);
       setApprovalError(null);
@@ -1865,7 +1934,7 @@ export default function PosPage() {
             check={currentCheck}
             items={checkItems}
             orderType={currentCheck?.orderType as OrderType}
-            onSend={() => sendCheckMutation.mutate()}
+            onSend={handleSmartSend}
             onVoidItem={(item) => {
               handleVoidItem(item);
               setSelectedItemId(null);
@@ -1873,14 +1942,28 @@ export default function PosPage() {
             onEditModifiers={handleEditModifiers}
             onSelectItem={handleSelectCheckItem}
             selectedItemId={selectedItemId}
-            onPay={() => setShowPaymentModal(true)}
+            onPay={() => {
+              if (pendingReopenCheckId) {
+                toast({ title: "Cannot add payment", description: "Void a payment first to reopen this check", variant: "destructive" });
+                return;
+              }
+              setShowPaymentModal(true);
+            }}
             onNewCheck={() => setShowOrderTypeModal(true)}
             onChangeOrderType={() => setShowOrderTypeModal(true)}
             onPriceOverride={(item) => {
+              if (pendingReopenCheckId) {
+                toast({ title: "Cannot modify price", description: "Void a payment first to reopen this check", variant: "destructive" });
+                return;
+              }
               setSelectedItemId(item.id);
               setShowPriceOverrideModal(true);
             }}
             onDiscountItem={(item) => {
+              if (pendingReopenCheckId) {
+                toast({ title: "Cannot apply discount", description: "Void a payment first to reopen this check", variant: "destructive" });
+                return;
+              }
               setDiscountItem(item);
               setShowDiscountModal(true);
             }}
@@ -2126,9 +2209,9 @@ export default function PosPage() {
           onClose={() => setShowReopenModal(false)}
           rvcId={currentRvc.id}
           onReopen={(checkId) => {
-            reopenCheckMutation.mutate(checkId);
+            loadClosedCheckForViewing(checkId);
           }}
-          isReopening={reopenCheckMutation.isPending}
+          isReopening={isLoadingClosedCheck}
           timezone={wsContext?.property?.timezone || "America/New_York"}
         />
       )}

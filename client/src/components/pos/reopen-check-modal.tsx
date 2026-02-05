@@ -146,12 +146,12 @@ export function ReopenCheckModal({
             {isReopening ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Reopening...
+                Loading...
               </>
             ) : (
               <>
                 <RotateCcw className="w-4 h-4 mr-2" />
-                Reopen Check
+                View Check
               </>
             )}
           </Button>
