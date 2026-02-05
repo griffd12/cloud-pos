@@ -600,11 +600,11 @@ export function CheckPanel({
             size="lg"
             className="aspect-square min-h-20 text-base font-semibold flex flex-col items-center justify-center gap-1"
             onClick={onSend}
-            disabled={isSending || (unsentItems.length === 0 && balanceDue > 0)}
+            disabled={isSending}
             data-testid="button-send-order"
           >
             <Send className="w-6 h-6" />
-            <span>{unsentItems.length > 0 ? `Send (${unsentItems.length})` : balanceDue > 0 ? "Pay First" : "Exit"}</span>
+            <span>{unsentItems.length > 0 ? `Send (${unsentItems.length})` : balanceDue > 0 ? "Send" : "Exit"}</span>
           </Button>
           <Button
             size="lg"
