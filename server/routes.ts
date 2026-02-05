@@ -4494,6 +4494,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           console.error("Gift card activation error:", e);
         }
 
+        // Award loyalty points/spend/visits if check has linked member
+        if (check?.customerId) {
+          try {
+            const allEnrollments = await storage.getLoyaltyEnrollments(check.customerId);
+            // Only process active enrollments
+            const enrollments = allEnrollments.filter(e => e.status === "active");
+            const programs = await storage.getLoyaltyPrograms();
+            const checkTotal = parseFloat(check.total || "0");
+            
+            // Get the property from the RVC
+            const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
+            const propertyId = rvc?.propertyId;
+            
+            for (const enrollment of enrollments) {
+              const program = programs.find(p => p.id === enrollment.programId);
+              if (!program || !program.active) continue;
+              
+              const pointsPerDollar = parseFloat(program.pointsPerDollar || "1");
+              let pointsToAward = 0;
+              let visitIncrement = 0;
+              let spendIncrement = 0;
+              
+              // Calculate based on program type (tiered is treated like points)
+              if (program.programType === "points" || program.programType === "tiered") {
+                pointsToAward = Math.floor(checkTotal * pointsPerDollar);
+              } else if (program.programType === "spend") {
+                spendIncrement = checkTotal;
+              } else if (program.programType === "visits") {
+                visitIncrement = 1;
+              }
+              
+              // Update enrollment metrics
+              const currentPoints = enrollment.currentPoints || 0;
+              const lifetimePoints = enrollment.lifetimePoints || 0;
+              const visitCount = enrollment.visitCount || 0;
+              const lifetimeSpend = parseFloat(enrollment.lifetimeSpend || "0");
+              
+              await storage.updateLoyaltyEnrollment(enrollment.id, {
+                currentPoints: currentPoints + pointsToAward,
+                lifetimePoints: lifetimePoints + pointsToAward,
+                visitCount: visitCount + visitIncrement,
+                lifetimeSpend: (lifetimeSpend + spendIncrement).toFixed(2),
+                lastActivityAt: new Date(),
+              });
+              
+              // Create loyalty transaction for audit trail
+              await storage.createLoyaltyTransaction({
+                memberId: check.customerId,
+                programId: program.id,
+                enrollmentId: enrollment.id,
+                propertyId: propertyId || undefined,
+                transactionType: "earn",
+                points: pointsToAward,
+                pointsBefore: currentPoints,
+                pointsAfter: currentPoints + pointsToAward,
+                visitIncrement,
+                visitsBefore: visitCount,
+                visitsAfter: visitCount + visitIncrement,
+                checkId,
+                checkTotal: checkTotal.toFixed(2),
+                employeeId,
+                reason: `Earned from check #${check.checkNumber}`,
+              });
+              
+              console.log(`Loyalty awarded - Member: ${check.customerId}, Program: ${program.name}, Points: ${pointsToAward}, Visits: ${visitIncrement}, Spend: ${spendIncrement}`);
+            }
+          } catch (loyaltyError) {
+            console.error("Loyalty earning error:", loyaltyError);
+          }
+        }
+
         await storage.createAuditLog({
           rvcId: check?.rvcId,
           employeeId,
@@ -18670,14 +18741,18 @@ connect();
   // POS CUSTOMER MANAGEMENT
   // ============================================================================
 
-  // Search for customers (loyalty members)
+  // Search for customers (loyalty members) - filter by property for POS
   app.get("/api/pos/customers/search", async (req, res) => {
     try {
-      const { query, programId } = req.query;
-      const members = await storage.getLoyaltyMembers(
+      const { query, programId, propertyId } = req.query;
+      let members = await storage.getLoyaltyMembers(
         programId as string | undefined,
         query as string | undefined
       );
+      // Filter by property if provided (for POS lookup)
+      if (propertyId && propertyId !== "all") {
+        members = members.filter(m => m.propertyId === propertyId);
+      }
       res.json(members);
     } catch (error) {
       res.status(500).json({ message: "Failed to search customers" });

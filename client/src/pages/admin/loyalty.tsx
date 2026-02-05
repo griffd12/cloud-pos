@@ -27,6 +27,7 @@ import {
   type InsertLoyaltyProgram,
   type InsertLoyaltyMember,
   type InsertLoyaltyReward,
+  type Property,
 } from "@shared/schema";
 
 // Extended member type from API that includes enrollments
@@ -114,6 +115,15 @@ export default function LoyaltyPage() {
     },
   });
 
+  const { data: properties = [] } = useQuery<Property[]>({
+    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
+  });
+
   const { data: memberTransactions = [] } = useQuery<(LoyaltyTransaction & { programName?: string })[]>({
     queryKey: ["/api/loyalty-transactions", selectedMember?.id, { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
@@ -162,6 +172,14 @@ export default function LoyaltyPage() {
   const memberColumns: Column<MemberWithEnrollments>[] = [
     { key: "firstName", header: "First Name", sortable: true },
     { key: "lastName", header: "Last Name", sortable: true },
+    {
+      key: "propertyId",
+      header: "Property",
+      render: (value) => {
+        const property = properties.find(p => p.id === value);
+        return property?.name || <span className="text-muted-foreground">Not assigned</span>;
+      },
+    },
     { key: "email", header: "Email", sortable: true },
     { key: "phone", header: "Phone" },
     {
@@ -226,6 +244,14 @@ export default function LoyaltyPage() {
 
 
   const memberFormFields: FormFieldConfig[] = [
+    {
+      name: "propertyId",
+      label: "Property",
+      type: "select",
+      options: properties.map(p => ({ value: p.id, label: p.name })),
+      required: true,
+      description: "Property where this member is enrolled",
+    },
     { name: "firstName", label: "First Name", type: "text", required: true },
     { name: "lastName", label: "Last Name", type: "text", required: true },
     { name: "email", label: "Email", type: "text", required: true },
