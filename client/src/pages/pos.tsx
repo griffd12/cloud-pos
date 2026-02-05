@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
@@ -214,6 +214,7 @@ export default function PosPage() {
   const [pendingVoidItem, setPendingVoidItem] = useState<CheckItem | null>(null);
   const [editingItem, setEditingItem] = useState<CheckItem | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [cashChangeDue, setCashChangeDue] = useState<number | null>(null);
   const [pendingCashOverTender, setPendingCashOverTender] = useState<{ tenderId: string; amount: number } | null>(null);
@@ -314,7 +315,31 @@ export default function PosPage() {
       toast({ title: "Error", description: "Failed to remove customer", variant: "destructive" });
     },
   });
-  
+
+  // Mutation to void a payment
+  const voidPaymentMutation = useMutation({
+    mutationFn: async (payment: CheckPayment) => {
+      const res = await apiRequest("PATCH", `/api/check-payments/${payment.id}/void`, {
+        reason: "Payment voided",
+        employeeId: currentEmployee?.id,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to void payment");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Payment Voided", description: "Payment has been voided and balance restored" });
+      setSelectedPaymentId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Handler for opening tip capture dialog
   const handleTipCapture = (payment: CheckPayment) => {
     setTipCapturePayment(payment);
@@ -403,6 +428,15 @@ export default function PosPage() {
     },
     enabled: !!currentRvc,
   });
+
+  // Create a mapping of tender IDs to tender names
+  const tenderNames: Record<string, string> = useMemo(() => {
+    const mapping: Record<string, string> = {};
+    for (const tender of tenders) {
+      mapping[tender.id] = tender.name;
+    }
+    return mapping;
+  }, [tenders]);
 
   const [itemModifierGroups, setItemModifierGroups] = useState<(ModifierGroup & { modifiers: Modifier[] })[]>([]);
 
@@ -1860,6 +1894,12 @@ export default function PosPage() {
             onTipCapture={handleTipCapture}
             customerName={customerName}
             onRemoveCustomer={currentCheck?.customerId ? () => removeCustomerMutation.mutate() : undefined}
+            payments={paymentInfo?.payments || []}
+            selectedPaymentId={selectedPaymentId}
+            onSelectPayment={(payment) => setSelectedPaymentId(payment?.id || null)}
+            onVoidPayment={(payment) => voidPaymentMutation.mutate(payment)}
+            canVoidPayment={hasPrivilege("void_payment") || hasPrivilege("void_sent")}
+            tenderNames={tenderNames}
           />
         </div>
       </div>

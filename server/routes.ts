@@ -4545,6 +4545,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ payments, paidAmount });
   });
 
+  // Void a payment - marks it as voided, restores balance, and reopens the check if it was closed
+  const voidPaymentSchema = z.object({
+    reason: z.string().optional(),
+    employeeId: z.string().optional(),
+    managerId: z.string().optional(),
+  });
+  
+  app.patch("/api/check-payments/:id/void", async (req, res) => {
+    try {
+      const paymentId = req.params.id;
+      
+      // Validate request body
+      const parseResult = voidPaymentSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parseResult.error.errors });
+      }
+      const { reason, employeeId, managerId } = parseResult.data;
+      
+      // Get the payment
+      const payments = await storage.getAllPayments();
+      const payment = payments.find(p => p.id === paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      
+      if (payment.paymentStatus === "voided") {
+        return res.status(400).json({ message: "Payment is already voided" });
+      }
+      
+      // Update payment status to voided
+      const updatedPayment = await storage.updateCheckPayment(paymentId, {
+        paymentStatus: "voided",
+      });
+      
+      // Get the check and recalculate totals
+      const check = await storage.getCheck(payment.checkId);
+      if (check) {
+        // Get all payments for this check to recalculate paid amount
+        const allPayments = await storage.getPayments(payment.checkId);
+        const newPaidAmount = allPayments
+          .filter(p => p.paymentStatus === "completed")
+          .reduce((sum, p) => sum + parseFloat(p.amount || "0") + parseFloat(p.tipAmount || "0"), 0);
+        
+        // Persist the updated paid amount to the check
+        const total = parseFloat(check.total || "0");
+        const wasClosedWithBalanceDue = check.status === "closed" && newPaidAmount < total;
+        
+        // Update check with new balance and potentially reopen
+        await storage.updateCheck(check.id, {
+          ...(wasClosedWithBalanceDue ? { status: "open" } : {}),
+        });
+        
+        // Log the void action
+        await storage.createAuditLog({
+          action: "void_payment",
+          tableName: "check_payments",
+          recordId: paymentId,
+          employeeId: employeeId || null,
+          managerId: managerId || null,
+          details: JSON.stringify({
+            checkId: payment.checkId,
+            amount: payment.amount,
+            previousPaidAmount: check.total,
+            newPaidAmount: newPaidAmount.toFixed(2),
+            reason: reason || "Payment voided",
+            checkReopened: wasClosedWithBalanceDue,
+          }),
+          businessDate: check.businessDate || new Date().toISOString().split("T")[0],
+        });
+        
+        // Broadcast the check update for status change
+        if (wasClosedWithBalanceDue) {
+          broadcastCheckUpdate(check.id, "open", check.rvcId);
+        }
+      }
+      
+      // Broadcast payment update
+      broadcastPaymentUpdate(payment.checkId);
+      
+      res.json({ 
+        ...updatedPayment, 
+        message: "Payment voided successfully" 
+      });
+    } catch (error) {
+      console.error("Void payment error:", error);
+      res.status(500).json({ message: "Failed to void payment" });
+    }
+  });
+
   // Helper function to print check receipt - routes through print agents for local network printing
   async function printCheckReceipt(checkId: string, rvcId?: string | null) {
     // Get RVC to find property

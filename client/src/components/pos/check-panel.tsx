@@ -34,6 +34,12 @@ interface CheckPanelProps {
   onTipCapture?: (payment: CheckPayment) => void;
   customerName?: string | null;
   onRemoveCustomer?: () => void;
+  payments?: CheckPayment[];
+  selectedPaymentId?: string | null;
+  onSelectPayment?: (payment: CheckPayment | null) => void;
+  onVoidPayment?: (payment: CheckPayment) => void;
+  canVoidPayment?: boolean;
+  tenderNames?: Record<string, string>;
 }
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
@@ -326,6 +332,12 @@ export function CheckPanel({
   onTipCapture,
   customerName,
   onRemoveCustomer,
+  payments = [],
+  selectedPaymentId,
+  onSelectPayment,
+  onVoidPayment,
+  canVoidPayment = false,
+  tenderNames = {},
 }: CheckPanelProps) {
   const formatPrice = (price: string | number | null) => {
     const numPrice = typeof price === "string" ? parseFloat(price) : (price || 0);
@@ -443,6 +455,73 @@ export function CheckPanel({
           )}
         </div>
       </ScrollArea>
+
+      {/* Payments Section - only show if there are completed/voided payments */}
+      {payments.filter(p => p.paymentStatus === "completed" || p.paymentStatus === "voided").length > 0 && (
+        <div className="flex-shrink-0 border-t bg-green-50 dark:bg-green-950/20">
+          <div className="px-3 py-2">
+            <div className="flex items-center gap-2 mb-2">
+              <CreditCard className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                Payments
+              </span>
+            </div>
+            <div className="space-y-1">
+              {payments
+                .filter(p => p.paymentStatus === "completed" || p.paymentStatus === "voided")
+                .map((payment) => {
+                  const isSelected = selectedPaymentId === payment.id;
+                  const isVoided = payment.paymentStatus === "voided";
+                  const tenderName = tenderNames[payment.tenderId] || "Payment";
+                  
+                  return (
+                    <div
+                      key={payment.id}
+                      className={`flex items-center justify-between gap-2 p-2 rounded-md cursor-pointer transition-colors ${
+                        isVoided 
+                          ? "bg-red-100 dark:bg-red-900/30 line-through opacity-60"
+                          : isSelected 
+                            ? "bg-accent ring-1 ring-primary/20" 
+                            : "bg-white dark:bg-card hover-elevate"
+                      }`}
+                      onClick={() => !isVoided && onSelectPayment?.(isSelected ? null : payment)}
+                      data-testid={`payment-row-${payment.id}`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CreditCard className={`w-4 h-4 flex-shrink-0 ${isVoided ? "text-red-500" : "text-green-600 dark:text-green-400"}`} />
+                        <span className={`text-sm font-medium truncate ${isVoided ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {tenderName}
+                          {payment.tipAmount && parseFloat(payment.tipAmount) > 0 && (
+                            <span className="text-muted-foreground ml-1">(incl. tip)</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-semibold tabular-nums ${isVoided ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                          {isVoided ? "" : "-"}{formatPrice(parseFloat(payment.amount || "0") + parseFloat(payment.tipAmount || "0"))}
+                        </span>
+                        {isSelected && canVoidPayment && !isVoided && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onVoidPayment?.(payment);
+                            }}
+                            data-testid={`button-void-payment-${payment.id}`}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Void
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-shrink-0 border-t bg-muted/30">
         <div className="px-4 py-3 space-y-1">
