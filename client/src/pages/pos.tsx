@@ -323,13 +323,23 @@ export default function PosPage() {
     mutationFn: async (payment: CheckPayment) => {
       // If this is a pending reopen check and the payment belongs to this check, reopen it first
       if (pendingReopenCheckId && currentCheck?.id === pendingReopenCheckId) {
-        try {
-          await apiRequest("POST", `/api/checks/${pendingReopenCheckId}/reopen`, {
-            employeeId: currentEmployee?.id,
-          });
-        } catch (reopenError: any) {
-          throw new Error(`Failed to reopen check: ${reopenError.message}`);
+        // First, fetch fresh check status to see if it's actually still closed
+        const checkRes = await fetch(`/api/checks/${pendingReopenCheckId}`);
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          // Only attempt reopen if check is still closed
+          if (checkData.check?.status === "closed") {
+            try {
+              await apiRequest("POST", `/api/checks/${pendingReopenCheckId}/reopen`, {
+                employeeId: currentEmployee?.id,
+              });
+            } catch (reopenError: any) {
+              throw new Error(`Failed to reopen check: ${reopenError.message}`);
+            }
+          }
         }
+        // Clear pending state since we've handled the reopen check
+        setPendingReopenCheckId(null);
       }
       
       const res = await fetch(`/api/check-payments/${payment.id}/void`, {
@@ -350,10 +360,8 @@ export default function PosPage() {
     onSuccess: () => {
       toast({ title: "Payment Voided", description: "Payment has been voided and balance restored" });
       setSelectedPaymentId(null);
-      // Clear pending reopen state since check is now actually reopened
-      if (pendingReopenCheckId && currentCheck?.id === pendingReopenCheckId) {
-        setPendingReopenCheckId(null);
-      }
+      // Clear pending reopen state (should already be cleared in mutationFn, but just in case)
+      setPendingReopenCheckId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });

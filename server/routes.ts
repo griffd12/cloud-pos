@@ -4592,10 +4592,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const total = parseFloat(check.total || "0");
         const wasClosedWithBalanceDue = check.status === "closed" && newPaidAmount < total;
         
-        // Update check with new balance and potentially reopen
-        await storage.updateCheck(check.id, {
-          ...(wasClosedWithBalanceDue ? { status: "open" } : {}),
-        });
+        // Update check with new balance and potentially reopen (only if status change needed)
+        if (wasClosedWithBalanceDue) {
+          await storage.updateCheck(check.id, { status: "open" });
+        }
         
         // Log the void action
         await storage.createAuditLog({
