@@ -1,15 +1,20 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmc } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAuthHeaders } from "@/lib/queryClient";
-import { Loader2, Calendar, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getAuthHeaders, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Calendar, Clock, CheckCircle2, AlertCircle, ArrowRight, CalendarClock } from "lucide-react";
 import type { Property, FiscalPeriod } from "@shared/schema";
 
 interface LiveTotals {
@@ -28,9 +33,15 @@ interface LiveTotals {
 
 export default function FiscalClosePage() {
   usePosWebSocket();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { selectedEnterpriseId } = useEmc();
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const today = new Date().toISOString().split("T")[0];
+  const [targetDate, setTargetDate] = useState(today);
+  const [showPinPrompt, setShowPinPrompt] = useState(false);
+  const [pin, setPin] = useState("");
 
   const { data: properties = [], isLoading: propertiesLoading } = useQuery<Property[]>({
     queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
@@ -79,6 +90,50 @@ export default function FiscalClosePage() {
   });
 
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+
+  // Mutation to advance business date to a specific date
+  const advanceBusinessDateMutation = useMutation({
+    mutationFn: async ({ propertyId, targetDate, pin }: { propertyId: string; targetDate: string; pin: string }) => {
+      const res = await apiRequest("POST", `/api/properties/${propertyId}/business-date/advance`, {
+        targetDate,
+        pin,
+        enterpriseId: selectedEnterpriseId,
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to advance business date");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Business Date Updated",
+        description: data.message,
+      });
+      setShowPinPrompt(false);
+      setPin("");
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fiscal-periods/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fiscal-periods"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAdvanceDate = () => {
+    if (!selectedPropertyId || !targetDate) return;
+    setShowPinPrompt(true);
+  };
+
+  const handleConfirmAdvance = () => {
+    if (!selectedPropertyId || !targetDate || !pin) return;
+    advanceBusinessDateMutation.mutate({ propertyId: selectedPropertyId, targetDate, pin });
+  };
 
   const formatCurrency = (value: string | null | undefined) => {
     if (!value) return "$0.00";
@@ -137,6 +192,7 @@ export default function FiscalClosePage() {
         <Tabs defaultValue="current" className="space-y-4">
           <TabsList>
             <TabsTrigger value="current" data-testid="tab-current">Current Period</TabsTrigger>
+            <TabsTrigger value="manage" data-testid="tab-manage">Business Date Management</TabsTrigger>
             <TabsTrigger value="history" data-testid="tab-history">History</TabsTrigger>
           </TabsList>
 
@@ -233,6 +289,77 @@ export default function FiscalClosePage() {
             )}
           </TabsContent>
 
+          <TabsContent value="manage" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarClock className="w-5 h-5" />
+                  Business Date Management
+                </CardTitle>
+                <CardDescription>
+                  Manually advance the business date to a specific date. This will close the current fiscal period and start a new one for the selected date.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-muted-foreground">Current Business Date</Label>
+                      <div className="text-2xl font-bold mt-1" data-testid="text-current-business-date">
+                        {currentPeriod?.businessDate || selectedProperty?.currentBusinessDate || "Not set"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="target-date">Advance To Date</Label>
+                      <div className="flex items-center gap-3 mt-2">
+                        <Input
+                          id="target-date"
+                          type="date"
+                          value={targetDate}
+                          onChange={(e) => setTargetDate(e.target.value)}
+                          className="w-48"
+                          data-testid="input-target-date"
+                        />
+                        <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                        <Button
+                          onClick={handleAdvanceDate}
+                          disabled={advanceBusinessDateMutation.isPending || !targetDate}
+                          data-testid="button-advance-date"
+                        >
+                          {advanceBusinessDateMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Advancing...
+                            </>
+                          ) : (
+                            "Advance Date"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                      <p className="font-medium">Important:</p>
+                      <ul className="list-disc list-inside mt-1 space-y-1">
+                        <li>Advancing the date will close any open fiscal period for the current date</li>
+                        <li>A new fiscal period will be created for the selected date with reset financial totals</li>
+                        <li>All new transactions will be recorded under the new business date</li>
+                        <li>This action is logged for audit purposes</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="history">
             <Card>
               <CardHeader>
@@ -285,6 +412,62 @@ export default function FiscalClosePage() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* PIN Prompt Dialog */}
+      <Dialog open={showPinPrompt} onOpenChange={(open) => {
+        if (!open) {
+          setShowPinPrompt(false);
+          setPin("");
+        }
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Admin Authorization Required</DialogTitle>
+            <DialogDescription>
+              Enter your PIN to advance the business date to {targetDate}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-pin">Employee PIN</Label>
+              <Input
+                id="admin-pin"
+                type="password"
+                placeholder="Enter PIN"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleConfirmAdvance()}
+                data-testid="input-admin-pin"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPinPrompt(false);
+                setPin("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmAdvance}
+              disabled={!pin || advanceBusinessDateMutation.isPending}
+              data-testid="button-confirm-advance"
+            >
+              {advanceBusinessDateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Advancing...
+                </>
+              ) : (
+                "Confirm"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

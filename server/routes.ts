@@ -6077,6 +6077,140 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Advance business date to a specific date - requires Admin role + PIN
+  app.post("/api/properties/:id/business-date/advance", async (req, res) => {
+    try {
+      const { targetDate, pin, enterpriseId } = req.body;
+      const propertyId = req.params.id;
+      
+      if (!targetDate) {
+        return res.status(400).json({ message: "Target date is required" });
+      }
+      
+      // Require enterpriseId for multi-tenant security
+      if (!enterpriseId) {
+        return res.status(400).json({ message: "Enterprise ID is required" });
+      }
+      
+      // Require PIN for authentication
+      if (!pin) {
+        return res.status(400).json({ message: "Employee PIN is required" });
+      }
+      
+      // Authenticate employee by PIN
+      const employee = await storage.getEmployeeByPin(pin);
+      if (!employee) {
+        return res.status(401).json({ message: "Invalid PIN" });
+      }
+      
+      // Verify employee belongs to the same enterprise (multi-tenant employee check)
+      if (employee.enterpriseId !== enterpriseId) {
+        return res.status(403).json({ message: "You are not authorized to manage this enterprise" });
+      }
+      
+      // Check if employee has admin_access privilege
+      if (!employee.roleId) {
+        return res.status(403).json({ message: "Employee has no assigned role" });
+      }
+      
+      const privileges = await storage.getRolePrivileges(employee.roleId);
+      if (!privileges.includes("admin_access")) {
+        return res.status(403).json({ message: "You do not have admin access privileges" });
+      }
+      
+      // Validate date format (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(targetDate)) {
+        return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD" });
+      }
+      
+      // Get property
+      const property = await storage.getProperty(propertyId);
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Validate property belongs to the specified enterprise (multi-tenant check)
+      if (property.enterpriseId !== enterpriseId) {
+        return res.status(403).json({ message: "Property does not belong to this enterprise" });
+      }
+      
+      const previousBusinessDate = property.currentBusinessDate || resolveBusinessDate(new Date(), property);
+      
+      // Update property with new business date
+      await storage.updateProperty(propertyId, {
+        businessDateMode: "manual",
+        currentBusinessDate: targetDate,
+      });
+      
+      // Close any existing open fiscal period for the previous date
+      const fiscalPeriods = await storage.getFiscalPeriods();
+      const openPeriod = fiscalPeriods.find(
+        fp => fp.propertyId === propertyId && fp.businessDate === previousBusinessDate && fp.status === "open"
+      );
+      if (openPeriod) {
+        await storage.updateFiscalPeriod(openPeriod.id, {
+          status: "closed",
+          closedAt: new Date().toISOString(),
+          closedByEmployeeId: employee.id,
+        });
+      }
+      
+      // Create a new fiscal period for the new date if it doesn't exist
+      const existingNewPeriod = fiscalPeriods.find(
+        fp => fp.propertyId === propertyId && fp.businessDate === targetDate
+      );
+      if (!existingNewPeriod) {
+        await storage.createFiscalPeriod({
+          propertyId,
+          businessDate: targetDate,
+          status: "open",
+          grossSales: "0",
+          netSales: "0",
+          taxCollected: "0",
+          tipsTotal: "0",
+          discountsTotal: "0",
+          refundsTotal: "0",
+          serviceChargesTotal: "0",
+          checkCount: 0,
+          guestCount: 0,
+          cashExpected: "0",
+          cardTotal: "0",
+          openedAt: new Date().toISOString(),
+        });
+      }
+      
+      // Create audit log entry with server-derived employee ID
+      await storage.createAuditLog({
+        rvcId: null,
+        employeeId: employee.id,
+        action: "business_date_advance",
+        targetType: "property",
+        targetId: propertyId,
+        details: {
+          propertyId,
+          propertyName: property.name,
+          previousBusinessDate,
+          newBusinessDate: targetDate,
+          timestamp: new Date().toISOString(),
+          advancedBy: `${employee.firstName} ${employee.lastName}`,
+        },
+        reasonCode: "admin_action",
+        managerApprovalId: null,
+      });
+      
+      res.json({
+        success: true,
+        previousBusinessDate,
+        newBusinessDate: targetDate,
+        message: `Business date advanced from ${previousBusinessDate} to ${targetDate}`,
+      });
+    } catch (error: any) {
+      console.error("Advance business date error:", error);
+      res.status(500).json({ message: error.message || "Failed to advance business date" });
+    }
+  });
+
   // ============================================================================
   // POS LAYOUT ROUTES
   // ============================================================================
