@@ -14,6 +14,7 @@ import PosPage from "@/pages/pos";
 import PizzaBuilderPage from "@/pages/pizza-builder";
 import KdsPage from "@/pages/kds";
 import DeviceSetupPage from "@/pages/device-setup";
+import DeviceTypeSelectPage from "@/pages/device-type-select";
 import EmcLoginPage from "@/pages/emc/login";
 import EmcSetupPage from "@/pages/emc/setup";
 import EmcAdminLayout from "@/pages/emc/admin-layout";
@@ -52,7 +53,7 @@ function DeviceGuardedRoute({
 }
 
 function Router() {
-  const { deviceType, isConfigured } = useDeviceContext();
+  const { deviceType, isConfigured, hasExplicitDeviceType } = useDeviceContext();
   const [location] = useLocation();
   
   // Check for auto-enroll redirect from CAL wizard - handle FIRST before any other routing
@@ -76,21 +77,24 @@ function Router() {
     );
   }
   
-  // Handle unconfigured devices - redirect to setup except if already there
-  if (!isConfigured && location !== "/setup") {
-    return <Redirect to="/setup" />;
+  // Device type selection - show if user hasn't explicitly chosen a device type
+  // This is the FIRST screen a new device sees (POS Terminal or KDS Display)
+  if (!hasExplicitDeviceType && !deviceType) {
+    if (location !== "/device-type" && location !== "/setup") {
+      return <Redirect to="/device-type" />;
+    }
   }
   
-  // Handle KDS devices - they can only access /kds and /setup
-  // Don't redirect if already on an allowed path
-  if (isConfigured && deviceType === "kds") {
-    if (location !== "/kds" && location !== "/setup") {
+  // Handle KDS devices - they can only access /kds, /device-type, and /setup
+  if (hasExplicitDeviceType && deviceType === "kds") {
+    if (location !== "/kds" && location !== "/device-type" && location !== "/setup") {
       return <Redirect to="/kds" />;
     }
   }
 
   return (
     <Switch>
+      <Route path="/device-type" component={DeviceTypeSelectPage} />
       <Route path="/setup" component={DeviceSetupPage} />
       <Route path="/kds">
         {() => <DeviceGuardedRoute component={KdsPage} allowedTypes={["pos", "kds"]} />}

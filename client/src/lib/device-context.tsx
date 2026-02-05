@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 
 const DEVICE_TYPE_KEY = "pos_device_type";
+const DEVICE_TYPE_EXPLICIT_KEY = "pos_device_type_explicit"; // Tracks if user explicitly chose device type
 const DEVICE_ID_KEY = "pos_device_linked_id";
 const DEVICE_NAME_KEY = "pos_device_name";
 const DEVICE_TOKEN_KEY = "pos_device_token";
@@ -29,7 +30,9 @@ interface DeviceContextType {
   isConfigured: boolean;
   isValidating: boolean;
   validationError: string | null;
+  hasExplicitDeviceType: boolean; // True if user explicitly selected device type
   
+  setDeviceTypeOnly: (type: "pos" | "kds") => void; // Set device type without linking to specific device
   configureAsPos: (workstationId: string, name: string) => void;
   configureAsKds: (kdsDeviceId: string, name: string) => void;
   enrollDevice: (token: string, device: RegisteredDeviceInfo) => void;
@@ -69,6 +72,11 @@ function getStoredRegisteredDeviceId(): string | null {
 function getStoredPropertyId(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(DEVICE_PROPERTY_ID_KEY);
+}
+
+function getStoredExplicitDeviceType(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(DEVICE_TYPE_EXPLICIT_KEY) === "true";
 }
 
 const AUTO_ENROLL_REDIRECT_KEY = "pos_auto_enroll_redirect";
@@ -116,8 +124,10 @@ function processUrlCredentials(): { stored: boolean; autoEnroll: boolean; target
     
     if (deviceType === "pos_workstation") {
       localStorage.setItem(DEVICE_TYPE_KEY, "pos");
+      localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
     } else if (deviceType === "kds_display") {
       localStorage.setItem(DEVICE_TYPE_KEY, "kds");
+      localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
     }
     
     if (autoEnroll) {
@@ -144,8 +154,9 @@ export function getAutoEnrollRedirect(): string | null {
 const urlCredsProcessed = processUrlCredentials();
 
 export function DeviceProvider({ children }: { children: ReactNode }) {
-  // Security disabled - default to "pos" if no device type is stored
-  const [deviceType, setDeviceType] = useState<DeviceType>(getStoredDeviceType() || "pos");
+  // Security disabled - default to null if no device type is stored (shows device type selector)
+  const [deviceType, setDeviceType] = useState<DeviceType>(getStoredDeviceType());
+  const [hasExplicitDeviceType, setHasExplicitDeviceType] = useState<boolean>(getStoredExplicitDeviceType);
   const [linkedDeviceId, setLinkedDeviceId] = useState<string | null>(getStoredDeviceId);
   const [deviceName, setDeviceName] = useState<string | null>(getStoredDeviceName);
   const [deviceToken, setDeviceToken] = useState<string | null>(getStoredDeviceToken);
@@ -154,20 +165,32 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Set device type only (without linking to a specific workstation/kds device)
+  const setDeviceTypeOnly = useCallback((type: "pos" | "kds") => {
+    localStorage.setItem(DEVICE_TYPE_KEY, type);
+    localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
+    setDeviceType(type);
+    setHasExplicitDeviceType(true);
+  }, []);
+
   const configureAsPos = useCallback((workstationId: string, name: string) => {
     localStorage.setItem(DEVICE_TYPE_KEY, "pos");
+    localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
     localStorage.setItem(DEVICE_ID_KEY, workstationId);
     localStorage.setItem(DEVICE_NAME_KEY, name);
     setDeviceType("pos");
+    setHasExplicitDeviceType(true);
     setLinkedDeviceId(workstationId);
     setDeviceName(name);
   }, []);
 
   const configureAsKds = useCallback((kdsDeviceId: string, name: string) => {
     localStorage.setItem(DEVICE_TYPE_KEY, "kds");
+    localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
     localStorage.setItem(DEVICE_ID_KEY, kdsDeviceId);
     localStorage.setItem(DEVICE_NAME_KEY, name);
     setDeviceType("kds");
+    setHasExplicitDeviceType(true);
     setLinkedDeviceId(kdsDeviceId);
     setDeviceName(name);
   }, []);
@@ -188,13 +211,17 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
     if (isPosDevice && device.workstationId) {
       localStorage.setItem(DEVICE_TYPE_KEY, "pos");
+      localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
       localStorage.setItem(DEVICE_ID_KEY, device.workstationId);
       setDeviceType("pos");
+      setHasExplicitDeviceType(true);
       setLinkedDeviceId(device.workstationId);
     } else if (isKdsDevice && device.kdsDeviceId) {
       localStorage.setItem(DEVICE_TYPE_KEY, "kds");
+      localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, "true");
       localStorage.setItem(DEVICE_ID_KEY, device.kdsDeviceId);
       setDeviceType("kds");
+      setHasExplicitDeviceType(true);
       setLinkedDeviceId(device.kdsDeviceId);
     }
     setValidationError(null);
@@ -202,12 +229,14 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
   const clearDeviceConfig = useCallback(() => {
     localStorage.removeItem(DEVICE_TYPE_KEY);
+    localStorage.removeItem(DEVICE_TYPE_EXPLICIT_KEY);
     localStorage.removeItem(DEVICE_ID_KEY);
     localStorage.removeItem(DEVICE_NAME_KEY);
     localStorage.removeItem(DEVICE_TOKEN_KEY);
     localStorage.removeItem(REGISTERED_DEVICE_ID_KEY);
     localStorage.removeItem(DEVICE_PROPERTY_ID_KEY);
     setDeviceType(null);
+    setHasExplicitDeviceType(false);
     setLinkedDeviceId(null);
     setDeviceName(null);
     setDeviceToken(null);
@@ -271,6 +300,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         isConfigured,
         isValidating,
         validationError,
+        hasExplicitDeviceType,
+        setDeviceTypeOnly,
         configureAsPos,
         configureAsKds,
         enrollDevice,
