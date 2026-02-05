@@ -6860,7 +6860,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
       const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
-      const end = endDate ? new Date(endDate as string) : new Date();
+      // Set end date to end-of-day (23:59:59.999) to include all checks on the end date
+      const endDateParsed = endDate ? new Date(endDate as string) : new Date();
+      const end = new Date(endDateParsed.setHours(23, 59, 59, 999));
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
@@ -7383,7 +7385,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
       const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
-      const end = endDate ? new Date(endDate as string) : new Date();
+      const endDateParsed = endDate ? new Date(endDate as string) : new Date();
+      const end = new Date(endDateParsed.setHours(23, 59, 59, 999));
       
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
@@ -7918,7 +7921,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { propertyId, rvcId, startDate, endDate, businessDate, itemId } = req.query;
       const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
-      const end = endDate ? new Date(endDate as string) : new Date();
+      const endDateParsed = endDate ? new Date(endDate as string) : new Date();
+      const end = new Date(endDateParsed.setHours(23, 59, 59, 999));
       
       const allCheckItems = await storage.getAllCheckItems();
       const allChecks = await storage.getChecks();
@@ -8289,7 +8293,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
-      const end = endDate ? new Date(endDate as string) : new Date();
+      const endDateParsed = endDate ? new Date(endDate as string) : new Date();
+      const end = new Date(endDateParsed.setHours(23, 59, 59, 999));
       const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       
       const allChecks = await storage.getChecks();
@@ -8370,7 +8375,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { propertyId, rvcId, employeeId, startDate, endDate, businessDate } = req.query;
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
-      const end = endDate ? new Date(endDate as string) : new Date();
+      const endDateParsed = endDate ? new Date(endDate as string) : new Date();
+      const end = new Date(endDateParsed.setHours(23, 59, 59, 999));
       const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       
       const employees = await storage.getEmployees();
