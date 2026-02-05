@@ -79,12 +79,9 @@ function Router() {
     );
   }
 
-  // Server setup - first screen for native apps (optional for web preview)
-  // Skip server setup check for web preview (when accessing via browser directly)
-  const isWebPreview = typeof window !== 'undefined' && window.location.hostname.includes('replit');
-  
-  // Native apps must complete server setup first (only /server-setup is allowed)
-  if (!isWebPreview && !hasServerConfig) {
+  // Server setup - REQUIRED for ALL application types (Windows, Android, Web)
+  // User must enter enterprise URL (e.g., server.com/BOM) before proceeding
+  if (!hasServerConfig) {
     if (location !== "/server-setup") {
       return <Redirect to="/server-setup" />;
     }
