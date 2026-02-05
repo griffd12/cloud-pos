@@ -91,7 +91,7 @@ export default function PosPage() {
   usePosWebSocket();
   
   // Get device context for reload filtering
-  const { registeredDeviceId, propertyId } = useDeviceContext();
+  const { registeredDeviceId, propertyId, clearDeviceConfig } = useDeviceContext();
   
   // Listen for remote reload commands from EMC
   useDeviceReload({ registeredDeviceId: registeredDeviceId || undefined, propertyId: propertyId || undefined });
@@ -169,6 +169,16 @@ export default function PosPage() {
     }
     logout();
   }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout]);
+
+  // Reset device - logs out employee, clears device config, and navigates to device type selection
+  const handleResetDevice = useCallback(async () => {
+    if (currentCheck?.id && workstationId) {
+      await releaseCurrentCheckLock();
+    }
+    logout();
+    clearDeviceConfig();
+    navigate("/device-type");
+  }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout, clearDeviceConfig, navigate]);
 
   // Auto-set RVC from workstation if not already set
   useEffect(() => {
@@ -2001,6 +2011,7 @@ export default function PosPage() {
             description: "Table assignment will be available in a future update",
           });
         }}
+        onResetDevice={handleResetDevice}
         privileges={{
           canTransfer: hasPrivilege("transfer_check"),
           canSplit: hasPrivilege("split_check"),

@@ -16,8 +16,6 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { SystemStatusModal } from "./system-status-modal";
-import { useDeviceContext } from "@/lib/device-context";
-import { useLocation } from "wouter";
 
 interface WorkstationInfo {
   name: string;
@@ -34,6 +32,7 @@ interface FunctionsModalProps {
   onReopenCheck: () => void;
   onPriceOverride: () => void;
   onAssignTable: () => void;
+  onResetDevice?: () => void;
   privileges: {
     canTransfer: boolean;
     canSplit: boolean;
@@ -97,19 +96,19 @@ export function FunctionsModal({
   onReopenCheck,
   onPriceOverride,
   onAssignTable,
+  onResetDevice,
   privileges,
   propertyId,
   workstation,
 }: FunctionsModalProps) {
   const [showSystemStatus, setShowSystemStatus] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const { clearDeviceConfig } = useDeviceContext();
-  const [, navigate] = useLocation();
 
   const handleResetDevice = () => {
     setShowResetConfirm(false);
-    clearDeviceConfig();
-    navigate("/device-type");
+    if (onResetDevice) {
+      onResetDevice();
+    }
     onClose();
   };
 
