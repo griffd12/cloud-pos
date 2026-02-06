@@ -8,40 +8,37 @@
   },
   "files": [
     "dist/public/**/*",
-    "electron/**/*"
+    "electron/**/*",
+    "!electron-dist"
+  ],
+  "extraResources": [
+    {
+      "from": "electron/assets",
+      "to": "assets"
+    }
   ],
   "win": {
     "target": [
       {
         "target": "nsis",
         "arch": ["x64"]
-      },
-      {
-        "target": "portable",
-        "arch": ["x64"]
       }
     ],
-    "artifactName": "${productName}-${version}-Windows.${ext}"
+    "artifactName": "${productName}-${version}-Setup.${ext}",
+    "icon": "electron/assets/icon.png"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Cloud POS"
-  },
-  "portable": {
-    "artifactName": "${productName}-${version}-Portable.${ext}"
-  },
-  "linux": {
-    "target": ["AppImage", "deb"],
-    "category": "Office",
-    "artifactName": "${productName}-${version}-Linux.${ext}"
-  },
-  "mac": {
-    "target": ["dmg"],
-    "category": "public.app-category.business",
-    "artifactName": "${productName}-${version}-Mac.${ext}"
+    "shortcutName": "Cloud POS",
+    "include": "electron/installer.nsh",
+    "perMachine": true,
+    "allowElevation": true,
+    "installerIcon": "electron/assets/icon.ico",
+    "uninstallerIcon": "electron/assets/icon.ico",
+    "menuCategory": "Cloud POS"
   },
   "extraMetadata": {
     "main": "electron/main.cjs"

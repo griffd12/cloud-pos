@@ -13909,6 +13909,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Session is not active, cannot cancel" });
       }
 
+      // Cancel the action on the physical Stripe terminal if applicable
+      try {
+        const terminalDevice = await storage.getTerminalDevice(session.terminalDeviceId);
+        if (terminalDevice?.cloudDeviceId) {
+          const stripe = getStripeForTerminal();
+          await stripe.terminal.readers.cancelAction(terminalDevice.cloudDeviceId);
+        }
+      } catch (stripeError: any) {
+        console.warn("Could not cancel Stripe terminal action (device may already be idle):", stripeError.message);
+      }
+
       const updated = await storage.updateTerminalSession(req.params.id, {
         status: "cancelled",
         statusMessage: req.body.reason || "Cancelled by user",

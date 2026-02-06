@@ -836,7 +836,10 @@ export function PaymentModal({
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
+    if (terminalSession) {
+      await cancelTerminalSession();
+    }
     setCustomAmount("");
     setSelectedTender(null);
     setTenderAmount("");

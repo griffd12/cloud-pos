@@ -182,39 +182,61 @@ The Cloud POS system can be deployed as native applications for Android and Wind
 
 ### Project Structure
 ```
-native/           # Documentation and native-specific configs
-├── android/      # Android configuration docs
-├── windows/      # Windows/Electron configuration docs
-└── README.md     # Native apps overview
+electron/                      # Electron Windows application
+├── main.cjs                   # Main process: window management, offline DB, printing, EMV, sync
+├── preload.cjs                # Secure IPC bridge exposing APIs to renderer
+├── emv-terminal.cjs           # EMV terminal communication module (TCP/IP)
+├── offline.html               # Offline fallback page with auto-reconnect
+├── installer.nsh              # NSIS installer script (POS + KDS shortcuts)
+├── electron-builder.json      # Build configuration for Windows installer
+└── assets/                    # Icons and branding
 
-android/          # Capacitor Android project (auto-generated)
-electron/         # Electron main process and config
-├── main.js       # Electron main process
-├── preload.js    # Secure IPC bridge
-└── electron-builder.json
+client/src/lib/electron.ts     # Frontend TypeScript types and helpers for Electron APIs
 ```
 
-### Building Native Apps
+### Windows Deployment (Electron)
 
-**Android:**
+**Capabilities:**
+- **Offline Mode**: Local SQLite database (or JSON fallback) stores orders and payments when cloud is unreachable
+- **Local Printing**: Direct ESC/POS commands to USB guest check printers and TCP to network kitchen printers
+- **EMV Terminal**: Local TCP/IP communication with 3rd-party EMV devices, store-and-forward for offline payments
+- **Auto-Launch**: Windows registry-based auto-start on boot
+- **Kiosk Mode**: Full-screen locked-down mode for production POS terminals
+- **POS/KDS Mode**: Single installer creates shortcuts for both POS and KDS modes
+- **Auto-Sync**: Connectivity monitoring every 30s, offline queue synced every 60s on reconnect
+
+**Command-Line Args:**
+```
+CloudPOS.exe --pos              # Launch in POS mode
+CloudPOS.exe --kds              # Launch in KDS mode
+CloudPOS.exe --kiosk            # Launch in kiosk/fullscreen mode
+CloudPOS.exe --server=URL       # Set cloud server URL
+```
+
+**Building the Installer:**
+```bash
+npm run build                                                   # Build web app
+npx electron electron/main.cjs                                  # Run in dev mode
+npx electron-builder --config electron/electron-builder.json    # Build Windows .exe installer
+```
+
+**Installer Creates:**
+- Desktop shortcuts: "Cloud POS" and "Cloud KDS"
+- Start Menu shortcuts: POS, KDS, POS (Kiosk), KDS (Kiosk)
+
+### Android Deployment (Capacitor)
 ```bash
 npm run build                  # Build web app
 npx cap sync android           # Sync to Android
 npx cap open android           # Open in Android Studio
 ```
 
-**Windows:**
-```bash
-npm run build                           # Build web app
-npx electron electron/main.cjs          # Run in dev mode
-npx electron-builder --config electron/electron-builder.json  # Build installer
-```
-
 ### Feature Parity Guarantee
 All POS functionality is preserved:
 - Menu display, ordering, modifiers, pizza builder
-- Check management and payment processing
+- Check management and payment processing (including offline EMV)
 - KDS integration and real-time updates
-- Receipt printing (network printers or native plugins)
+- Receipt printing (USB ESC/POS printers, network printers)
 - Employee auth, time clock, manager approvals
 - Full EMC access via cloud
+- Offline resilience with automatic sync on reconnect

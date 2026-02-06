@@ -1,22 +1,264 @@
-const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const net = require('net');
+const { EMVTerminalManager } = require('./emv-terminal.cjs');
 
-// Keep a global reference of the window object
 let mainWindow = null;
+let appMode = 'pos';
+let isKiosk = false;
+let offlineDb = null;
+let syncInterval = null;
+let isOnline = true;
+let emvManager = null;
 
-// Server URL - defaults to cloud backend, can be overridden via environment variable
-// For production, update DEFAULT_SERVER_URL to your published domain
+const CONFIG_DIR = path.join(app.getPath('userData'), 'config');
+const DATA_DIR = path.join(app.getPath('userData'), 'data');
+const OFFLINE_DB_PATH = path.join(DATA_DIR, 'offline.db');
+const CONFIG_PATH = path.join(CONFIG_DIR, 'settings.json');
+
+function ensureDirectories() {
+  [CONFIG_DIR, DATA_DIR].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+}
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Failed to load config:', e.message);
+  }
+  return {};
+}
+
+function saveConfig(config) {
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+  } catch (e) {
+    console.error('Failed to save config:', e.message);
+  }
+}
+
 const DEFAULT_SERVER_URL = 'https://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev';
-const SERVER_URL = process.env.ELECTRON_SERVER_URL || DEFAULT_SERVER_URL;
+
+function getServerUrl() {
+  const config = loadConfig();
+  return process.env.ELECTRON_SERVER_URL || config.serverUrl || DEFAULT_SERVER_URL;
+}
+
+function parseArgs() {
+  const args = process.argv.slice(1);
+  args.forEach(arg => {
+    if (arg === '--pos') appMode = 'pos';
+    if (arg === '--kds') appMode = 'kds';
+    if (arg === '--kiosk') isKiosk = true;
+    if (arg.startsWith('--server=')) {
+      const url = arg.split('=')[1];
+      if (url) {
+        const config = loadConfig();
+        config.serverUrl = url;
+        saveConfig(config);
+      }
+    }
+  });
+
+  const config = loadConfig();
+  if (config.mode) appMode = config.mode;
+  if (config.kiosk) isKiosk = config.kiosk;
+}
+
+function initOfflineDatabase() {
+  try {
+    let Database;
+    try {
+      Database = require('better-sqlite3');
+    } catch (e) {
+      console.warn('better-sqlite3 not available, offline storage will use JSON files');
+      return initJsonOfflineStorage();
+    }
+
+    offlineDb = new Database(OFFLINE_DB_PATH);
+    offlineDb.pragma('journal_mode = WAL');
+
+    offlineDb.exec(`
+      CREATE TABLE IF NOT EXISTS offline_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        method TEXT DEFAULT 'POST',
+        body TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0,
+        synced_at TEXT,
+        error TEXT,
+        retry_count INTEGER DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS offline_checks (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS offline_payments (
+        id TEXT PRIMARY KEY,
+        check_id TEXT,
+        amount INTEGER,
+        method TEXT,
+        terminal_response TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS cached_data (
+        key TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    console.log('Offline SQLite database initialized at:', OFFLINE_DB_PATH);
+    return true;
+  } catch (e) {
+    console.error('Failed to init offline database:', e.message);
+    return initJsonOfflineStorage();
+  }
+}
+
+function initJsonOfflineStorage() {
+  const queuePath = path.join(DATA_DIR, 'offline_queue.json');
+  const cachePath = path.join(DATA_DIR, 'cached_data.json');
+  if (!fs.existsSync(queuePath)) fs.writeFileSync(queuePath, '[]');
+  if (!fs.existsSync(cachePath)) fs.writeFileSync(cachePath, '{}');
+  console.log('Using JSON-based offline storage at:', DATA_DIR);
+  return true;
+}
+
+function queueOfflineOperation(type, endpoint, method, body) {
+  try {
+    if (offlineDb) {
+      offlineDb.prepare(
+        'INSERT INTO offline_queue (type, endpoint, method, body) VALUES (?, ?, ?, ?)'
+      ).run(type, endpoint, method, JSON.stringify(body));
+    } else {
+      const queuePath = path.join(DATA_DIR, 'offline_queue.json');
+      const queue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+      queue.push({
+        id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        type, endpoint, method,
+        body: typeof body === 'string' ? body : JSON.stringify(body),
+        created_at: new Date().toISOString(),
+        synced: false
+      });
+      fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
+    }
+  } catch (e) {
+    console.error('Failed to queue offline operation:', e.message);
+  }
+}
+
+function getPendingOperations() {
+  try {
+    if (offlineDb) {
+      return offlineDb.prepare('SELECT * FROM offline_queue WHERE synced = 0 ORDER BY created_at').all();
+    } else {
+      const queuePath = path.join(DATA_DIR, 'offline_queue.json');
+      const queue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+      return queue.filter(op => !op.synced);
+    }
+  } catch (e) {
+    console.error('Failed to get pending operations:', e.message);
+    return [];
+  }
+}
+
+function markOperationSynced(id) {
+  try {
+    if (offlineDb) {
+      offlineDb.prepare("UPDATE offline_queue SET synced = 1, synced_at = datetime('now') WHERE id = ?").run(id);
+    } else {
+      const queuePath = path.join(DATA_DIR, 'offline_queue.json');
+      const queue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+      const op = queue.find(o => o.id === id || o.created_at === id);
+      if (op) op.synced = true;
+      fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
+    }
+  } catch (e) {
+    console.error('Failed to mark operation synced:', e.message);
+  }
+}
+
+async function syncOfflineData() {
+  if (!isOnline) return;
+  const pending = getPendingOperations();
+  if (pending.length === 0) return;
+
+  console.log(`Syncing ${pending.length} offline operations...`);
+  const serverUrl = getServerUrl();
+
+  for (const op of pending) {
+    try {
+      const response = await fetch(`${serverUrl}${op.endpoint}`, {
+        method: op.method || 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: op.body,
+      });
+
+      if (response.ok) {
+        markOperationSynced(op.id || op.created_at);
+        console.log(`Synced: ${op.type} -> ${op.endpoint}`);
+      } else {
+        console.warn(`Sync failed for ${op.endpoint}: ${response.status}`);
+      }
+    } catch (e) {
+      console.warn(`Sync error for ${op.endpoint}: ${e.message}`);
+      break;
+    }
+  }
+
+  if (mainWindow) {
+    mainWindow.webContents.send('sync-status', {
+      pending: getPendingOperations().length,
+      lastSync: new Date().toISOString(),
+    });
+  }
+}
+
+async function checkConnectivity() {
+  try {
+    const serverUrl = getServerUrl();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(`${serverUrl}/api/health`, { signal: controller.signal });
+    clearTimeout(timeout);
+    const wasOffline = !isOnline;
+    isOnline = response.ok;
+    if (wasOffline && isOnline) {
+      console.log('Connection restored, syncing offline data...');
+      syncOfflineData();
+    }
+  } catch (e) {
+    isOnline = false;
+  }
+
+  if (mainWindow) {
+    mainWindow.webContents.send('online-status', isOnline);
+  }
+}
 
 function createWindow() {
-  // Create the browser window with POS-optimized settings
-  mainWindow = new BrowserWindow({
+  const windowConfig = {
     width: 1280,
     height: 1024,
     minWidth: 1024,
     minHeight: 768,
-    title: 'Cloud POS',
+    title: appMode === 'kds' ? 'Cloud POS - Kitchen Display' : 'Cloud POS',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
@@ -24,103 +266,486 @@ function createWindow() {
       webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
-    // POS-specific window settings
     autoHideMenuBar: true,
     fullscreenable: true,
     backgroundColor: '#1a1a2e',
-  });
+    kiosk: isKiosk,
+    fullscreen: isKiosk,
+  };
 
-  // Load the app
-  if (SERVER_URL) {
-    // Connect to remote server (cloud or local CAPS)
-    mainWindow.loadURL(SERVER_URL);
+  mainWindow = new BrowserWindow(windowConfig);
+
+  const serverUrl = getServerUrl();
+  const startPath = appMode === 'kds' ? '/kds' : '/pos';
+  mainWindow.loadURL(`${serverUrl}${startPath}`);
+
+  if (process.env.NODE_ENV !== 'production' && !isKiosk) {
+    const menuTemplate = [
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          {
+            label: 'Toggle Fullscreen',
+            accelerator: 'F11',
+            click: () => mainWindow.setFullScreen(!mainWindow.isFullScreen()),
+          },
+        ],
+      },
+      {
+        label: 'Mode',
+        submenu: [
+          {
+            label: 'POS Mode',
+            type: 'radio',
+            checked: appMode === 'pos',
+            click: () => switchMode('pos'),
+          },
+          {
+            label: 'KDS Mode',
+            type: 'radio',
+            checked: appMode === 'kds',
+            click: () => switchMode('kds'),
+          },
+        ],
+      },
+      {
+        label: 'Settings',
+        submenu: [
+          {
+            label: 'Configure Server URL...',
+            click: () => showServerConfig(),
+          },
+          {
+            label: 'Toggle Kiosk Mode',
+            click: () => {
+              isKiosk = !isKiosk;
+              mainWindow.setKiosk(isKiosk);
+              const config = loadConfig();
+              config.kiosk = isKiosk;
+              saveConfig(config);
+            },
+          },
+        ],
+      },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
   } else {
-    // Load local build (for standalone deployments)
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'public', 'index.html'));
-  }
-
-  // Remove default menu in production
-  if (process.env.NODE_ENV === 'production') {
     Menu.setApplicationMenu(null);
   }
 
-  // Handle window close
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 
-  // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // POS-specific: Prevent accidental navigation away
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const currentURL = mainWindow.webContents.getURL();
-    const currentOrigin = new URL(currentURL).origin;
-    const newOrigin = new URL(url).origin;
-    
-    // Allow navigation within same origin
-    if (currentOrigin !== newOrigin) {
-      event.preventDefault();
-      shell.openExternal(url);
+    try {
+      const currentOrigin = new URL(currentURL).origin;
+      const newOrigin = new URL(url).origin;
+      if (currentOrigin !== newOrigin) {
+        event.preventDefault();
+        shell.openExternal(url);
+      }
+    } catch (e) {
+      // ignore invalid URLs
+    }
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error(`Page load failed: ${errorDescription} (${errorCode})`);
+    if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
+      isOnline = false;
+      mainWindow.loadFile(path.join(__dirname, 'offline.html'));
     }
   });
 }
 
-// App lifecycle events
+function switchMode(mode) {
+  appMode = mode;
+  const config = loadConfig();
+  config.mode = mode;
+  saveConfig(config);
+  const serverUrl = getServerUrl();
+  const startPath = mode === 'kds' ? '/kds' : '/pos';
+  mainWindow.loadURL(`${serverUrl}${startPath}`);
+}
+
+async function showServerConfig() {
+  const config = loadConfig();
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: 'Server Configuration',
+    message: `Current server: ${getServerUrl()}\n\nTo change, launch with --server=https://your-server.com`,
+    buttons: ['OK', 'Reset to Default'],
+  });
+
+  if (result.response === 1) {
+    delete config.serverUrl;
+    saveConfig(config);
+    mainWindow.loadURL(`${getServerUrl()}/${appMode === 'kds' ? 'kds' : 'pos'}`);
+  }
+}
+
+function sendRawToPrinter(address, port, data) {
+  return new Promise((resolve, reject) => {
+    const client = new net.Socket();
+    const timeout = setTimeout(() => {
+      client.destroy();
+      reject(new Error('Printer connection timed out'));
+    }, 10000);
+
+    client.connect(port || 9100, address, () => {
+      client.write(Buffer.from(data), (err) => {
+        clearTimeout(timeout);
+        if (err) {
+          client.destroy();
+          reject(err);
+        } else {
+          client.end();
+          resolve({ success: true });
+        }
+      });
+    });
+
+    client.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    client.on('close', () => {
+      clearTimeout(timeout);
+    });
+  });
+}
+
+function setupIpcHandlers() {
+  ipcMain.on('toggle-fullscreen', () => {
+    if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  });
+
+  ipcMain.on('quit-app', () => {
+    app.quit();
+  });
+
+  ipcMain.handle('get-app-info', () => ({
+    mode: appMode,
+    isKiosk,
+    isOnline,
+    serverUrl: getServerUrl(),
+    platform: process.platform,
+    version: app.getVersion(),
+    dataDir: DATA_DIR,
+    pendingSync: getPendingOperations().length,
+  }));
+
+  ipcMain.handle('get-online-status', () => isOnline);
+
+  ipcMain.handle('print-raw', async (event, { address, port, data }) => {
+    try {
+      const result = await sendRawToPrinter(address, port || 9100, data);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('print-escpos', async (event, { address, port, commands }) => {
+    try {
+      const buffer = buildEscPosBuffer(commands);
+      const result = await sendRawToPrinter(address, port || 9100, buffer);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('get-local-printers', async () => {
+    try {
+      if (mainWindow) {
+        const printers = await mainWindow.webContents.getPrintersAsync();
+        return printers.map(p => ({
+          name: p.name,
+          displayName: p.displayName,
+          status: p.status,
+          isDefault: p.isDefault,
+        }));
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  ipcMain.handle('print-to-system-printer', async (event, { printerName, data, options }) => {
+    try {
+      if (!mainWindow) return { success: false, error: 'No window available' };
+      mainWindow.webContents.print({
+        silent: true,
+        printBackground: true,
+        deviceName: printerName || undefined,
+        ...options,
+      }, (success, errorType) => {
+        // callback-based, can't easily return
+      });
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('queue-offline-operation', async (event, { type, endpoint, method, body }) => {
+    queueOfflineOperation(type, endpoint, method, body);
+    return { success: true, pending: getPendingOperations().length };
+  });
+
+  ipcMain.handle('get-pending-sync-count', () => getPendingOperations().length);
+
+  ipcMain.handle('force-sync', async () => {
+    await syncOfflineData();
+    return { pending: getPendingOperations().length };
+  });
+
+  ipcMain.handle('cache-data', async (event, { key, data }) => {
+    try {
+      if (offlineDb) {
+        offlineDb.prepare(
+          "INSERT OR REPLACE INTO cached_data (key, data, updated_at) VALUES (?, ?, datetime('now'))"
+        ).run(key, JSON.stringify(data));
+      } else {
+        const cachePath = path.join(DATA_DIR, 'cached_data.json');
+        const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        cache[key] = { data, updated_at: new Date().toISOString() };
+        fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('get-cached-data', async (event, { key }) => {
+    try {
+      if (offlineDb) {
+        const row = offlineDb.prepare('SELECT data FROM cached_data WHERE key = ?').get(key);
+        return row ? JSON.parse(row.data) : null;
+      } else {
+        const cachePath = path.join(DATA_DIR, 'cached_data.json');
+        const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        return cache[key]?.data || null;
+      }
+    } catch (e) {
+      return null;
+    }
+  });
+
+  ipcMain.handle('set-mode', async (event, mode) => {
+    switchMode(mode);
+    return { success: true, mode };
+  });
+
+  ipcMain.handle('set-server-url', async (event, url) => {
+    const config = loadConfig();
+    config.serverUrl = url;
+    saveConfig(config);
+    return { success: true };
+  });
+
+  ipcMain.handle('set-auto-launch', async (event, enable) => {
+    const config = loadConfig();
+    config.autoLaunch = enable;
+    saveConfig(config);
+    setupAutoLaunch(enable);
+    return { success: true };
+  });
+
+  ipcMain.handle('emv-send-payment', async (event, { address, port, amount, transactionType, timeout }) => {
+    if (!emvManager) return { success: false, error: 'EMV manager not initialized' };
+    try {
+      const result = await emvManager.sendPaymentToTerminal({ address, port, amount, transactionType, timeout });
+      if (result.approved) {
+        emvManager.storeOfflinePayment({
+          amount,
+          transactionType,
+          authCode: result.authCode,
+          transactionId: result.transactionId,
+          cardType: result.cardType,
+          lastFour: result.lastFour,
+          entryMethod: result.entryMethod,
+          tipAmount: result.tipAmount,
+          approved: true,
+        });
+      }
+      return { success: true, ...result };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('emv-cancel', async (event, { address, port }) => {
+    if (!emvManager) return { success: false, error: 'EMV manager not initialized' };
+    return emvManager.cancelTerminalAction(address, port);
+  });
+
+  ipcMain.handle('emv-get-pending-payments', async () => {
+    if (!emvManager) return [];
+    return emvManager.getPendingPayments();
+  });
+
+  ipcMain.handle('emv-mark-payment-synced', async (event, { id }) => {
+    if (!emvManager) return { success: false };
+    emvManager.markPaymentSynced(id);
+    return { success: true };
+  });
+}
+
+function buildEscPosBuffer(commands) {
+  const parts = [];
+  const ESC = 0x1B;
+  const GS = 0x1D;
+  const LF = 0x0A;
+
+  for (const cmd of commands) {
+    switch (cmd.type) {
+      case 'init':
+        parts.push(Buffer.from([ESC, 0x40]));
+        break;
+      case 'text':
+        parts.push(Buffer.from(cmd.value, 'utf-8'));
+        break;
+      case 'newline':
+        parts.push(Buffer.from([LF]));
+        break;
+      case 'cut':
+        parts.push(Buffer.from([GS, 0x56, 0x00]));
+        break;
+      case 'partial-cut':
+        parts.push(Buffer.from([GS, 0x56, 0x01]));
+        break;
+      case 'bold-on':
+        parts.push(Buffer.from([ESC, 0x45, 0x01]));
+        break;
+      case 'bold-off':
+        parts.push(Buffer.from([ESC, 0x45, 0x00]));
+        break;
+      case 'align-left':
+        parts.push(Buffer.from([ESC, 0x61, 0x00]));
+        break;
+      case 'align-center':
+        parts.push(Buffer.from([ESC, 0x61, 0x01]));
+        break;
+      case 'align-right':
+        parts.push(Buffer.from([ESC, 0x61, 0x02]));
+        break;
+      case 'double-height':
+        parts.push(Buffer.from([ESC, 0x21, 0x10]));
+        break;
+      case 'double-width':
+        parts.push(Buffer.from([ESC, 0x21, 0x20]));
+        break;
+      case 'double-size':
+        parts.push(Buffer.from([ESC, 0x21, 0x30]));
+        break;
+      case 'normal-size':
+        parts.push(Buffer.from([ESC, 0x21, 0x00]));
+        break;
+      case 'feed':
+        const lines = cmd.lines || 1;
+        parts.push(Buffer.from([ESC, 0x64, lines]));
+        break;
+      case 'open-drawer':
+        parts.push(Buffer.from([ESC, 0x70, 0x00, 0x19, 0xFA]));
+        break;
+      case 'separator':
+        parts.push(Buffer.from('-'.repeat(cmd.width || 42), 'utf-8'));
+        parts.push(Buffer.from([LF]));
+        break;
+      case 'raw':
+        parts.push(Buffer.from(cmd.bytes));
+        break;
+    }
+  }
+
+  return Buffer.concat(parts);
+}
+
+function setupAutoLaunch(enable) {
+  if (process.platform !== 'win32') return;
+  const appPath = process.execPath;
+  const appArgs = appMode === 'kds' ? '--kds' : '--pos';
+  const kioskArg = isKiosk ? ' --kiosk' : '';
+  const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+  const regValue = 'CloudPOS';
+
+  const { execSync } = require('child_process');
+  try {
+    if (enable) {
+      execSync(`reg add "${regKey}" /v "${regValue}" /t REG_SZ /d "\\"${appPath}\\" ${appArgs}${kioskArg}" /f`, { windowsHide: true });
+      console.log('Auto-launch enabled');
+    } else {
+      execSync(`reg delete "${regKey}" /v "${regValue}" /f`, { windowsHide: true });
+      console.log('Auto-launch disabled');
+    }
+  } catch (e) {
+    console.warn('Could not set auto-launch:', e.message);
+  }
+}
+
 app.whenReady().then(() => {
+  ensureDirectories();
+  parseArgs();
+  initOfflineDatabase();
+  emvManager = new EMVTerminalManager(DATA_DIR);
+  setupIpcHandlers();
   createWindow();
 
+  const config = loadConfig();
+  if (config.autoLaunch) {
+    setupAutoLaunch(true);
+  }
+
+  syncInterval = setInterval(checkConnectivity, 30000);
+  checkConnectivity();
+
+  const syncTimer = setInterval(syncOfflineData, 60000);
+
   app.on('activate', () => {
-    // macOS: re-create window when dock icon clicked
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on('window-all-closed', () => {
-  // On macOS, apps typically stay active until explicit quit
-  if (process.platform !== 'darwin') {
-    app.quit();
+  if (syncInterval) clearInterval(syncInterval);
+  if (offlineDb) {
+    try { offlineDb.close(); } catch (e) {}
   }
+  if (process.platform !== 'darwin') app.quit();
 });
 
-// Handle fullscreen toggle (F11 or from app)
-ipcMain.on('toggle-fullscreen', () => {
-  if (mainWindow) {
-    mainWindow.setFullScreen(!mainWindow.isFullScreen());
-  }
-});
-
-// Handle app quit request
-ipcMain.on('quit-app', () => {
-  app.quit();
-});
-
-// Security: Disable navigation to arbitrary URLs
 app.on('web-contents-created', (event, contents) => {
   contents.on('will-navigate', (navigationEvent, navigationUrl) => {
-    // Only allow navigation to trusted origins
-    const parsedUrl = new URL(navigationUrl);
-    const trustedOrigins = [
-      'localhost',
-      '127.0.0.1',
-      'repl.co',
-      'replit.dev',
-    ];
-    
-    const isTrusted = trustedOrigins.some(origin => 
-      parsedUrl.hostname === origin || parsedUrl.hostname.endsWith('.' + origin)
-    );
-    
-    if (!isTrusted && SERVER_URL) {
-      const serverOrigin = new URL(SERVER_URL).hostname;
-      if (parsedUrl.hostname !== serverOrigin) {
+    try {
+      const parsedUrl = new URL(navigationUrl);
+      const serverUrl = getServerUrl();
+      const serverHost = new URL(serverUrl).hostname;
+      const trustedHosts = ['localhost', '127.0.0.1', serverHost];
+      const trustedDomains = ['repl.co', 'replit.dev', 'replit.app'];
+
+      const isTrusted = trustedHosts.includes(parsedUrl.hostname) ||
+        trustedDomains.some(d => parsedUrl.hostname.endsWith('.' + d));
+
+      if (!isTrusted) {
         navigationEvent.preventDefault();
       }
+    } catch (e) {
+      navigationEvent.preventDefault();
     }
   });
 });
