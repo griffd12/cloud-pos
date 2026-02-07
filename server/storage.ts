@@ -928,6 +928,21 @@ export interface IStorage {
   updateCalDeploymentTargetStatus(id: string, status: string, statusMessage?: string): Promise<CalDeploymentTarget | undefined>;
 }
 
+function sanitizeDates<T extends Record<string, any>>(data: T): T {
+  if (!data || typeof data !== 'object') return data;
+  const result = { ...data };
+  for (const key in result) {
+    const val = result[key];
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val)) {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        (result as any)[key] = d;
+      }
+    }
+  }
+  return result;
+}
+
 export class DatabaseStorage implements IStorage {
   // Enterprises
   async getEnterprises(): Promise<Enterprise[]> {
@@ -940,12 +955,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEnterprise(data: InsertEnterprise): Promise<Enterprise> {
-    const [result] = await db.insert(enterprises).values(data).returning();
+    const [result] = await db.insert(enterprises).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateEnterprise(id: string, data: Partial<InsertEnterprise>): Promise<Enterprise | undefined> {
-    const [result] = await db.update(enterprises).set(data).where(eq(enterprises.id, id)).returning();
+    const [result] = await db.update(enterprises).set(sanitizeDates(data)).where(eq(enterprises.id, id)).returning();
     return result;
   }
 
@@ -968,12 +983,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProperty(data: InsertProperty): Promise<Property> {
-    const [result] = await db.insert(properties).values(data).returning();
+    const [result] = await db.insert(properties).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateProperty(id: string, data: Partial<InsertProperty>): Promise<Property | undefined> {
-    const [result] = await db.update(properties).set(data).where(eq(properties.id, id)).returning();
+    const [result] = await db.update(properties).set(sanitizeDates(data)).where(eq(properties.id, id)).returning();
     return result;
   }
 
@@ -996,12 +1011,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRvc(data: InsertRvc): Promise<Rvc> {
-    const [result] = await db.insert(rvcs).values(data).returning();
+    const [result] = await db.insert(rvcs).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateRvc(id: string, data: Partial<InsertRvc>): Promise<Rvc | undefined> {
-    const [result] = await db.update(rvcs).set(data).where(eq(rvcs.id, id)).returning();
+    const [result] = await db.update(rvcs).set(sanitizeDates(data)).where(eq(rvcs.id, id)).returning();
     return result;
   }
 
@@ -1021,12 +1036,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRole(data: InsertRole): Promise<Role> {
-    const [result] = await db.insert(roles).values(data).returning();
+    const [result] = await db.insert(roles).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateRole(id: string, data: Partial<InsertRole>): Promise<Role | undefined> {
-    const [result] = await db.update(roles).set(data).where(eq(roles.id, id)).returning();
+    const [result] = await db.update(roles).set(sanitizeDates(data)).where(eq(roles.id, id)).returning();
     return result;
   }
 
@@ -1064,10 +1079,10 @@ export class DatabaseStorage implements IStorage {
     }
     const existing = await db.select().from(roles).where(and(...conditions)).limit(1);
     if (existing.length > 0) {
-      const [updated] = await db.update(roles).set(data).where(eq(roles.id, existing[0].id)).returning();
+      const [updated] = await db.update(roles).set(sanitizeDates(data)).where(eq(roles.id, existing[0].id)).returning();
       return updated;
     }
-    const [created] = await db.insert(roles).values(data).returning();
+    const [created] = await db.insert(roles).values(sanitizeDates(data)).returning();
     return created;
   }
 
@@ -1087,12 +1102,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEmployee(data: InsertEmployee): Promise<Employee> {
-    const [result] = await db.insert(employees).values(data).returning();
+    const [result] = await db.insert(employees).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateEmployee(id: string, data: Partial<InsertEmployee>): Promise<Employee | undefined> {
-    const [result] = await db.update(employees).set(data).where(eq(employees.id, id)).returning();
+    const [result] = await db.update(employees).set(sanitizeDates(data)).where(eq(employees.id, id)).returning();
     return result;
   }
 
@@ -1134,7 +1149,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPrivilege(data: InsertPrivilege): Promise<Privilege> {
-    const [result] = await db.insert(privileges).values(data).returning();
+    const [result] = await db.insert(privileges).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1160,12 +1175,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMajorGroup(data: InsertMajorGroup): Promise<MajorGroup> {
-    const [result] = await db.insert(majorGroups).values(data).returning();
+    const [result] = await db.insert(majorGroups).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateMajorGroup(id: string, data: Partial<InsertMajorGroup>): Promise<MajorGroup | undefined> {
-    const [result] = await db.update(majorGroups).set(data).where(eq(majorGroups.id, id)).returning();
+    const [result] = await db.update(majorGroups).set(sanitizeDates(data)).where(eq(majorGroups.id, id)).returning();
     return result;
   }
 
@@ -1191,12 +1206,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFamilyGroup(data: InsertFamilyGroup): Promise<FamilyGroup> {
-    const [result] = await db.insert(familyGroups).values(data).returning();
+    const [result] = await db.insert(familyGroups).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateFamilyGroup(id: string, data: Partial<InsertFamilyGroup>): Promise<FamilyGroup | undefined> {
-    const [result] = await db.update(familyGroups).set(data).where(eq(familyGroups.id, id)).returning();
+    const [result] = await db.update(familyGroups).set(sanitizeDates(data)).where(eq(familyGroups.id, id)).returning();
     return result;
   }
 
@@ -1218,12 +1233,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSlu(data: InsertSlu): Promise<Slu> {
-    const [result] = await db.insert(slus).values(data).returning();
+    const [result] = await db.insert(slus).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateSlu(id: string, data: Partial<InsertSlu>): Promise<Slu | undefined> {
-    const [result] = await db.update(slus).set(data).where(eq(slus.id, id)).returning();
+    const [result] = await db.update(slus).set(sanitizeDates(data)).where(eq(slus.id, id)).returning();
     return result;
   }
 
@@ -1269,12 +1284,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTaxGroup(data: InsertTaxGroup): Promise<TaxGroup> {
-    const [result] = await db.insert(taxGroups).values(data).returning();
+    const [result] = await db.insert(taxGroups).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTaxGroup(id: string, data: Partial<InsertTaxGroup>): Promise<TaxGroup | undefined> {
-    const [result] = await db.update(taxGroups).set(data).where(eq(taxGroups.id, id)).returning();
+    const [result] = await db.update(taxGroups).set(sanitizeDates(data)).where(eq(taxGroups.id, id)).returning();
     return result;
   }
 
@@ -1294,12 +1309,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPrintClass(data: InsertPrintClass): Promise<PrintClass> {
-    const [result] = await db.insert(printClasses).values(data).returning();
+    const [result] = await db.insert(printClasses).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePrintClass(id: string, data: Partial<InsertPrintClass>): Promise<PrintClass | undefined> {
-    const [result] = await db.update(printClasses).set(data).where(eq(printClasses.id, id)).returning();
+    const [result] = await db.update(printClasses).set(sanitizeDates(data)).where(eq(printClasses.id, id)).returning();
     return result;
   }
 
@@ -1322,12 +1337,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWorkstation(data: InsertWorkstation): Promise<Workstation> {
-    const [result] = await db.insert(workstations).values(data).returning();
+    const [result] = await db.insert(workstations).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateWorkstation(id: string, data: Partial<InsertWorkstation>): Promise<Workstation | undefined> {
-    const [result] = await db.update(workstations).set(data).where(eq(workstations.id, id)).returning();
+    const [result] = await db.update(workstations).set(sanitizeDates(data)).where(eq(workstations.id, id)).returning();
     return result;
   }
 
@@ -1350,12 +1365,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPrinter(data: InsertPrinter): Promise<Printer> {
-    const [result] = await db.insert(printers).values(data).returning();
+    const [result] = await db.insert(printers).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePrinter(id: string, data: Partial<InsertPrinter>): Promise<Printer | undefined> {
-    const [result] = await db.update(printers).set(data).where(eq(printers.id, id)).returning();
+    const [result] = await db.update(printers).set(sanitizeDates(data)).where(eq(printers.id, id)).returning();
     return result;
   }
 
@@ -1380,12 +1395,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createKdsDevice(data: InsertKdsDevice): Promise<KdsDevice> {
-    const [result] = await db.insert(kdsDevices).values(data).returning();
+    const [result] = await db.insert(kdsDevices).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateKdsDevice(id: string, data: Partial<InsertKdsDevice>): Promise<KdsDevice | undefined> {
-    const [result] = await db.update(kdsDevices).set(data).where(eq(kdsDevices.id, id)).returning();
+    const [result] = await db.update(kdsDevices).set(sanitizeDates(data)).where(eq(kdsDevices.id, id)).returning();
     return result;
   }
 
@@ -1408,12 +1423,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrderDevice(data: InsertOrderDevice): Promise<OrderDevice> {
-    const [result] = await db.insert(orderDevices).values(data).returning();
+    const [result] = await db.insert(orderDevices).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateOrderDevice(id: string, data: Partial<InsertOrderDevice>): Promise<OrderDevice | undefined> {
-    const [result] = await db.update(orderDevices).set(data).where(eq(orderDevices.id, id)).returning();
+    const [result] = await db.update(orderDevices).set(sanitizeDates(data)).where(eq(orderDevices.id, id)).returning();
     return result;
   }
 
@@ -1442,7 +1457,7 @@ export class DatabaseStorage implements IStorage {
       throw new Error("Printer must belong to the same property as the order device");
     }
     
-    const [result] = await db.insert(orderDevicePrinters).values(data).returning();
+    const [result] = await db.insert(orderDevicePrinters).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1470,7 +1485,7 @@ export class DatabaseStorage implements IStorage {
       throw new Error("KDS device must belong to the same property as the order device");
     }
     
-    const [result] = await db.insert(orderDeviceKds).values(data).returning();
+    const [result] = await db.insert(orderDeviceKds).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1492,7 +1507,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPrintClassRouting(data: InsertPrintClassRouting): Promise<PrintClassRouting> {
-    const [result] = await db.insert(printClassRouting).values(data).returning();
+    const [result] = await db.insert(printClassRouting).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1584,12 +1599,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMenuItem(data: InsertMenuItem): Promise<MenuItem> {
-    const [result] = await db.insert(menuItems).values(data).returning();
+    const [result] = await db.insert(menuItems).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateMenuItem(id: string, data: Partial<InsertMenuItem>): Promise<MenuItem | undefined> {
-    const [result] = await db.update(menuItems).set(data).where(eq(menuItems.id, id)).returning();
+    const [result] = await db.update(menuItems).set(sanitizeDates(data)).where(eq(menuItems.id, id)).returning();
     return result;
   }
 
@@ -1624,12 +1639,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createModifier(data: InsertModifier): Promise<Modifier> {
-    const [result] = await db.insert(modifiers).values(data).returning();
+    const [result] = await db.insert(modifiers).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateModifier(id: string, data: Partial<InsertModifier>): Promise<Modifier | undefined> {
-    const [result] = await db.update(modifiers).set(data).where(eq(modifiers.id, id)).returning();
+    const [result] = await db.update(modifiers).set(sanitizeDates(data)).where(eq(modifiers.id, id)).returning();
     return result;
   }
 
@@ -1685,12 +1700,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createModifierGroup(data: InsertModifierGroup): Promise<ModifierGroup> {
-    const [result] = await db.insert(modifierGroups).values(data).returning();
+    const [result] = await db.insert(modifierGroups).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateModifierGroup(id: string, data: Partial<InsertModifierGroup>): Promise<ModifierGroup | undefined> {
-    const [result] = await db.update(modifierGroups).set(data).where(eq(modifierGroups.id, id)).returning();
+    const [result] = await db.update(modifierGroups).set(sanitizeDates(data)).where(eq(modifierGroups.id, id)).returning();
     return result;
   }
 
@@ -1708,7 +1723,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async linkModifierToGroup(data: InsertModifierGroupModifier): Promise<ModifierGroupModifier> {
-    const [result] = await db.insert(modifierGroupModifiers).values(data).returning();
+    const [result] = await db.insert(modifierGroupModifiers).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1720,7 +1735,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateModifierGroupModifier(id: string, data: Partial<InsertModifierGroupModifier>): Promise<ModifierGroupModifier | undefined> {
-    const [result] = await db.update(modifierGroupModifiers).set(data).where(eq(modifierGroupModifiers.id, id)).returning();
+    const [result] = await db.update(modifierGroupModifiers).set(sanitizeDates(data)).where(eq(modifierGroupModifiers.id, id)).returning();
     return result;
   }
 
@@ -1730,7 +1745,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async linkModifierGroupToMenuItem(data: InsertMenuItemModifierGroup): Promise<MenuItemModifierGroup> {
-    const [result] = await db.insert(menuItemModifierGroups).values(data).returning();
+    const [result] = await db.insert(menuItemModifierGroups).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1752,12 +1767,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createIngredientPrefix(data: InsertIngredientPrefix): Promise<IngredientPrefix> {
-    const [result] = await db.insert(ingredientPrefixes).values(data).returning();
+    const [result] = await db.insert(ingredientPrefixes).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateIngredientPrefix(id: string, data: Partial<InsertIngredientPrefix>): Promise<IngredientPrefix | undefined> {
-    const [result] = await db.update(ingredientPrefixes).set(data).where(eq(ingredientPrefixes.id, id)).returning();
+    const [result] = await db.update(ingredientPrefixes).set(sanitizeDates(data)).where(eq(ingredientPrefixes.id, id)).returning();
     return result;
   }
 
@@ -1779,12 +1794,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMenuItemRecipeIngredient(data: InsertMenuItemRecipeIngredient): Promise<MenuItemRecipeIngredient> {
-    const [result] = await db.insert(menuItemRecipeIngredients).values(data).returning();
+    const [result] = await db.insert(menuItemRecipeIngredients).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateMenuItemRecipeIngredient(id: string, data: Partial<InsertMenuItemRecipeIngredient>): Promise<MenuItemRecipeIngredient | undefined> {
-    const [result] = await db.update(menuItemRecipeIngredients).set(data).where(eq(menuItemRecipeIngredients.id, id)).returning();
+    const [result] = await db.update(menuItemRecipeIngredients).set(sanitizeDates(data)).where(eq(menuItemRecipeIngredients.id, id)).returning();
     return result;
   }
 
@@ -1804,12 +1819,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTender(data: InsertTender): Promise<Tender> {
-    const [result] = await db.insert(tenders).values(data).returning();
+    const [result] = await db.insert(tenders).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTender(id: string, data: Partial<InsertTender>): Promise<Tender | undefined> {
-    const [result] = await db.update(tenders).set(data).where(eq(tenders.id, id)).returning();
+    const [result] = await db.update(tenders).set(sanitizeDates(data)).where(eq(tenders.id, id)).returning();
     return result;
   }
 
@@ -1829,12 +1844,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDiscount(data: InsertDiscount): Promise<Discount> {
-    const [result] = await db.insert(discounts).values(data).returning();
+    const [result] = await db.insert(discounts).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateDiscount(id: string, data: Partial<InsertDiscount>): Promise<Discount | undefined> {
-    const [result] = await db.update(discounts).set(data).where(eq(discounts.id, id)).returning();
+    const [result] = await db.update(discounts).set(sanitizeDates(data)).where(eq(discounts.id, id)).returning();
     return result;
   }
 
@@ -1854,12 +1869,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createServiceCharge(data: InsertServiceCharge): Promise<ServiceCharge> {
-    const [result] = await db.insert(serviceCharges).values(data).returning();
+    const [result] = await db.insert(serviceCharges).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateServiceCharge(id: string, data: Partial<InsertServiceCharge>): Promise<ServiceCharge | undefined> {
-    const [result] = await db.update(serviceCharges).set(data).where(eq(serviceCharges.id, id)).returning();
+    const [result] = await db.update(serviceCharges).set(sanitizeDates(data)).where(eq(serviceCharges.id, id)).returning();
     return result;
   }
 
@@ -1912,12 +1927,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCheck(data: InsertCheck): Promise<Check> {
-    const [result] = await db.insert(checks).values(data).returning();
+    const [result] = await db.insert(checks).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCheck(id: string, data: Partial<Check>): Promise<Check | undefined> {
-    const [result] = await db.update(checks).set(data).where(eq(checks.id, id)).returning();
+    const [result] = await db.update(checks).set(sanitizeDates(data)).where(eq(checks.id, id)).returning();
     return result;
   }
 
@@ -1944,12 +1959,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCheckItem(data: InsertCheckItem): Promise<CheckItem> {
-    const [result] = await db.insert(checkItems).values(data).returning();
+    const [result] = await db.insert(checkItems).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCheckItem(id: string, data: Partial<CheckItem>): Promise<CheckItem | undefined> {
-    const [result] = await db.update(checkItems).set(data).where(eq(checkItems.id, id)).returning();
+    const [result] = await db.update(checkItems).set(sanitizeDates(data)).where(eq(checkItems.id, id)).returning();
     return result;
   }
 
@@ -1969,7 +1984,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCheckDiscount(data: InsertCheckDiscount): Promise<CheckDiscount> {
-    const [result] = await db.insert(checkDiscounts).values(data).returning();
+    const [result] = await db.insert(checkDiscounts).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -1980,7 +1995,7 @@ export class DatabaseStorage implements IStorage {
 
   // Rounds
   async createRound(data: InsertRound): Promise<Round> {
-    const [result] = await db.insert(rounds).values(data).returning();
+    const [result] = await db.insert(rounds).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -2000,12 +2015,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCheckLock(data: { checkId: string; workstationId: string; employeeId: string; lockMode?: string; expiresAt: Date }): Promise<CheckLock> {
-    const [result] = await db.insert(checkLocks).values(data).returning();
+    const [result] = await db.insert(checkLocks).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCheckLock(id: string, data: Partial<{ expiresAt: Date; lockMode: string }>): Promise<CheckLock | undefined> {
-    const [result] = await db.update(checkLocks).set(data).where(eq(checkLocks.id, id)).returning();
+    const [result] = await db.update(checkLocks).set(sanitizeDates(data)).where(eq(checkLocks.id, id)).returning();
     return result;
   }
 
@@ -2021,7 +2036,7 @@ export class DatabaseStorage implements IStorage {
 
   // Payments
   async createPayment(data: InsertCheckPayment): Promise<CheckPayment> {
-    const [result] = await db.insert(checkPayments).values(data).returning();
+    const [result] = await db.insert(checkPayments).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -2034,7 +2049,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCheckPayment(id: string, data: Partial<CheckPayment>): Promise<CheckPayment | undefined> {
-    const [result] = await db.update(checkPayments).set(data).where(eq(checkPayments.id, id)).returning();
+    const [result] = await db.update(checkPayments).set(sanitizeDates(data)).where(eq(checkPayments.id, id)).returning();
     return result;
   }
 
@@ -2056,12 +2071,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPaymentProcessor(data: InsertPaymentProcessor): Promise<PaymentProcessor> {
-    const [result] = await db.insert(paymentProcessors).values(data).returning();
+    const [result] = await db.insert(paymentProcessors).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePaymentProcessor(id: string, data: Partial<InsertPaymentProcessor>): Promise<PaymentProcessor | undefined> {
-    const [result] = await db.update(paymentProcessors).set(data).where(eq(paymentProcessors.id, id)).returning();
+    const [result] = await db.update(paymentProcessors).set(sanitizeDates(data)).where(eq(paymentProcessors.id, id)).returning();
     return result;
   }
 
@@ -2095,12 +2110,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPaymentTransaction(data: InsertPaymentTransaction): Promise<PaymentTransaction> {
-    const [result] = await db.insert(paymentTransactions).values(data).returning();
+    const [result] = await db.insert(paymentTransactions).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePaymentTransaction(id: string, data: Partial<PaymentTransaction>): Promise<PaymentTransaction | undefined> {
-    const [result] = await db.update(paymentTransactions).set(data).where(eq(paymentTransactions.id, id)).returning();
+    const [result] = await db.update(paymentTransactions).set(sanitizeDates(data)).where(eq(paymentTransactions.id, id)).returning();
     return result;
   }
 
@@ -2122,12 +2137,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTerminalDevice(data: InsertTerminalDevice): Promise<TerminalDevice> {
-    const [result] = await db.insert(terminalDevices).values(data).returning();
+    const [result] = await db.insert(terminalDevices).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTerminalDevice(id: string, data: Partial<InsertTerminalDevice>): Promise<TerminalDevice | undefined> {
-    const [result] = await db.update(terminalDevices).set(data).where(eq(terminalDevices.id, id)).returning();
+    const [result] = await db.update(terminalDevices).set(sanitizeDates(data)).where(eq(terminalDevices.id, id)).returning();
     return result;
   }
 
@@ -2141,7 +2156,7 @@ export class DatabaseStorage implements IStorage {
     if (lastHeartbeat) {
       updateData.lastHeartbeat = lastHeartbeat;
     }
-    const [result] = await db.update(terminalDevices).set(updateData).where(eq(terminalDevices.id, id)).returning();
+    const [result] = await db.update(terminalDevices).set(sanitizeDates(updateData)).where(eq(terminalDevices.id, id)).returning();
     return result;
   }
 
@@ -2176,12 +2191,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTerminalSession(data: InsertTerminalSession): Promise<TerminalSession> {
-    const [result] = await db.insert(terminalSessions).values(data).returning();
+    const [result] = await db.insert(terminalSessions).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTerminalSession(id: string, data: Partial<TerminalSession>): Promise<TerminalSession | undefined> {
-    const [result] = await db.update(terminalSessions).set(data).where(eq(terminalSessions.id, id)).returning();
+    const [result] = await db.update(terminalSessions).set(sanitizeDates(data)).where(eq(terminalSessions.id, id)).returning();
     return result;
   }
 
@@ -2216,12 +2231,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRegisteredDevice(data: InsertRegisteredDevice): Promise<RegisteredDevice> {
-    const [result] = await db.insert(registeredDevices).values(data).returning();
+    const [result] = await db.insert(registeredDevices).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateRegisteredDevice(id: string, data: Partial<RegisteredDevice>): Promise<RegisteredDevice | undefined> {
-    const [result] = await db.update(registeredDevices).set(data).where(eq(registeredDevices.id, id)).returning();
+    const [result] = await db.update(registeredDevices).set(sanitizeDates(data)).where(eq(registeredDevices.id, id)).returning();
     return result;
   }
 
@@ -2264,7 +2279,7 @@ export class DatabaseStorage implements IStorage {
     if (data.email) {
       updateData.email = data.email.toLowerCase();
     }
-    const [result] = await db.update(emcUsers).set(updateData).where(eq(emcUsers.id, id)).returning();
+    const [result] = await db.update(emcUsers).set(sanitizeDates(updateData)).where(eq(emcUsers.id, id)).returning();
     return result;
   }
 
@@ -2296,7 +2311,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEmcSession(data: InsertEmcSession): Promise<EmcSession> {
-    const [result] = await db.insert(emcSessions).values(data).returning();
+    const [result] = await db.insert(emcSessions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -2312,7 +2327,7 @@ export class DatabaseStorage implements IStorage {
 
   // Audit Logs
   async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
-    const [result] = await db.insert(auditLogs).values(data).returning();
+    const [result] = await db.insert(auditLogs).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -2325,7 +2340,7 @@ export class DatabaseStorage implements IStorage {
 
   // Print Jobs
   async createPrintJob(data: InsertPrintJob): Promise<PrintJob> {
-    const [result] = await db.insert(printJobs).values(data).returning();
+    const [result] = await db.insert(printJobs).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -2346,7 +2361,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePrintJob(id: string, data: Partial<PrintJob>): Promise<PrintJob | undefined> {
-    const [result] = await db.update(printJobs).set(data).where(eq(printJobs.id, id)).returning();
+    const [result] = await db.update(printJobs).set(sanitizeDates(data)).where(eq(printJobs.id, id)).returning();
     return result;
   }
 
@@ -2396,12 +2411,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPrintAgent(data: InsertPrintAgent): Promise<PrintAgent> {
-    const [result] = await db.insert(printAgents).values(data).returning();
+    const [result] = await db.insert(printAgents).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePrintAgent(id: string, data: Partial<PrintAgent>): Promise<PrintAgent | undefined> {
-    const [result] = await db.update(printAgents).set(data).where(eq(printAgents.id, id)).returning();
+    const [result] = await db.update(printAgents).set(sanitizeDates(data)).where(eq(printAgents.id, id)).returning();
     return result;
   }
 
@@ -2572,12 +2587,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createKdsTicket(data: InsertKdsTicket): Promise<KdsTicket> {
-    const [result] = await db.insert(kdsTickets).values(data).returning();
+    const [result] = await db.insert(kdsTickets).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateKdsTicket(id: string, data: Partial<KdsTicket>): Promise<KdsTicket | undefined> {
-    const [result] = await db.update(kdsTickets).set(data).where(eq(kdsTickets.id, id)).returning();
+    const [result] = await db.update(kdsTickets).set(sanitizeDates(data)).where(eq(kdsTickets.id, id)).returning();
     return result;
   }
 
@@ -2803,12 +2818,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPosLayout(data: InsertPosLayout): Promise<PosLayout> {
-    const [result] = await db.insert(posLayouts).values(data).returning();
+    const [result] = await db.insert(posLayouts).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePosLayout(id: string, data: Partial<InsertPosLayout>): Promise<PosLayout | undefined> {
-    const [result] = await db.update(posLayouts).set(data).where(eq(posLayouts.id, id)).returning();
+    const [result] = await db.update(posLayouts).set(sanitizeDates(data)).where(eq(posLayouts.id, id)).returning();
     return result;
   }
 
@@ -3407,12 +3422,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDevice(data: InsertDevice): Promise<Device> {
-    const [result] = await db.insert(devices).values(data).returning();
+    const [result] = await db.insert(devices).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateDevice(id: string, data: Partial<InsertDevice>): Promise<Device | undefined> {
-    const [result] = await db.update(devices).set(data).where(eq(devices.id, id)).returning();
+    const [result] = await db.update(devices).set(sanitizeDates(data)).where(eq(devices.id, id)).returning();
     return result;
   }
 
@@ -3444,7 +3459,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDeviceEnrollmentToken(data: InsertDeviceEnrollmentToken): Promise<DeviceEnrollmentToken> {
-    const [result] = await db.insert(deviceEnrollmentTokens).values(data).returning();
+    const [result] = await db.insert(deviceEnrollmentTokens).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -3478,7 +3493,7 @@ export class DatabaseStorage implements IStorage {
 
   // Device Heartbeats
   async createDeviceHeartbeat(data: InsertDeviceHeartbeat): Promise<DeviceHeartbeat> {
-    const [result] = await db.insert(deviceHeartbeats).values(data).returning();
+    const [result] = await db.insert(deviceHeartbeats).values(sanitizeDates(data)).returning();
     // Also update the device's last seen timestamp
     await this.updateDeviceLastSeen(data.deviceId);
     return result;
@@ -3523,7 +3538,7 @@ export class DatabaseStorage implements IStorage {
     items: Omit<InsertRefundItem, 'refundId'>[],
     payments: Omit<InsertRefundPayment, 'refundId'>[]
   ): Promise<Refund> {
-    const [refund] = await db.insert(refunds).values(data).returning();
+    const [refund] = await db.insert(refunds).values(sanitizeDates(data)).returning();
 
     if (items.length > 0) {
       await db.insert(refundItems).values(
@@ -3593,12 +3608,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createJobCode(data: InsertJobCode): Promise<JobCode> {
-    const [result] = await db.insert(jobCodes).values(data).returning();
+    const [result] = await db.insert(jobCodes).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateJobCode(id: string, data: Partial<InsertJobCode>): Promise<JobCode | undefined> {
-    const [result] = await db.update(jobCodes).set(data).where(eq(jobCodes.id, id)).returning();
+    const [result] = await db.update(jobCodes).set(sanitizeDates(data)).where(eq(jobCodes.id, id)).returning();
     return result;
   }
 
@@ -3732,12 +3747,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPayPeriod(data: InsertPayPeriod): Promise<PayPeriod> {
-    const [result] = await db.insert(payPeriods).values(data).returning();
+    const [result] = await db.insert(payPeriods).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePayPeriod(id: string, data: Partial<InsertPayPeriod>): Promise<PayPeriod | undefined> {
-    const [result] = await db.update(payPeriods).set(data).where(eq(payPeriods.id, id)).returning();
+    const [result] = await db.update(payPeriods).set(sanitizeDates(data)).where(eq(payPeriods.id, id)).returning();
     return result;
   }
 
@@ -3839,7 +3854,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTimePunch(data: InsertTimePunch): Promise<TimePunch> {
-    const [result] = await db.insert(timePunches).values(data).returning();
+    const [result] = await db.insert(timePunches).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -3885,7 +3900,7 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    const [result] = await db.update(timePunches).set(updateData).where(eq(timePunches.id, id)).returning();
+    const [result] = await db.update(timePunches).set(sanitizeDates(updateData)).where(eq(timePunches.id, id)).returning();
     return result;
   }
 
@@ -3939,12 +3954,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBreakSession(data: InsertBreakSession): Promise<BreakSession> {
-    const [result] = await db.insert(breakSessions).values(data).returning();
+    const [result] = await db.insert(breakSessions).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateBreakSession(id: string, data: Partial<InsertBreakSession>): Promise<BreakSession | undefined> {
-    const [result] = await db.update(breakSessions).set(data).where(eq(breakSessions.id, id)).returning();
+    const [result] = await db.update(breakSessions).set(sanitizeDates(data)).where(eq(breakSessions.id, id)).returning();
     return result;
   }
 
@@ -3970,12 +3985,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTimecard(data: InsertTimecard): Promise<Timecard> {
-    const [result] = await db.insert(timecards).values(data).returning();
+    const [result] = await db.insert(timecards).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTimecard(id: string, data: Partial<InsertTimecard>): Promise<Timecard | undefined> {
-    const [result] = await db.update(timecards).set({ ...data, updatedAt: new Date() }).where(eq(timecards.id, id)).returning();
+    const [result] = await db.update(timecards).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(timecards.id, id)).returning();
     return result;
   }
 
@@ -4144,7 +4159,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTimecardException(data: InsertTimecardException): Promise<TimecardException> {
-    const [result] = await db.insert(timecardExceptions).values(data).returning();
+    const [result] = await db.insert(timecardExceptions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -4170,7 +4185,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTimecardEdit(data: InsertTimecardEdit): Promise<TimecardEdit> {
-    const [result] = await db.insert(timecardEdits).values(data).returning();
+    const [result] = await db.insert(timecardEdits).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -4198,7 +4213,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAvailabilityException(data: InsertAvailabilityException): Promise<AvailabilityException> {
-    const [result] = await db.insert(availabilityExceptions).values(data).returning();
+    const [result] = await db.insert(availabilityExceptions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -4226,12 +4241,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTimeOffRequest(data: InsertTimeOffRequest): Promise<TimeOffRequest> {
-    const [result] = await db.insert(timeOffRequests).values(data).returning();
+    const [result] = await db.insert(timeOffRequests).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTimeOffRequest(id: string, data: Partial<InsertTimeOffRequest>): Promise<TimeOffRequest | undefined> {
-    const [result] = await db.update(timeOffRequests).set({ ...data, updatedAt: new Date() }).where(eq(timeOffRequests.id, id)).returning();
+    const [result] = await db.update(timeOffRequests).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(timeOffRequests.id, id)).returning();
     return result;
   }
 
@@ -4260,12 +4275,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createShiftTemplate(data: InsertShiftTemplate): Promise<ShiftTemplate> {
-    const [result] = await db.insert(shiftTemplates).values(data).returning();
+    const [result] = await db.insert(shiftTemplates).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateShiftTemplate(id: string, data: Partial<InsertShiftTemplate>): Promise<ShiftTemplate | undefined> {
-    const [result] = await db.update(shiftTemplates).set(data).where(eq(shiftTemplates.id, id)).returning();
+    const [result] = await db.update(shiftTemplates).set(sanitizeDates(data)).where(eq(shiftTemplates.id, id)).returning();
     return result;
   }
 
@@ -4296,12 +4311,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createShift(data: InsertShift): Promise<Shift> {
-    const [result] = await db.insert(shifts).values(data).returning();
+    const [result] = await db.insert(shifts).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateShift(id: string, data: Partial<InsertShift>): Promise<Shift | undefined> {
-    const [result] = await db.update(shifts).set({ ...data, updatedAt: new Date() }).where(eq(shifts.id, id)).returning();
+    const [result] = await db.update(shifts).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(shifts.id, id)).returning();
     return result;
   }
 
@@ -4321,7 +4336,7 @@ export class DatabaseStorage implements IStorage {
       updateData.publishedById = publishedById;
     }
     return db.update(shifts)
-      .set(updateData)
+      .set(sanitizeDates(updateData))
       .where(inArray(shifts.id, shiftIds))
       .returning();
   }
@@ -4382,12 +4397,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createShiftCoverRequest(data: InsertShiftCoverRequest): Promise<ShiftCoverRequest> {
-    const [result] = await db.insert(shiftCoverRequests).values(data).returning();
+    const [result] = await db.insert(shiftCoverRequests).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateShiftCoverRequest(id: string, data: Partial<InsertShiftCoverRequest>): Promise<ShiftCoverRequest | undefined> {
-    const [result] = await db.update(shiftCoverRequests).set({ ...data, updatedAt: new Date() }).where(eq(shiftCoverRequests.id, id)).returning();
+    const [result] = await db.update(shiftCoverRequests).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(shiftCoverRequests.id, id)).returning();
     return result;
   }
 
@@ -4397,12 +4412,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createShiftCoverOffer(data: InsertShiftCoverOffer): Promise<ShiftCoverOffer> {
-    const [result] = await db.insert(shiftCoverOffers).values(data).returning();
+    const [result] = await db.insert(shiftCoverOffers).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateShiftCoverOffer(id: string, data: Partial<InsertShiftCoverOffer>): Promise<ShiftCoverOffer | undefined> {
-    const [result] = await db.update(shiftCoverOffers).set(data).where(eq(shiftCoverOffers.id, id)).returning();
+    const [result] = await db.update(shiftCoverOffers).set(sanitizeDates(data)).where(eq(shiftCoverOffers.id, id)).returning();
     return result;
   }
 
@@ -4461,12 +4476,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTipPoolPolicy(data: InsertTipPoolPolicy): Promise<TipPoolPolicy> {
-    const [result] = await db.insert(tipPoolPolicies).values(data).returning();
+    const [result] = await db.insert(tipPoolPolicies).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTipPoolPolicy(id: string, data: Partial<InsertTipPoolPolicy>): Promise<TipPoolPolicy | undefined> {
-    const [result] = await db.update(tipPoolPolicies).set(data).where(eq(tipPoolPolicies.id, id)).returning();
+    const [result] = await db.update(tipPoolPolicies).set(sanitizeDates(data)).where(eq(tipPoolPolicies.id, id)).returning();
     return result;
   }
 
@@ -4493,12 +4508,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTipPoolRun(data: InsertTipPoolRun): Promise<TipPoolRun> {
-    const [result] = await db.insert(tipPoolRuns).values(data).returning();
+    const [result] = await db.insert(tipPoolRuns).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTipPoolRun(id: string, data: Partial<InsertTipPoolRun>): Promise<TipPoolRun | undefined> {
-    const [result] = await db.update(tipPoolRuns).set(data).where(eq(tipPoolRuns.id, id)).returning();
+    const [result] = await db.update(tipPoolRuns).set(sanitizeDates(data)).where(eq(tipPoolRuns.id, id)).returning();
     return result;
   }
 
@@ -4508,7 +4523,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTipAllocation(data: InsertTipAllocation): Promise<TipAllocation> {
-    const [result] = await db.insert(tipAllocations).values(data).returning();
+    const [result] = await db.insert(tipAllocations).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -4643,12 +4658,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTipRule(data: InsertTipRule): Promise<TipRule> {
-    const [result] = await db.insert(tipRules).values(data).returning();
+    const [result] = await db.insert(tipRules).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateTipRule(id: string, data: Partial<InsertTipRule>): Promise<TipRule | undefined> {
-    const [result] = await db.update(tipRules).set({ ...data, updatedAt: new Date() }).where(eq(tipRules.id, id)).returning();
+    const [result] = await db.update(tipRules).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(tipRules.id, id)).returning();
     return result;
   }
 
@@ -4699,12 +4714,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLaborSnapshot(data: InsertLaborSnapshot): Promise<LaborSnapshot> {
-    const [result] = await db.insert(laborSnapshots).values(data).returning();
+    const [result] = await db.insert(laborSnapshots).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateLaborSnapshot(id: string, data: Partial<InsertLaborSnapshot>): Promise<LaborSnapshot | undefined> {
-    const [result] = await db.update(laborSnapshots).set({ ...data, updatedAt: new Date() }).where(eq(laborSnapshots.id, id)).returning();
+    const [result] = await db.update(laborSnapshots).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(laborSnapshots.id, id)).returning();
     return result;
   }
 
@@ -4787,13 +4802,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOvertimeRule(data: InsertOvertimeRule): Promise<OvertimeRule> {
-    const [result] = await db.insert(overtimeRules).values(data).returning();
+    const [result] = await db.insert(overtimeRules).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateOvertimeRule(id: string, data: Partial<InsertOvertimeRule>): Promise<OvertimeRule | undefined> {
     const [result] = await db.update(overtimeRules)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(overtimeRules.id, id))
       .returning();
     return result;
@@ -4826,13 +4841,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBreakRule(data: InsertBreakRule): Promise<BreakRule> {
-    const [result] = await db.insert(breakRules).values(data).returning();
+    const [result] = await db.insert(breakRules).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateBreakRule(id: string, data: Partial<InsertBreakRule>): Promise<BreakRule | undefined> {
     const [result] = await db.update(breakRules)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(breakRules.id, id))
       .returning();
     return result;
@@ -4856,7 +4871,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBreakAttestation(data: InsertBreakAttestation): Promise<BreakAttestation> {
-    const [result] = await db.insert(breakAttestations).values(data).returning();
+    const [result] = await db.insert(breakAttestations).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -4876,13 +4891,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBreakViolation(data: InsertBreakViolation): Promise<BreakViolation> {
-    const [result] = await db.insert(breakViolations).values(data).returning();
+    const [result] = await db.insert(breakViolations).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateBreakViolation(id: string, data: Partial<InsertBreakViolation>): Promise<BreakViolation | undefined> {
     const [result] = await db.update(breakViolations)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(breakViolations.id, id))
       .returning();
     return result;
@@ -4909,13 +4924,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMinorLaborRule(data: InsertMinorLaborRule): Promise<MinorLaborRule> {
-    const [result] = await db.insert(minorLaborRules).values(data).returning();
+    const [result] = await db.insert(minorLaborRules).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateMinorLaborRule(id: string, data: Partial<InsertMinorLaborRule>): Promise<MinorLaborRule | undefined> {
     const [result] = await db.update(minorLaborRules)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(minorLaborRules.id, id))
       .returning();
     return result;
@@ -4927,13 +4942,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEmployeeMinorStatus(data: InsertEmployeeMinorStatus): Promise<EmployeeMinorStatus> {
-    const [result] = await db.insert(employeeMinorStatus).values(data).returning();
+    const [result] = await db.insert(employeeMinorStatus).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateEmployeeMinorStatus(id: string, data: Partial<InsertEmployeeMinorStatus>): Promise<EmployeeMinorStatus | undefined> {
     const [result] = await db.update(employeeMinorStatus)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(employeeMinorStatus.id, id))
       .returning();
     return result;
@@ -4976,12 +4991,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFiscalPeriod(data: InsertFiscalPeriod): Promise<FiscalPeriod> {
-    const [result] = await db.insert(fiscalPeriods).values(data).returning();
+    const [result] = await db.insert(fiscalPeriods).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateFiscalPeriod(id: string, data: Partial<InsertFiscalPeriod>): Promise<FiscalPeriod | undefined> {
-    const [result] = await db.update(fiscalPeriods).set(data).where(eq(fiscalPeriods.id, id)).returning();
+    const [result] = await db.update(fiscalPeriods).set(sanitizeDates(data)).where(eq(fiscalPeriods.id, id)).returning();
     return result;
   }
 
@@ -5072,7 +5087,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCashDrawer(data: InsertCashDrawer): Promise<CashDrawer> {
-    const [result] = await db.insert(cashDrawers).values(data).returning();
+    const [result] = await db.insert(cashDrawers).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5098,17 +5113,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDrawerAssignment(data: InsertDrawerAssignment): Promise<DrawerAssignment> {
-    const [result] = await db.insert(drawerAssignments).values(data).returning();
+    const [result] = await db.insert(drawerAssignments).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateDrawerAssignment(id: string, data: Partial<InsertDrawerAssignment>): Promise<DrawerAssignment | undefined> {
-    const [result] = await db.update(drawerAssignments).set(data).where(eq(drawerAssignments.id, id)).returning();
+    const [result] = await db.update(drawerAssignments).set(sanitizeDates(data)).where(eq(drawerAssignments.id, id)).returning();
     return result;
   }
 
   async createCashTransaction(data: InsertCashTransaction): Promise<CashTransaction> {
-    const [result] = await db.insert(cashTransactions).values(data).returning();
+    const [result] = await db.insert(cashTransactions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5119,7 +5134,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSafeCount(data: InsertSafeCount): Promise<SafeCount> {
-    const [result] = await db.insert(safeCounts).values(data).returning();
+    const [result] = await db.insert(safeCounts).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5145,12 +5160,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGiftCard(data: InsertGiftCard): Promise<GiftCard> {
-    const [result] = await db.insert(giftCards).values(data).returning();
+    const [result] = await db.insert(giftCards).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateGiftCard(id: string, data: Partial<InsertGiftCard>): Promise<GiftCard | undefined> {
-    const [result] = await db.update(giftCards).set(data).where(eq(giftCards.id, id)).returning();
+    const [result] = await db.update(giftCards).set(sanitizeDates(data)).where(eq(giftCards.id, id)).returning();
     return result;
   }
 
@@ -5159,7 +5174,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGiftCardTransaction(data: InsertGiftCardTransaction): Promise<GiftCardTransaction> {
-    const [result] = await db.insert(giftCardTransactions).values(data).returning();
+    const [result] = await db.insert(giftCardTransactions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5175,12 +5190,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLoyaltyProgram(data: InsertLoyaltyProgram): Promise<LoyaltyProgram> {
-    const [result] = await db.insert(loyaltyPrograms).values(data).returning();
+    const [result] = await db.insert(loyaltyPrograms).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateLoyaltyProgram(id: string, data: Partial<InsertLoyaltyProgram>): Promise<LoyaltyProgram | undefined> {
-    const [result] = await db.update(loyaltyPrograms).set(data).where(eq(loyaltyPrograms.id, id)).returning();
+    const [result] = await db.update(loyaltyPrograms).set(sanitizeDates(data)).where(eq(loyaltyPrograms.id, id)).returning();
     return result;
   }
 
@@ -5231,12 +5246,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLoyaltyMember(data: InsertLoyaltyMember): Promise<LoyaltyMember> {
-    const [result] = await db.insert(loyaltyMembers).values(data).returning();
+    const [result] = await db.insert(loyaltyMembers).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateLoyaltyMember(id: string, data: Partial<InsertLoyaltyMember>): Promise<LoyaltyMember | undefined> {
-    const [result] = await db.update(loyaltyMembers).set(data).where(eq(loyaltyMembers.id, id)).returning();
+    const [result] = await db.update(loyaltyMembers).set(sanitizeDates(data)).where(eq(loyaltyMembers.id, id)).returning();
     return result;
   }
 
@@ -5258,18 +5273,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLoyaltyEnrollment(data: InsertLoyaltyMemberEnrollment): Promise<LoyaltyMemberEnrollment> {
-    const [result] = await db.insert(loyaltyMemberEnrollments).values(data).returning();
+    const [result] = await db.insert(loyaltyMemberEnrollments).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateLoyaltyEnrollment(id: string, data: Partial<InsertLoyaltyMemberEnrollment>): Promise<LoyaltyMemberEnrollment | undefined> {
-    const [result] = await db.update(loyaltyMemberEnrollments).set(data)
+    const [result] = await db.update(loyaltyMemberEnrollments).set(sanitizeDates(data))
       .where(eq(loyaltyMemberEnrollments.id, id)).returning();
     return result;
   }
 
   async createLoyaltyTransaction(data: InsertLoyaltyTransaction): Promise<LoyaltyTransaction> {
-    const [result] = await db.insert(loyaltyTransactions).values(data).returning();
+    const [result] = await db.insert(loyaltyTransactions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5290,7 +5305,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLoyaltyReward(data: InsertLoyaltyReward): Promise<LoyaltyReward> {
-    const [result] = await db.insert(loyaltyRewards).values(data).returning();
+    const [result] = await db.insert(loyaltyRewards).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5300,7 +5315,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateLoyaltyReward(id: string, data: Partial<InsertLoyaltyReward>): Promise<LoyaltyReward | undefined> {
-    const [result] = await db.update(loyaltyRewards).set(data).where(eq(loyaltyRewards.id, id)).returning();
+    const [result] = await db.update(loyaltyRewards).set(sanitizeDates(data)).where(eq(loyaltyRewards.id, id)).returning();
     return result;
   }
 
@@ -5314,7 +5329,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLoyaltyRedemption(data: InsertLoyaltyRedemption): Promise<LoyaltyRedemption> {
-    const [result] = await db.insert(loyaltyRedemptions).values(data).returning();
+    const [result] = await db.insert(loyaltyRedemptions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5362,12 +5377,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInventoryItem(data: InsertInventoryItem): Promise<InventoryItem> {
-    const [result] = await db.insert(inventoryItems).values(data).returning();
+    const [result] = await db.insert(inventoryItems).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateInventoryItem(id: string, data: Partial<InsertInventoryItem>): Promise<InventoryItem | undefined> {
-    const [result] = await db.update(inventoryItems).set(data).where(eq(inventoryItems.id, id)).returning();
+    const [result] = await db.update(inventoryItems).set(sanitizeDates(data)).where(eq(inventoryItems.id, id)).returning();
     return result;
   }
 
@@ -5382,17 +5397,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInventoryStock(data: InsertInventoryStock): Promise<InventoryStock> {
-    const [result] = await db.insert(inventoryStock).values(data).returning();
+    const [result] = await db.insert(inventoryStock).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateInventoryStock(id: string, data: Partial<InsertInventoryStock>): Promise<InventoryStock | undefined> {
-    const [result] = await db.update(inventoryStock).set({ ...data, updatedAt: new Date() }).where(eq(inventoryStock.id, id)).returning();
+    const [result] = await db.update(inventoryStock).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(inventoryStock.id, id)).returning();
     return result;
   }
 
   async createInventoryTransaction(data: InsertInventoryTransaction): Promise<InventoryTransaction> {
-    const [result] = await db.insert(inventoryTransactions).values(data).returning();
+    const [result] = await db.insert(inventoryTransactions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5410,7 +5425,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRecipe(data: InsertRecipe): Promise<Recipe> {
-    const [result] = await db.insert(recipes).values(data).returning();
+    const [result] = await db.insert(recipes).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5423,7 +5438,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOnlineOrderSource(data: InsertOnlineOrderSource): Promise<OnlineOrderSource> {
-    const [result] = await db.insert(onlineOrderSources).values(data).returning();
+    const [result] = await db.insert(onlineOrderSources).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5439,12 +5454,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOnlineOrder(data: InsertOnlineOrder): Promise<OnlineOrder> {
-    const [result] = await db.insert(onlineOrders).values(data).returning();
+    const [result] = await db.insert(onlineOrders).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateOnlineOrder(id: string, data: Partial<InsertOnlineOrder>): Promise<OnlineOrder | undefined> {
-    const [result] = await db.update(onlineOrders).set({ ...data, updatedAt: new Date() }).where(eq(onlineOrders.id, id)).returning();
+    const [result] = await db.update(onlineOrders).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(onlineOrders.id, id)).returning();
     return result;
   }
 
@@ -5467,12 +5482,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createManagerAlert(data: InsertManagerAlert): Promise<ManagerAlert> {
-    const [result] = await db.insert(managerAlerts).values(data).returning();
+    const [result] = await db.insert(managerAlerts).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateManagerAlert(id: string, data: Partial<InsertManagerAlert>): Promise<ManagerAlert | undefined> {
-    const [result] = await db.update(managerAlerts).set(data).where(eq(managerAlerts.id, id)).returning();
+    const [result] = await db.update(managerAlerts).set(sanitizeDates(data)).where(eq(managerAlerts.id, id)).returning();
     return result;
   }
 
@@ -5488,12 +5503,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createItemAvailability(data: InsertItemAvailability): Promise<ItemAvailability> {
-    const [result] = await db.insert(itemAvailability).values(data).returning();
+    const [result] = await db.insert(itemAvailability).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateItemAvailability(id: string, data: Partial<InsertItemAvailability>): Promise<ItemAvailability | undefined> {
-    const [result] = await db.update(itemAvailability).set({ ...data, updatedAt: new Date() }).where(eq(itemAvailability.id, id)).returning();
+    const [result] = await db.update(itemAvailability).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(itemAvailability.id, id)).returning();
     return result;
   }
 
@@ -5571,12 +5586,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPrepItem(data: InsertPrepItem): Promise<PrepItem> {
-    const [result] = await db.insert(prepItems).values(data).returning();
+    const [result] = await db.insert(prepItems).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updatePrepItem(id: string, data: Partial<InsertPrepItem>): Promise<PrepItem | undefined> {
-    const [result] = await db.update(prepItems).set(data).where(eq(prepItems.id, id)).returning();
+    const [result] = await db.update(prepItems).set(sanitizeDates(data)).where(eq(prepItems.id, id)).returning();
     return result;
   }
 
@@ -5592,7 +5607,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSalesForecast(data: InsertSalesForecast): Promise<SalesForecast> {
-    const [result] = await db.insert(salesForecasts).values(data).returning();
+    const [result] = await db.insert(salesForecasts).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5604,7 +5619,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLaborForecast(data: InsertLaborForecast): Promise<LaborForecast> {
-    const [result] = await db.insert(laborForecasts).values(data).returning();
+    const [result] = await db.insert(laborForecasts).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5620,7 +5635,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGlMapping(data: InsertGlMapping): Promise<GlMapping> {
-    const [result] = await db.insert(glMappings).values(data).returning();
+    const [result] = await db.insert(glMappings).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5629,12 +5644,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAccountingExport(data: InsertAccountingExport): Promise<AccountingExport> {
-    const [result] = await db.insert(accountingExports).values(data).returning();
+    const [result] = await db.insert(accountingExports).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateAccountingExport(id: string, data: Partial<InsertAccountingExport>): Promise<AccountingExport | undefined> {
-    const [result] = await db.update(accountingExports).set(data).where(eq(accountingExports.id, id)).returning();
+    const [result] = await db.update(accountingExports).set(sanitizeDates(data)).where(eq(accountingExports.id, id)).returning();
     return result;
   }
 
@@ -5659,12 +5674,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOfflineOrderQueue(data: InsertOfflineOrderQueue): Promise<OfflineOrderQueue> {
-    const [result] = await db.insert(offlineOrderQueue).values(data).returning();
+    const [result] = await db.insert(offlineOrderQueue).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateOfflineOrderQueue(id: string, data: Partial<InsertOfflineOrderQueue>): Promise<OfflineOrderQueue | undefined> {
-    const [result] = await db.update(offlineOrderQueue).set(data).where(eq(offlineOrderQueue.id, id)).returning();
+    const [result] = await db.update(offlineOrderQueue).set(sanitizeDates(data)).where(eq(offlineOrderQueue.id, id)).returning();
     return result;
   }
 
@@ -5683,13 +5698,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDescriptorSet(data: InsertDescriptorSet): Promise<DescriptorSet> {
-    const [result] = await db.insert(descriptorSets).values(data).returning();
+    const [result] = await db.insert(descriptorSets).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateDescriptorSet(id: string, data: Partial<InsertDescriptorSet>): Promise<DescriptorSet | undefined> {
     const [result] = await db.update(descriptorSets)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(descriptorSets.id, id))
       .returning();
     return result;
@@ -5763,7 +5778,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDescriptorLogoAsset(data: InsertDescriptorLogoAsset): Promise<DescriptorLogoAsset> {
-    const [result] = await db.insert(descriptorLogoAssets).values(data).returning();
+    const [result] = await db.insert(descriptorLogoAssets).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5789,13 +5804,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createServiceHost(data: InsertServiceHost): Promise<ServiceHost> {
-    const [result] = await db.insert(serviceHosts).values(data).returning();
+    const [result] = await db.insert(serviceHosts).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateServiceHost(id: string, data: Partial<InsertServiceHost>): Promise<ServiceHost | undefined> {
     const [result] = await db.update(serviceHosts)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(serviceHosts.id, id))
       .returning();
     return result;
@@ -5824,12 +5839,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createConfigVersion(data: InsertConfigVersion): Promise<ConfigVersion> {
-    const [result] = await db.insert(configVersions).values(data).returning();
+    const [result] = await db.insert(configVersions).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async createServiceHostTransaction(data: InsertServiceHostTransaction): Promise<ServiceHostTransaction> {
-    const [result] = await db.insert(serviceHostTransactions).values(data).returning();
+    const [result] = await db.insert(serviceHostTransactions).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5842,7 +5857,7 @@ export class DatabaseStorage implements IStorage {
 
   // Service Host Metrics
   async createServiceHostMetrics(data: InsertServiceHostMetrics): Promise<ServiceHostMetrics> {
-    const [result] = await db.insert(serviceHostMetrics).values(data).returning();
+    const [result] = await db.insert(serviceHostMetrics).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5873,7 +5888,7 @@ export class DatabaseStorage implements IStorage {
 
   // Service Host Alerts
   async createServiceHostAlert(data: InsertServiceHostAlert): Promise<ServiceHostAlert> {
-    const [result] = await db.insert(serviceHostAlerts).values(data).returning();
+    const [result] = await db.insert(serviceHostAlerts).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -5919,13 +5934,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createServiceHostAlertRule(data: InsertServiceHostAlertRule): Promise<ServiceHostAlertRule> {
-    const [result] = await db.insert(serviceHostAlertRules).values(data).returning();
+    const [result] = await db.insert(serviceHostAlertRules).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateServiceHostAlertRule(id: string, data: Partial<InsertServiceHostAlertRule>): Promise<ServiceHostAlertRule | undefined> {
     const [result] = await db.update(serviceHostAlertRules)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(serviceHostAlertRules.id, id))
       .returning();
     return result;
@@ -5989,13 +6004,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWorkstationServiceBinding(data: InsertWorkstationServiceBinding): Promise<WorkstationServiceBinding> {
-    const [result] = await db.insert(workstationServiceBindings).values(data).returning();
+    const [result] = await db.insert(workstationServiceBindings).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateWorkstationServiceBinding(id: string, data: Partial<InsertWorkstationServiceBinding>): Promise<WorkstationServiceBinding | undefined> {
     const [result] = await db.update(workstationServiceBindings)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(workstationServiceBindings.id, id))
       .returning();
     return result;
@@ -6023,13 +6038,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCalPackage(data: InsertCalPackage): Promise<CalPackage> {
-    const [result] = await db.insert(calPackages).values(data).returning();
+    const [result] = await db.insert(calPackages).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCalPackage(id: string, data: Partial<InsertCalPackage>): Promise<CalPackage | undefined> {
     const [result] = await db.update(calPackages)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(calPackages.id, id))
       .returning();
     return result;
@@ -6068,13 +6083,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCalPackageVersion(data: InsertCalPackageVersion): Promise<CalPackageVersion> {
-    const [result] = await db.insert(calPackageVersions).values(data).returning();
+    const [result] = await db.insert(calPackageVersions).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCalPackageVersion(id: string, data: Partial<InsertCalPackageVersion>): Promise<CalPackageVersion | undefined> {
     const [result] = await db.update(calPackageVersions)
-      .set(data)
+      .set(sanitizeDates(data))
       .where(eq(calPackageVersions.id, id))
       .returning();
     return result;
@@ -6094,7 +6109,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCalPackagePrerequisite(data: InsertCalPackagePrerequisite): Promise<CalPackagePrerequisite> {
-    const [result] = await db.insert(calPackagePrerequisites).values(data).returning();
+    const [result] = await db.insert(calPackagePrerequisites).values(sanitizeDates(data)).returning();
     return result;
   }
 
@@ -6117,13 +6132,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCalDeployment(data: InsertCalDeployment): Promise<CalDeployment> {
-    const [result] = await db.insert(calDeployments).values(data).returning();
+    const [result] = await db.insert(calDeployments).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCalDeployment(id: string, data: Partial<InsertCalDeployment>): Promise<CalDeployment | undefined> {
     const [result] = await db.update(calDeployments)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
       .where(eq(calDeployments.id, id))
       .returning();
     return result;
@@ -6147,13 +6162,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCalDeploymentTarget(data: InsertCalDeploymentTarget): Promise<CalDeploymentTarget> {
-    const [result] = await db.insert(calDeploymentTargets).values(data).returning();
+    const [result] = await db.insert(calDeploymentTargets).values(sanitizeDates(data)).returning();
     return result;
   }
 
   async updateCalDeploymentTarget(id: string, data: Partial<InsertCalDeploymentTarget>): Promise<CalDeploymentTarget | undefined> {
     const [result] = await db.update(calDeploymentTargets)
-      .set(data)
+      .set(sanitizeDates(data))
       .where(eq(calDeploymentTargets.id, id))
       .returning();
     return result;
@@ -6195,7 +6210,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const [result] = await db.update(calDeploymentTargets)
-      .set(updateData)
+      .set(sanitizeDates(updateData))
       .where(eq(calDeploymentTargets.id, id))
       .returning();
     return result;
