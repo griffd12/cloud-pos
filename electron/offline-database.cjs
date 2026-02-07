@@ -482,23 +482,16 @@ class OfflineDatabase {
     const endpoints = [
       { table: 'menu_items', url: `/api/menu-items?enterpriseId=${enterpriseId}` },
       { table: 'modifier_groups', url: `/api/modifier-groups?enterpriseId=${enterpriseId}` },
-      { table: 'condiment_groups', url: `/api/condiment-groups?enterpriseId=${enterpriseId}` },
-      { table: 'combo_meals', url: `/api/combo-meals?enterpriseId=${enterpriseId}` },
       { table: 'employees', url: `/api/employees?enterpriseId=${enterpriseId}` },
-      { table: 'tax_rates', url: `/api/tax-rates?enterpriseId=${enterpriseId}` },
       { table: 'discounts', url: `/api/discounts?enterpriseId=${enterpriseId}` },
-      { table: 'tender_types', url: `/api/tender-types?enterpriseId=${enterpriseId}` },
-      { table: 'order_types', url: `/api/order-types?enterpriseId=${enterpriseId}` },
       { table: 'service_charges', url: `/api/service-charges?enterpriseId=${enterpriseId}` },
       { table: 'major_groups', url: `/api/major-groups?enterpriseId=${enterpriseId}` },
       { table: 'family_groups', url: `/api/family-groups?enterpriseId=${enterpriseId}` },
-      { table: 'menu_item_classes', url: `/api/menu-item-classes?enterpriseId=${enterpriseId}` },
-      { table: 'menu_item_availability', url: `/api/menu-item-availability?enterpriseId=${enterpriseId}` },
     ];
 
     if (propertyId) {
       endpoints.push(
-        { table: 'revenue_centers', url: `/api/revenue-centers?propertyId=${propertyId}` },
+        { table: 'revenue_centers', url: `/api/rvcs?propertyId=${propertyId}` },
         { table: 'printers', url: `/api/printers?propertyId=${propertyId}` },
         { table: 'workstations', url: `/api/workstations?propertyId=${propertyId}` },
       );
@@ -506,7 +499,7 @@ class OfflineDatabase {
 
     if (rvcId) {
       endpoints.push(
-        { key: `rvc_config_${rvcId}`, url: `/api/revenue-centers/${rvcId}` },
+        { key: `rvc_config_${rvcId}`, url: `/api/rvcs/${rvcId}` },
       );
     }
 

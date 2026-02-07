@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, shell, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const net = require('net');
 const { EMVTerminalManager } = require('./emv-terminal.cjs');
 const { PrintAgentService } = require('./print-agent-service.cjs');
@@ -20,8 +21,11 @@ let isOnline = true;
 let emvManager = null;
 let dataSyncInterval = null;
 
-const CONFIG_DIR = path.join(app.getPath('userData'), 'config');
-const DATA_DIR = path.join(app.getPath('userData'), 'data');
+const APP_DATA_ROOT = process.platform === 'win32'
+  ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Cloud POS')
+  : app.getPath('userData');
+const CONFIG_DIR = path.join(APP_DATA_ROOT, 'config');
+const DATA_DIR = path.join(APP_DATA_ROOT, 'data');
 const OFFLINE_DB_PATH = path.join(DATA_DIR, 'offline.db');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'settings.json');
 
@@ -1218,8 +1222,61 @@ function setupAutoLaunch(enable) {
   }
 }
 
-function initPrintAgent() {
+async function autoRegisterPrintAgent(config) {
+  try {
+    const serverUrl = getServerUrl();
+    const deviceName = config.deviceName || os.hostname();
+    const propertyId = config.propertyId || null;
+
+    printLogger.info('AutoRegister', `Registering embedded print agent for device: ${deviceName}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(`${serverUrl}/api/print-agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        propertyId: propertyId ? Number(propertyId) : null,
+        name: `${deviceName} (Embedded Agent)`,
+        description: `Auto-registered embedded print agent for ${deviceName}`,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      printLogger.error('AutoRegister', `Server returned ${response.status}: ${errText}`);
+      return null;
+    }
+
+    const result = await response.json();
+    printLogger.info('AutoRegister', `Print agent registered: ${result.name} (${result.id})`);
+
+    config.printAgentId = result.id;
+    config.printAgentToken = result.agentToken;
+    saveConfig(config);
+
+    return { agentId: result.id, agentToken: result.agentToken };
+  } catch (e) {
+    printLogger.error('AutoRegister', `Auto-registration failed: ${e.message}`);
+    return null;
+  }
+}
+
+async function initPrintAgent() {
   const config = loadConfig();
+
+  if (!config.printAgentId && !config.printAgentToken) {
+    printLogger.info('Init', 'No agent ID/token configured, attempting auto-registration');
+    const registered = await autoRegisterPrintAgent(config);
+    if (registered) {
+      config.printAgentId = registered.agentId;
+      config.printAgentToken = registered.agentToken;
+    }
+  }
+
   printAgent = new PrintAgentService({
     serverUrl: getServerUrl(),
     agentId: config.printAgentId || null,
@@ -1251,7 +1308,7 @@ function initPrintAgent() {
   if (config.printAgentId || config.printAgentToken) {
     printAgent.start();
   } else {
-    printLogger.info('Init', 'No agent ID/token configured, print agent awaiting configuration');
+    printLogger.info('Init', 'No agent ID/token configured and auto-registration failed, print agent awaiting manual configuration');
   }
 }
 
@@ -1317,7 +1374,7 @@ async function initAllServices() {
   initOfflineDatabase();
   await initEnhancedOfflineDb();
   emvManager = new EMVTerminalManager(DATA_DIR);
-  initPrintAgent();
+  await initPrintAgent();
 
   if (config.autoLaunch) {
     setupAutoLaunch(true);
