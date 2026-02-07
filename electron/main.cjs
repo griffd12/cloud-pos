@@ -328,6 +328,28 @@ function createWindow() {
               saveConfig(config);
             },
           },
+          { type: 'separator' },
+          {
+            label: 'Clear Browser Data',
+            click: async () => {
+              const result = await dialog.showMessageBox(mainWindow, {
+                type: 'question',
+                title: 'Clear Browser Data',
+                message: 'This will clear saved login sessions and enterprise selection. You will need to log in again.\n\nContinue?',
+                buttons: ['Cancel', 'Clear'],
+                defaultId: 0,
+              });
+              if (result.response === 1) {
+                await mainWindow.webContents.session.clearStorageData();
+                const startPath = appMode === 'kds' ? '/kds' : '/pos';
+                mainWindow.loadURL(`${getServerUrl()}${startPath}`);
+              }
+            },
+          },
+          {
+            label: 'Reset Everything...',
+            click: () => resetAllData(),
+          },
         ],
       },
     ];
@@ -380,17 +402,107 @@ function switchMode(mode) {
 
 async function showServerConfig() {
   const config = loadConfig();
-  const result = await dialog.showMessageBox(mainWindow, {
+  const currentUrl = getServerUrl();
+
+  const { response, returnValue } = await dialog.showMessageBox(mainWindow, {
     type: 'question',
     title: 'Server Configuration',
-    message: `Current server: ${getServerUrl()}\n\nTo change, launch with --server=https://your-server.com`,
-    buttons: ['OK', 'Reset to Default'],
+    message: `Current server:\n${currentUrl}\n\nCurrent mode: ${appMode.toUpperCase()}`,
+    detail: 'Choose an action below:',
+    buttons: ['Cancel', 'Change Server URL', 'Reset to Default'],
+    defaultId: 0,
+    cancelId: 0,
+  });
+
+  if (response === 1) {
+    const newUrlWin = new BrowserWindow({
+      parent: mainWindow,
+      modal: true,
+      width: 460,
+      height: 200,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'settings-preload.cjs'),
+      },
+    });
+    newUrlWin.setMenuBarVisibility(false);
+
+    ipcMain.handleOnce('settings-get-data', () => ({
+      currentUrl,
+      defaultUrl: DEFAULT_SERVER_URL,
+      mode: appMode,
+    }));
+
+    ipcMain.once('settings-save-url', (event, newUrl) => {
+      if (newUrl && newUrl.trim()) {
+        const cleanUrl = newUrl.trim().replace(/\/+$/, '');
+        config.serverUrl = cleanUrl;
+        saveConfig(config);
+        const startPath = appMode === 'kds' ? '/kds' : '/pos';
+        mainWindow.loadURL(`${cleanUrl}${startPath}`);
+      }
+      newUrlWin.close();
+    });
+
+    newUrlWin.on('closed', () => {
+      ipcMain.removeHandler('settings-get-data');
+      ipcMain.removeAllListeners('settings-save-url');
+    });
+
+    newUrlWin.loadFile(path.join(__dirname, 'settings-url.html'));
+  } else if (response === 2) {
+    delete config.serverUrl;
+    saveConfig(config);
+    const startPath = appMode === 'kds' ? '/kds' : '/pos';
+    mainWindow.loadURL(`${getServerUrl()}${startPath}`);
+  }
+}
+
+async function resetAllData() {
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: 'Reset Application',
+    message: 'This will clear all saved settings, cached data, offline transactions, and stored credentials. The app will restart fresh.\n\nAre you sure?',
+    buttons: ['Cancel', 'Reset Everything'],
+    defaultId: 0,
+    cancelId: 0,
   });
 
   if (result.response === 1) {
-    delete config.serverUrl;
-    saveConfig(config);
-    mainWindow.loadURL(`${getServerUrl()}/${appMode === 'kds' ? 'kds' : 'pos'}`);
+    try {
+      await mainWindow.webContents.session.clearStorageData();
+
+      saveConfig({});
+
+      if (offlineDb) {
+        try {
+          offlineDb.exec('DELETE FROM cached_data');
+          offlineDb.exec('DELETE FROM offline_queue');
+          offlineDb.exec('DELETE FROM offline_payments');
+          offlineDb.exec('DELETE FROM offline_checks');
+        } catch (e) {
+          console.warn('Some offline tables may not exist:', e.message);
+        }
+      }
+
+      const jsonResets = { 'cached_data.json': '{}', 'offline_queue.json': '[]' };
+      Object.entries(jsonResets).forEach(([file, empty]) => {
+        const filePath = path.join(DATA_DIR, file);
+        if (fs.existsSync(filePath)) {
+          fs.writeFileSync(filePath, empty);
+        }
+      });
+
+      app.relaunch();
+      app.exit(0);
+    } catch (e) {
+      console.error('Reset failed:', e.message);
+      dialog.showErrorBox('Reset Failed', 'Could not reset application data: ' + e.message);
+    }
   }
 }
 
