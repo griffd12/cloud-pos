@@ -252,6 +252,7 @@ export default function PosPage() {
   // Conversational Ordering state (Menu Build)
   const [conversationalOrderItem, setConversationalOrderItem] = useState<MenuItem | null>(null);
   const [editingCOMCheckItem, setEditingCOMCheckItem] = useState<CheckItem | null>(null);
+  const [pendingStandardModifiers, setPendingStandardModifiers] = useState<SelectedModifier[]>([]);
   
   // Item availability hook
   const { getQuantityRemaining, isItemAvailable, setAvailability, decrementQuantity, isUpdating: isAvailabilityUpdating } = useItemAvailability();
@@ -1171,7 +1172,7 @@ export default function PosPage() {
     }
     
     // Conversational Ordering: If RVC has it enabled and item has menu build enabled,
-    // open the conversational order panel instead of normal modifier flow
+    // check for linked modifier groups FIRST, then open COM panel after
     if (currentRvc?.conversationalOrderingEnabled && item.menuBuildEnabled) {
       // Ensure we have a check first
       let checkToUse = currentCheck;
@@ -1185,7 +1186,24 @@ export default function PosPage() {
           return;
         }
       }
-      // Open the conversational order panel
+      // Check for linked modifier groups before opening COM
+      try {
+        const res = await fetch(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
+        const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
+        const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
+        
+        if (hasRequiredModifiers) {
+          // Show modifier modal first; COM will open after modifiers are confirmed
+          setItemModifierGroups(groups);
+          setPendingItem(item);
+          setShowModifierModal(true);
+          return;
+        }
+      } catch {
+        // If modifier fetch fails, proceed to COM without modifiers
+      }
+      // No required modifiers — go straight to COM panel
+      setPendingStandardModifiers([]);
       setConversationalOrderItem(item);
       return;
     }
@@ -1292,6 +1310,15 @@ export default function PosPage() {
       });
       // Modal is closed and state cleaned up in onSuccess
     } else if (pendingItem) {
+      // If this is a COM-enabled item, store modifiers and open COM panel next
+      if (currentRvc?.conversationalOrderingEnabled && pendingItem.menuBuildEnabled) {
+        setPendingStandardModifiers(modifiers);
+        setShowModifierModal(false);
+        setItemModifierGroups([]);
+        setConversationalOrderItem(pendingItem);
+        setPendingItem(null);
+        return;
+      }
       addItemMutation.mutate({ menuItem: pendingItem, modifiers });
       // Modal is closed and state cleaned up in onSuccess
     }
@@ -1306,6 +1333,7 @@ export default function PosPage() {
     setPendingItem(null);
     setEditingItem(null);
     setItemModifierGroups([]);
+    setPendingStandardModifiers([]);
   };
 
   const handleVoidItem = (item: CheckItem) => {
@@ -1350,6 +1378,7 @@ export default function PosPage() {
     
     // Check if this is a COM item (Menu Build enabled)
     if (currentRvc?.conversationalOrderingEnabled && menuItem.menuBuildEnabled) {
+      setPendingStandardModifiers([]);
       setEditingCOMCheckItem(item);
       setConversationalOrderItem(menuItem);
       return;
@@ -1409,6 +1438,13 @@ export default function PosPage() {
   const handleOrderTypeSelect = async (orderType: OrderType) => {
     await createCheckMutation.mutateAsync(orderType);
     if (pendingItem) {
+      // For COM-enabled items, re-enter the full item flow (modifier check then COM)
+      if (currentRvc?.conversationalOrderingEnabled && pendingItem.menuBuildEnabled) {
+        const itemToProcess = pendingItem;
+        setPendingItem(null);
+        handleSelectItem(itemToProcess, true);
+        return;
+      }
       addItemMutation.mutate({ menuItem: pendingItem, modifiers: [] });
       setPendingItem(null);
     }
@@ -1841,35 +1877,37 @@ export default function PosPage() {
                       return;
                     }
                     try {
-                      const modifiersForCheck: (SelectedModifier & { prefix?: string })[] = modifications.map(m => ({
+                      const comModifiers: (SelectedModifier & { prefix?: string })[] = modifications.map(m => ({
                         id: m.ingredientName,
                         name: m.prefixName ? `${m.prefixName} ${m.ingredientName}` : m.ingredientName,
                         priceDelta: "0.00",
                         prefix: m.prefixName || undefined,
                       }));
                       
+                      // Merge standard modifiers (e.g. Meat Temp) with COM ingredient modifiers
+                      const allModifiers = [...pendingStandardModifiers, ...comModifiers];
+                      
                       if (editingCOMCheckItem) {
-                        // Update existing check item
                         const res = await fetch(`/api/check-items/${editingCOMCheckItem.id}/modifiers`, {
                           method: "PUT",
                           headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-                          body: JSON.stringify({ modifiers: modifiersForCheck }),
+                          body: JSON.stringify({ modifiers: allModifiers }),
                         });
                         if (!res.ok) throw new Error("Failed to update item");
                         const updatedItem = await res.json();
                         setCheckItems(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
                         toast({ title: "Item updated" });
                       } else {
-                        // Add new item
                         await addItemMutation.mutateAsync({
                           menuItem: conversationalOrderItem!,
-                          modifiers: modifiersForCheck,
+                          modifiers: allModifiers,
                         });
                         toast({ title: "Item added to order" });
                       }
                       
                       setConversationalOrderItem(null);
                       setEditingCOMCheckItem(null);
+                      setPendingStandardModifiers([]);
                     } catch (error: any) {
                       toast({ title: "Failed to save item", description: error.message, variant: "destructive" });
                     }
@@ -1877,6 +1915,7 @@ export default function PosPage() {
                   onCancelItem={() => {
                     setConversationalOrderItem(null);
                     setEditingCOMCheckItem(null);
+                    setPendingStandardModifiers([]);
                   }}
                 />
               )}
