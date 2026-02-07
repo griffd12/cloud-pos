@@ -369,11 +369,21 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
               localStorage.setItem(DEVICE_NAME_KEY, String(appInfo.deviceName || ''));
               setLinkedDeviceId(String(appInfo.deviceId));
               setDeviceName(String(appInfo.deviceName || ''));
+              if (mode === 'pos') {
+                localStorage.setItem('pos_workstation_id', String(appInfo.deviceId));
+              }
             }
 
             if (appInfo.propertyId) {
               localStorage.setItem(DEVICE_PROPERTY_ID_KEY, String(appInfo.propertyId));
               setPropertyId(String(appInfo.propertyId));
+            }
+
+            if (appInfo.rvcId) {
+              try {
+                const rvcObj = { id: Number(appInfo.rvcId), name: String(appInfo.rvcName || ''), propertyId: Number(appInfo.propertyId || 0) };
+                localStorage.setItem('pos_selected_rvc', JSON.stringify(rvcObj));
+              } catch (e) {}
             }
           }
         }
