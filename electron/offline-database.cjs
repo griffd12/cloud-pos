@@ -875,6 +875,7 @@ class OfflineDatabase {
   getStats() {
     const stats = {
       usingSqlite: this.usingSqlite,
+      encryptionActive: this.encryptionActive || false,
       lastSync: this.getSyncMetadata('lastFullSync'),
       enterpriseId: this.getSyncMetadata('enterpriseId'),
       propertyId: this.getSyncMetadata('propertyId'),

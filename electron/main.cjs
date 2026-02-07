@@ -275,31 +275,41 @@ async function checkConnectivity() {
 }
 
 function createWindow() {
+  const config = loadConfig();
+  const needsSetup = !config.setupComplete;
+
   const windowConfig = {
-    width: 1280,
-    height: 1024,
-    minWidth: 1024,
-    minHeight: 768,
-    title: appMode === 'kds' ? 'Cloud POS - Kitchen Display' : 'Cloud POS',
+    width: needsSetup ? 620 : 1280,
+    height: needsSetup ? 640 : 1024,
+    minWidth: needsSetup ? 580 : 1024,
+    minHeight: needsSetup ? 500 : 768,
+    title: needsSetup ? 'Cloud POS - Terminal Setup' : (appMode === 'kds' ? 'Cloud POS - Kitchen Display' : 'Cloud POS'),
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: needsSetup
+        ? path.join(__dirname, 'setup-wizard-preload.cjs')
+        : path.join(__dirname, 'preload.cjs'),
     },
     autoHideMenuBar: true,
-    fullscreenable: true,
-    backgroundColor: '#1a1a2e',
-    kiosk: isKiosk,
-    fullscreen: isKiosk,
+    fullscreenable: !needsSetup,
+    backgroundColor: '#0f1729',
+    kiosk: needsSetup ? false : isKiosk,
+    fullscreen: needsSetup ? false : isKiosk,
+    resizable: true,
   };
 
   mainWindow = new BrowserWindow(windowConfig);
 
-  const serverUrl = getServerUrl();
-  const startPath = appMode === 'kds' ? '/kds' : '/pos';
-  mainWindow.loadURL(`${serverUrl}${startPath}`);
+  if (needsSetup) {
+    mainWindow.loadFile(path.join(__dirname, 'setup-wizard.html'));
+  } else {
+    const serverUrl = getServerUrl();
+    const startPath = appMode === 'kds' ? '/kds' : '/pos';
+    mainWindow.loadURL(`${serverUrl}${startPath}`);
+  }
 
   if (process.env.NODE_ENV !== 'production' && !isKiosk) {
     const menuTemplate = [
@@ -339,6 +349,25 @@ function createWindow() {
           {
             label: 'Configure Server URL...',
             click: () => showServerConfig(),
+          },
+          {
+            label: 'Reconfigure Terminal...',
+            click: async () => {
+              const result = await dialog.showMessageBox(mainWindow, {
+                type: 'question',
+                title: 'Reconfigure Terminal',
+                message: 'This will open the Terminal Setup Wizard to change the enterprise, property, or device assignment.\n\nContinue?',
+                buttons: ['Cancel', 'Reconfigure'],
+                defaultId: 0,
+              });
+              if (result.response === 1) {
+                const cfg = loadConfig();
+                cfg.setupComplete = false;
+                saveConfig(cfg);
+                app.relaunch();
+                app.exit(0);
+              }
+            },
           },
           {
             label: 'Toggle Kiosk Mode',
@@ -569,16 +598,29 @@ function setupIpcHandlers() {
     app.quit();
   });
 
-  ipcMain.handle('get-app-info', () => ({
-    mode: appMode,
-    isKiosk,
-    isOnline,
-    serverUrl: getServerUrl(),
-    platform: process.platform,
-    version: app.getVersion(),
-    dataDir: DATA_DIR,
-    pendingSync: getPendingOperations().length,
-  }));
+  ipcMain.handle('get-app-info', () => {
+    const config = loadConfig();
+    return {
+      mode: appMode,
+      isKiosk,
+      isOnline,
+      serverUrl: getServerUrl(),
+      platform: process.platform,
+      version: app.getVersion(),
+      dataDir: DATA_DIR,
+      pendingSync: getPendingOperations().length,
+      enterpriseId: config.enterpriseId || null,
+      enterpriseName: config.enterpriseName || null,
+      propertyId: config.propertyId || null,
+      propertyName: config.propertyName || null,
+      rvcId: config.rvcId || null,
+      rvcName: config.rvcName || null,
+      deviceId: config.deviceId || null,
+      deviceName: config.deviceName || null,
+      deviceType: config.deviceType || null,
+      setupComplete: config.setupComplete || false,
+    };
+  });
 
   ipcMain.handle('get-online-status', () => isOnline);
 
@@ -867,6 +909,158 @@ function setupIpcHandlers() {
     emvManager.markPaymentSynced(id);
     return { success: true };
   });
+
+  // === Setup Wizard IPC Handlers ===
+  ipcMain.handle('wizard-test-connection', async (event, url) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(`${url}/api/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (response.ok) {
+        return { success: true };
+      }
+      return { success: false, error: `Server responded with status ${response.status}` };
+    } catch (e) {
+      return { success: false, error: e.name === 'AbortError' ? 'Connection timed out' : e.message };
+    }
+  });
+
+  ipcMain.handle('wizard-fetch-enterprises', async (event, serverUrl) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${serverUrl}/api/enterprises`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      const data = await response.json();
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('wizard-fetch-properties', async (event, serverUrl, enterpriseId) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${serverUrl}/api/properties?enterpriseId=${enterpriseId}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      const data = await response.json();
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('wizard-fetch-devices', async (event, serverUrl, enterpriseId, propertyId, mode) => {
+    try {
+      const endpoint = mode === 'kds' ? 'kds-devices' : 'workstations';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${serverUrl}/api/${endpoint}?propertyId=${propertyId}&enterpriseId=${enterpriseId}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      const data = await response.json();
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('wizard-fetch-rvcs', async (event, serverUrl, propertyId) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${serverUrl}/api/rvcs?propertyId=${propertyId}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      const data = await response.json();
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('wizard-save-config', async (event, wizardConfig) => {
+    try {
+      const config = loadConfig();
+      config.serverUrl = wizardConfig.serverUrl;
+      config.enterpriseId = wizardConfig.enterpriseId;
+      config.enterpriseName = wizardConfig.enterpriseName;
+      config.enterpriseCode = wizardConfig.enterpriseCode;
+      config.propertyId = wizardConfig.propertyId;
+      config.propertyName = wizardConfig.propertyName;
+      config.rvcId = wizardConfig.rvcId;
+      config.rvcName = wizardConfig.rvcName;
+      config.mode = wizardConfig.mode;
+      config.deviceId = wizardConfig.deviceId;
+      config.deviceName = wizardConfig.deviceName;
+      config.deviceType = wizardConfig.deviceType;
+      config.setupComplete = true;
+      config.setupDate = wizardConfig.setupDate;
+      saveConfig(config);
+      appMode = wizardConfig.mode;
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('wizard-get-existing-config', async () => {
+    return loadConfig();
+  });
+
+  ipcMain.on('wizard-launch-app', () => {
+    const config = loadConfig();
+    if (mainWindow) {
+      mainWindow.close();
+      mainWindow = null;
+    }
+
+    const windowConfig = {
+      width: 1280,
+      height: 1024,
+      minWidth: 1024,
+      minHeight: 768,
+      title: appMode === 'kds' ? 'Cloud POS - Kitchen Display' : 'Cloud POS',
+      icon: path.join(__dirname, 'assets', 'icon.png'),
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: true,
+        preload: path.join(__dirname, 'preload.cjs'),
+      },
+      autoHideMenuBar: true,
+      fullscreenable: true,
+      backgroundColor: '#0f1729',
+      kiosk: isKiosk,
+      fullscreen: isKiosk,
+    };
+
+    mainWindow = new BrowserWindow(windowConfig);
+
+    const serverUrl = config.serverUrl || getServerUrl();
+    const startPath = appMode === 'kds' ? '/kds' : '/pos';
+    mainWindow.loadURL(`${serverUrl}${startPath}`);
+
+    mainWindow.on('closed', () => { mainWindow = null; });
+
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error(`Page load failed: ${errorDescription} (${errorCode})`);
+      if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
+        isOnline = false;
+        mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+      }
+    });
+
+    if (enhancedOfflineDb) {
+      performInitialDataSync().catch(e => {
+        console.warn('[OfflineDB] Post-wizard sync failed:', e.message);
+      });
+    }
+  });
 }
 
 function buildEscPosBuffer(commands) {
@@ -998,11 +1192,11 @@ function initPrintAgent() {
   }
 }
 
-function initEnhancedOfflineDb() {
+async function initEnhancedOfflineDb() {
   enhancedOfflineDb = new OfflineDatabase({
     dataDir: DATA_DIR,
   });
-  enhancedOfflineDb.initialize();
+  await enhancedOfflineDb.initialize();
 
   offlineInterceptor = new OfflineApiInterceptor(enhancedOfflineDb);
   console.log('[OfflineDB] Enhanced offline database initialized');
@@ -1040,7 +1234,7 @@ app.whenReady().then(async () => {
   ensureDirectories();
   parseArgs();
   initOfflineDatabase();
-  initEnhancedOfflineDb();
+  await initEnhancedOfflineDb();
   emvManager = new EMVTerminalManager(DATA_DIR);
   initPrintAgent();
   setupIpcHandlers();

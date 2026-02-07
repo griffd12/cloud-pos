@@ -15,6 +15,16 @@ declare global {
         version: string;
         dataDir: string;
         pendingSync: number;
+        enterpriseId?: string | null;
+        enterpriseName?: string | null;
+        propertyId?: string | null;
+        propertyName?: string | null;
+        rvcId?: string | null;
+        rvcName?: string | null;
+        deviceId?: string | null;
+        deviceName?: string | null;
+        deviceType?: string | null;
+        setupComplete?: boolean;
       }>;
       getOnlineStatus: () => Promise<boolean>;
       printRaw: (address: string, port: number, data: ArrayBuffer) => Promise<{ success: boolean; error?: string }>;
@@ -104,6 +114,7 @@ export interface OfflineSyncResult {
 
 export interface OfflineDbStats {
   usingSqlite?: boolean;
+  encryptionActive?: boolean;
   lastSync?: string;
   enterpriseId?: string;
   propertyId?: string;

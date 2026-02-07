@@ -1,72 +1,7 @@
 # Cloud POS System
 
-## CRITICAL SYSTEM RULES – READ FIRST
-
-This POS system already has multiple Enterprises configured. There may be:
-- Existing Enterprises
-- Existing Properties
-- Existing RVCs
-- Existing Menu, EMC, and configuration data already in use
-
-### What is NOT Allowed
-- Delete existing configuration
-- Rename existing configuration
-- Change the meaning or behavior of existing configuration
-- Break or invalidate any existing Enterprise setup
-
-### All Changes MUST be NON-DESTRUCTIVE and ADDITIVE ONLY
-
-**Definitions:**
-- **ADDITIVE** = new fields, new options, new configuration records, or new logic that does not alter existing behavior
-- **NON-DESTRUCTIVE** = existing Enterprises continue to work exactly as before without modification
-
-### When Making ANY Change
-1. Assume existing Enterprises are already live and operational
-2. Existing configurations must continue to function without requiring edits
-3. No existing data may be removed or overwritten
-4. No defaults may be changed retroactively
-
-### Enterprise Configuration Rules
-Any new feature, field, or configuration must:
-- Be OPTIONAL for existing Enterprises
-- Default to OFF or NULL for existing Enterprises
-- Be explicitly enabled per Enterprise, Property, or RVC if needed
-
-### EMC (Enterprise Management Console) Rules
-- If a new configuration option is added:
-  - ALL Enterprises must see the new option in EMC
-  - Existing Enterprises must retain their current values
-  - New Enterprises must inherit the new option with safe defaults
-- EMC pages must be UPDATED, not recreated
-- Existing EMC pages must not be replaced or removed
-
-### Multi-Enterprise Rule (CRITICAL)
-- Changes must apply consistently across:
-  - Enterprise A (existing)
-  - Enterprise B (existing)
-  - Any future Enterprise C, D, etc.
-- The system must NEVER assume there is only one Enterprise
-
-### Migration & Versioning Rules
-- If a database change is required:
-  - Use versioned migrations only
-  - Never drop columns or tables used by existing Enterprises
-  - Add new columns as nullable or with safe defaults
-- No migration may require manual intervention for existing Enterprises
-
-### Before Making Any Change, You MUST
-1. State whether the change is additive or destructive
-2. Confirm that no existing Enterprise configuration will be altered
-3. Confirm how the change appears in EMC for:
-   - Existing Enterprises
-   - New Enterprises
-
-### If a Requested Change Would Break Existing Enterprises
-- You must REFUSE the change
-- You must propose a safe alternative that preserves compatibility
-
 ## Overview
-This project is an enterprise cloud-based Quick Service Restaurant (QSR) Point of Sale system designed for high-volume environments. It features a multi-property hierarchy (Enterprise → Property → Revenue Center), Kitchen Display System (KDS) integration, and comprehensive admin configuration, leveraging a Simphony-class design pattern for configuration inheritance with override capabilities. The system supports device configuration, real-time KDS order flow, robust time & attendance, PCI-compliant payment processing, and extensive enterprise capabilities including fiscal close, cash management, gift cards, loyalty programs, inventory, forecasting, and online ordering integration. An optional CAPS (Central Application Processing Service) provides a hybrid cloud/on-premise architecture for offline resilience.
+This project is an enterprise cloud-based Quick Service Restaurant (QSR) Point of Sale system designed for high-volume environments. Its core purpose is to provide a scalable and robust POS solution with comprehensive administrative configuration and real-time operational capabilities. Key features include a multi-property hierarchy (Enterprise → Property → Revenue Center), Kitchen Display System (KDS) integration, and extensive enterprise functionalities such as fiscal close, cash management, gift cards, loyalty programs, inventory, forecasting, and online ordering integration. The system leverages a Simphony-class design pattern for configuration inheritance with override capabilities and offers an optional Central Application Processing Service (CAPS) for hybrid cloud/on-premise offline resilience. The business vision is to deliver a highly flexible and reliable POS system that can be deployed across various QSR operations, ensuring continuous service even in offline conditions and supporting both web and native application environments (Android & Windows).
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -79,43 +14,26 @@ Preferred communication style: Simple, everyday language.
 - **Touch-First UI**: High-contrast theming optimized for POS terminals.
 - **Real-time Operations**: WebSocket communication for KDS updates and CAPS synchronization.
 - **Offline Resilience**: Optional on-premise CAPS with local SQLite for offline operations and cloud synchronization.
+- **Non-Destructive Changes**: All system modifications must be additive and not alter existing enterprise configurations. New features must be optional and default to OFF/NULL for existing enterprises.
 
 ### Technical Stack
 - **Frontend**: React 18, TypeScript, Vite, Wouter, TanStack React Query, React Context, shadcn/ui, Tailwind CSS.
 - **Backend**: Node.js, Express, TypeScript, RESTful JSON API with WebSocket support.
 - **Database**: PostgreSQL with Drizzle ORM.
 - **Offline Storage**: Browser IndexedDB for client-side offline resilience.
+- **Native Applications**: Capacitor (Android) and Electron (Windows) wrappers for web app deployment, offering 100% feature parity.
 
 ### Key Features and Implementations
-- **Device Configuration**: Simphony-style configuration for Workstations, Printers, and KDS Devices with hierarchical overrides.
-- **KDS Order Flow**: Supports "Standard Mode" and "Dynamic Order Mode" with real-time WebSocket updates.
-- **Authentication**: PIN-based employee authentication with role-based access control and manager approval.
+- **Device Configuration**: Hierarchical configuration for Workstations, Printers, and KDS Devices.
+- **KDS Order Flow**: Supports "Standard Mode" and "Dynamic Order Mode" with real-time updates.
+- **Authentication**: PIN-based employee authentication with role-based access control.
 - **Time & Attendance**: Comprehensive time clock, timecards, scheduling, and labor analytics.
 - **Payment Processing**: PCI-compliant, gateway-agnostic framework.
-- **Printing System**: Comprehensive receipt and report printing with network printer support (ESC/POS) via a database-backed print queue and a standalone Print Agent System.
-- **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering Integration, Inventory Management, Sales & Labor Forecasting.
-- **Pizza Builder Module**: Full-page visual pizza customization interface at `/pizza-builder/:menuItemId`. Features:
-  - Visual SVG pizza graphic with topping dots using deterministic pseudo-random placement
-  - Section selection modes: Whole pizza, Half (Left/Right), Quarter (4 sections)
-  - Topping selection by category (Proteins, Market, Cheese, Premium) with size-based pricing
-  - Quantity adjustment per topping (1x, 2x, 3x) with section-specific placement
-  - Base sauce selection (Marinara, Alfredo, Olive Oil, BBQ, Ranch)
-  - Auto-detection of pizza items in POS by name pattern ("classic pizza", "gluten crust", "create your own pizza")
-  - Seamless integration with check flow - adds pizza with all selected modifiers to current check
-
-## Security Mode Status
-
-**SECURITY FEATURES DISABLED** - The system currently operates in an open-access mode:
-- Device enrollment/token validation is bypassed
-- POS and KDS are accessible directly from any web browser without CAL Setup Wizard
-- WebSocket connections don't require device or EMC authentication
-- Print agents can connect without strict token validation (just need agent ID)
-- The following EMC pages have been removed: Device Hub, CAL Packages, Services, Connectivity Test, Registered Devices
-
-This simplified mode allows the system to work as a standard web-based POS without on-premise security requirements. All payment functionality remains fully operational.
-
-## Terminology
-- **Print Agent**: Software running on a local machine that handles network printer communication
+- **Printing System**: Database-backed print queue and a standalone Print Agent System for network printer support (ESC/POS).
+- **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering, Inventory, Sales & Labor Forecasting.
+- **Pizza Builder Module**: Visual, full-page interface for pizza customization, integrating with the check flow and adding modifiers.
+- **Multi-Enterprise Architecture**: Currently uses Enterprise ID filtering for data isolation; future plans include company code login, per-enterprise URLs, and separate databases for enhanced isolation and disaster recovery.
+- **Native Application Capabilities (Windows Electron)**: Includes an embedded print agent, SQLite/SQLCipher for offline data caching, local reporting, store-and-forward for offline transactions, EMV terminal communication, auto-launch, kiosk mode, and a terminal setup wizard.
 
 ## External Dependencies
 
@@ -135,116 +53,3 @@ This simplified mode allows the system to work as a standard web-based POS witho
 - Elavon Converge (EMV terminal integration)
 - Elavon Fusebox (EMV terminal with multi-processor support)
 - Heartland / Global Payments (EMV terminal + online via Portico gateway)
-  - Card-Present: Site ID, License ID, Device ID, Username, Password, Developer ID, Version Number
-  - Card-Not-Present: Secret API Key, Developer ID, Version Number
-  - Sandbox URL: https://cert.api2.heartlandportico.com
-  - Production URL: https://api2.heartlandportico.com
-
-## Follow-Up / Future Enhancements
-
-### Oracle Simphony-Style Multi-Tenant Architecture (Priority: High)
-The current system uses a shared PostgreSQL database with enterprise ID filtering for data isolation. To match Oracle Simphony's MTU (Multi-Tenant Unit) model for better isolation and disaster recovery:
-
-1. **Company Code Login**
-   - EMC login screen: Enter Company Code + Username + Password
-   - Example: Company Code `BOM` (Blue Oceans Management) → dgriffin → password
-   - User sees only their enterprise's data (properties, employees, sales, reports)
-
-2. **Per-Enterprise URLs**
-   - Subdomain-based: `bom.yourpos.com`, `acme.yourpos.com`
-   - Or tenant-based routing: `yourpos.com/bom/emc`, `yourpos.com/acme/pos`
-
-3. **Separate Databases per Enterprise** (Future)
-   - Each enterprise gets its own PostgreSQL database
-   - If one database crashes, other enterprises continue operating
-   - Enhanced disaster recovery and complete data isolation
-
-4. **Benefits**
-   - Complete data isolation between customers
-   - No single point of failure for all customers
-   - Clear branding/identity per customer
-   - Simphony-familiar login experience
-
-### Current Multi-Tenant Status
-- **Working**: Enterprise ID filtering across all 56+ EMC pages, POS, KDS, reports
-- **Working**: New enterprises start with blank EMC (no shared data)
-- **Working**: CAPS with local SQLite provides offline resilience per property
-- **Needed**: Company code login, per-customer URLs, separate databases
-
-## Native Applications (Android & Windows)
-
-The Cloud POS system can be deployed as native applications for Android and Windows while maintaining 100% feature parity with the web version.
-
-### Architecture
-- **Web App**: The existing React frontend runs unchanged
-- **Native Wrappers**: Capacitor (Android) and Electron (Windows) wrap the web app in native containers
-- **Cloud Backend**: EMC remains fully cloud-based; POS connects to cloud or on-premise CAPS
-
-### Project Structure
-```
-electron/                              # Electron Windows application
-├── main.cjs                           # Main process: window management, offline DB, printing, EMV, sync, print agent auto-start
-├── preload.cjs                        # Secure IPC bridge exposing APIs to renderer (print agent, offline DB, EMV)
-├── print-agent-service.cjs            # Embedded Print Agent: WebSocket cloud connection, TCP network printing, local queue
-├── offline-database.cjs               # Enhanced SQLite/SQLCipher offline database: full POS data cache, local reporting
-├── offline-api-interceptor.cjs        # Transparent API interceptor: serves from local cache when cloud unreachable
-├── emv-terminal.cjs                   # EMV terminal communication module (TCP/IP)
-├── offline.html                       # Offline fallback page with auto-reconnect
-├── installer.nsh                      # NSIS installer script (silent, auto-launch, firewall rules, POS + KDS shortcuts)
-├── electron-builder.json              # Build configuration for Windows installer
-└── assets/                            # Icons and branding
-
-client/src/lib/electron.ts             # Frontend TypeScript types and helpers for Electron APIs (print agent, offline DB, EMV)
-```
-
-### Windows Deployment (Electron)
-
-**Capabilities:**
-- **Embedded Print Agent**: Built-in print agent connects to cloud WebSocket, receives print jobs, sends ESC/POS to local network printers via TCP. Supports multiple printers, auto-reconnect, offline local print queue.
-- **Offline Mode**: SQLite/SQLCipher (AES-256 encrypted) database caches all POS configuration data. Keys stored in Windows Credential Manager. Full offline POS operation.
-- **Offline Data Cache**: Menu items, modifier groups, condiment groups, combo meals, employees, tax rates, discounts, tender types, order types, service charges, RVC config, printers, workstations, pizza builder config.
-- **Local Printing**: Direct ESC/POS commands to USB guest check printers and TCP to network kitchen printers via embedded print agent.
-- **Local Reports**: Sales summary and check detail reports run against local SQLite data while offline.
-- **Store-and-Forward**: Offline transactions (checks, payments, time punches) queue locally and sync to cloud on reconnect.
-- **EMV Terminal**: Local TCP/IP communication with 3rd-party EMV devices, store-and-forward for offline payments.
-- **Auto-Launch**: Windows registry-based auto-start on boot.
-- **Kiosk Mode**: Full-screen locked-down mode for production POS terminals.
-- **POS/KDS Mode**: Single installer creates shortcuts for both POS and KDS modes.
-- **Auto-Sync**: Cloud connectivity check every 30s, full data sync every 5 minutes, offline queue sync on reconnect.
-- **Silent Installer**: NSIS installer with firewall rules for print agent, desktop/start menu shortcuts, minimal user interaction.
-
-**Command-Line Args:**
-```
-CloudPOS.exe --pos              # Launch in POS mode
-CloudPOS.exe --kds              # Launch in KDS mode
-CloudPOS.exe --kiosk            # Launch in kiosk/fullscreen mode
-CloudPOS.exe --server=URL       # Set cloud server URL
-```
-
-**Building the Installer:**
-```bash
-npm run build                                                   # Build web app
-npx electron electron/main.cjs                                  # Run in dev mode
-npx electron-builder --config electron/electron-builder.json    # Build Windows .exe installer
-```
-
-**Installer Creates:**
-- Desktop shortcuts: "Cloud POS" and "Cloud KDS"
-- Start Menu shortcuts: POS, KDS, POS (Kiosk), KDS (Kiosk)
-
-### Android Deployment (Capacitor)
-```bash
-npm run build                  # Build web app
-npx cap sync android           # Sync to Android
-npx cap open android           # Open in Android Studio
-```
-
-### Feature Parity Guarantee
-All POS functionality is preserved:
-- Menu display, ordering, modifiers, pizza builder
-- Check management and payment processing (including offline EMV)
-- KDS integration and real-time updates
-- Receipt printing (USB ESC/POS printers, network printers)
-- Employee auth, time clock, manager approvals
-- Full EMC access via cloud
-- Offline resilience with automatic sync on reconnect
