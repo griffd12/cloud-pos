@@ -1,0 +1,18 @@
+{
+  "serverUrl": "https://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev",
+  "enterpriseId": "587bd7b1-db7e-487c-b1f7-2315ab093502",
+  "enterpriseName": "Blue Oceans Management",
+  "enterpriseCode": null,
+  "propertyId": "b0c038b1-5c55-4c63-85fe-5ea9dc64a767",
+  "propertyName": "SNS-Newport Beach",
+  "rvcId": "95a4ebcf-2b84-432d-9a5b-325eae839a08",
+  "rvcName": "SNS-001 Shop",
+  "mode": "pos",
+  "deviceId": "e794558a-dacc-4049-a792-be2b7f1ac94c",
+  "deviceName": "Derek-Laptop",
+  "deviceType": "workstation",
+  "setupComplete": true,
+  "setupDate": "2026-02-07T19:24:31.208Z",
+  "printAgentId": "3d2781ce-8778-4e98-a98f-8b549a3a496f",
+  "printAgentToken": "02235e41-e688-4b94-afcf-58577f4ba8f8-12d1167c91c09524779dca3d759f66c7d5c54a5330eccd4e755356cd8a6707b2"
+}
