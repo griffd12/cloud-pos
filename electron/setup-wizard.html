@@ -299,6 +299,30 @@
       width: 20px;
       height: 20px;
     }
+    .login-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: #1e3a5f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      color: #60a5fa;
+    }
+    .login-title {
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 4px;
+    }
+    .login-subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
@@ -315,7 +339,7 @@
       </div>
       <div class="step-item" id="step-ind-1">
         <div class="step-dot"></div>
-        <span class="step-label">Enterprise</span>
+        <span class="step-label">Login</span>
       </div>
       <div class="step-item" id="step-ind-2">
         <div class="step-dot"></div>
@@ -324,6 +348,10 @@
       <div class="step-item" id="step-ind-3">
         <div class="step-dot"></div>
         <span class="step-label">Device</span>
+      </div>
+      <div class="step-item" id="step-ind-4">
+        <div class="step-dot"></div>
+        <span class="step-label">Confirm</span>
       </div>
     </div>
 
@@ -339,16 +367,26 @@
         <div class="status-msg" id="connection-status"></div>
       </div>
 
-      <!-- Step 1: Enterprise Selection -->
+      <!-- Step 1: EMC Login -->
       <div class="step" id="step-1">
-        <div class="form-group">
-          <label>Select Enterprise</label>
+        <div class="login-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
         </div>
-        <div id="enterprise-list" class="selection-list"></div>
-        <div class="status-msg" id="enterprise-status"></div>
+        <div class="login-title">Sign In</div>
+        <div class="login-subtitle">Use your EMC credentials to authenticate</div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="you@company.com" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="Enter your password" />
+        </div>
+        <button class="btn btn-primary" id="btn-login" onclick="doEmcLogin()">Sign In</button>
+        <div class="status-msg" id="login-status"></div>
       </div>
 
-      <!-- Step 2: Property Selection -->
+      <!-- Step 2: Property Selection (filtered by login) -->
       <div class="step" id="step-2">
         <div class="form-group">
           <label>Select Property</label>
@@ -394,6 +432,7 @@
         </div>
         <table class="summary-table" id="summary-table">
           <tr><td>Server</td><td id="sum-server"></td></tr>
+          <tr><td>Signed in as</td><td id="sum-user"></td></tr>
           <tr><td>Enterprise</td><td id="sum-enterprise"></td></tr>
           <tr><td>Property</td><td id="sum-property"></td></tr>
           <tr><td>Mode</td><td id="sum-mode"></td></tr>
@@ -413,13 +452,16 @@
   <script>
     let currentStep = 0;
     const totalSteps = 5;
+    const stepIndicatorCount = 5;
 
     let state = {
       serverUrl: '',
       connectionVerified: false,
-      enterprises: [],
+      emcUser: null,
+      emcAuthenticated: false,
+      accessibleEnterprises: [],
+      accessibleProperties: [],
       selectedEnterprise: null,
-      properties: [],
       selectedProperty: null,
       rvcs: [],
       mode: 'pos',
@@ -429,7 +471,7 @@
     };
 
     function updateStepIndicators() {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < stepIndicatorCount; i++) {
         const ind = document.getElementById(`step-ind-${i}`);
         const dot = ind.querySelector('.step-dot');
         const label = ind.querySelector('.step-label');
@@ -437,7 +479,7 @@
         label.className = 'step-label';
         if (i < currentStep) {
           dot.classList.add('completed');
-        } else if (i === currentStep || (currentStep === 4 && i === 3)) {
+        } else if (i === currentStep || (currentStep === 4 && i === 4)) {
           dot.classList.add('active');
           label.classList.add('active');
         }
@@ -472,7 +514,7 @@
           btn.disabled = !state.connectionVerified;
           break;
         case 1:
-          btn.disabled = !state.selectedEnterprise;
+          btn.disabled = !state.emcAuthenticated;
           break;
         case 2:
           btn.disabled = !state.selectedProperty;
@@ -527,96 +569,96 @@
       btn.disabled = false;
     }
 
-    async function loadEnterprises() {
-      const listEl = document.getElementById('enterprise-list');
-      const statusEl = document.getElementById('enterprise-status');
-      listEl.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span><p>Loading enterprises...</p></div>';
-      statusEl.className = 'status-msg';
+    async function doEmcLogin() {
+      const emailInput = document.getElementById('login-email');
+      const passwordInput = document.getElementById('login-password');
+      const statusEl = document.getElementById('login-status');
+      const btn = document.getElementById('btn-login');
+
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!email || !password) {
+        statusEl.className = 'status-msg error';
+        statusEl.textContent = 'Please enter your email and password';
+        return;
+      }
+
+      btn.disabled = true;
+      statusEl.className = 'status-msg loading';
+      statusEl.innerHTML = '<span class="loading-spinner"></span>Signing in...';
 
       try {
-        const result = await window.wizardAPI.fetchEnterprises(state.serverUrl);
-        if (!result.success) throw new Error(result.error);
+        const result = await window.wizardAPI.emcLogin(state.serverUrl, email, password);
+        if (result.success) {
+          state.emcUser = result.data.user;
+          state.emcAuthenticated = true;
+          state.accessibleEnterprises = result.data.accessibleEnterprises || [];
+          state.accessibleProperties = result.data.accessibleProperties || [];
 
-        state.enterprises = result.data;
-        if (state.enterprises.length === 0) {
-          listEl.innerHTML = '<div class="empty-state"><p>No enterprises found on this server.</p></div>';
-          return;
-        }
+          if (state.accessibleEnterprises.length === 1) {
+            state.selectedEnterprise = state.accessibleEnterprises[0];
+          }
 
-        listEl.innerHTML = state.enterprises.map(e => `
-          <div class="selection-item" data-id="${e.id}" onclick="selectEnterprise('${e.id}')">
-            <div class="item-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/></svg>
-            </div>
-            <div class="item-details">
-              <div class="item-name">${escHtml(e.name)}</div>
-              <div class="item-meta">${escHtml(e.code || '')}</div>
-            </div>
-          </div>
-        `).join('');
-
-        if (state.enterprises.length === 1) {
-          selectEnterprise(state.enterprises[0].id);
+          statusEl.className = 'status-msg success';
+          statusEl.textContent = `Welcome, ${result.data.user.displayName}`;
+          updateNextButton();
+        } else {
+          statusEl.className = 'status-msg error';
+          statusEl.textContent = result.error || 'Login failed';
+          state.emcAuthenticated = false;
+          updateNextButton();
         }
       } catch (e) {
         statusEl.className = 'status-msg error';
-        statusEl.textContent = 'Failed to load enterprises: ' + e.message;
-        listEl.innerHTML = '';
+        statusEl.textContent = 'Login failed: ' + e.message;
+        state.emcAuthenticated = false;
+        updateNextButton();
       }
+      btn.disabled = false;
     }
 
-    function selectEnterprise(id) {
-      state.selectedEnterprise = state.enterprises.find(e => String(e.id) === String(id));
-      document.querySelectorAll('#enterprise-list .selection-item').forEach(el => {
-        el.classList.toggle('selected', el.dataset.id === String(id));
-      });
-      state.selectedProperty = null;
-      state.selectedDevice = null;
-      updateNextButton();
-    }
-
-    async function loadProperties() {
+    function loadProperties() {
       const listEl = document.getElementById('property-list');
       const statusEl = document.getElementById('property-status');
       const hintEl = document.getElementById('property-hint');
-      hintEl.textContent = `Properties for ${state.selectedEnterprise.name}`;
-      listEl.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span><p>Loading properties...</p></div>';
-      statusEl.className = 'status-msg';
 
-      try {
-        const result = await window.wizardAPI.fetchProperties(state.serverUrl, state.selectedEnterprise.id);
-        if (!result.success) throw new Error(result.error);
+      const entName = state.selectedEnterprise ? state.selectedEnterprise.name : 'your enterprise';
+      hintEl.textContent = `Properties available for ${entName}`;
 
-        state.properties = result.data;
-        if (state.properties.length === 0) {
-          listEl.innerHTML = '<div class="empty-state"><p>No properties configured for this enterprise.</p></div>';
-          return;
-        }
+      const props = state.accessibleProperties.filter(p => {
+        if (!state.selectedEnterprise) return true;
+        return String(p.enterpriseId) === String(state.selectedEnterprise.id);
+      });
 
-        listEl.innerHTML = state.properties.map(p => `
-          <div class="selection-item" data-id="${p.id}" onclick="selectProperty('${p.id}')">
-            <div class="item-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>
-            <div class="item-details">
-              <div class="item-name">${escHtml(p.name)}</div>
-              <div class="item-meta">${escHtml(p.address || p.city || '')}</div>
-            </div>
+      if (props.length === 0) {
+        listEl.innerHTML = '<div class="empty-state"><p>No properties available for your account.</p></div>';
+        return;
+      }
+
+      listEl.innerHTML = props.map(p => `
+        <div class="selection-item" data-id="${p.id}" onclick="selectProperty('${p.id}')">
+          <div class="item-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </div>
-        `).join('');
+          <div class="item-details">
+            <div class="item-name">${escHtml(p.name)}</div>
+            <div class="item-meta">${escHtml(p.address || p.city || '')}</div>
+          </div>
+        </div>
+      `).join('');
 
-        if (state.properties.length === 1) {
-          selectProperty(state.properties[0].id);
-        }
-      } catch (e) {
-        statusEl.className = 'status-msg error';
-        statusEl.textContent = 'Failed to load properties: ' + e.message;
-        listEl.innerHTML = '';
+      if (props.length === 1) {
+        selectProperty(props[0].id);
       }
     }
 
     function selectProperty(id) {
-      state.selectedProperty = state.properties.find(p => String(p.id) === String(id));
+      const allProps = state.accessibleProperties;
+      state.selectedProperty = allProps.find(p => String(p.id) === String(id));
+      if (state.selectedProperty && state.selectedProperty.enterpriseId) {
+        state.selectedEnterprise = state.accessibleEnterprises.find(e => String(e.id) === String(state.selectedProperty.enterpriseId));
+      }
       document.querySelectorAll('#property-list .selection-item').forEach(el => {
         el.classList.toggle('selected', el.dataset.id === String(id));
       });
@@ -640,9 +682,10 @@
       statusEl.className = 'status-msg';
 
       try {
+        const entId = state.selectedEnterprise ? state.selectedEnterprise.id : '';
         const result = await window.wizardAPI.fetchDevices(
           state.serverUrl,
-          state.selectedEnterprise.id,
+          entId,
           state.selectedProperty.id,
           state.mode
         );
@@ -702,6 +745,7 @@
 
     function buildSummary() {
       document.getElementById('sum-server').textContent = state.serverUrl;
+      document.getElementById('sum-user').textContent = state.emcUser?.displayName || state.emcUser?.email || '-';
       document.getElementById('sum-enterprise').textContent = state.selectedEnterprise?.name || '-';
       document.getElementById('sum-property').textContent = state.selectedProperty?.name || '-';
       document.getElementById('sum-mode').textContent = state.mode === 'pos' ? 'POS Workstation' : 'Kitchen Display (KDS)';
@@ -712,8 +756,7 @@
     async function goNext() {
       if (currentStep === 0 && state.connectionVerified) {
         showStep(1);
-        loadEnterprises();
-      } else if (currentStep === 1 && state.selectedEnterprise) {
+      } else if (currentStep === 1 && state.emcAuthenticated) {
         showStep(2);
         loadProperties();
       } else if (currentStep === 2 && state.selectedProperty) {
@@ -743,9 +786,9 @@
       try {
         const config = {
           serverUrl: state.serverUrl,
-          enterpriseId: state.selectedEnterprise.id,
-          enterpriseName: state.selectedEnterprise.name,
-          enterpriseCode: state.selectedEnterprise.code,
+          enterpriseId: state.selectedEnterprise?.id || null,
+          enterpriseName: state.selectedEnterprise?.name || null,
+          enterpriseCode: state.selectedEnterprise?.code || null,
           propertyId: state.selectedProperty.id,
           propertyName: state.selectedProperty.name,
           rvcId: state.selectedRvc?.id || null,
@@ -756,6 +799,7 @@
           deviceType: state.mode === 'pos' ? 'workstation' : 'kds',
           setupComplete: true,
           setupDate: new Date().toISOString(),
+          configuredBy: state.emcUser?.displayName || state.emcUser?.email || 'unknown',
         };
 
         const result = await window.wizardAPI.saveConfig(config);
@@ -788,6 +832,20 @@
 
     document.getElementById('server-url').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') testConnection();
+    });
+
+    document.getElementById('login-email').addEventListener('input', () => {
+      state.emcAuthenticated = false;
+      updateNextButton();
+    });
+
+    document.getElementById('login-password').addEventListener('input', () => {
+      state.emcAuthenticated = false;
+      updateNextButton();
+    });
+
+    document.getElementById('login-password').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doEmcLogin();
     });
 
     window.addEventListener('DOMContentLoaded', async () => {

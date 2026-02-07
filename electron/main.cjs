@@ -926,6 +926,27 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('wizard-emc-login', async (event, serverUrl, email, password) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${serverUrl}/api/emc/wizard-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.message || `HTTP ${response.status}` };
+      }
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: e.name === 'AbortError' ? 'Login timed out' : e.message };
+    }
+  });
+
   ipcMain.handle('wizard-fetch-enterprises', async (event, serverUrl) => {
     try {
       const controller = new AbortController();
@@ -1043,6 +1064,7 @@ function setupIpcHandlers() {
 
     const serverUrl = config.serverUrl || getServerUrl();
     const startPath = appMode === 'kds' ? '/kds' : '/pos';
+
     mainWindow.loadURL(`${serverUrl}${startPath}`);
 
     mainWindow.on('closed', () => { mainWindow = null; });

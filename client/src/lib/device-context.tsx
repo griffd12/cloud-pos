@@ -337,12 +337,46 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     }
   }, [clearDeviceConfig]);
 
-  // Security disabled - skip automatic token validation
-  // useEffect(() => {
-  //   if (deviceToken) {
-  //     validateDeviceToken();
-  //   }
-  // }, []);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.getAppInfo().then((appInfo: any) => {
+        if (appInfo && appInfo.setupComplete && appInfo.serverUrl) {
+          const storedUrl = localStorage.getItem(SERVER_URL_KEY);
+          const storedEntId = localStorage.getItem(ENTERPRISE_ID_KEY);
+          const storedDeviceType = localStorage.getItem(DEVICE_TYPE_KEY);
+
+          if (!storedUrl || storedUrl !== appInfo.serverUrl || !storedEntId || !storedDeviceType) {
+            const entId = String(appInfo.enterpriseId || '');
+            const entName = String(appInfo.enterpriseName || '');
+            localStorage.setItem(SERVER_URL_KEY, appInfo.serverUrl);
+            localStorage.setItem(ENTERPRISE_CODE_KEY, entName);
+            localStorage.setItem(ENTERPRISE_ID_KEY, entId);
+            setServerUrl(appInfo.serverUrl);
+            setEnterpriseCode(entName);
+            setEnterpriseId(entId);
+
+            const mode = appInfo.mode === 'kds' ? 'kds' : 'pos';
+            localStorage.setItem(DEVICE_TYPE_KEY, mode);
+            localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, 'true');
+            setDeviceType(mode);
+            setHasExplicitDeviceType(true);
+
+            if (appInfo.deviceId) {
+              localStorage.setItem(DEVICE_ID_KEY, String(appInfo.deviceId));
+              localStorage.setItem(DEVICE_NAME_KEY, String(appInfo.deviceName || ''));
+              setLinkedDeviceId(String(appInfo.deviceId));
+              setDeviceName(String(appInfo.deviceName || ''));
+            }
+
+            if (appInfo.propertyId) {
+              localStorage.setItem(DEVICE_PROPERTY_ID_KEY, String(appInfo.propertyId));
+              setPropertyId(String(appInfo.propertyId));
+            }
+          }
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   // Security disabled - always consider device as configured
   const isConfigured = true;

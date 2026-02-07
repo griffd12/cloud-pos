@@ -42,6 +42,11 @@ export default function EmployeesPage() {
   const [active, setActive] = useState(true);
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [jobAssignments, setJobAssignments] = useState<JobAssignment[]>([]);
+  const [emcEmail, setEmcEmail] = useState("");
+  const [emcPassword, setEmcPassword] = useState("");
+  const [emcAccessLevel, setEmcAccessLevel] = useState("property_admin");
+  const [hasEmcAccess, setHasEmcAccess] = useState(false);
+  const [emcLoading, setEmcLoading] = useState(false);
 
   // Build URLs with enterprise filtering for multi-tenancy
   const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
@@ -93,6 +98,10 @@ export default function EmployeesPage() {
     // Pre-select the context property if one is selected in EMC
     setSelectedPropertyIds(selectedPropertyId ? [selectedPropertyId] : []);
     setJobAssignments([]);
+    setEmcEmail("");
+    setEmcPassword("");
+    setEmcAccessLevel("property_admin");
+    setHasEmcAccess(false);
   };
 
   useEffect(() => {
@@ -121,6 +130,21 @@ export default function EmployeesPage() {
             bypassClockIn: a.bypassClockIn || false,
           })));
         });
+
+      apiRequest("GET", `/api/employees/${editingItem.id}/emc-access`)
+        .then(res => res.json())
+        .then((data: any) => {
+          if (data.hasEmcAccess) {
+            setHasEmcAccess(true);
+            setEmcEmail(data.email || "");
+            setEmcAccessLevel(data.accessLevel || "property_admin");
+          } else {
+            setHasEmcAccess(false);
+            setEmcEmail("");
+            setEmcAccessLevel("property_admin");
+          }
+          setEmcPassword("");
+        });
     } else {
       resetForm();
     }
@@ -147,7 +171,7 @@ export default function EmployeesPage() {
   ];
 
   const createMutation = useMutation({
-    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[]; jobAssignments: JobAssignment[] }) => {
+    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[]; jobAssignments: JobAssignment[]; emcEmail?: string; emcPassword?: string; emcAccessLevel?: string }) => {
       const response = await apiRequest("POST", "/api/employees", data.employee);
       const created = await response.json();
       if (data.propertyIds.length > 0) {
@@ -161,6 +185,13 @@ export default function EmployeesPage() {
             isPrimary: a.isPrimary,
             bypassClockIn: a.bypassClockIn,
           }))
+        });
+      }
+      if (data.emcEmail) {
+        await apiRequest("PUT", `/api/employees/${created.id}/emc-access`, {
+          email: data.emcEmail,
+          password: data.emcPassword,
+          accessLevel: data.emcAccessLevel,
         });
       }
       return created;
@@ -178,7 +209,7 @@ export default function EmployeesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[]; jobAssignments: JobAssignment[] }) => {
+    mutationFn: async (data: { employee: Partial<Employee>; propertyIds: string[]; jobAssignments: JobAssignment[]; emcEmail?: string; emcPassword?: string; emcAccessLevel?: string; removeEmcAccess?: boolean }) => {
       const response = await apiRequest("PUT", "/api/employees/" + data.employee.id, data.employee);
       await apiRequest("PUT", `/api/employees/${data.employee.id}/assignments`, { propertyIds: data.propertyIds });
       await apiRequest("PUT", `/api/employees/${data.employee.id}/job-codes`, { 
@@ -189,6 +220,17 @@ export default function EmployeesPage() {
           bypassClockIn: a.bypassClockIn,
         }))
       });
+      if (data.emcEmail) {
+        await apiRequest("PUT", `/api/employees/${data.employee.id}/emc-access`, {
+          email: data.emcEmail,
+          password: data.emcPassword,
+          accessLevel: data.emcAccessLevel,
+        });
+      } else if (data.removeEmcAccess) {
+        await apiRequest("PUT", `/api/employees/${data.employee.id}/emc-access`, {
+          removeAccess: true,
+        });
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -248,7 +290,7 @@ export default function EmployeesPage() {
       if (selectedPropertyIds.length > 0) {
         (employeeData as any).propertyId = selectedPropertyIds[0];
       }
-      updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds, jobAssignments });
+      updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds, jobAssignments, emcEmail: emcEmail || undefined, emcPassword: emcPassword || undefined, emcAccessLevel, removeEmcAccess: !emcEmail && hasEmcAccess });
     } else {
       // For new employees, use: first selected property > EMC context property > first available property
       const primaryPropertyId = selectedPropertyIds.length > 0 
@@ -267,7 +309,10 @@ export default function EmployeesPage() {
           propertyId: primaryPropertyId,
         } as Employee, 
         propertyIds: propertyIdsToAssign, 
-        jobAssignments 
+        jobAssignments,
+        emcEmail: emcEmail || undefined,
+        emcPassword: emcPassword || undefined,
+        emcAccessLevel,
       });
     }
   };
@@ -335,7 +380,7 @@ export default function EmployeesPage() {
           resetForm();
         }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Employee" : "Add Employee"}</DialogTitle>
           </DialogHeader>
@@ -539,6 +584,54 @@ export default function EmployeesPage() {
               <p className="text-xs text-muted-foreground">
                 Select one or more properties this employee can access
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">EMC Access</Label>
+              <p className="text-xs text-muted-foreground">
+                Grant this employee access to the Enterprise Management Console and the terminal installer program
+              </p>
+              <div className="border rounded-md p-3 space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="emcEmail">EMC Email</Label>
+                  <Input
+                    id="emcEmail"
+                    data-testid="input-emc-email"
+                    type="email"
+                    value={emcEmail}
+                    onChange={(e) => setEmcEmail(e.target.value)}
+                    placeholder="email@company.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="emcPassword">
+                    EMC Password {hasEmcAccess ? "(leave blank to keep current)" : ""}
+                  </Label>
+                  <Input
+                    id="emcPassword"
+                    data-testid="input-emc-password"
+                    type="password"
+                    value={emcPassword}
+                    onChange={(e) => setEmcPassword(e.target.value)}
+                    placeholder={hasEmcAccess ? "Leave blank to keep current" : "Minimum 8 characters"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="emcAccessLevel">Access Level</Label>
+                  <Select value={emcAccessLevel} onValueChange={setEmcAccessLevel}>
+                    <SelectTrigger data-testid="select-emc-access-level">
+                      <SelectValue placeholder="Select access level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="property_admin">Property Admin</SelectItem>
+                      <SelectItem value="enterprise_admin">Enterprise Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Property Admin can only access assigned properties. Enterprise Admin can access all properties in the enterprise.
+                  </p>
+                </div>
+              </div>
             </div>
             
             <div className="flex items-center space-x-2">

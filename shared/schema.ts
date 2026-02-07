@@ -784,6 +784,7 @@ export const emcUsers = pgTable("emc_users", {
   accessLevel: text("access_level").notNull().default("property_admin"), // super_admin, enterprise_admin, property_admin
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id), // null for super_admin
   propertyId: varchar("property_id").references(() => properties.id), // null for enterprise_admin and above
+  employeeId: varchar("employee_id").references(() => employees.id),
   // Status
   active: boolean("active").default(true),
   lastLoginAt: timestamp("last_login_at"),
@@ -797,6 +798,7 @@ export const emcUsers = pgTable("emc_users", {
 export const emcUsersRelations = relations(emcUsers, ({ one }) => ({
   enterprise: one(enterprises, { fields: [emcUsers.enterpriseId], references: [enterprises.id] }),
   property: one(properties, { fields: [emcUsers.propertyId], references: [properties.id] }),
+  employee: one(employees, { fields: [emcUsers.employeeId], references: [employees.id] }),
 }));
 
 // EMC Sessions for server-side session management

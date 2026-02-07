@@ -8,6 +8,9 @@ import fs from "fs";
 import path from "path";
 import archiver from "archiver";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq, sql, inArray } from "drizzle-orm";
+import { emcUsers, enterprises, properties, employeeAssignments } from "@shared/schema";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { resolveBusinessDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
@@ -866,6 +869,13 @@ async function finalizePreviewTicket(
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // Run schema migrations
+  try {
+    await db.execute(sql`ALTER TABLE emc_users ADD COLUMN IF NOT EXISTS employee_id VARCHAR REFERENCES employees(id)`);
+  } catch (e) {
+    console.error("Migration error (non-fatal):", e);
+  }
+
   // Use noServer: true for all WebSocket servers and handle upgrade manually
   const wss = new WebSocketServer({ noServer: true });
   const printAgentWss = new WebSocketServer({ noServer: true });
@@ -10470,6 +10480,94 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // === EMC ACCESS (Employee-linked EMC users) ===
+
+  app.get("/api/employees/:id/emc-access", async (req, res) => {
+    try {
+      const result = await db.select().from(emcUsers).where(eq(emcUsers.employeeId, req.params.id)).limit(1);
+      if (result.length > 0) {
+        res.json({
+          hasEmcAccess: true,
+          email: result[0].email,
+          accessLevel: result[0].accessLevel,
+          active: result[0].active,
+          emcUserId: result[0].id,
+        });
+      } else {
+        res.json({ hasEmcAccess: false });
+      }
+    } catch (error) {
+      console.error("Error fetching EMC access:", error);
+      res.status(500).json({ message: "Failed to fetch EMC access" });
+    }
+  });
+
+  app.put("/api/employees/:id/emc-access", async (req, res) => {
+    try {
+      const employeeId = req.params.id;
+      const { email, password, accessLevel, removeAccess } = req.body;
+
+      const employee = await storage.getEmployee(employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      if (removeAccess) {
+        const existing = await db.select().from(emcUsers).where(eq(emcUsers.employeeId, employeeId)).limit(1);
+        if (existing.length > 0) {
+          await db.update(emcUsers).set({ active: false, employeeId: null }).where(eq(emcUsers.id, existing[0].id));
+        }
+        return res.json({ success: true, removed: true });
+      }
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const existingByEmployee = await db.select().from(emcUsers).where(eq(emcUsers.employeeId, employeeId)).limit(1);
+
+      const existingByEmail = await db.select().from(emcUsers).where(eq(emcUsers.email, email.toLowerCase())).limit(1);
+      if (existingByEmail.length > 0 && existingByEmail[0].employeeId !== employeeId) {
+        return res.status(400).json({ message: "This email is already in use by another EMC user" });
+      }
+
+      if (existingByEmployee.length > 0) {
+        const updateData: any = {
+          email: email.toLowerCase(),
+          accessLevel: accessLevel || existingByEmployee[0].accessLevel,
+          active: true,
+          enterpriseId: employee.enterpriseId,
+          propertyId: employee.propertyId,
+        };
+        if (password && password.length > 0) {
+          updateData.passwordHash = await bcrypt.hash(password, 10);
+        }
+        await db.update(emcUsers).set(updateData).where(eq(emcUsers.id, existingByEmployee[0].id));
+        res.json({ success: true, updated: true });
+      } else {
+        if (!password || password.length < 8) {
+          return res.status(400).json({ message: "Password must be at least 8 characters" });
+        }
+        const passwordHash = await bcrypt.hash(password, 10);
+        await db.insert(emcUsers).values({
+          email: email.toLowerCase(),
+          passwordHash,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          accessLevel: accessLevel || "property_admin",
+          enterpriseId: employee.enterpriseId,
+          propertyId: employee.propertyId,
+          employeeId: employeeId,
+          active: true,
+        });
+        res.json({ success: true, created: true });
+      }
+    } catch (error) {
+      console.error("Error updating EMC access:", error);
+      res.status(500).json({ message: "Failed to update EMC access" });
+    }
+  });
+
   // === TIMECARD EDITS (AUDIT) ===
 
   // Get timecard edits
@@ -15734,6 +15832,89 @@ connect();
     } catch (error) {
       console.error("EMC logout error:", error);
       res.status(500).json({ message: "Failed to logout" });
+    }
+  });
+
+  // EMC Wizard Login - authenticates EMC credentials for the Electron installer wizard
+  // Returns user info plus their accessible enterprises and properties
+  app.post("/api/emc/wizard-login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      const user = await storage.getEmcUserByEmail(email.toLowerCase());
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      if (!user.active) {
+        return res.status(401).json({ message: "Account is disabled" });
+      }
+
+      const passwordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordValid) {
+        await storage.updateEmcUser(user.id, {
+          failedLoginAttempts: (user.failedLoginAttempts || 0) + 1,
+        });
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      await storage.updateEmcUser(user.id, {
+        failedLoginAttempts: 0,
+        lastLoginAt: new Date(),
+      });
+
+      let accessibleEnterprises: any[] = [];
+      let accessibleProperties: any[] = [];
+
+      if (user.accessLevel === "super_admin") {
+        accessibleEnterprises = await db.select().from(enterprises);
+        accessibleProperties = await db.select().from(properties);
+      } else if (user.accessLevel === "enterprise_admin") {
+        if (user.enterpriseId) {
+          accessibleEnterprises = await db.select().from(enterprises).where(eq(enterprises.id, user.enterpriseId));
+          accessibleProperties = await db.select().from(properties).where(eq(properties.enterpriseId, user.enterpriseId));
+        }
+      } else {
+        // property_admin - get from employee assignments if linked, otherwise from propertyId
+        if (user.enterpriseId) {
+          accessibleEnterprises = await db.select().from(enterprises).where(eq(enterprises.id, user.enterpriseId));
+        }
+
+        if ((user as any).employeeId) {
+          const assignments = await db.select().from(employeeAssignments).where(eq(employeeAssignments.employeeId, (user as any).employeeId));
+          const assignedPropertyIds = assignments.map(a => a.propertyId).filter(Boolean) as string[];
+          if (assignedPropertyIds.length > 0) {
+            accessibleProperties = await db.select().from(properties).where(inArray(properties.id, assignedPropertyIds));
+          }
+        }
+
+        if (accessibleProperties.length === 0 && user.propertyId) {
+          accessibleProperties = await db.select().from(properties).where(eq(properties.id, user.propertyId));
+        }
+      }
+
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          displayName: `${user.firstName} ${user.lastName}`,
+          accessLevel: user.accessLevel,
+          enterpriseId: user.enterpriseId,
+          propertyId: user.propertyId,
+        },
+        accessibleEnterprises: accessibleEnterprises.map(e => ({ id: e.id, name: e.name })),
+        accessibleProperties: accessibleProperties.map(p => ({ id: p.id, name: p.name, enterpriseId: p.enterpriseId })),
+      });
+    } catch (error) {
+      console.error("EMC wizard login error:", error);
+      res.status(500).json({ message: "Failed to authenticate" });
     }
   });
 
