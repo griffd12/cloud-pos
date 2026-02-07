@@ -70,6 +70,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getOfflineMode: () => ipcRenderer.invoke('get-offline-mode'),
 
+  // === Logging API ===
+  openLogDirectory: () => ipcRenderer.invoke('open-log-directory'),
+  getLogContent: (logName, lines) => ipcRenderer.invoke('get-log-content', { logName, lines }),
+
   // === EMV Terminal API ===
   emvSendPayment: (config) => ipcRenderer.invoke('emv-send-payment', config),
   emvCancel: (address, port) => ipcRenderer.invoke('emv-cancel', { address, port }),

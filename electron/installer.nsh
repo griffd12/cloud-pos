@@ -1,9 +1,27 @@
 !macro customInstall
+  ; Initialize installer log
+  CreateDirectory "$LOCALAPPDATA\Cloud POS\logs"
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "$\r$\n================================================================================$\r$\n"
+  FileWrite $0 "  CLOUD POS INSTALLER - INSTALL LOG$\r$\n"
+  FileWrite $0 "  Install Directory: $INSTDIR$\r$\n"
+  FileWrite $0 "================================================================================$\r$\n"
+  FileClose $0
+
   ; Create POS Mode shortcut on desktop
   CreateShortCut "$DESKTOP\Cloud POS.lnk" "$INSTDIR\Cloud POS.exe" "--pos" "$INSTDIR\Cloud POS.exe" 0
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Desktop shortcut created: Cloud POS.lnk$\r$\n"
+  FileClose $0
   
   ; Create KDS Mode shortcut on desktop
   CreateShortCut "$DESKTOP\Cloud KDS.lnk" "$INSTDIR\Cloud POS.exe" "--kds" "$INSTDIR\Cloud POS.exe" 0
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Desktop shortcut created: Cloud KDS.lnk$\r$\n"
+  FileClose $0
   
   ; Create Start Menu shortcuts
   CreateDirectory "$SMPROGRAMS\Cloud POS"
@@ -11,13 +29,25 @@
   CreateShortCut "$SMPROGRAMS\Cloud POS\Cloud KDS.lnk" "$INSTDIR\Cloud POS.exe" "--kds" "$INSTDIR\Cloud POS.exe" 0
   CreateShortCut "$SMPROGRAMS\Cloud POS\Cloud POS (Kiosk).lnk" "$INSTDIR\Cloud POS.exe" "--pos --kiosk" "$INSTDIR\Cloud POS.exe" 0
   CreateShortCut "$SMPROGRAMS\Cloud POS\Cloud KDS (Kiosk).lnk" "$INSTDIR\Cloud POS.exe" "--kds --kiosk" "$INSTDIR\Cloud POS.exe" 0
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Start Menu shortcuts created (POS, KDS, POS Kiosk, KDS Kiosk)$\r$\n"
+  FileClose $0
 
   ; Create data directories for offline database and print agent
   CreateDirectory "$LOCALAPPDATA\Cloud POS\config"
   CreateDirectory "$LOCALAPPDATA\Cloud POS\data"
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Data directories created: config, data, logs$\r$\n"
+  FileClose $0
   
   ; Set auto-launch in Windows registry (POS mode by default)
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CloudPOS" '"$INSTDIR\Cloud POS.exe" --pos'
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Auto-launch registry entry set (HKCU\Run\CloudPOS)$\r$\n"
+  FileClose $0
   
   ; Write uninstall info for Windows Add/Remove Programs
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "DisplayName" "Cloud POS"
@@ -26,13 +56,37 @@
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "Publisher" "Cloud POS Systems"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "NoRepair" 1
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Windows Add/Remove Programs registry entries written$\r$\n"
+  FileClose $0
   
   ; Add Windows Firewall exception for print agent TCP communication
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="Cloud POS Print Agent" dir=out action=allow protocol=tcp remoteport=9100 program="$INSTDIR\Cloud POS.exe"'
+  Pop $1
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="Cloud POS Print Agent Inbound" dir=in action=allow protocol=tcp localport=9100 program="$INSTDIR\Cloud POS.exe"'
+  Pop $2
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Firewall rules added (outbound port 9100 result: $1, inbound port 9100 result: $2)$\r$\n"
+  FileWrite $0 "================================================================================$\r$\n"
+  FileWrite $0 "  INSTALLATION COMPLETE$\r$\n"
+  FileWrite $0 "  Install Path: $INSTDIR$\r$\n"
+  FileWrite $0 "  Data Path: $LOCALAPPDATA\Cloud POS$\r$\n"
+  FileWrite $0 "  Log Path: $LOCALAPPDATA\Cloud POS\logs$\r$\n"
+  FileWrite $0 "================================================================================$\r$\n"
+  FileClose $0
 !macroend
 
 !macro customUnInstall
+  ; Log uninstall start
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "$\r$\n================================================================================$\r$\n"
+  FileWrite $0 "  CLOUD POS INSTALLER - UNINSTALL LOG$\r$\n"
+  FileWrite $0 "================================================================================$\r$\n"
+  FileClose $0
+
   ; Remove desktop shortcuts
   Delete "$DESKTOP\Cloud POS.lnk"
   Delete "$DESKTOP\Cloud KDS.lnk"
@@ -53,4 +107,14 @@
   ; Remove firewall rules
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Cloud POS Print Agent"'
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Cloud POS Print Agent Inbound"'
+
+  ; Log uninstall complete
+  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
+  FileSeek $0 0 END
+  FileWrite $0 "[OK] Shortcuts removed$\r$\n"
+  FileWrite $0 "[OK] Registry entries removed$\r$\n"
+  FileWrite $0 "[OK] Firewall rules removed$\r$\n"
+  FileWrite $0 "  UNINSTALL COMPLETE$\r$\n"
+  FileWrite $0 "================================================================================$\r$\n"
+  FileClose $0
 !macroend

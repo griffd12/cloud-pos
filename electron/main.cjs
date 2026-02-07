@@ -6,6 +6,7 @@ const { EMVTerminalManager } = require('./emv-terminal.cjs');
 const { PrintAgentService } = require('./print-agent-service.cjs');
 const { OfflineDatabase } = require('./offline-database.cjs');
 const { OfflineApiInterceptor } = require('./offline-api-interceptor.cjs');
+const { appLogger, printLogger, LOG_DIR } = require('./logger.cjs');
 
 let mainWindow = null;
 let appMode = 'pos';
@@ -38,7 +39,7 @@ function loadConfig() {
       return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
     }
   } catch (e) {
-    console.error('Failed to load config:', e.message);
+    appLogger.error('Config', 'Failed to load config', e.message);
   }
   return {};
 }
@@ -47,7 +48,7 @@ function saveConfig(config) {
   try {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
   } catch (e) {
-    console.error('Failed to save config:', e.message);
+    appLogger.error('Config', 'Failed to save config', e.message);
   }
 }
 
@@ -85,7 +86,7 @@ function initOfflineDatabase() {
     try {
       Database = require('better-sqlite3');
     } catch (e) {
-      console.warn('better-sqlite3 not available, offline storage will use JSON files');
+      appLogger.warn('OfflineDB', 'better-sqlite3 not available, using JSON file storage');
       return initJsonOfflineStorage();
     }
 
@@ -130,10 +131,10 @@ function initOfflineDatabase() {
       );
     `);
 
-    console.log('Offline SQLite database initialized at:', OFFLINE_DB_PATH);
+    appLogger.info('OfflineDB', 'SQLite database initialized', { path: OFFLINE_DB_PATH });
     return true;
   } catch (e) {
-    console.error('Failed to init offline database:', e.message);
+    appLogger.error('OfflineDB', 'SQLite init failed', e.message);
     return initJsonOfflineStorage();
   }
 }
@@ -143,7 +144,7 @@ function initJsonOfflineStorage() {
   const cachePath = path.join(DATA_DIR, 'cached_data.json');
   if (!fs.existsSync(queuePath)) fs.writeFileSync(queuePath, '[]');
   if (!fs.existsSync(cachePath)) fs.writeFileSync(cachePath, '{}');
-  console.log('Using JSON-based offline storage at:', DATA_DIR);
+  appLogger.info('OfflineDB', 'Using JSON-based offline storage', { path: DATA_DIR });
   return true;
 }
 
@@ -166,7 +167,7 @@ function queueOfflineOperation(type, endpoint, method, body) {
       fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
     }
   } catch (e) {
-    console.error('Failed to queue offline operation:', e.message);
+    appLogger.error('Sync', 'Failed to queue offline operation', e.message);
   }
 }
 
@@ -180,7 +181,7 @@ function getPendingOperations() {
       return queue.filter(op => !op.synced);
     }
   } catch (e) {
-    console.error('Failed to get pending operations:', e.message);
+    appLogger.error('Sync', 'Failed to get pending operations', e.message);
     return [];
   }
 }
@@ -197,7 +198,7 @@ function markOperationSynced(id) {
       fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
     }
   } catch (e) {
-    console.error('Failed to mark operation synced:', e.message);
+    appLogger.error('Sync', 'Failed to mark operation synced', e.message);
   }
 }
 
@@ -206,7 +207,7 @@ async function syncOfflineData() {
   const pending = getPendingOperations();
   if (pending.length === 0) return;
 
-  console.log(`Syncing ${pending.length} offline operations...`);
+  appLogger.info('Sync', `Syncing ${pending.length} offline operations`);
   const serverUrl = getServerUrl();
 
   for (const op of pending) {
@@ -219,12 +220,12 @@ async function syncOfflineData() {
 
       if (response.ok) {
         markOperationSynced(op.id || op.created_at);
-        console.log(`Synced: ${op.type} -> ${op.endpoint}`);
+        appLogger.info('Sync', `Synced: ${op.type} -> ${op.endpoint}`);
       } else {
-        console.warn(`Sync failed for ${op.endpoint}: ${response.status}`);
+        appLogger.warn('Sync', `Sync failed: ${op.endpoint}`, { status: response.status });
       }
     } catch (e) {
-      console.warn(`Sync error for ${op.endpoint}: ${e.message}`);
+      appLogger.warn('Sync', `Sync error: ${op.endpoint}`, e.message);
       break;
     }
   }
@@ -252,13 +253,13 @@ async function checkConnectivity() {
     }
 
     if (wasOffline && isOnline) {
-      console.log('Connection restored, syncing offline data...');
+      appLogger.info('Network', 'Connection restored, syncing offline data');
       syncOfflineData();
       if (enhancedOfflineDb) {
         enhancedOfflineDb.syncToCloud(serverUrl).then(result => {
-          console.log(`[OfflineDB] Cloud sync: ${result.synced} synced, ${result.failed} failed`);
+          appLogger.info('OfflineDB', `Cloud sync completed`, { synced: result.synced, failed: result.failed });
         }).catch(e => {
-          console.warn('[OfflineDB] Cloud sync error:', e.message);
+          appLogger.warn('OfflineDB', 'Cloud sync error', e.message);
         });
       }
     }
@@ -302,6 +303,7 @@ function createWindow() {
   };
 
   mainWindow = new BrowserWindow(windowConfig);
+  appLogger.info('Window', needsSetup ? 'Opening setup wizard' : `Launching ${appMode.toUpperCase()} mode`, { kiosk: isKiosk });
 
   if (needsSetup) {
     mainWindow.loadFile(path.join(__dirname, 'setup-wizard.html'));
@@ -381,6 +383,14 @@ function createWindow() {
           },
           { type: 'separator' },
           {
+            label: 'View Logs...',
+            click: () => {
+              appLogger.info('App', 'User opened log directory');
+              shell.openPath(LOG_DIR);
+            },
+          },
+          { type: 'separator' },
+          {
             label: 'Clear Browser Data',
             click: async () => {
               const result = await dialog.showMessageBox(mainWindow, {
@@ -433,7 +443,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error(`Page load failed: ${errorDescription} (${errorCode})`);
+    appLogger.error('Window', `Page load failed: ${errorDescription}`, { errorCode });
     if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
       isOnline = false;
       mainWindow.loadFile(path.join(__dirname, 'offline.html'));
@@ -446,6 +456,7 @@ function switchMode(mode) {
   const config = loadConfig();
   config.mode = mode;
   saveConfig(config);
+  appLogger.info('App', `Mode switched to ${mode}`);
   const serverUrl = getServerUrl();
   const startPath = mode === 'kds' ? '/kds' : '/pos';
   mainWindow.loadURL(`${serverUrl}${startPath}`);
@@ -524,6 +535,7 @@ async function resetAllData() {
   });
 
   if (result.response === 1) {
+    appLogger.info('App', 'Reset all data requested');
     try {
       await mainWindow.webContents.session.clearStorageData();
 
@@ -536,7 +548,7 @@ async function resetAllData() {
           offlineDb.exec('DELETE FROM offline_payments');
           offlineDb.exec('DELETE FROM offline_checks');
         } catch (e) {
-          console.warn('Some offline tables may not exist:', e.message);
+          appLogger.warn('App', 'Some offline tables may not exist during reset', e.message);
         }
       }
 
@@ -548,10 +560,11 @@ async function resetAllData() {
         }
       });
 
+      appLogger.warn('App', 'All data cleared, app will relaunch');
       app.relaunch();
       app.exit(0);
     } catch (e) {
-      console.error('Reset failed:', e.message);
+      appLogger.error('App', 'Reset failed', e.message);
       dialog.showErrorBox('Reset Failed', 'Could not reset application data: ' + e.message);
     }
   }
@@ -624,21 +637,45 @@ function setupIpcHandlers() {
 
   ipcMain.handle('get-online-status', () => isOnline);
 
+  ipcMain.handle('open-log-directory', () => {
+    appLogger.info('App', 'Opening log directory via IPC');
+    shell.openPath(LOG_DIR);
+    return { success: true, path: LOG_DIR };
+  });
+
+  ipcMain.handle('get-log-content', async (event, { logName, lines }) => {
+    try {
+      const allowedLogs = ['app', 'print-agent', 'offline-db', 'installer'];
+      const safeName = allowedLogs.includes(logName) ? logName : 'app';
+      const { Logger } = require('./logger.cjs');
+      const logger = new Logger(safeName);
+      return { success: true, content: logger.readRecentLines(lines || 200), path: logger.getLogPath() };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('print-raw', async (event, { address, port, data }) => {
     try {
+      printLogger.info('RawPrint', `Sending raw data to ${address}:${port || 9100}`);
       const result = await sendRawToPrinter(address, port || 9100, data);
+      printLogger.info('RawPrint', 'Raw print successful');
       return { success: true };
     } catch (e) {
+      printLogger.error('RawPrint', `Raw print failed: ${e.message}`, { address, port });
       return { success: false, error: e.message };
     }
   });
 
   ipcMain.handle('print-escpos', async (event, { address, port, commands }) => {
     try {
+      printLogger.info('EscPos', `Sending ESC/POS commands to ${address}:${port || 9100}`, { commandCount: commands.length });
       const buffer = buildEscPosBuffer(commands);
       const result = await sendRawToPrinter(address, port || 9100, buffer);
+      printLogger.info('EscPos', 'ESC/POS print successful');
       return { success: true };
     } catch (e) {
+      printLogger.error('EscPos', `ESC/POS print failed: ${e.message}`, { address, port });
       return { success: false, error: e.message };
     }
   });
@@ -794,14 +831,17 @@ function setupIpcHandlers() {
 
   ipcMain.handle('print-agent-test-printer', async (event, { ipAddress, port }) => {
     try {
+      printLogger.info('Test', `Testing printer at ${ipAddress}:${port || 9100}`);
       const testData = Buffer.from([0x1B, 0x40, 0x1B, 0x61, 0x01]); // init + center
       const text = Buffer.from('*** PRINT TEST ***\nCloud POS Print Agent\nPrinter Connected OK\n\n\n', 'utf-8');
       const cut = Buffer.from([0x1D, 0x56, 0x01]); // partial cut
       const fullData = Buffer.concat([testData, text, cut]);
 
       await printAgent.sendToPrinter(ipAddress, port || 9100, fullData);
+      printLogger.info('Test', 'Printer test successful');
       return { success: true };
     } catch (e) {
+      printLogger.error('Test', `Printer test failed: ${e.message}`, { ipAddress, port });
       return { success: false, error: e.message };
     }
   });
@@ -814,6 +854,7 @@ function setupIpcHandlers() {
       data,
       printerId,
     });
+    printLogger.info('LocalPrint', `Print job queued`, { printerIp, printerPort, printerId, jobId });
     return { success: true, jobId };
   });
 
@@ -1022,6 +1063,7 @@ function setupIpcHandlers() {
       config.setupComplete = true;
       config.setupDate = wizardConfig.setupDate;
       saveConfig(config);
+      appLogger.info('Wizard', 'Setup wizard completed', { enterprise: wizardConfig.enterpriseName, property: wizardConfig.propertyName, mode: wizardConfig.mode, device: wizardConfig.deviceName });
       appMode = wizardConfig.mode;
       return { success: true };
     } catch (e) {
@@ -1034,6 +1076,7 @@ function setupIpcHandlers() {
   });
 
   ipcMain.on('wizard-launch-app', () => {
+    appLogger.info('Wizard', 'Launching app after wizard completion');
     const config = loadConfig();
     if (mainWindow) {
       mainWindow.close();
@@ -1070,7 +1113,7 @@ function setupIpcHandlers() {
     mainWindow.on('closed', () => { mainWindow = null; });
 
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-      console.error(`Page load failed: ${errorDescription} (${errorCode})`);
+      appLogger.error('Window', `Page load failed after wizard: ${errorDescription}`, { errorCode });
       if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
         isOnline = false;
         mainWindow.loadFile(path.join(__dirname, 'offline.html'));
@@ -1079,7 +1122,7 @@ function setupIpcHandlers() {
 
     if (enhancedOfflineDb) {
       performInitialDataSync().catch(e => {
-        console.warn('[OfflineDB] Post-wizard sync failed:', e.message);
+        appLogger.warn('OfflineDB', 'Post-wizard sync failed', e.message);
       });
     }
   });
@@ -1167,13 +1210,13 @@ function setupAutoLaunch(enable) {
   try {
     if (enable) {
       execSync(`reg add "${regKey}" /v "${regValue}" /t REG_SZ /d "\\"${appPath}\\" ${appArgs}${kioskArg}" /f`, { windowsHide: true });
-      console.log('Auto-launch enabled');
+      appLogger.info('Config', 'Auto-launch enabled');
     } else {
       execSync(`reg delete "${regKey}" /v "${regValue}" /f`, { windowsHide: true });
-      console.log('Auto-launch disabled');
+      appLogger.info('Config', 'Auto-launch disabled');
     }
   } catch (e) {
-    console.warn('Could not set auto-launch:', e.message);
+    appLogger.warn('Config', 'Could not set auto-launch', e.message);
   }
 }
 
@@ -1192,7 +1235,7 @@ function initPrintAgent() {
     if (mainWindow) {
       mainWindow.webContents.send('print-agent-status', status);
     }
-    console.log(`[PrintAgent] Status: connected=${status.connected}, auth=${status.authenticated}`);
+    printLogger.info('Status', `connected=${status.connected}, auth=${status.authenticated}`);
   });
 
   printAgent.on('jobCompleted', (info) => {
@@ -1210,7 +1253,7 @@ function initPrintAgent() {
   if (config.printAgentId || config.printAgentToken) {
     printAgent.start();
   } else {
-    console.log('[PrintAgent] No agent ID/token configured. Print agent will start after configuration.');
+    printLogger.info('Init', 'No agent ID/token configured, print agent awaiting configuration');
   }
 }
 
@@ -1221,7 +1264,7 @@ async function initEnhancedOfflineDb() {
   await enhancedOfflineDb.initialize();
 
   offlineInterceptor = new OfflineApiInterceptor(enhancedOfflineDb);
-  console.log('[OfflineDB] Enhanced offline database initialized');
+  appLogger.info('OfflineDB', 'Enhanced offline database initialized');
 }
 
 async function performInitialDataSync() {
@@ -1231,7 +1274,7 @@ async function performInitialDataSync() {
   const rvcId = config.rvcId;
 
   if (!enterpriseId) {
-    console.log('[OfflineDB] No enterprise configured yet, skipping initial sync');
+    appLogger.info('OfflineDB', 'No enterprise configured, skipping initial sync');
     return;
   }
 
@@ -1243,18 +1286,21 @@ async function performInitialDataSync() {
     clearTimeout(timeout);
 
     if (response.ok && enhancedOfflineDb) {
-      console.log('[OfflineDB] Cloud reachable, starting initial data sync...');
+      appLogger.info('OfflineDB', 'Cloud reachable, starting initial data sync');
       const result = await enhancedOfflineDb.syncFromCloud(serverUrl, enterpriseId, propertyId, rvcId);
-      console.log(`[OfflineDB] Initial sync: ${result.synced?.length || 0} tables, ${result.errors?.length || 0} errors`);
+      appLogger.info('OfflineDB', 'Initial sync completed', { tables: result.synced?.length || 0, errors: result.errors?.length || 0 });
     }
   } catch (e) {
-    console.log('[OfflineDB] Cloud not reachable for initial sync, using cached data');
+    appLogger.warn('OfflineDB', 'Cloud not reachable for initial sync, using cached data');
   }
 }
 
 app.whenReady().then(async () => {
   ensureDirectories();
   parseArgs();
+  appLogger.separator('APPLICATION STARTUP');
+  appLogger.info('App', 'Cloud POS starting', { version: app.getVersion(), mode: appMode, kiosk: isKiosk, platform: process.platform });
+  appLogger.info('App', 'Directories', { config: CONFIG_DIR, data: DATA_DIR, logs: LOG_DIR });
   initOfflineDatabase();
   await initEnhancedOfflineDb();
   emvManager = new EMVTerminalManager(DATA_DIR);
@@ -1277,6 +1323,7 @@ app.whenReady().then(async () => {
   // Connectivity monitoring
   syncInterval = setInterval(checkConnectivity, 30000);
   checkConnectivity();
+  appLogger.info('App', 'Startup complete, connectivity monitoring active');
 
   // Sync offline operations every 60 seconds
   const syncTimer = setInterval(syncOfflineData, 60000);
@@ -1289,7 +1336,7 @@ app.whenReady().then(async () => {
         try {
           await enhancedOfflineDb.syncFromCloud(getServerUrl(), cfg.enterpriseId, cfg.propertyId, cfg.rvcId);
         } catch (e) {
-          console.warn('[OfflineDB] Periodic sync failed:', e.message);
+          appLogger.warn('OfflineDB', 'Periodic sync failed', e.message);
         }
       }
     }
@@ -1304,6 +1351,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  appLogger.info('App', 'Application shutting down');
   if (syncInterval) clearInterval(syncInterval);
   if (dataSyncInterval) clearInterval(dataSyncInterval);
   if (printAgent) {

@@ -9,7 +9,14 @@
   "files": [
     "dist/public/**/*",
     "electron/**/*",
-    "!electron-dist"
+    "!electron-dist",
+    "node_modules/better-sqlite3/**/*",
+    "node_modules/bindings/**/*",
+    "node_modules/file-uri-to-path/**/*",
+    "node_modules/prebuild-install/**/*",
+    "node_modules/node-abi/**/*",
+    "node_modules/keytar/**/*",
+    "node_modules/ws/**/*"
   ],
   "extraResources": [
     {
@@ -44,6 +51,9 @@
     "installerSidebar": null
   },
   "extraMetadata": {
-    "main": "electron/main.cjs"
-  }
+    "main": "electron/main.cjs",
+    "version": "1.1.0"
+  },
+  "buildDependenciesFromSource": false,
+  "npmRebuild": true
 }

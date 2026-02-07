@@ -1,3 +1,4 @@
+const { offlineDbLogger } = require('./logger.cjs');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -31,10 +32,10 @@ class OfflineDatabase {
       if (existing) return existing;
       const newKey = crypto.randomBytes(32).toString('hex');
       await keytar.setPassword('CloudPOS', 'offline-db-key', newKey);
-      console.log('[OfflineDB] Generated and stored new encryption key in Windows Credential Manager');
+      offlineDbLogger.info('Encryption', 'Generated and stored new encryption key in Windows Credential Manager');
       return newKey;
     } catch (e) {
-      console.warn('[OfflineDB] keytar not available for Credential Manager, using file-based key:', e.message);
+      offlineDbLogger.warn('Encryption', 'keytar not available for Credential Manager, using file-based key', e.message);
       return this.getFileBasedKey();
     }
   }
@@ -49,7 +50,7 @@ class OfflineDatabase {
       fs.writeFileSync(keyPath, newKey, { mode: 0o600 });
       return newKey;
     } catch (e) {
-      console.error('[OfflineDB] Key management error:', e.message);
+      offlineDbLogger.error('Encryption', 'Key management error', e.message);
       return crypto.createHash('sha256').update(require('os').hostname() + this.dataDir).digest('hex');
     }
   }
@@ -60,7 +61,7 @@ class OfflineDatabase {
       try {
         Database = require('better-sqlite3');
       } catch (e) {
-        console.warn('[OfflineDB] better-sqlite3 not available, using JSON file storage');
+        offlineDbLogger.warn('Init', 'better-sqlite3 not available, using JSON file storage');
         return this.initJsonStorage();
       }
 
@@ -74,13 +75,13 @@ class OfflineDatabase {
           if (testResult && testResult.length > 0) {
             this.db.pragma('cipher_page_size = 4096');
             this.encryptionActive = true;
-            console.log(`[OfflineDB] SQLCipher encryption enabled (${testResult[0].cipher_version})`);
+            offlineDbLogger.info('Encryption', `SQLCipher encryption enabled (${testResult[0].cipher_version})`);
           } else {
-            console.warn('[OfflineDB] better-sqlite3 not compiled with SQLCipher. To enable encryption, rebuild with: npm rebuild better-sqlite3 --build-from-source --sqlite3=sqlcipher');
+            offlineDbLogger.warn('Encryption', 'better-sqlite3 not compiled with SQLCipher. To enable encryption, rebuild with: npm rebuild better-sqlite3 --build-from-source --sqlite3=sqlcipher');
             this.encryptionActive = false;
           }
         } catch (encErr) {
-          console.warn('[OfflineDB] Encryption not available (better-sqlite3 built without SQLCipher):', encErr.message);
+          offlineDbLogger.warn('Encryption', 'Encryption not available (better-sqlite3 built without SQLCipher)', encErr.message);
           this.encryptionActive = false;
           this.db.close();
           this.db = new Database(this.dbPath);
@@ -92,11 +93,11 @@ class OfflineDatabase {
       this.usingSqlite = true;
 
       this.createTables();
-      console.log('[OfflineDB] SQLite database initialized at:', this.dbPath);
-      console.log(`[OfflineDB] Encryption: ${this.encryptionActive ? 'ENABLED (AES-256-CBC)' : 'DISABLED (build with SQLCipher to enable)'}`);
+      offlineDbLogger.info('Init', 'SQLite database initialized', this.dbPath);
+      offlineDbLogger.info('Init', `Encryption: ${this.encryptionActive ? 'ENABLED (AES-256-CBC)' : 'DISABLED (build with SQLCipher to enable)'}`);
       return true;
     } catch (e) {
-      console.error('[OfflineDB] SQLite init failed:', e.message);
+      offlineDbLogger.error('Init', 'SQLite init failed', e.message);
       return this.initJsonStorage();
     }
   }
@@ -377,7 +378,7 @@ class OfflineDatabase {
         fs.writeFileSync(filePath, defaultContent);
       }
     });
-    console.log('[OfflineDB] JSON file storage initialized at:', this.dataDir);
+    offlineDbLogger.info('Init', 'JSON file storage initialized', this.dataDir);
     return true;
   }
 
@@ -395,7 +396,7 @@ class OfflineDatabase {
         fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
       }
     } catch (e) {
-      console.error('[OfflineDB] Cache config error:', e.message);
+      offlineDbLogger.error('Cache', 'Cache config error', e.message);
     }
   }
 
@@ -434,7 +435,7 @@ class OfflineDatabase {
 
       tx(items);
     } catch (e) {
-      console.error(`[OfflineDB] Cache ${tableName} error:`, e.message);
+      offlineDbLogger.error('Cache', `Cache ${tableName} error`, e.message);
       this.cacheConfigData(tableName, items, enterpriseId);
     }
   }
@@ -475,7 +476,7 @@ class OfflineDatabase {
     if (this.syncInProgress) return { success: false, reason: 'sync already in progress' };
     this.syncInProgress = true;
 
-    console.log('[OfflineDB] Starting full sync from cloud...');
+    offlineDbLogger.info('Sync', 'Starting full sync from cloud...');
     const results = { success: true, errors: [], synced: [] };
 
     const endpoints = [
@@ -544,7 +545,7 @@ class OfflineDatabase {
     this.lastSyncTime = new Date();
     this.syncInProgress = false;
 
-    console.log(`[OfflineDB] Sync complete. ${results.synced.length} tables synced, ${results.errors.length} errors`);
+    offlineDbLogger.info('Sync', `Sync complete. ${results.synced.length} tables synced, ${results.errors.length} errors`);
     return results;
   }
 
@@ -569,7 +570,7 @@ class OfflineDatabase {
         fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
       }
     } catch (e) {
-      console.error('[OfflineDB] Queue operation error:', e.message);
+      offlineDbLogger.error('Queue', 'Queue operation error', e.message);
     }
   }
 
@@ -599,7 +600,7 @@ class OfflineDatabase {
         fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
       }
     } catch (e) {
-      console.error('[OfflineDB] Mark synced error:', e.message);
+      offlineDbLogger.error('Sync', 'Mark synced error', e.message);
     }
   }
 
@@ -627,7 +628,7 @@ class OfflineDatabase {
         fs.writeFileSync(checksPath, JSON.stringify(checks, null, 2));
       }
     } catch (e) {
-      console.error('[OfflineDB] Save check error:', e.message);
+      offlineDbLogger.error('Check', 'Save check error', e.message);
     }
   }
 
@@ -681,7 +682,7 @@ class OfflineDatabase {
         fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
       }
     } catch (e) {
-      console.error('[OfflineDB] Save payment error:', e.message);
+      offlineDbLogger.error('Payment', 'Save payment error', e.message);
     }
   }
 
@@ -694,7 +695,7 @@ class OfflineDatabase {
         `).run(punch.id, punch.employeeId, punch.punchType, JSON.stringify(punch));
       }
     } catch (e) {
-      console.error('[OfflineDB] Save time punch error:', e.message);
+      offlineDbLogger.error('TimePunch', 'Save time punch error', e.message);
     }
   }
 
@@ -723,7 +724,7 @@ class OfflineDatabase {
         `).run(job.id, job.printerId, job.printerIp, job.printerPort || 9100, job.jobType, JSON.stringify(job), job.escposData, job.status || 'pending');
       }
     } catch (e) {
-      console.error('[OfflineDB] Save print job error:', e.message);
+      offlineDbLogger.error('Print', 'Save print job error', e.message);
     }
   }
 
@@ -815,7 +816,7 @@ class OfflineDatabase {
       }
       return null;
     } catch (e) {
-      console.error('[OfflineDB] Get sales data error:', e.message);
+      offlineDbLogger.error('Report', 'Get sales data error', e.message);
       return null;
     }
   }
@@ -835,7 +836,7 @@ class OfflineDatabase {
     let synced = 0;
     let failed = 0;
 
-    console.log(`[OfflineDB] Syncing ${batchPending.length} of ${pending.length} operations to cloud...`);
+    offlineDbLogger.info('Sync', `Syncing ${batchPending.length} of ${pending.length} operations to cloud...`);
 
     for (const op of batchPending) {
       try {
@@ -852,7 +853,7 @@ class OfflineDatabase {
         if (response.ok) {
           this.markOperationSynced(op.id);
           synced++;
-          console.log(`[OfflineDB] Synced: ${op.type} -> ${op.endpoint}`);
+          offlineDbLogger.info('Sync', `Synced: ${op.type} -> ${op.endpoint}`);
         } else {
           this.markOperationFailed(op.id, `HTTP ${response.status}`);
           failed++;
@@ -861,14 +862,14 @@ class OfflineDatabase {
         this.markOperationFailed(op.id, e.message);
         failed++;
         if (e.name === 'AbortError' || e.message.includes('network')) {
-          console.log('[OfflineDB] Network error during sync, stopping...');
+          offlineDbLogger.warn('Sync', 'Network error during sync, stopping...');
           break;
         }
       }
     }
 
     this.syncInProgress = false;
-    console.log(`[OfflineDB] Sync results: ${synced} synced, ${failed} failed`);
+    offlineDbLogger.info('Sync', `Sync results: ${synced} synced, ${failed} failed`);
     return { synced, failed, remaining: this.getPendingOperations().length };
   }
 

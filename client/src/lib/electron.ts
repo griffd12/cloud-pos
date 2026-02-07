@@ -66,6 +66,9 @@ declare global {
 
       getOfflineMode: () => Promise<OfflineModeStatus>;
 
+      openLogDirectory: () => Promise<{ success: boolean; path: string }>;
+      getLogContent: (logName: string, lines?: number) => Promise<{ success: boolean; content?: string; path?: string; error?: string }>;
+
       emvSendPayment: (config: {
         address: string;
         port?: number;

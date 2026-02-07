@@ -2,6 +2,7 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { printLogger } = require('./logger.cjs');
 
 class PrintAgentService {
   constructor(options = {}) {
@@ -54,7 +55,7 @@ class PrintAgentService {
   emit(event, data) {
     if (this.listeners[event]) {
       this.listeners[event].forEach(cb => {
-        try { cb(data); } catch (e) { console.error(`PrintAgent event error:`, e); }
+        try { cb(data); } catch (e) { printLogger.error('Event', 'PrintAgent event error', e.message); }
       });
     }
   }
@@ -77,7 +78,7 @@ class PrintAgentService {
         }
       }
     } catch (e) {
-      console.error('[PrintAgent] Failed to load printer config:', e.message);
+      printLogger.error('Config', 'Failed to load printer config', e.message);
     }
   }
 
@@ -87,7 +88,7 @@ class PrintAgentService {
       const printers = Array.from(this.printerMap.values());
       fs.writeFileSync(configPath, JSON.stringify(printers, null, 2));
     } catch (e) {
-      console.error('[PrintAgent] Failed to save printer config:', e.message);
+      printLogger.error('Config', 'Failed to save printer config', e.message);
     }
   }
 
@@ -101,7 +102,7 @@ class PrintAgentService {
       type: config.type || 'network',
     });
     this.savePrinterConfig();
-    console.log(`[PrintAgent] Printer added: ${config.name} at ${config.ipAddress}:${config.port || 9100}`);
+    printLogger.info('Config', `Printer added: ${config.name}`, { ip: config.ipAddress, port: config.port || 9100 });
   }
 
   removePrinter(key) {
@@ -116,7 +117,7 @@ class PrintAgentService {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log('[PrintAgent] Starting print agent service...');
+    printLogger.info('Service', 'Starting print agent service');
     this.connect();
     this.processLocalQueue();
   }
@@ -140,7 +141,7 @@ class PrintAgentService {
     }
 
     this.emit('status', { connected: false, authenticated: false, reason: 'stopped' });
-    console.log('[PrintAgent] Service stopped');
+    printLogger.info('Service', 'Print agent service stopped');
   }
 
   async connect() {
@@ -153,7 +154,7 @@ class PrintAgentService {
         .replace(/^http:/, 'ws:')
         .replace(/\/$/, '') + '/ws/print-agents';
 
-      console.log(`[PrintAgent] Connecting to ${wsUrl}...`);
+      printLogger.info('Connect', `Connecting to ${wsUrl}`);
 
       this.ws = new WebSocket(wsUrl, {
         rejectUnauthorized: false,
@@ -161,7 +162,7 @@ class PrintAgentService {
       });
 
       this.ws.on('open', () => {
-        console.log('[PrintAgent] WebSocket connected, authenticating...');
+        printLogger.info('Connect', 'WebSocket connected, authenticating');
         this.isConnected = true;
         this.reconnectAttempts = 0;
 
@@ -180,7 +181,7 @@ class PrintAgentService {
       });
 
       this.ws.on('close', (code, reason) => {
-        console.log(`[PrintAgent] Disconnected (code: ${code})`);
+        printLogger.info('Connect', `Disconnected (code: ${code})`);
         this.isConnected = false;
         this.isAuthenticated = false;
         this.stopHeartbeat();
@@ -189,12 +190,12 @@ class PrintAgentService {
       });
 
       this.ws.on('error', (err) => {
-        console.error(`[PrintAgent] WebSocket error: ${err.message}`);
+        printLogger.error('Connect', `WebSocket error: ${err.message}`);
         this.emit('error', { message: err.message });
       });
 
     } catch (e) {
-      console.error(`[PrintAgent] Connection failed: ${e.message}`);
+      printLogger.error('Connect', `Connection failed: ${e.message}`);
       this.scheduleReconnect();
     }
   }
@@ -203,7 +204,7 @@ class PrintAgentService {
     if (!this.isRunning) return;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.maxReconnectDelay);
     this.reconnectAttempts++;
-    console.log(`[PrintAgent] Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})...`);
+    printLogger.info('Connect', `Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})`);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
 
@@ -223,7 +224,7 @@ class PrintAgentService {
             pendingLocalJobs: this.jobQueue.length,
           }));
         } catch (e) {
-          console.error('[PrintAgent] Heartbeat failed:', e.message);
+          printLogger.error('Heartbeat', `Heartbeat failed: ${e.message}`);
         }
       }
     }, this.heartbeatMs);
@@ -244,7 +245,7 @@ class PrintAgentService {
         case 'AUTH_OK':
           this.isAuthenticated = true;
           this.agentId = msg.agentId;
-          console.log(`[PrintAgent] Authenticated as: ${msg.agentName} (${msg.agentId})`);
+          printLogger.info('Auth', `Authenticated as: ${msg.agentName} (${msg.agentId})`);
           this.startHeartbeat();
           this.emit('status', {
             connected: true,
@@ -257,7 +258,7 @@ class PrintAgentService {
           break;
 
         case 'AUTH_FAIL':
-          console.error(`[PrintAgent] Authentication failed: ${msg.message}`);
+          printLogger.error('Auth', `Authentication failed: ${msg.message}`);
           this.isAuthenticated = false;
           this.emit('status', { connected: true, authenticated: false, reason: msg.message });
           break;
@@ -270,10 +271,10 @@ class PrintAgentService {
           break;
 
         default:
-          console.log(`[PrintAgent] Unknown message type: ${msg.type}`);
+          printLogger.warn('Message', `Unknown message type: ${msg.type}`);
       }
     } catch (e) {
-      console.error('[PrintAgent] Failed to parse message:', e.message);
+      printLogger.error('Message', 'Failed to parse message', e.message);
     }
   }
 
@@ -284,7 +285,7 @@ class PrintAgentService {
     const printData = msg.data;
     const printerId = msg.printerId;
 
-    console.log(`[PrintAgent] Received job ${jobId} for printer ${printerIp || printerId || 'default'}`);
+    printLogger.info('Job', `Received job ${jobId}`, { printer: printerIp || printerId || 'default' });
 
     try {
       this.ws.send(JSON.stringify({ type: 'ACK', jobId }));
@@ -310,7 +311,7 @@ class PrintAgentService {
     }
 
     if (!targetIp) {
-      console.error(`[PrintAgent] No printer IP for job ${jobId}`);
+      printLogger.error('Job', `No printer IP for job ${jobId}`);
       this.sendJobResult(jobId, false, 'No printer configured');
       return;
     }
@@ -320,11 +321,11 @@ class PrintAgentService {
       await this.sendToPrinter(targetIp, targetPort, buffer);
       this.sendJobResult(jobId, true);
       this.emit('jobCompleted', { jobId, printer: targetIp });
-      console.log(`[PrintAgent] Job ${jobId} printed successfully to ${targetIp}:${targetPort}`);
+      printLogger.info('Job', `Job ${jobId} printed successfully`, { printer: `${targetIp}:${targetPort}` });
     } catch (err) {
       this.sendJobResult(jobId, false, err.message);
       this.emit('jobFailed', { jobId, printer: targetIp, error: err.message });
-      console.error(`[PrintAgent] Job ${jobId} failed: ${err.message}`);
+      printLogger.error('Job', `Job ${jobId} failed: ${err.message}`);
     }
   }
 
@@ -337,7 +338,7 @@ class PrintAgentService {
           ...(error ? { error } : {}),
         }));
       } catch (e) {
-        console.error('[PrintAgent] Failed to send job result:', e.message);
+        printLogger.error('Job', 'Failed to send job result', e.message);
       }
     }
   }
@@ -391,7 +392,7 @@ class PrintAgentService {
     };
     this.jobQueue.push(localJob);
     this.saveLocalQueue();
-    console.log(`[PrintAgent] Queued local job ${localJob.id}`);
+    printLogger.info('LocalQueue', `Queued local job ${localJob.id}`);
 
     this.processNextLocalJob();
     return localJob.id;
@@ -435,7 +436,7 @@ class PrintAgentService {
       await this.sendToPrinter(targetIp, targetPort, buffer);
       job.status = 'completed';
       job.printedAt = new Date().toISOString();
-      console.log(`[PrintAgent] Local job ${job.id} printed to ${targetIp}`);
+      printLogger.info('LocalQueue', `Local job ${job.id} printed`, { printer: targetIp });
     } catch (err) {
       job.retries = (job.retries || 0) + 1;
       if (job.retries >= 3) {
@@ -445,7 +446,7 @@ class PrintAgentService {
         job.status = 'pending';
         job.error = err.message;
       }
-      console.error(`[PrintAgent] Local job ${job.id} failed: ${err.message}`);
+      printLogger.error('LocalQueue', `Local job ${job.id} failed: ${err.message}`);
     }
 
     this.saveLocalQueue();
@@ -479,7 +480,7 @@ class PrintAgentService {
       const activeJobs = this.jobQueue.filter(j => j.status !== 'completed' || j.cloudJobId);
       fs.writeFileSync(queuePath, JSON.stringify(activeJobs, null, 2));
     } catch (e) {
-      console.error('[PrintAgent] Failed to save local queue:', e.message);
+      printLogger.error('LocalQueue', 'Failed to save local queue', e.message);
     }
   }
 
@@ -490,7 +491,7 @@ class PrintAgentService {
         this.jobQueue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
       }
     } catch (e) {
-      console.error('[PrintAgent] Failed to load local queue:', e.message);
+      printLogger.error('LocalQueue', 'Failed to load local queue', e.message);
       this.jobQueue = [];
     }
   }
