@@ -1075,9 +1075,13 @@ function setupIpcHandlers() {
     return loadConfig();
   });
 
-  ipcMain.on('wizard-launch-app', () => {
+  ipcMain.on('wizard-launch-app', async () => {
     appLogger.info('Wizard', 'Launching app after wizard completion');
     const config = loadConfig();
+
+    appLogger.info('Wizard', 'Initializing all services after setup completion');
+    await initAllServices();
+
     if (mainWindow) {
       mainWindow.close();
       mainWindow = null;
@@ -1119,12 +1123,6 @@ function setupIpcHandlers() {
         mainWindow.loadFile(path.join(__dirname, 'offline.html'));
       }
     });
-
-    if (enhancedOfflineDb) {
-      performInitialDataSync().catch(e => {
-        appLogger.warn('OfflineDB', 'Post-wizard sync failed', e.message);
-      });
-    }
   });
 }
 
@@ -1269,6 +1267,10 @@ async function initEnhancedOfflineDb() {
 
 async function performInitialDataSync() {
   const config = loadConfig();
+  if (!config.setupComplete) {
+    return;
+  }
+
   const enterpriseId = config.enterpriseId;
   const propertyId = config.propertyId;
   const rvcId = config.rvcId;
@@ -1295,40 +1297,37 @@ async function performInitialDataSync() {
   }
 }
 
-app.whenReady().then(async () => {
-  ensureDirectories();
-  parseArgs();
-  appLogger.separator('APPLICATION STARTUP');
-  appLogger.info('App', 'Cloud POS starting', { version: app.getVersion(), mode: appMode, kiosk: isKiosk, platform: process.platform });
-  appLogger.info('App', 'Directories', { config: CONFIG_DIR, data: DATA_DIR, logs: LOG_DIR });
+let servicesInitialized = false;
+let syncTimer = null;
+
+async function initAllServices() {
+  if (servicesInitialized) {
+    appLogger.info('App', 'Services already initialized, skipping');
+    return;
+  }
+
+  const config = loadConfig();
+  if (!config.setupComplete) {
+    appLogger.info('App', 'Setup not complete, deferring service initialization');
+    return;
+  }
+
+  appLogger.info('App', 'Initializing services after setup verification');
+
   initOfflineDatabase();
   await initEnhancedOfflineDb();
   emvManager = new EMVTerminalManager(DATA_DIR);
   initPrintAgent();
-  setupIpcHandlers();
 
-  // Register protocol interceptor for offline API handling
-  protocol.interceptHttpProtocol && (() => {
-    // Protocol interceptor not needed for external URLs
-    // Offline interception happens via IPC from renderer
-  })();
-
-  createWindow();
-
-  const config = loadConfig();
   if (config.autoLaunch) {
     setupAutoLaunch(true);
   }
 
-  // Connectivity monitoring
   syncInterval = setInterval(checkConnectivity, 30000);
   checkConnectivity();
-  appLogger.info('App', 'Startup complete, connectivity monitoring active');
 
-  // Sync offline operations every 60 seconds
-  const syncTimer = setInterval(syncOfflineData, 60000);
+  syncTimer = setInterval(syncOfflineData, 60000);
 
-  // Periodic data cache sync every 5 minutes when online
   dataSyncInterval = setInterval(async () => {
     if (isOnline && enhancedOfflineDb) {
       const cfg = loadConfig();
@@ -1342,8 +1341,31 @@ app.whenReady().then(async () => {
     }
   }, 300000);
 
-  // Initial data sync
   await performInitialDataSync();
+
+  servicesInitialized = true;
+  appLogger.info('App', 'All services initialized successfully');
+}
+
+app.whenReady().then(async () => {
+  ensureDirectories();
+  parseArgs();
+  appLogger.separator('APPLICATION STARTUP');
+  appLogger.info('App', 'Cloud POS starting', { version: app.getVersion(), mode: appMode, kiosk: isKiosk, platform: process.platform });
+  appLogger.info('App', 'Directories', { config: CONFIG_DIR, data: DATA_DIR, logs: LOG_DIR });
+
+  const config = loadConfig();
+
+  setupIpcHandlers();
+
+  if (config.setupComplete) {
+    appLogger.info('App', 'Setup previously completed, initializing all services');
+    await initAllServices();
+  } else {
+    appLogger.info('App', 'Setup not yet completed, launching Setup Wizard only (no services initialized)');
+  }
+
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -1353,6 +1375,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   appLogger.info('App', 'Application shutting down');
   if (syncInterval) clearInterval(syncInterval);
+  if (syncTimer) clearInterval(syncTimer);
   if (dataSyncInterval) clearInterval(dataSyncInterval);
   if (printAgent) {
     printAgent.stop();

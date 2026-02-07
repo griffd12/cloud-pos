@@ -34,6 +34,7 @@ Preferred communication style: Simple, everyday language.
 - **Pizza Builder Module**: Visual, full-page interface for pizza customization, integrating with the check flow and adding modifiers.
 - **Multi-Enterprise Architecture**: Currently uses Enterprise ID filtering for data isolation; future plans include company code login, per-enterprise URLs, and separate databases for enhanced isolation and disaster recovery.
 - **Native Application Capabilities (Windows Electron)**: Includes an embedded print agent, SQLite/SQLCipher for offline data caching, local reporting, store-and-forward for offline transactions, EMV terminal communication, auto-launch, kiosk mode, and a terminal setup wizard.
+- **Electron Deferred Initialization**: All services (print agent, offline DB, EMV, sync timers, connectivity monitoring) are gated behind `setupComplete` flag. On fresh install, only the Setup Wizard UI loads — no services initialize until wizard completes. The `initAllServices()` function in main.cjs handles deferred init with an idempotent `servicesInitialized` guard.
 
 ## External Dependencies
 
