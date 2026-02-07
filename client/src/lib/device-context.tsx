@@ -38,6 +38,7 @@ interface DeviceContextType {
   enterpriseCode: string | null; // Enterprise code from URL (e.g., BOM)
   enterpriseId: string | null; // Enterprise ID from server
   hasServerConfig: boolean; // True if server URL is configured
+  isElectronLoading: boolean; // True while waiting for Electron config to load
   
   setDeviceTypeOnly: (type: "pos" | "kds") => void; // Set device type without linking to specific device
   configureAsPos: (workstationId: string, name: string) => void;
@@ -188,6 +189,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [propertyId, setPropertyId] = useState<string | null>(getStoredPropertyId);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const isElectronEnv = typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
+  const [isElectronLoading, setIsElectronLoading] = useState(isElectronEnv && !getStoredServerUrl());
   const [serverUrl, setServerUrl] = useState<string | null>(getStoredServerUrl);
   const [enterpriseCode, setEnterpriseCode] = useState<string | null>(getStoredEnterpriseCode);
   const [enterpriseId, setEnterpriseId] = useState<string | null>(getStoredEnterpriseId);
@@ -374,7 +377,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => {
+        setIsElectronLoading(false);
+      });
     }
   }, []);
 
@@ -398,6 +403,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         enterpriseCode,
         enterpriseId,
         hasServerConfig,
+        isElectronLoading,
         setDeviceTypeOnly,
         configureAsPos,
         configureAsKds,

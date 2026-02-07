@@ -55,8 +55,19 @@ function DeviceGuardedRoute({
 }
 
 function Router() {
-  const { deviceType, isConfigured, hasExplicitDeviceType, hasServerConfig, linkedDeviceId } = useDeviceContext();
+  const { deviceType, isConfigured, hasExplicitDeviceType, hasServerConfig, linkedDeviceId, isElectronLoading } = useDeviceContext();
   const [location] = useLocation();
+  
+  if (isElectronLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background" data-testid="loading-electron-config">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+          <p className="text-muted-foreground text-sm">Loading terminal configuration...</p>
+        </div>
+      </div>
+    );
+  }
   
   // Check for auto-enroll redirect from CAL wizard - handle FIRST before any other routing
   const autoEnrollRedirect = getAutoEnrollRedirect();

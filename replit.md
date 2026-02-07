@@ -35,6 +35,7 @@ Preferred communication style: Simple, everyday language.
 - **Multi-Enterprise Architecture**: Currently uses Enterprise ID filtering for data isolation; future plans include company code login, per-enterprise URLs, and separate databases for enhanced isolation and disaster recovery.
 - **Native Application Capabilities (Windows Electron)**: Includes an embedded print agent, SQLite/SQLCipher for offline data caching, local reporting, store-and-forward for offline transactions, EMV terminal communication, auto-launch, kiosk mode, and a terminal setup wizard.
 - **Electron Deferred Initialization**: All services (print agent, offline DB, EMV, sync timers, connectivity monitoring) are gated behind `setupComplete` flag. On fresh install, only the Setup Wizard UI loads — no services initialize until wizard completes. The `initAllServices()` function in main.cjs handles deferred init with an idempotent `servicesInitialized` guard.
+- **Electron Config Loading Guard**: DeviceContext includes an `isElectronLoading` flag that prevents the Router from making routing decisions (e.g., redirecting to `/server-setup`) until the async `getAppInfo()` IPC call completes and syncs the Electron config into localStorage. This prevents a race condition where the web app would redirect to setup pages before the Electron config was loaded.
 
 ## External Dependencies
 
