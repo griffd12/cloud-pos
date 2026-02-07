@@ -1,0 +1,75 @@
+D:\OnPoint-PosV2>npm install
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: vite@7.3.1
+npm warn Found: @types/node@20.16.11
+npm warn node_modules/@types/node
+npm warn   dev @types/node@"20.16.11" from the root project
+npm warn   17 more (@types/fs-extra, stripe, @types/body-parser, ...)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.3.1
+npm warn node_modules/vitest/node_modules/vite
+npm warn   vite@"^6.0.0 || ^7.0.0" from vitest@4.0.17
+npm warn   node_modules/vitest
+npm warn   1 more (@vitest/mocker)
+npm warn
+npm warn Conflicting peer dependency: @types/node@25.2.1
+npm warn node_modules/@types/node
+npm warn   peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.3.1
+npm warn   node_modules/vitest/node_modules/vite
+npm warn     vite@"^6.0.0 || ^7.0.0" from vitest@4.0.17
+npm warn     node_modules/vitest
+npm warn     1 more (@vitest/mocker)
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+added 834 packages, and audited 835 packages in 48s
+
+121 packages are looking for funding
+  run `npm fund` for details
+
+11 vulnerabilities (6 moderate, 5 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+D:\OnPoint-PosV2>npm run build
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v5.4.20 building for production...
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+✓ 3618 modules transformed.
+../dist/public/index.html                            2.24 kB │ gzip:   0.89 kB
+../dist/public/assets/index-B2akdK_O.css           102.68 kB │ gzip:  16.27 kB
+../dist/public/assets/offline-queue-eN96lbJU.js      2.07 kB │ gzip:   0.82 kB
+../dist/public/assets/index-COimaoYv.js          2,206.40 kB │ gzip: 544.68 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 13.32s
+building server...
+
+  dist\index.cjs  1.8mb
+
+Done in 1452ms
+
+D:\OnPoint-PosV2>npx electron-builder --config electron/electron-builder.json
+  • electron-builder  version=26.7.0 os=10.0.26200
+  • loaded configuration  file=D:\OnPoint-PosV2\electron\electron-builder.json
+  • description is missed in the package.json  appPackageFile=D:\OnPoint-PosV2\package.json
+  • author is missed in the package.json  appPackageFile=D:\OnPoint-PosV2\package.json
+  ⨯ Package "electron" is only allowed in "devDependencies". Please remove it from the "dependencies" section in your package.json.
+
+D:\OnPoint-PosV2>
