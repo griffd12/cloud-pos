@@ -1,16 +1,23 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const { EMVTerminalManager } = require('./emv-terminal.cjs');
+const { PrintAgentService } = require('./print-agent-service.cjs');
+const { OfflineDatabase } = require('./offline-database.cjs');
+const { OfflineApiInterceptor } = require('./offline-api-interceptor.cjs');
 
 let mainWindow = null;
 let appMode = 'pos';
 let isKiosk = false;
 let offlineDb = null;
+let enhancedOfflineDb = null;
+let offlineInterceptor = null;
+let printAgent = null;
 let syncInterval = null;
 let isOnline = true;
 let emvManager = null;
+let dataSyncInterval = null;
 
 const CONFIG_DIR = path.join(app.getPath('userData'), 'config');
 const DATA_DIR = path.join(app.getPath('userData'), 'data');
@@ -239,12 +246,27 @@ async function checkConnectivity() {
     clearTimeout(timeout);
     const wasOffline = !isOnline;
     isOnline = response.ok;
+
+    if (offlineInterceptor) {
+      offlineInterceptor.setOffline(!isOnline);
+    }
+
     if (wasOffline && isOnline) {
       console.log('Connection restored, syncing offline data...');
       syncOfflineData();
+      if (enhancedOfflineDb) {
+        enhancedOfflineDb.syncToCloud(serverUrl).then(result => {
+          console.log(`[OfflineDB] Cloud sync: ${result.synced} synced, ${result.failed} failed`);
+        }).catch(e => {
+          console.warn('[OfflineDB] Cloud sync error:', e.message);
+        });
+      }
     }
   } catch (e) {
     isOnline = false;
+    if (offlineInterceptor) {
+      offlineInterceptor.setOffline(true);
+    }
   }
 
   if (mainWindow) {
@@ -678,6 +700,135 @@ function setupIpcHandlers() {
     return { success: true };
   });
 
+  // === Print Agent IPC Handlers ===
+  ipcMain.handle('print-agent-get-status', async () => {
+    if (!printAgent) return { isRunning: false };
+    return printAgent.getStatus();
+  });
+
+  ipcMain.handle('print-agent-start', async () => {
+    if (!printAgent) return { success: false, error: 'Print agent not initialized' };
+    printAgent.start();
+    return { success: true };
+  });
+
+  ipcMain.handle('print-agent-stop', async () => {
+    if (!printAgent) return { success: false, error: 'Print agent not initialized' };
+    printAgent.stop();
+    return { success: true };
+  });
+
+  ipcMain.handle('print-agent-add-printer', async (event, config) => {
+    if (!printAgent) return { success: false, error: 'Print agent not initialized' };
+    printAgent.addPrinter(config);
+    return { success: true };
+  });
+
+  ipcMain.handle('print-agent-remove-printer', async (event, key) => {
+    if (!printAgent) return { success: false, error: 'Print agent not initialized' };
+    printAgent.removePrinter(key);
+    return { success: true };
+  });
+
+  ipcMain.handle('print-agent-get-printers', async () => {
+    if (!printAgent) return [];
+    return printAgent.getPrinters();
+  });
+
+  ipcMain.handle('print-agent-configure', async (event, config) => {
+    const appConfig = loadConfig();
+    if (config.agentId) appConfig.printAgentId = config.agentId;
+    if (config.agentToken) appConfig.printAgentToken = config.agentToken;
+    saveConfig(appConfig);
+
+    if (printAgent) {
+      if (config.agentId) printAgent.agentId = config.agentId;
+      if (config.agentToken) printAgent.agentToken = config.agentToken;
+      printAgent.stop();
+      printAgent.start();
+    }
+    return { success: true };
+  });
+
+  ipcMain.handle('print-agent-test-printer', async (event, { ipAddress, port }) => {
+    try {
+      const testData = Buffer.from([0x1B, 0x40, 0x1B, 0x61, 0x01]); // init + center
+      const text = Buffer.from('*** PRINT TEST ***\nCloud POS Print Agent\nPrinter Connected OK\n\n\n', 'utf-8');
+      const cut = Buffer.from([0x1D, 0x56, 0x01]); // partial cut
+      const fullData = Buffer.concat([testData, text, cut]);
+
+      await printAgent.sendToPrinter(ipAddress, port || 9100, fullData);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('print-agent-local-print', async (event, { printerIp, printerPort, data, printerId }) => {
+    if (!printAgent) return { success: false, error: 'Print agent not initialized' };
+    const jobId = printAgent.queueLocalPrintJob({
+      printerIp,
+      printerPort: printerPort || 9100,
+      data,
+      printerId,
+    });
+    return { success: true, jobId };
+  });
+
+  // === Enhanced Offline Database IPC Handlers ===
+  ipcMain.handle('offline-db-sync', async (event, { enterpriseId, propertyId, rvcId }) => {
+    if (!enhancedOfflineDb) return { success: false, error: 'Offline DB not initialized' };
+    const serverUrl = getServerUrl();
+    const result = await enhancedOfflineDb.syncFromCloud(serverUrl, enterpriseId, propertyId, rvcId);
+    return result;
+  });
+
+  ipcMain.handle('offline-db-get-stats', async () => {
+    if (!enhancedOfflineDb) return {};
+    return enhancedOfflineDb.getStats();
+  });
+
+  ipcMain.handle('offline-db-get-entity', async (event, { table, id }) => {
+    if (!enhancedOfflineDb) return null;
+    return enhancedOfflineDb.getEntity(table, id);
+  });
+
+  ipcMain.handle('offline-db-get-entity-list', async (event, { table, enterpriseId }) => {
+    if (!enhancedOfflineDb) return [];
+    return enhancedOfflineDb.getEntityList(table, enterpriseId);
+  });
+
+  ipcMain.handle('offline-db-get-sales-data', async (event, { businessDate, rvcId }) => {
+    if (!enhancedOfflineDb) return null;
+    return enhancedOfflineDb.getLocalSalesData(businessDate, rvcId);
+  });
+
+  ipcMain.handle('offline-db-sync-to-cloud', async () => {
+    if (!enhancedOfflineDb) return { synced: 0, failed: 0 };
+    const serverUrl = getServerUrl();
+    return enhancedOfflineDb.syncToCloud(serverUrl);
+  });
+
+  ipcMain.handle('offline-db-get-checks', async (event, { rvcId, status }) => {
+    if (!enhancedOfflineDb) return [];
+    return enhancedOfflineDb.getOfflineChecks(rvcId, status);
+  });
+
+  ipcMain.handle('offline-db-save-check', async (event, check) => {
+    if (!enhancedOfflineDb) return { success: false };
+    enhancedOfflineDb.saveOfflineCheck(check);
+    return { success: true };
+  });
+
+  ipcMain.handle('get-offline-mode', async () => {
+    return {
+      isOffline: !isOnline,
+      lastSync: enhancedOfflineDb?.getSyncMetadata('lastFullSync'),
+      pendingOps: enhancedOfflineDb?.getPendingOperations().length || 0,
+      stats: enhancedOfflineDb?.getStats() || {},
+    };
+  });
+
   ipcMain.handle('emv-send-payment', async (event, { address, port, amount, transactionType, timeout }) => {
     if (!emvManager) return { success: false, error: 'EMV manager not initialized' };
     try {
@@ -810,12 +961,96 @@ function setupAutoLaunch(enable) {
   }
 }
 
-app.whenReady().then(() => {
+function initPrintAgent() {
+  const config = loadConfig();
+  printAgent = new PrintAgentService({
+    serverUrl: getServerUrl(),
+    agentId: config.printAgentId || null,
+    agentToken: config.printAgentToken || null,
+    configDir: CONFIG_DIR,
+    dataDir: DATA_DIR,
+    heartbeatMs: 30000,
+  });
+
+  printAgent.on('status', (status) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('print-agent-status', status);
+    }
+    console.log(`[PrintAgent] Status: connected=${status.connected}, auth=${status.authenticated}`);
+  });
+
+  printAgent.on('jobCompleted', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('print-agent-job-completed', info);
+    }
+  });
+
+  printAgent.on('jobFailed', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('print-agent-job-failed', info);
+    }
+  });
+
+  if (config.printAgentId || config.printAgentToken) {
+    printAgent.start();
+  } else {
+    console.log('[PrintAgent] No agent ID/token configured. Print agent will start after configuration.');
+  }
+}
+
+function initEnhancedOfflineDb() {
+  enhancedOfflineDb = new OfflineDatabase({
+    dataDir: DATA_DIR,
+  });
+  enhancedOfflineDb.initialize();
+
+  offlineInterceptor = new OfflineApiInterceptor(enhancedOfflineDb);
+  console.log('[OfflineDB] Enhanced offline database initialized');
+}
+
+async function performInitialDataSync() {
+  const config = loadConfig();
+  const enterpriseId = config.enterpriseId;
+  const propertyId = config.propertyId;
+  const rvcId = config.rvcId;
+
+  if (!enterpriseId) {
+    console.log('[OfflineDB] No enterprise configured yet, skipping initial sync');
+    return;
+  }
+
+  try {
+    const serverUrl = getServerUrl();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(`${serverUrl}/api/health`, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (response.ok && enhancedOfflineDb) {
+      console.log('[OfflineDB] Cloud reachable, starting initial data sync...');
+      const result = await enhancedOfflineDb.syncFromCloud(serverUrl, enterpriseId, propertyId, rvcId);
+      console.log(`[OfflineDB] Initial sync: ${result.synced?.length || 0} tables, ${result.errors?.length || 0} errors`);
+    }
+  } catch (e) {
+    console.log('[OfflineDB] Cloud not reachable for initial sync, using cached data');
+  }
+}
+
+app.whenReady().then(async () => {
   ensureDirectories();
   parseArgs();
   initOfflineDatabase();
+  initEnhancedOfflineDb();
   emvManager = new EMVTerminalManager(DATA_DIR);
+  initPrintAgent();
   setupIpcHandlers();
+
+  // Register protocol interceptor for offline API handling
+  protocol.interceptHttpProtocol && (() => {
+    // Protocol interceptor not needed for external URLs
+    // Offline interception happens via IPC from renderer
+  })();
+
   createWindow();
 
   const config = loadConfig();
@@ -823,10 +1058,29 @@ app.whenReady().then(() => {
     setupAutoLaunch(true);
   }
 
+  // Connectivity monitoring
   syncInterval = setInterval(checkConnectivity, 30000);
   checkConnectivity();
 
+  // Sync offline operations every 60 seconds
   const syncTimer = setInterval(syncOfflineData, 60000);
+
+  // Periodic data cache sync every 5 minutes when online
+  dataSyncInterval = setInterval(async () => {
+    if (isOnline && enhancedOfflineDb) {
+      const cfg = loadConfig();
+      if (cfg.enterpriseId) {
+        try {
+          await enhancedOfflineDb.syncFromCloud(getServerUrl(), cfg.enterpriseId, cfg.propertyId, cfg.rvcId);
+        } catch (e) {
+          console.warn('[OfflineDB] Periodic sync failed:', e.message);
+        }
+      }
+    }
+  }, 300000);
+
+  // Initial data sync
+  await performInitialDataSync();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -835,6 +1089,13 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (syncInterval) clearInterval(syncInterval);
+  if (dataSyncInterval) clearInterval(dataSyncInterval);
+  if (printAgent) {
+    printAgent.stop();
+  }
+  if (enhancedOfflineDb) {
+    try { enhancedOfflineDb.close(); } catch (e) {}
+  }
   if (offlineDb) {
     try { offlineDb.close(); } catch (e) {}
   }

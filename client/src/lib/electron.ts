@@ -29,6 +29,33 @@ declare global {
       setMode: (mode: string) => Promise<{ success: boolean; mode: string }>;
       setServerUrl: (url: string) => Promise<{ success: boolean }>;
       setAutoLaunch: (enable: boolean) => Promise<{ success: boolean }>;
+      // Print Agent API
+      printAgent: {
+        getStatus: () => Promise<PrintAgentStatus>;
+        start: () => Promise<{ success: boolean; error?: string }>;
+        stop: () => Promise<{ success: boolean; error?: string }>;
+        addPrinter: (config: PrinterConfig) => Promise<{ success: boolean }>;
+        removePrinter: (key: string) => Promise<{ success: boolean }>;
+        getPrinters: () => Promise<PrinterConfig[]>;
+        configure: (config: { agentId?: string; agentToken?: string }) => Promise<{ success: boolean }>;
+        testPrinter: (ipAddress: string, port?: number) => Promise<{ success: boolean; error?: string }>;
+        localPrint: (config: { printerIp: string; printerPort?: number; data: string; printerId?: string }) => Promise<{ success: boolean; jobId?: string }>;
+      };
+
+      // Enhanced Offline Database API
+      offlineDb: {
+        sync: (enterpriseId: string, propertyId?: string, rvcId?: string) => Promise<OfflineSyncResult>;
+        getStats: () => Promise<OfflineDbStats>;
+        getEntity: (table: string, id: string) => Promise<unknown>;
+        getEntityList: (table: string, enterpriseId?: string) => Promise<unknown[]>;
+        getSalesData: (businessDate?: string, rvcId?: string) => Promise<LocalSalesData | null>;
+        syncToCloud: () => Promise<{ synced: number; failed: number; remaining?: number }>;
+        getChecks: (rvcId?: string, status?: string) => Promise<unknown[]>;
+        saveCheck: (check: unknown) => Promise<{ success: boolean }>;
+      };
+
+      getOfflineMode: () => Promise<OfflineModeStatus>;
+
       emvSendPayment: (config: {
         address: string;
         port?: number;
@@ -41,8 +68,69 @@ declare global {
       emvMarkPaymentSynced: (id: string) => Promise<{ success: boolean }>;
       onOnlineStatus: (callback: (status: boolean) => void) => () => void;
       onSyncStatus: (callback: (status: { pending: number; lastSync: string }) => void) => () => void;
+      onPrintAgentStatus: (callback: (status: PrintAgentStatus) => void) => () => void;
+      onPrintAgentJobCompleted: (callback: (info: { jobId: string; printer: string }) => void) => () => void;
+      onPrintAgentJobFailed: (callback: (info: { jobId: string; printer: string; error: string }) => void) => () => void;
     };
   }
+}
+
+export interface PrintAgentStatus {
+  isRunning: boolean;
+  isConnected?: boolean;
+  isAuthenticated?: boolean;
+  agentId?: string;
+  agentName?: string;
+  printers?: PrinterConfig[];
+  localQueueSize?: number;
+  completedJobs?: number;
+  failedJobs?: number;
+}
+
+export interface PrinterConfig {
+  name: string;
+  ipAddress: string;
+  port?: number;
+  printerId?: string;
+  type?: string;
+}
+
+export interface OfflineSyncResult {
+  success: boolean;
+  errors?: Array<{ endpoint: string; error?: string; status?: number }>;
+  synced?: Array<{ table?: string; key?: string; count?: number }>;
+  reason?: string;
+}
+
+export interface OfflineDbStats {
+  usingSqlite?: boolean;
+  lastSync?: string;
+  enterpriseId?: string;
+  propertyId?: string;
+  pendingOperations?: number;
+  offlineChecks?: number;
+  offlinePayments?: number;
+  cachedMenuItems?: number;
+  cachedEmployees?: number;
+}
+
+export interface LocalSalesData {
+  businessDate: string;
+  totalSales: string;
+  totalTax: string;
+  totalDiscounts: string;
+  totalNet: string;
+  checkCount: number;
+  itemCount: number;
+  paymentsByTender: Record<string, { count: number; total: number }>;
+  isOfflineData: boolean;
+}
+
+export interface OfflineModeStatus {
+  isOffline: boolean;
+  lastSync?: string;
+  pendingOps?: number;
+  stats?: OfflineDbStats;
 }
 
 export interface EscPosCommand {

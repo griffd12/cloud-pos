@@ -25,11 +25,12 @@
       }
     ],
     "artifactName": "${productName}-${version}-Setup.${ext}",
-    "icon": "electron/assets/icon.png"
+    "icon": "electron/assets/icon.png",
+    "requestedExecutionLevel": "requireAdministrator"
   },
   "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
+    "oneClick": true,
+    "allowToChangeInstallationDirectory": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Cloud POS",
@@ -38,7 +39,9 @@
     "allowElevation": true,
     "installerIcon": "electron/assets/icon.ico",
     "uninstallerIcon": "electron/assets/icon.ico",
-    "menuCategory": "Cloud POS"
+    "menuCategory": "Cloud POS",
+    "runAfterFinish": true,
+    "installerSidebar": null
   },
   "extraMetadata": {
     "main": "electron/main.cjs"

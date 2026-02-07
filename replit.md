@@ -182,28 +182,36 @@ The Cloud POS system can be deployed as native applications for Android and Wind
 
 ### Project Structure
 ```
-electron/                      # Electron Windows application
-├── main.cjs                   # Main process: window management, offline DB, printing, EMV, sync
-├── preload.cjs                # Secure IPC bridge exposing APIs to renderer
-├── emv-terminal.cjs           # EMV terminal communication module (TCP/IP)
-├── offline.html               # Offline fallback page with auto-reconnect
-├── installer.nsh              # NSIS installer script (POS + KDS shortcuts)
-├── electron-builder.json      # Build configuration for Windows installer
-└── assets/                    # Icons and branding
+electron/                              # Electron Windows application
+├── main.cjs                           # Main process: window management, offline DB, printing, EMV, sync, print agent auto-start
+├── preload.cjs                        # Secure IPC bridge exposing APIs to renderer (print agent, offline DB, EMV)
+├── print-agent-service.cjs            # Embedded Print Agent: WebSocket cloud connection, TCP network printing, local queue
+├── offline-database.cjs               # Enhanced SQLite/SQLCipher offline database: full POS data cache, local reporting
+├── offline-api-interceptor.cjs        # Transparent API interceptor: serves from local cache when cloud unreachable
+├── emv-terminal.cjs                   # EMV terminal communication module (TCP/IP)
+├── offline.html                       # Offline fallback page with auto-reconnect
+├── installer.nsh                      # NSIS installer script (silent, auto-launch, firewall rules, POS + KDS shortcuts)
+├── electron-builder.json              # Build configuration for Windows installer
+└── assets/                            # Icons and branding
 
-client/src/lib/electron.ts     # Frontend TypeScript types and helpers for Electron APIs
+client/src/lib/electron.ts             # Frontend TypeScript types and helpers for Electron APIs (print agent, offline DB, EMV)
 ```
 
 ### Windows Deployment (Electron)
 
 **Capabilities:**
-- **Offline Mode**: Local SQLite database (or JSON fallback) stores orders and payments when cloud is unreachable
-- **Local Printing**: Direct ESC/POS commands to USB guest check printers and TCP to network kitchen printers
-- **EMV Terminal**: Local TCP/IP communication with 3rd-party EMV devices, store-and-forward for offline payments
-- **Auto-Launch**: Windows registry-based auto-start on boot
-- **Kiosk Mode**: Full-screen locked-down mode for production POS terminals
-- **POS/KDS Mode**: Single installer creates shortcuts for both POS and KDS modes
-- **Auto-Sync**: Connectivity monitoring every 30s, offline queue synced every 60s on reconnect
+- **Embedded Print Agent**: Built-in print agent connects to cloud WebSocket, receives print jobs, sends ESC/POS to local network printers via TCP. Supports multiple printers, auto-reconnect, offline local print queue.
+- **Offline Mode**: SQLite/SQLCipher (AES-256 encrypted) database caches all POS configuration data. Keys stored in Windows Credential Manager. Full offline POS operation.
+- **Offline Data Cache**: Menu items, modifier groups, condiment groups, combo meals, employees, tax rates, discounts, tender types, order types, service charges, RVC config, printers, workstations, pizza builder config.
+- **Local Printing**: Direct ESC/POS commands to USB guest check printers and TCP to network kitchen printers via embedded print agent.
+- **Local Reports**: Sales summary and check detail reports run against local SQLite data while offline.
+- **Store-and-Forward**: Offline transactions (checks, payments, time punches) queue locally and sync to cloud on reconnect.
+- **EMV Terminal**: Local TCP/IP communication with 3rd-party EMV devices, store-and-forward for offline payments.
+- **Auto-Launch**: Windows registry-based auto-start on boot.
+- **Kiosk Mode**: Full-screen locked-down mode for production POS terminals.
+- **POS/KDS Mode**: Single installer creates shortcuts for both POS and KDS modes.
+- **Auto-Sync**: Cloud connectivity check every 30s, full data sync every 5 minutes, offline queue sync on reconnect.
+- **Silent Installer**: NSIS installer with firewall rules for print agent, desktop/start menu shortcuts, minimal user interaction.
 
 **Command-Line Args:**
 ```

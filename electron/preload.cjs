@@ -40,11 +40,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   setAutoLaunch: (enable) => ipcRenderer.invoke('set-auto-launch', enable),
 
+  // === Print Agent API ===
+  printAgent: {
+    getStatus: () => ipcRenderer.invoke('print-agent-get-status'),
+    start: () => ipcRenderer.invoke('print-agent-start'),
+    stop: () => ipcRenderer.invoke('print-agent-stop'),
+    addPrinter: (config) => ipcRenderer.invoke('print-agent-add-printer', config),
+    removePrinter: (key) => ipcRenderer.invoke('print-agent-remove-printer', key),
+    getPrinters: () => ipcRenderer.invoke('print-agent-get-printers'),
+    configure: (config) => ipcRenderer.invoke('print-agent-configure', config),
+    testPrinter: (ipAddress, port) => ipcRenderer.invoke('print-agent-test-printer', { ipAddress, port }),
+    localPrint: (config) => ipcRenderer.invoke('print-agent-local-print', config),
+  },
+
+  // === Enhanced Offline Database API ===
+  offlineDb: {
+    sync: (enterpriseId, propertyId, rvcId) =>
+      ipcRenderer.invoke('offline-db-sync', { enterpriseId, propertyId, rvcId }),
+    getStats: () => ipcRenderer.invoke('offline-db-get-stats'),
+    getEntity: (table, id) => ipcRenderer.invoke('offline-db-get-entity', { table, id }),
+    getEntityList: (table, enterpriseId) =>
+      ipcRenderer.invoke('offline-db-get-entity-list', { table, enterpriseId }),
+    getSalesData: (businessDate, rvcId) =>
+      ipcRenderer.invoke('offline-db-get-sales-data', { businessDate, rvcId }),
+    syncToCloud: () => ipcRenderer.invoke('offline-db-sync-to-cloud'),
+    getChecks: (rvcId, status) => ipcRenderer.invoke('offline-db-get-checks', { rvcId, status }),
+    saveCheck: (check) => ipcRenderer.invoke('offline-db-save-check', check),
+  },
+
+  getOfflineMode: () => ipcRenderer.invoke('get-offline-mode'),
+
+  // === EMV Terminal API ===
   emvSendPayment: (config) => ipcRenderer.invoke('emv-send-payment', config),
   emvCancel: (address, port) => ipcRenderer.invoke('emv-cancel', { address, port }),
   emvGetPendingPayments: () => ipcRenderer.invoke('emv-get-pending-payments'),
   emvMarkPaymentSynced: (id) => ipcRenderer.invoke('emv-mark-payment-synced', { id }),
 
+  // === Event Listeners ===
   onOnlineStatus: (callback) => {
     const handler = (event, status) => callback(status);
     ipcRenderer.on('online-status', handler);
@@ -55,5 +87,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (event, status) => callback(status);
     ipcRenderer.on('sync-status', handler);
     return () => ipcRenderer.removeListener('sync-status', handler);
+  },
+
+  onPrintAgentStatus: (callback) => {
+    const handler = (event, status) => callback(status);
+    ipcRenderer.on('print-agent-status', handler);
+    return () => ipcRenderer.removeListener('print-agent-status', handler);
+  },
+
+  onPrintAgentJobCompleted: (callback) => {
+    const handler = (event, info) => callback(info);
+    ipcRenderer.on('print-agent-job-completed', handler);
+    return () => ipcRenderer.removeListener('print-agent-job-completed', handler);
+  },
+
+  onPrintAgentJobFailed: (callback) => {
+    const handler = (event, info) => callback(info);
+    ipcRenderer.on('print-agent-job-failed', handler);
+    return () => ipcRenderer.removeListener('print-agent-job-failed', handler);
   },
 });

@@ -1,0 +1,904 @@
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+class OfflineDatabase {
+  constructor(options = {}) {
+    this.dataDir = options.dataDir || path.join(require('os').homedir(), '.cloudpos', 'data');
+    this.dbPath = path.join(this.dataDir, 'offline.db');
+    this.db = null;
+    this.usingSqlite = false;
+    this.useEncryption = options.useEncryption !== false;
+    this.cacheDir = path.join(this.dataDir, 'cache');
+    this.lastSyncTime = null;
+    this.syncInProgress = false;
+
+    this.ensureDirectories();
+  }
+
+  ensureDirectories() {
+    [this.dataDir, this.cacheDir].forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
+  }
+
+  async getEncryptionKey() {
+    try {
+      const keytar = require('keytar');
+      const existing = await keytar.getPassword('CloudPOS', 'offline-db-key');
+      if (existing) return existing;
+      const newKey = crypto.randomBytes(32).toString('hex');
+      await keytar.setPassword('CloudPOS', 'offline-db-key', newKey);
+      console.log('[OfflineDB] Generated and stored new encryption key in Windows Credential Manager');
+      return newKey;
+    } catch (e) {
+      console.warn('[OfflineDB] keytar not available for Credential Manager, using file-based key:', e.message);
+      return this.getFileBasedKey();
+    }
+  }
+
+  getFileBasedKey() {
+    const keyPath = path.join(this.dataDir, '.db_key');
+    try {
+      if (fs.existsSync(keyPath)) {
+        return fs.readFileSync(keyPath, 'utf-8').trim();
+      }
+      const newKey = crypto.randomBytes(32).toString('hex');
+      fs.writeFileSync(keyPath, newKey, { mode: 0o600 });
+      return newKey;
+    } catch (e) {
+      console.error('[OfflineDB] Key management error:', e.message);
+      return crypto.createHash('sha256').update(require('os').hostname() + this.dataDir).digest('hex');
+    }
+  }
+
+  async initialize() {
+    try {
+      let Database;
+      try {
+        Database = require('better-sqlite3');
+      } catch (e) {
+        console.warn('[OfflineDB] better-sqlite3 not available, using JSON file storage');
+        return this.initJsonStorage();
+      }
+
+      this.db = new Database(this.dbPath);
+
+      if (this.useEncryption) {
+        const key = await this.getEncryptionKey();
+        try {
+          this.db.pragma(`key = "${key}"`);
+          const testResult = this.db.pragma('cipher_version');
+          if (testResult && testResult.length > 0) {
+            this.db.pragma('cipher_page_size = 4096');
+            this.encryptionActive = true;
+            console.log(`[OfflineDB] SQLCipher encryption enabled (${testResult[0].cipher_version})`);
+          } else {
+            console.warn('[OfflineDB] better-sqlite3 not compiled with SQLCipher. To enable encryption, rebuild with: npm rebuild better-sqlite3 --build-from-source --sqlite3=sqlcipher');
+            this.encryptionActive = false;
+          }
+        } catch (encErr) {
+          console.warn('[OfflineDB] Encryption not available (better-sqlite3 built without SQLCipher):', encErr.message);
+          this.encryptionActive = false;
+          this.db.close();
+          this.db = new Database(this.dbPath);
+        }
+      }
+
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('synchronous = NORMAL');
+      this.usingSqlite = true;
+
+      this.createTables();
+      console.log('[OfflineDB] SQLite database initialized at:', this.dbPath);
+      console.log(`[OfflineDB] Encryption: ${this.encryptionActive ? 'ENABLED (AES-256-CBC)' : 'DISABLED (build with SQLCipher to enable)'}`);
+      return true;
+    } catch (e) {
+      console.error('[OfflineDB] SQLite init failed:', e.message);
+      return this.initJsonStorage();
+    }
+  }
+
+  createTables() {
+    this.db.exec(`
+      -- Offline operation queue (for sync back to cloud)
+      CREATE TABLE IF NOT EXISTS offline_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        method TEXT DEFAULT 'POST',
+        body TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0,
+        synced_at TEXT,
+        error TEXT,
+        retry_count INTEGER DEFAULT 0,
+        priority INTEGER DEFAULT 5
+      );
+
+      -- POS configuration cache
+      CREATE TABLE IF NOT EXISTS config_cache (
+        cache_key TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        enterprise_id TEXT,
+        property_id TEXT,
+        rvc_id TEXT,
+        updated_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT,
+        version INTEGER DEFAULT 1
+      );
+
+      -- Menu items cache
+      CREATE TABLE IF NOT EXISTS menu_items (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Modifier groups cache
+      CREATE TABLE IF NOT EXISTS modifier_groups (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Condiment groups cache
+      CREATE TABLE IF NOT EXISTS condiment_groups (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Combo meals cache
+      CREATE TABLE IF NOT EXISTS combo_meals (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Employees cache (PIN + roles for auth)
+      CREATE TABLE IF NOT EXISTS employees (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Tax rates cache
+      CREATE TABLE IF NOT EXISTS tax_rates (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Discounts cache
+      CREATE TABLE IF NOT EXISTS discounts (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Tender types cache
+      CREATE TABLE IF NOT EXISTS tender_types (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Order types cache
+      CREATE TABLE IF NOT EXISTS order_types (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Service charges cache
+      CREATE TABLE IF NOT EXISTS service_charges (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Revenue centers cache
+      CREATE TABLE IF NOT EXISTS revenue_centers (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        property_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Properties cache
+      CREATE TABLE IF NOT EXISTS properties (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Printers cache
+      CREATE TABLE IF NOT EXISTS printers (
+        id TEXT PRIMARY KEY,
+        property_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Workstations cache
+      CREATE TABLE IF NOT EXISTS workstations (
+        id TEXT PRIMARY KEY,
+        property_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Menu item availability cache
+      CREATE TABLE IF NOT EXISTS menu_item_availability (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Major groups cache
+      CREATE TABLE IF NOT EXISTS major_groups (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Family groups cache
+      CREATE TABLE IF NOT EXISTS family_groups (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Menu item classes cache
+      CREATE TABLE IF NOT EXISTS menu_item_classes (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Offline checks (local orders)
+      CREATE TABLE IF NOT EXISTS offline_checks (
+        id TEXT PRIMARY KEY,
+        check_number INTEGER,
+        rvc_id TEXT,
+        employee_id TEXT,
+        order_type TEXT,
+        status TEXT DEFAULT 'open',
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0,
+        synced_at TEXT,
+        cloud_id TEXT
+      );
+
+      -- Offline check items
+      CREATE TABLE IF NOT EXISTS offline_check_items (
+        id TEXT PRIMARY KEY,
+        check_id TEXT NOT NULL,
+        menu_item_id TEXT,
+        menu_item_name TEXT,
+        quantity INTEGER DEFAULT 1,
+        unit_price TEXT,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0
+      );
+
+      -- Offline payments
+      CREATE TABLE IF NOT EXISTS offline_payments (
+        id TEXT PRIMARY KEY,
+        check_id TEXT,
+        tender_id TEXT,
+        tender_name TEXT,
+        amount TEXT,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0,
+        synced_at TEXT
+      );
+
+      -- Offline time punches
+      CREATE TABLE IF NOT EXISTS offline_time_punches (
+        id TEXT PRIMARY KEY,
+        employee_id TEXT,
+        punch_type TEXT,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        synced INTEGER DEFAULT 0
+      );
+
+      -- Offline print jobs
+      CREATE TABLE IF NOT EXISTS offline_print_jobs (
+        id TEXT PRIMARY KEY,
+        printer_id TEXT,
+        printer_ip TEXT,
+        printer_port INTEGER DEFAULT 9100,
+        job_type TEXT,
+        data TEXT NOT NULL,
+        escpos_data TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT (datetime('now')),
+        printed_at TEXT,
+        error TEXT,
+        retry_count INTEGER DEFAULT 0
+      );
+
+      -- Sync metadata
+      CREATE TABLE IF NOT EXISTS sync_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Local reports data
+      CREATE TABLE IF NOT EXISTS local_sales_data (
+        id TEXT PRIMARY KEY,
+        business_date TEXT,
+        rvc_id TEXT,
+        employee_id TEXT,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  initJsonStorage() {
+    this.usingSqlite = false;
+    const files = {
+      'offline_queue.json': '[]',
+      'config_cache.json': '{}',
+      'offline_checks.json': '[]',
+      'offline_payments.json': '[]',
+      'sync_metadata.json': '{}',
+    };
+    Object.entries(files).forEach(([file, defaultContent]) => {
+      const filePath = path.join(this.dataDir, file);
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, defaultContent);
+      }
+    });
+    console.log('[OfflineDB] JSON file storage initialized at:', this.dataDir);
+    return true;
+  }
+
+  cacheConfigData(key, data, enterpriseId, propertyId, rvcId) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO config_cache (cache_key, data, enterprise_id, property_id, rvc_id, updated_at)
+          VALUES (?, ?, ?, ?, ?, datetime('now'))
+        `).run(key, JSON.stringify(data), enterpriseId || null, propertyId || null, rvcId || null);
+      } else {
+        const cachePath = path.join(this.dataDir, 'config_cache.json');
+        const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        cache[key] = { data, enterpriseId, propertyId, rvcId, updatedAt: new Date().toISOString() };
+        fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Cache config error:', e.message);
+    }
+  }
+
+  getCachedConfig(key) {
+    try {
+      if (this.usingSqlite) {
+        const row = this.db.prepare('SELECT data FROM config_cache WHERE cache_key = ?').get(key);
+        return row ? JSON.parse(row.data) : null;
+      } else {
+        const cachePath = path.join(this.dataDir, 'config_cache.json');
+        const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        return cache[key]?.data || null;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  cacheEntityList(tableName, items, enterpriseId) {
+    if (!this.usingSqlite) {
+      this.cacheConfigData(tableName, items, enterpriseId);
+      return;
+    }
+
+    try {
+      const insert = this.db.prepare(`
+        INSERT OR REPLACE INTO ${tableName} (id, enterprise_id, data, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `);
+
+      const tx = this.db.transaction((rows) => {
+        for (const item of rows) {
+          insert.run(item.id, enterpriseId || null, JSON.stringify(item));
+        }
+      });
+
+      tx(items);
+    } catch (e) {
+      console.error(`[OfflineDB] Cache ${tableName} error:`, e.message);
+      this.cacheConfigData(tableName, items, enterpriseId);
+    }
+  }
+
+  getEntityList(tableName, enterpriseId) {
+    if (!this.usingSqlite) {
+      return this.getCachedConfig(tableName) || [];
+    }
+
+    try {
+      let rows;
+      if (enterpriseId) {
+        rows = this.db.prepare(`SELECT data FROM ${tableName} WHERE enterprise_id = ?`).all(enterpriseId);
+      } else {
+        rows = this.db.prepare(`SELECT data FROM ${tableName}`).all();
+      }
+      return rows.map(r => JSON.parse(r.data));
+    } catch (e) {
+      return this.getCachedConfig(tableName) || [];
+    }
+  }
+
+  getEntity(tableName, id) {
+    if (!this.usingSqlite) {
+      const all = this.getCachedConfig(tableName) || [];
+      return all.find(item => item.id === id) || null;
+    }
+
+    try {
+      const row = this.db.prepare(`SELECT data FROM ${tableName} WHERE id = ?`).get(id);
+      return row ? JSON.parse(row.data) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async syncFromCloud(serverUrl, enterpriseId, propertyId, rvcId) {
+    if (this.syncInProgress) return { success: false, reason: 'sync already in progress' };
+    this.syncInProgress = true;
+
+    console.log('[OfflineDB] Starting full sync from cloud...');
+    const results = { success: true, errors: [], synced: [] };
+
+    const endpoints = [
+      { table: 'menu_items', url: `/api/menu-items?enterpriseId=${enterpriseId}` },
+      { table: 'modifier_groups', url: `/api/modifier-groups?enterpriseId=${enterpriseId}` },
+      { table: 'condiment_groups', url: `/api/condiment-groups?enterpriseId=${enterpriseId}` },
+      { table: 'combo_meals', url: `/api/combo-meals?enterpriseId=${enterpriseId}` },
+      { table: 'employees', url: `/api/employees?enterpriseId=${enterpriseId}` },
+      { table: 'tax_rates', url: `/api/tax-rates?enterpriseId=${enterpriseId}` },
+      { table: 'discounts', url: `/api/discounts?enterpriseId=${enterpriseId}` },
+      { table: 'tender_types', url: `/api/tender-types?enterpriseId=${enterpriseId}` },
+      { table: 'order_types', url: `/api/order-types?enterpriseId=${enterpriseId}` },
+      { table: 'service_charges', url: `/api/service-charges?enterpriseId=${enterpriseId}` },
+      { table: 'major_groups', url: `/api/major-groups?enterpriseId=${enterpriseId}` },
+      { table: 'family_groups', url: `/api/family-groups?enterpriseId=${enterpriseId}` },
+      { table: 'menu_item_classes', url: `/api/menu-item-classes?enterpriseId=${enterpriseId}` },
+      { table: 'menu_item_availability', url: `/api/menu-item-availability?enterpriseId=${enterpriseId}` },
+    ];
+
+    if (propertyId) {
+      endpoints.push(
+        { table: 'revenue_centers', url: `/api/revenue-centers?propertyId=${propertyId}` },
+        { table: 'printers', url: `/api/printers?propertyId=${propertyId}` },
+        { table: 'workstations', url: `/api/workstations?propertyId=${propertyId}` },
+      );
+    }
+
+    if (rvcId) {
+      endpoints.push(
+        { key: `rvc_config_${rvcId}`, url: `/api/revenue-centers/${rvcId}` },
+      );
+    }
+
+    for (const ep of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(`${serverUrl}${ep.url}`, {
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+        });
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (ep.table) {
+            const items = Array.isArray(data) ? data : [data];
+            this.cacheEntityList(ep.table, items, enterpriseId);
+            results.synced.push({ table: ep.table, count: items.length });
+          } else if (ep.key) {
+            this.cacheConfigData(ep.key, data, enterpriseId, propertyId, rvcId);
+            results.synced.push({ key: ep.key });
+          }
+        } else {
+          results.errors.push({ endpoint: ep.url, status: response.status });
+        }
+      } catch (e) {
+        results.errors.push({ endpoint: ep.url, error: e.message });
+      }
+    }
+
+    this.setSyncMetadata('lastFullSync', new Date().toISOString());
+    this.setSyncMetadata('enterpriseId', enterpriseId);
+    this.setSyncMetadata('propertyId', propertyId || '');
+    this.setSyncMetadata('rvcId', rvcId || '');
+    this.lastSyncTime = new Date();
+    this.syncInProgress = false;
+
+    console.log(`[OfflineDB] Sync complete. ${results.synced.length} tables synced, ${results.errors.length} errors`);
+    return results;
+  }
+
+  queueOperation(type, endpoint, method, body, priority) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          INSERT INTO offline_queue (type, endpoint, method, body, priority)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(type, endpoint, method || 'POST', JSON.stringify(body), priority || 5);
+      } else {
+        const queuePath = path.join(this.dataDir, 'offline_queue.json');
+        const queue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+        queue.push({
+          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          type, endpoint, method: method || 'POST',
+          body: JSON.stringify(body),
+          created_at: new Date().toISOString(),
+          synced: false,
+          priority: priority || 5,
+        });
+        fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Queue operation error:', e.message);
+    }
+  }
+
+  getPendingOperations() {
+    try {
+      if (this.usingSqlite) {
+        return this.db.prepare('SELECT * FROM offline_queue WHERE synced = 0 ORDER BY priority ASC, created_at ASC').all();
+      } else {
+        const queuePath = path.join(this.dataDir, 'offline_queue.json');
+        const queue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+        return queue.filter(op => !op.synced);
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  markOperationSynced(id) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare("UPDATE offline_queue SET synced = 1, synced_at = datetime('now') WHERE id = ?").run(id);
+      } else {
+        const queuePath = path.join(this.dataDir, 'offline_queue.json');
+        const queue = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+        const op = queue.find(o => o.id === id);
+        if (op) { op.synced = true; op.synced_at = new Date().toISOString(); }
+        fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Mark synced error:', e.message);
+    }
+  }
+
+  markOperationFailed(id, error) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare("UPDATE offline_queue SET retry_count = retry_count + 1, error = ? WHERE id = ?").run(error, id);
+      }
+    } catch (e) {}
+  }
+
+  saveOfflineCheck(check) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO offline_checks (id, check_number, rvc_id, employee_id, order_type, status, data, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(check.id, check.checkNumber, check.rvcId, check.employeeId, check.orderType, check.status || 'open', JSON.stringify(check));
+      } else {
+        const checksPath = path.join(this.dataDir, 'offline_checks.json');
+        const checks = JSON.parse(fs.readFileSync(checksPath, 'utf-8'));
+        const idx = checks.findIndex(c => c.id === check.id);
+        if (idx >= 0) checks[idx] = check;
+        else checks.push(check);
+        fs.writeFileSync(checksPath, JSON.stringify(checks, null, 2));
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Save check error:', e.message);
+    }
+  }
+
+  getOfflineChecks(rvcId, status) {
+    try {
+      if (this.usingSqlite) {
+        let query = 'SELECT data FROM offline_checks WHERE synced = 0';
+        const params = [];
+        if (rvcId) { query += ' AND rvc_id = ?'; params.push(rvcId); }
+        if (status) { query += ' AND status = ?'; params.push(status); }
+        query += ' ORDER BY created_at DESC';
+        return this.db.prepare(query).all(...params).map(r => JSON.parse(r.data));
+      } else {
+        const checksPath = path.join(this.dataDir, 'offline_checks.json');
+        let checks = JSON.parse(fs.readFileSync(checksPath, 'utf-8'));
+        if (rvcId) checks = checks.filter(c => c.rvcId === rvcId);
+        if (status) checks = checks.filter(c => c.status === status);
+        return checks;
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
+  getOfflineCheck(id) {
+    try {
+      if (this.usingSqlite) {
+        const row = this.db.prepare('SELECT data FROM offline_checks WHERE id = ?').get(id);
+        return row ? JSON.parse(row.data) : null;
+      } else {
+        const checksPath = path.join(this.dataDir, 'offline_checks.json');
+        const checks = JSON.parse(fs.readFileSync(checksPath, 'utf-8'));
+        return checks.find(c => c.id === id) || null;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  saveOfflinePayment(payment) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO offline_payments (id, check_id, tender_id, tender_name, amount, data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(payment.id, payment.checkId, payment.tenderId, payment.tenderName, payment.amount, JSON.stringify(payment));
+      } else {
+        const paymentsPath = path.join(this.dataDir, 'offline_payments.json');
+        const payments = JSON.parse(fs.readFileSync(paymentsPath, 'utf-8'));
+        payments.push(payment);
+        fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Save payment error:', e.message);
+    }
+  }
+
+  saveOfflineTimePunch(punch) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          INSERT INTO offline_time_punches (id, employee_id, punch_type, data)
+          VALUES (?, ?, ?, ?)
+        `).run(punch.id, punch.employeeId, punch.punchType, JSON.stringify(punch));
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Save time punch error:', e.message);
+    }
+  }
+
+  getNextCheckNumber(rvcId) {
+    try {
+      if (this.usingSqlite) {
+        const row = this.db.prepare(
+          'SELECT MAX(check_number) as maxNum FROM offline_checks WHERE rvc_id = ?'
+        ).get(rvcId);
+        const cloudMax = this.getCachedConfig(`last_check_number_${rvcId}`) || 0;
+        const localMax = row?.maxNum || 0;
+        return Math.max(cloudMax, localMax) + 1;
+      }
+      return Date.now() % 100000;
+    } catch (e) {
+      return Date.now() % 100000;
+    }
+  }
+
+  savePrintJob(job) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO offline_print_jobs (id, printer_id, printer_ip, printer_port, job_type, data, escpos_data, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(job.id, job.printerId, job.printerIp, job.printerPort || 9100, job.jobType, JSON.stringify(job), job.escposData, job.status || 'pending');
+      }
+    } catch (e) {
+      console.error('[OfflineDB] Save print job error:', e.message);
+    }
+  }
+
+  getPendingPrintJobs() {
+    try {
+      if (this.usingSqlite) {
+        return this.db.prepare("SELECT * FROM offline_print_jobs WHERE status = 'pending' ORDER BY created_at ASC").all();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  setSyncMetadata(key, value) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare("INSERT OR REPLACE INTO sync_metadata (key, value, updated_at) VALUES (?, ?, datetime('now'))").run(key, value);
+      } else {
+        const metaPath = path.join(this.dataDir, 'sync_metadata.json');
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        meta[key] = value;
+        fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+      }
+    } catch (e) {}
+  }
+
+  getSyncMetadata(key) {
+    try {
+      if (this.usingSqlite) {
+        const row = this.db.prepare('SELECT value FROM sync_metadata WHERE key = ?').get(key);
+        return row?.value || null;
+      } else {
+        const metaPath = path.join(this.dataDir, 'sync_metadata.json');
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        return meta[key] || null;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  getLocalSalesData(businessDate, rvcId) {
+    try {
+      if (this.usingSqlite) {
+        let query = 'SELECT data FROM offline_checks WHERE synced = 0';
+        const params = [];
+        if (businessDate) { query += ' AND created_at LIKE ?'; params.push(`${businessDate}%`); }
+        if (rvcId) { query += ' AND rvc_id = ?'; params.push(rvcId); }
+
+        const checks = this.db.prepare(query).all(...params).map(r => JSON.parse(r.data));
+
+        let totalSales = 0;
+        let totalTax = 0;
+        let totalDiscounts = 0;
+        let checkCount = checks.length;
+        let itemCount = 0;
+
+        checks.forEach(check => {
+          totalSales += parseFloat(check.subtotal || 0);
+          totalTax += parseFloat(check.taxTotal || 0);
+          totalDiscounts += parseFloat(check.discountTotal || 0);
+          if (check.items) itemCount += check.items.length;
+        });
+
+        const payments = this.db.prepare(
+          'SELECT data FROM offline_payments WHERE synced = 0' + (businessDate ? " AND created_at LIKE ?" : '')
+        ).all(...(businessDate ? [`${businessDate}%`] : [])).map(r => JSON.parse(r.data));
+
+        const paymentsByTender = {};
+        payments.forEach(p => {
+          const name = p.tenderName || 'Unknown';
+          if (!paymentsByTender[name]) paymentsByTender[name] = { count: 0, total: 0 };
+          paymentsByTender[name].count++;
+          paymentsByTender[name].total += parseFloat(p.amount || 0);
+        });
+
+        return {
+          businessDate: businessDate || new Date().toISOString().split('T')[0],
+          totalSales: totalSales.toFixed(2),
+          totalTax: totalTax.toFixed(2),
+          totalDiscounts: totalDiscounts.toFixed(2),
+          totalNet: (totalSales + totalTax - totalDiscounts).toFixed(2),
+          checkCount,
+          itemCount,
+          paymentsByTender,
+          isOfflineData: true,
+        };
+      }
+      return null;
+    } catch (e) {
+      console.error('[OfflineDB] Get sales data error:', e.message);
+      return null;
+    }
+  }
+
+  async syncToCloud(serverUrl) {
+    if (this.syncInProgress) return { synced: 0, failed: 0, reason: 'sync already in progress' };
+    this.syncInProgress = true;
+
+    const pending = this.getPendingOperations();
+    if (pending.length === 0) {
+      this.syncInProgress = false;
+      return { synced: 0, failed: 0 };
+    }
+
+    const maxBatchSize = 50;
+    const batchPending = pending.slice(0, maxBatchSize);
+    let synced = 0;
+    let failed = 0;
+
+    console.log(`[OfflineDB] Syncing ${batchPending.length} of ${pending.length} operations to cloud...`);
+
+    for (const op of batchPending) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(`${serverUrl}${op.endpoint}`, {
+          method: op.method || 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: op.body,
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          this.markOperationSynced(op.id);
+          synced++;
+          console.log(`[OfflineDB] Synced: ${op.type} -> ${op.endpoint}`);
+        } else {
+          this.markOperationFailed(op.id, `HTTP ${response.status}`);
+          failed++;
+        }
+      } catch (e) {
+        this.markOperationFailed(op.id, e.message);
+        failed++;
+        if (e.name === 'AbortError' || e.message.includes('network')) {
+          console.log('[OfflineDB] Network error during sync, stopping...');
+          break;
+        }
+      }
+    }
+
+    this.syncInProgress = false;
+    console.log(`[OfflineDB] Sync results: ${synced} synced, ${failed} failed`);
+    return { synced, failed, remaining: this.getPendingOperations().length };
+  }
+
+  getStats() {
+    const stats = {
+      usingSqlite: this.usingSqlite,
+      lastSync: this.getSyncMetadata('lastFullSync'),
+      enterpriseId: this.getSyncMetadata('enterpriseId'),
+      propertyId: this.getSyncMetadata('propertyId'),
+    };
+
+    if (this.usingSqlite) {
+      try {
+        stats.pendingOperations = this.db.prepare('SELECT COUNT(*) as c FROM offline_queue WHERE synced = 0').get().c;
+        stats.offlineChecks = this.db.prepare('SELECT COUNT(*) as c FROM offline_checks WHERE synced = 0').get().c;
+        stats.offlinePayments = this.db.prepare('SELECT COUNT(*) as c FROM offline_payments WHERE synced = 0').get().c;
+        stats.cachedMenuItems = this.db.prepare('SELECT COUNT(*) as c FROM menu_items').get().c;
+        stats.cachedEmployees = this.db.prepare('SELECT COUNT(*) as c FROM employees').get().c;
+      } catch (e) {}
+    }
+
+    return stats;
+  }
+
+  close() {
+    if (this.db) {
+      try { this.db.close(); } catch (e) {}
+      this.db = null;
+    }
+  }
+}
+
+module.exports = { OfflineDatabase };

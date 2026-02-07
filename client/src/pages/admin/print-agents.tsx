@@ -293,16 +293,19 @@ export default function PrintAgentsPage() {
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p>
-            1. Download and install the print agent on a computer connected to your local network
+            1. Create a new agent below and copy the authentication token
           </p>
           <p>
-            2. Create a new agent here and copy the authentication token
+            2. <strong>Windows POS:</strong> The print agent is built into the Cloud POS desktop app. Enter the agent token in Settings to connect automatically.
           </p>
           <p>
-            3. Configure the agent with the token and your cloud POS URL
+            3. <strong>Standalone:</strong> Download the agent software for computers that only need printing (no POS).
           </p>
           <p>
-            4. The agent will connect and relay print jobs to your local printers
+            4. Configure printer IP addresses in the agent. It will connect to this cloud server and relay print jobs to your local network printers.
+          </p>
+          <p>
+            5. The agent works both online and offline. Print jobs queue locally when cloud is unreachable.
           </p>
         </CardContent>
       </Card>
