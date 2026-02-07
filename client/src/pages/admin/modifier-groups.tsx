@@ -211,55 +211,53 @@ export default function ModifierGroupsPage() {
       />
 
       <Dialog open={!!linkingGroup} onOpenChange={(open) => !open && handleCloseLinkDialog()}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Manage Modifiers in "{linkingGroup?.name}"</DialogTitle>
           </DialogHeader>
           
-          <div className="py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             {allModifiers.length === 0 ? (
               <p className="text-muted-foreground text-sm text-center py-8">
                 No modifiers available. Create modifiers first in the Modifiers section.
               </p>
             ) : (
-              <ScrollArea className="h-[300px]">
-                <div className="space-y-3">
-                  {allModifiers.map((modifier) => {
-                    const isLinked = linkedModifiers.some((lm) => lm.modifierId === modifier.id);
-                    return (
-                      <div
-                        key={modifier.id}
-                        className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
-                        onClick={() => handleToggleModifier(modifier.id)}
-                        data-testid={`row-modifier-${modifier.id}`}
-                      >
-                        <Checkbox
-                          checked={isLinked}
-                          onCheckedChange={() => {}}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleModifier(modifier.id);
-                          }}
-                          data-testid={`checkbox-modifier-${modifier.id}`}
-                        />
-                        <div className="flex-1 flex items-center justify-between">
-                          <span>{modifier.name}</span>
-                          {modifier.priceDelta && parseFloat(modifier.priceDelta) !== 0 && (
-                            <span className="text-sm text-muted-foreground">
-                              {parseFloat(modifier.priceDelta) > 0 ? "+" : ""}
-                              {parseFloat(modifier.priceDelta).toFixed(2)}
-                            </span>
-                          )}
-                        </div>
+              <div className="space-y-3">
+                {allModifiers.map((modifier) => {
+                  const isLinked = linkedModifiers.some((lm) => lm.modifierId === modifier.id);
+                  return (
+                    <div
+                      key={modifier.id}
+                      className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
+                      onClick={() => handleToggleModifier(modifier.id)}
+                      data-testid={`row-modifier-${modifier.id}`}
+                    >
+                      <Checkbox
+                        checked={isLinked}
+                        onCheckedChange={() => {}}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleModifier(modifier.id);
+                        }}
+                        data-testid={`checkbox-modifier-${modifier.id}`}
+                      />
+                      <div className="flex-1 flex items-center justify-between">
+                        <span>{modifier.name}</span>
+                        {modifier.priceDelta && parseFloat(modifier.priceDelta) !== 0 && (
+                          <span className="text-sm text-muted-foreground">
+                            {parseFloat(modifier.priceDelta) > 0 ? "+" : ""}
+                            {parseFloat(modifier.priceDelta).toFixed(2)}
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button onClick={handleCloseLinkDialog} data-testid="button-close-link-dialog">
               Done
             </Button>

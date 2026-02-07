@@ -2514,7 +2514,7 @@ export default function ReportsPage() {
       </Tabs>
 
       <Dialog open={checkModalOpen} onOpenChange={setCheckModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -2539,6 +2539,7 @@ export default function ReportsPage() {
             </DialogTitle>
           </DialogHeader>
           
+          <div className="flex-1 overflow-y-auto pr-2">
           {checkDetailLoading ? (
             <div className="py-8 text-center text-muted-foreground">Loading check details...</div>
           ) : checkDetailData ? (
@@ -2670,6 +2671,7 @@ export default function ReportsPage() {
           ) : (
             <div className="py-8 text-center text-muted-foreground">Failed to load check details</div>
           )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

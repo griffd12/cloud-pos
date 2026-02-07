@@ -96,22 +96,22 @@ export function EntityForm<T extends z.ZodTypeAny>({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle data-testid="text-form-title">{title}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto -mx-6 px-6 pr-4">
-              <div className="space-y-4 py-4 pr-2">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto pr-2">
+              <div className="grid grid-cols-2 gap-4 py-1">
                 {fields.map((fieldConfig) => (
                   <FormField
                     key={fieldConfig.name}
                     control={form.control}
                     name={fieldConfig.name as any}
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className={(fieldConfig.type === "textarea" || fieldConfig.type === "switch") ? "col-span-2" : ""}>
                         <div className="flex items-center justify-between">
                           <FormLabel>{fieldConfig.label}</FormLabel>
                           {fieldConfig.type === "switch" && (
@@ -243,7 +243,7 @@ export function EntityForm<T extends z.ZodTypeAny>({
               </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0 border-t mt-2">
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button
                 type="button"
                 variant="outline"

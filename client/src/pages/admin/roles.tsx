@@ -304,11 +304,12 @@ export default function RolesPage() {
           resetForm();
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Role" : "Add Role"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Role Name *</Label>
@@ -393,7 +394,8 @@ export default function RolesPage() {
               </Accordion>
             </div>
 
-            <DialogFooter>
+            </div>
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button 
                 type="button" 
                 variant="outline" 

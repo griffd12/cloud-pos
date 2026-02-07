@@ -385,30 +385,32 @@ export default function BreakViolationsPage() {
       )}
 
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Export Break Violations</DialogTitle>
             <DialogDescription>
               Export break violations report for payroll processing.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Date Range:</span>
-                <span className="font-medium">{startDate} to {endDate}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Total Employees with Violations:</span>
-                <span className="font-medium">{summaries.length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Total Premium Pay:</span>
-                <span className="font-medium text-green-600">${totals.premiumPay.toFixed(2)}</span>
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Date Range:</span>
+                  <span className="font-medium">{startDate} to {endDate}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Total Employees with Violations:</span>
+                  <span className="font-medium">{summaries.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Total Premium Pay:</span>
+                  <span className="font-medium text-green-600">${totals.premiumPay.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setShowExportDialog(false)}>
               Cancel
             </Button>

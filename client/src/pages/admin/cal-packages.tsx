@@ -504,46 +504,50 @@ function PackageDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add CAL Package</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Package Name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Service Host"
-              data-testid="input-package-name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Package Type</Label>
-            <Select value={packageType} onValueChange={setPackageType}>
-              <SelectTrigger data-testid="select-package-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CAL_PACKAGE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {PACKAGE_TYPE_LABELS[type] || type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-              data-testid="input-package-description"
-            />
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Package Name</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Service Host"
+                  data-testid="input-package-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Package Type</Label>
+                <Select value={packageType} onValueChange={setPackageType}>
+                  <SelectTrigger data-testid="select-package-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CAL_PACKAGE_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {PACKAGE_TYPE_LABELS[type] || type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description"
+                data-testid="input-package-description"
+              />
+            </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
           <Button variant="outline" onClick={onClose} data-testid="button-cancel">
             Cancel
           </Button>
@@ -583,36 +587,40 @@ function EditPackageDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Edit CAL Package</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Package Name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Service Host"
-              data-testid="input-edit-package-name"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Package Type</Label>
-            <Badge variant="secondary">{PACKAGE_TYPE_LABELS[pkg.packageType] || pkg.packageType}</Badge>
-            <p className="text-xs text-muted-foreground">Package type cannot be changed after creation</p>
-          </div>
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-              data-testid="input-edit-package-description"
-            />
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Package Name</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Service Host"
+                  data-testid="input-edit-package-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Package Type</Label>
+                <Badge variant="secondary">{PACKAGE_TYPE_LABELS[pkg.packageType] || pkg.packageType}</Badge>
+                <p className="text-xs text-muted-foreground">Package type cannot be changed after creation</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description"
+                data-testid="input-edit-package-description"
+              />
+            </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
           <Button variant="outline" onClick={onClose} data-testid="button-cancel-edit">
             Cancel
           </Button>
@@ -696,54 +704,58 @@ function VersionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add Version</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Version</Label>
-            <Input
-              value={version}
-              onChange={handleVersionChange}
-              placeholder="e.g., 1.0.0"
-              data-testid="input-version"
-              className={versionError ? "border-destructive" : ""}
-            />
-            <p className="text-xs text-muted-foreground">
-              Format: X.X.X (Major.Patch.Hotfix) - e.g., 1.0.0, 3.5.2, 19.3.1
-            </p>
-            {versionError && (
-              <p className="text-xs text-destructive">{versionError}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Download URL <span className="text-destructive">*</span></Label>
-            <Input
-              value={downloadUrl}
-              onChange={handleUrlChange}
-              placeholder="https://example.com/packages/mypackage-1.0.0.tar.gz"
-              data-testid="input-download-url"
-              className={urlError ? "border-destructive" : ""}
-            />
-            <p className="text-xs text-muted-foreground">
-              URL where Service Hosts will download the .tar.gz package file
-            </p>
-            {urlError && (
-              <p className="text-xs text-destructive">{urlError}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Release Notes</Label>
-            <Textarea
-              value={releaseNotes}
-              onChange={(e) => setReleaseNotes(e.target.value)}
-              placeholder="What's new in this version"
-              data-testid="input-release-notes"
-            />
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Version</Label>
+                <Input
+                  value={version}
+                  onChange={handleVersionChange}
+                  placeholder="e.g., 1.0.0"
+                  data-testid="input-version"
+                  className={versionError ? "border-destructive" : ""}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Format: X.X.X (Major.Patch.Hotfix) - e.g., 1.0.0, 3.5.2, 19.3.1
+                </p>
+                {versionError && (
+                  <p className="text-xs text-destructive">{versionError}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Download URL <span className="text-destructive">*</span></Label>
+                <Input
+                  value={downloadUrl}
+                  onChange={handleUrlChange}
+                  placeholder="https://example.com/packages/mypackage-1.0.0.tar.gz"
+                  data-testid="input-download-url"
+                  className={urlError ? "border-destructive" : ""}
+                />
+                <p className="text-xs text-muted-foreground">
+                  URL where Service Hosts will download the .tar.gz package file
+                </p>
+                {urlError && (
+                  <p className="text-xs text-destructive">{urlError}</p>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Release Notes</Label>
+              <Textarea
+                value={releaseNotes}
+                onChange={(e) => setReleaseNotes(e.target.value)}
+                placeholder="What's new in this version"
+                data-testid="input-release-notes"
+              />
+            </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
           <Button variant="outline" onClick={onClose} data-testid="button-cancel">
             Cancel
           </Button>
@@ -809,58 +821,61 @@ function DeployDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Deploy {packageVersion.version}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Deployment Scope</Label>
-            <Select value={deploymentScope} onValueChange={setDeploymentScope}>
-              <SelectTrigger data-testid="select-deployment-scope">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="enterprise">Enterprise (All Properties)</SelectItem>
-                <SelectItem value="property">Property</SelectItem>
-                <SelectItem value="workstation">Workstation</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {deploymentScope === "property" && (
-            <div className="space-y-2">
-              <Label>Target Property</Label>
-              <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-                <SelectTrigger data-testid="select-property">
-                  <SelectValue placeholder="Select property" />
-                </SelectTrigger>
-                <SelectContent>
-                  {properties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Deployment Scope</Label>
+                <Select value={deploymentScope} onValueChange={setDeploymentScope}>
+                  <SelectTrigger data-testid="select-deployment-scope">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="enterprise">Enterprise (All Properties)</SelectItem>
+                    <SelectItem value="property">Property</SelectItem>
+                    <SelectItem value="workstation">Workstation</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Action</Label>
+                <Select value={action} onValueChange={setAction}>
+                  <SelectTrigger data-testid="select-action">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CAL_DEPLOYMENT_ACTIONS.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {a.charAt(0).toUpperCase() + a.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
 
-          <div className="space-y-2">
-            <Label>Action</Label>
-            <Select value={action} onValueChange={setAction}>
-              <SelectTrigger data-testid="select-action">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CAL_DEPLOYMENT_ACTIONS.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {a.charAt(0).toUpperCase() + a.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {deploymentScope === "property" && (
+              <div className="space-y-2">
+                <Label>Target Property</Label>
+                <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+                  <SelectTrigger data-testid="select-property">
+                    <SelectValue placeholder="Select property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {properties.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
           <Button variant="outline" onClick={onClose} data-testid="button-cancel">
             Cancel
           </Button>

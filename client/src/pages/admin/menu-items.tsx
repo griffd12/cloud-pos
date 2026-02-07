@@ -717,7 +717,7 @@ function MenuItemFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle data-testid="text-form-title">
             {editingItem ? "Edit Menu Item" : "Add Menu Item"}
@@ -725,178 +725,179 @@ function MenuItemFormDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto -mx-6 px-6 pr-4">
-              <div className="space-y-4 py-4 pr-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Item Name *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Cheeseburger" {...field} data-testid="input-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="shortName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Short Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., CHZBGR" {...field} value={field.value || ""} data-testid="input-shortName" />
-                      </FormControl>
-                      <FormDescription>Abbreviated name for receipts/KDS</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="price"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Price *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="0.00" {...field} data-testid="input-price" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="taxGroupId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tax Group</FormLabel>
-                      <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Item Name *</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-taxGroupId">
-                            <SelectValue placeholder="Select tax group..." />
-                          </SelectTrigger>
+                          <Input placeholder="e.g., Cheeseburger" {...field} data-testid="input-name" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {taxGroups.map(tg => (
-                            <SelectItem key={tg.id} value={tg.id}>{tg.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="printClassId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Print Class</FormLabel>
-                      <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                  <FormField
+                    control={form.control}
+                    name="shortName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Short Name</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-printClassId">
-                            <SelectValue placeholder="Select print class..." />
-                          </SelectTrigger>
+                          <Input placeholder="e.g., CHZBGR" {...field} value={field.value || ""} data-testid="input-shortName" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {printClasses.map(pc => (
-                            <SelectItem key={pc.id} value={pc.id}>{pc.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Routes items to kitchen printers/KDS</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormDescription>Abbreviated name for receipts/KDS</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="majorGroupId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Major Group</FormLabel>
-                      <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                  <FormField
+                    control={form.control}
+                    name="price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Price *</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-majorGroupId">
-                            <SelectValue placeholder="Select major group..." />
-                          </SelectTrigger>
+                          <Input placeholder="0.00" {...field} data-testid="input-price" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {majorGroups.map(g => (
-                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>High-level reporting category</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="familyGroupId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Family Group</FormLabel>
-                      <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                  <FormField
+                    control={form.control}
+                    name="taxGroupId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tax Group</FormLabel>
+                        <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-taxGroupId">
+                              <SelectValue placeholder="Select tax group..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {taxGroups.map(tg => (
+                              <SelectItem key={tg.id} value={tg.id}>{tg.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="printClassId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Print Class</FormLabel>
+                        <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-printClassId">
+                              <SelectValue placeholder="Select print class..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {printClasses.map(pc => (
+                              <SelectItem key={pc.id} value={pc.id}>{pc.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Routes items to kitchen printers/KDS</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="majorGroupId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Major Group</FormLabel>
+                        <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-majorGroupId">
+                              <SelectValue placeholder="Select major group..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {majorGroups.map(g => (
+                              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>High-level reporting category</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="familyGroupId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Family Group</FormLabel>
+                        <Select value={field.value || "__none__"} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-familyGroupId">
+                              <SelectValue placeholder="Select family group..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {familyGroups.map(g => (
+                              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Sub-category for detailed reporting</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="color"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Button Color</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-familyGroupId">
-                            <SelectValue placeholder="Select family group..." />
-                          </SelectTrigger>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={field.value || "#3B82F6"}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              className="w-10 h-10 rounded border cursor-pointer"
+                              data-testid="color-color"
+                            />
+                            <Input
+                              placeholder="#3B82F6"
+                              {...field}
+                              value={field.value || ""}
+                              className="flex-1"
+                            />
+                          </div>
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {familyGroups.map(g => (
-                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Sub-category for detailed reporting</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="color"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Button Color</FormLabel>
-                      <FormControl>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={field.value || "#3B82F6"}
-                            onChange={(e) => field.onChange(e.target.value)}
-                            className="w-10 h-10 rounded border cursor-pointer"
-                            data-testid="color-color"
-                          />
-                          <Input
-                            placeholder="#3B82F6"
-                            {...field}
-                            value={field.value || ""}
-                            className="flex-1"
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <FormField
                   control={form.control}
@@ -1103,10 +1104,9 @@ function MenuItemFormDialog({
                     </>
                   )}
                 </div>
-              </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-4 flex-shrink-0 border-t mt-2">
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button
                 type="button"
                 variant="outline"

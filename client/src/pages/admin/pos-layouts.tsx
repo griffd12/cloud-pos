@@ -728,19 +728,34 @@ export default function PosLayoutsPage() {
       )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingLayout ? "Edit Layout" : "Create Layout"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Layout Name</Label>
-              <Input
-                value={layoutName}
-                onChange={(e) => setLayoutName(e.target.value)}
-                placeholder="e.g., Quick Service Layout"
-                data-testid="input-layout-name"
-              />
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Layout Name</Label>
+                <Input
+                  value={layoutName}
+                  onChange={(e) => setLayoutName(e.target.value)}
+                  placeholder="e.g., Quick Service Layout"
+                  data-testid="input-layout-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Layout Mode</Label>
+                <Select value={layoutMode} onValueChange={(v) => setLayoutMode(v as any)}>
+                  <SelectTrigger data-testid="select-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="slu_tabs">SLU Tabs (Category based)</SelectItem>
+                    <SelectItem value="custom_grid">Custom Grid (Designer)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Revenue Centers</Label>
@@ -840,18 +855,6 @@ export default function PosLayoutsPage() {
                 </p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label>Layout Mode</Label>
-              <Select value={layoutMode} onValueChange={(v) => setLayoutMode(v as any)}>
-                <SelectTrigger data-testid="select-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="slu_tabs">SLU Tabs (Category based)</SelectItem>
-                  <SelectItem value="custom_grid">Custom Grid (Designer)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             {layoutMode === "custom_grid" && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -878,30 +881,33 @@ export default function PosLayoutsPage() {
                 </div>
               </div>
             )}
-            <div className="space-y-2">
-              <Label>Button Font Size</Label>
-              <Select value={fontSize} onValueChange={(v) => setFontSize(v as any)}>
-                <SelectTrigger data-testid="select-font-size">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="small">Small</SelectItem>
-                  <SelectItem value="medium">Medium (Default)</SelectItem>
-                  <SelectItem value="large">Large</SelectItem>
-                  <SelectItem value="xlarge">Extra Large</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={isDefault}
-                onCheckedChange={setIsDefault}
-                data-testid="switch-default"
-              />
-              <Label>Set as default layout</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Button Font Size</Label>
+                <Select value={fontSize} onValueChange={(v) => setFontSize(v as any)}>
+                  <SelectTrigger data-testid="select-font-size">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="medium">Medium (Default)</SelectItem>
+                    <SelectItem value="large">Large</SelectItem>
+                    <SelectItem value="xlarge">Extra Large</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <Switch
+                  checked={isDefault}
+                  onCheckedChange={setIsDefault}
+                  data-testid="switch-default"
+                />
+                <Label>Set as default layout</Label>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          </div>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={!layoutName} data-testid="button-save-layout">
               {editingLayout ? "Update" : "Create"}

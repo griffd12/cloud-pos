@@ -289,7 +289,7 @@ export default function PaymentProcessorsPage() {
           setEditingItem(null);
         }
       }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Payment Processor" : "Add Payment Processor"}</DialogTitle>
             <DialogDescription>
@@ -298,165 +298,171 @@ export default function PaymentProcessorsPage() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Main Credit Card Processor" {...field} data-testid="input-processor-name" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Main Credit Card Processor" {...field} data-testid="input-processor-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <FormField
-                control={form.control}
-                name="gatewayType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Gateway Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                  <FormField
+                    control={form.control}
+                    name="gatewayType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gateway Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-gateway-type">
+                              <SelectValue placeholder="Select gateway" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {GATEWAY_TYPES.map((type) => (
+                              <SelectItem 
+                                key={type.value} 
+                                value={type.value}
+                                disabled={!["stripe", "elavon_converge", "elavon_fusebox", "heartland"].includes(type.value)}
+                              >
+                                <div className="flex flex-col">
+                                  <span>{type.label}</span>
+                                  <span className="text-xs text-muted-foreground">{type.description}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="propertyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Property</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-property">
+                              <SelectValue placeholder="Select property" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {properties.map((prop) => (
+                              <SelectItem key={prop.id} value={prop.id}>
+                                {prop.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="environment"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Environment</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-environment">
+                              <SelectValue placeholder="Select environment" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {ENVIRONMENTS.map((env) => (
+                              <SelectItem key={env.value} value={env.value}>
+                                {env.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="credentialKeyPrefix"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Credential Key Prefix</FormLabel>
                       <FormControl>
-                        <SelectTrigger data-testid="select-gateway-type">
-                          <SelectValue placeholder="Select gateway" />
-                        </SelectTrigger>
+                        <Input placeholder="e.g., STRIPE or ELAVON" {...field} data-testid="input-credential-prefix" />
                       </FormControl>
-                      <SelectContent>
-                        {GATEWAY_TYPES.map((type) => (
-                          <SelectItem 
-                            key={type.value} 
-                            value={type.value}
-                            disabled={!["stripe", "elavon_converge", "elavon_fusebox", "heartland"].includes(type.value)}
-                          >
-                            <div className="flex flex-col">
-                              <span>{type.label}</span>
-                              <span className="text-xs text-muted-foreground">{type.description}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="propertyId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Property</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-property">
-                          <SelectValue placeholder="Select property" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {properties.map((prop) => (
-                          <SelectItem key={prop.id} value={prop.id}>
-                            {prop.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="environment"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Environment</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-environment">
-                          <SelectValue placeholder="Select environment" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {ENVIRONMENTS.map((env) => (
-                          <SelectItem key={env.value} value={env.value}>
-                            {env.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="credentialKeyPrefix"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Credential Key Prefix</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., STRIPE or ELAVON" {...field} data-testid="input-credential-prefix" />
-                    </FormControl>
-                    <FormDescription className="text-xs">
-                      {getCredentialHint()}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="supportsTipAdjust"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Tip Adjust</FormLabel>
                       <FormDescription className="text-xs">
-                        Allow post-auth tips
+                        {getCredentialHint()}
                       </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value ?? true}
-                        onCheckedChange={field.onChange}
-                        data-testid="switch-tip-adjust"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="active"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Active</FormLabel>
-                      <FormDescription className="text-xs">
-                        Enable this processor
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value ?? true}
-                        onCheckedChange={field.onChange}
-                        data-testid="switch-active"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="supportsTipAdjust"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Tip Adjust</FormLabel>
+                          <FormDescription className="text-xs">
+                            Allow post-auth tips
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value ?? true}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-tip-adjust"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
 
-              <DialogFooter>
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="space-y-0.5">
+                          <FormLabel>Active</FormLabel>
+                          <FormDescription className="text-xs">
+                            Enable this processor
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value ?? true}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-active"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
                 <Button
                   type="button"
                   variant="outline"

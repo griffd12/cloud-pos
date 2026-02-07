@@ -854,12 +854,15 @@ export default function SchedulingPage() {
       )}
 
       <Dialog open={isAddingShift} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
             <DialogTitle className="text-lg font-semibold">
               {editingShift ? "Edit shift" : "Add shift"}
             </DialogTitle>
           </DialogHeader>
+
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
 
           <div className="space-y-0 divide-y">
             <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
@@ -925,37 +928,39 @@ export default function SchedulingPage() {
             </div>
           </div>
 
-          <div className="space-y-0 divide-y border-t mt-4 pt-2">
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-              <span className="text-sm font-medium text-muted-foreground">Start Date</span>
-              <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
-            </div>
+          <div className="border-t mt-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                <span className="text-sm font-medium text-muted-foreground">Start Date</span>
+                <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
+              </div>
 
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-              <span className="text-sm font-medium text-muted-foreground">Start Time</span>
-              <Input
-                type="time"
-                value={shiftForm.startTime}
-                onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
-                className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
-                data-testid="input-start-time"
-              />
-            </div>
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                <span className="text-sm font-medium text-muted-foreground">End Date</span>
+                <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
+              </div>
 
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-              <span className="text-sm font-medium text-muted-foreground">End Date</span>
-              <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
-            </div>
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                <span className="text-sm font-medium text-muted-foreground">Start Time</span>
+                <Input
+                  type="time"
+                  value={shiftForm.startTime}
+                  onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
+                  className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
+                  data-testid="input-start-time"
+                />
+              </div>
 
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-              <span className="text-sm font-medium text-muted-foreground">End Time</span>
-              <Input
-                type="time"
-                value={shiftForm.endTime}
-                onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
-                className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
-                data-testid="input-end-time"
-              />
+              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                <span className="text-sm font-medium text-muted-foreground">End Time</span>
+                <Input
+                  type="time"
+                  value={shiftForm.endTime}
+                  onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
+                  className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
+                  data-testid="input-end-time"
+                />
+              </div>
             </div>
           </div>
 
@@ -1019,7 +1024,10 @@ export default function SchedulingPage() {
             </div>
           )}
 
-          <DialogFooter className="mt-4 flex justify-between gap-2">
+          </div>
+          </div>
+
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0 flex justify-between gap-2">
             {editingShift && (
               <Button
                 variant="destructive"
@@ -1050,7 +1058,7 @@ export default function SchedulingPage() {
       </Dialog>
 
       <Dialog open={showPublishConfirm} onOpenChange={setShowPublishConfirm}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Publish Schedule</DialogTitle>
             <DialogDescription>
@@ -1058,7 +1066,7 @@ export default function SchedulingPage() {
               Once published, employees will be notified and can view their schedules.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setShowPublishConfirm(false)}>
               Cancel
             </Button>

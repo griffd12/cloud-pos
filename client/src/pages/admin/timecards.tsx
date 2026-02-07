@@ -604,13 +604,15 @@ export default function TimecardsPage() {
       )}
 
       <Dialog open={!!editingTimecard} onOpenChange={() => setEditingTimecard(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="w-5 h-5" />
               Edit Timecard
             </DialogTitle>
           </DialogHeader>
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {editingTimecard && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -644,7 +646,8 @@ export default function TimecardsPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          </div>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setEditingTimecard(null)}>
               Cancel
             </Button>
@@ -667,17 +670,20 @@ export default function TimecardsPage() {
               Save Changes
             </Button>
           </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editingPunch} onOpenChange={() => setEditingPunch(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="w-5 h-5" />
               Edit Time Punch
             </DialogTitle>
           </DialogHeader>
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {editingPunch && (
             <div className="space-y-4">
               <div className="p-3 bg-muted rounded-md">
@@ -717,7 +723,8 @@ export default function TimecardsPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          </div>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setEditingPunch(null)}>
               Cancel
             </Button>
@@ -745,6 +752,7 @@ export default function TimecardsPage() {
               Save Changes
             </Button>
           </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

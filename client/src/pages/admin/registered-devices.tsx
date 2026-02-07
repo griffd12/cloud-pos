@@ -461,7 +461,7 @@ export default function RegisteredDevicesPage() {
       />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Device" : "Register New Device"}</DialogTitle>
             <DialogDescription>
@@ -472,7 +472,9 @@ export default function RegisteredDevicesPage() {
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -547,6 +549,7 @@ export default function RegisteredDevicesPage() {
                   </FormItem>
                 )}
               />
+              </div>
 
               {deviceType === "pos_workstation" && (
                 <FormField
@@ -667,7 +670,8 @@ export default function RegisteredDevicesPage() {
                 )}
               />
 
-              <DialogFooter>
+              </div>
+              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
                 <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
                   Cancel
                 </Button>
@@ -688,7 +692,7 @@ export default function RegisteredDevicesPage() {
       </Dialog>
 
       <Dialog open={!!enrollmentCodeDialog} onOpenChange={() => setEnrollmentCodeDialog(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="w-5 h-5" />
@@ -699,6 +703,7 @@ export default function RegisteredDevicesPage() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {enrollmentCodeDialog?.device && (
             <div className="space-y-4">
               <div className="bg-muted rounded-lg p-6 text-center">
@@ -726,6 +731,7 @@ export default function RegisteredDevicesPage() {
               </Button>
             </div>
           )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

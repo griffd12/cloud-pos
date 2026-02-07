@@ -487,7 +487,7 @@ export default function MinorLaborPage() {
       </Card>
 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Add Minor Employee</DialogTitle>
             <DialogDescription>
@@ -495,139 +495,141 @@ export default function MinorLaborPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Employee</Label>
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger data-testid="select-employee">
-                  <SelectValue placeholder="Select employee..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {employeesWithoutStatus.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.firstName} {e.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="space-y-2">
+                <Label>Employee</Label>
+                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                  <SelectTrigger data-testid="select-employee">
+                    <SelectValue placeholder="Select employee..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employeesWithoutStatus.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.firstName} {e.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="dob">Date of Birth</Label>
-                <Input
-                  id="dob"
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                  data-testid="input-dob"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dob">Date of Birth</Label>
+                  <Input
+                    id="dob"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    data-testid="input-dob"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="permitNumber">Work Permit Number</Label>
+                  <Input
+                    id="permitNumber"
+                    value={formData.workPermitNumber}
+                    onChange={(e) => setFormData({ ...formData, workPermitNumber: e.target.value })}
+                    placeholder="WP-12345"
+                    data-testid="input-permit-number"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="permitNumber">Work Permit Number</Label>
-                <Input
-                  id="permitNumber"
-                  value={formData.workPermitNumber}
-                  onChange={(e) => setFormData({ ...formData, workPermitNumber: e.target.value })}
-                  placeholder="WP-12345"
-                  data-testid="input-permit-number"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="permitExpiration">Permit Expiration</Label>
-                <Input
-                  id="permitExpiration"
-                  type="date"
-                  value={formData.workPermitExpirationDate}
-                  onChange={(e) => setFormData({ ...formData, workPermitExpirationDate: e.target.value })}
-                  data-testid="input-permit-expiration"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="permitExpiration">Permit Expiration</Label>
+                  <Input
+                    id="permitExpiration"
+                    type="date"
+                    value={formData.workPermitExpirationDate}
+                    onChange={(e) => setFormData({ ...formData, workPermitExpirationDate: e.target.value })}
+                    data-testid="input-permit-expiration"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="schoolName">School Name</Label>
+                  <Input
+                    id="schoolName"
+                    value={formData.schoolName}
+                    onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
+                    placeholder="Lincoln High School"
+                    data-testid="input-school"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="schoolName">School Name</Label>
-                <Input
-                  id="schoolName"
-                  value={formData.schoolName}
-                  onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
-                  placeholder="Lincoln High School"
-                  data-testid="input-school"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="maxDaily">Max Daily Hours</Label>
-                <Input
-                  id="maxDaily"
-                  type="number"
-                  value={formData.maxDailyHours}
-                  onChange={(e) => setFormData({ ...formData, maxDailyHours: e.target.value })}
-                  data-testid="input-max-daily"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="maxDaily">Max Daily Hours</Label>
+                  <Input
+                    id="maxDaily"
+                    type="number"
+                    value={formData.maxDailyHours}
+                    onChange={(e) => setFormData({ ...formData, maxDailyHours: e.target.value })}
+                    data-testid="input-max-daily"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxWeekly">Max Weekly Hours</Label>
+                  <Input
+                    id="maxWeekly"
+                    type="number"
+                    value={formData.maxWeeklyHours}
+                    onChange={(e) => setFormData({ ...formData, maxWeeklyHours: e.target.value })}
+                    data-testid="input-max-weekly"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="maxWeekly">Max Weekly Hours</Label>
-                <Input
-                  id="maxWeekly"
-                  type="number"
-                  value={formData.maxWeeklyHours}
-                  onChange={(e) => setFormData({ ...formData, maxWeeklyHours: e.target.value })}
-                  data-testid="input-max-weekly"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="earliestStartTime">No Work Before</Label>
-                <Input
-                  id="earliestStartTime"
-                  type="time"
-                  value={formData.earliestStartTime}
-                  onChange={(e) => setFormData({ ...formData, earliestStartTime: e.target.value })}
-                  data-testid="input-no-work-before"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="earliestStartTime">No Work Before</Label>
+                  <Input
+                    id="earliestStartTime"
+                    type="time"
+                    value={formData.earliestStartTime}
+                    onChange={(e) => setFormData({ ...formData, earliestStartTime: e.target.value })}
+                    data-testid="input-no-work-before"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="latestEndTime">No Work After</Label>
+                  <Input
+                    id="latestEndTime"
+                    type="time"
+                    value={formData.latestEndTime}
+                    onChange={(e) => setFormData({ ...formData, latestEndTime: e.target.value })}
+                    data-testid="input-no-work-after"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="latestEndTime">No Work After</Label>
-                <Input
-                  id="latestEndTime"
-                  type="time"
-                  value={formData.latestEndTime}
-                  onChange={(e) => setFormData({ ...formData, latestEndTime: e.target.value })}
-                  data-testid="input-no-work-after"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="parentName">Parent/Guardian Name</Label>
-                <Input
-                  id="parentName"
-                  value={formData.parentGuardianName}
-                  onChange={(e) => setFormData({ ...formData, parentGuardianName: e.target.value })}
-                  data-testid="input-parent-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="parentPhone">Parent/Guardian Phone</Label>
-                <Input
-                  id="parentPhone"
-                  type="tel"
-                  value={formData.parentGuardianPhone}
-                  onChange={(e) => setFormData({ ...formData, parentGuardianPhone: e.target.value })}
-                  data-testid="input-parent-phone"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="parentName">Parent/Guardian Name</Label>
+                  <Input
+                    id="parentName"
+                    value={formData.parentGuardianName}
+                    onChange={(e) => setFormData({ ...formData, parentGuardianName: e.target.value })}
+                    data-testid="input-parent-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="parentPhone">Parent/Guardian Phone</Label>
+                  <Input
+                    id="parentPhone"
+                    type="tel"
+                    value={formData.parentGuardianPhone}
+                    onChange={(e) => setFormData({ ...formData, parentGuardianPhone: e.target.value })}
+                    data-testid="input-parent-phone"
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>
               Cancel
             </Button>

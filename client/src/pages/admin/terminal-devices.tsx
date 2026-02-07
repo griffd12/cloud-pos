@@ -545,7 +545,7 @@ export default function TerminalDevicesPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingDevice ? "Edit Terminal Device" : "Add Terminal Device"}</DialogTitle>
             <DialogDescription>
@@ -553,7 +553,8 @@ export default function TerminalDevicesPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -865,7 +866,8 @@ export default function TerminalDevicesPage() {
                 )}
               />
 
-              <DialogFooter>
+              </div>
+              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
                 <Button type="button" variant="outline" onClick={closeDialog} data-testid="button-cancel">
                   Cancel
                 </Button>

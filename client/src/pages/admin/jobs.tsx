@@ -228,65 +228,67 @@ export default function JobsPage() {
       />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Job" : "New Job"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="code">Code *</Label>
-                <Input
-                  id="code"
-                  data-testid="input-job-code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="e.g., SERVER, BARTENDER"
-                />
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="code">Code *</Label>
+                  <Input
+                    id="code"
+                    data-testid="input-job-code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="e.g., SERVER, BARTENDER"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    data-testid="input-job-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g., Server, Bartender"
+                  />
+                </div>
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  data-testid="input-job-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Server, Bartender"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="role">Role (for permissions)</Label>
-                <Select value={roleId} onValueChange={setRoleId}>
-                  <SelectTrigger data-testid="select-job-role">
-                    <SelectValue placeholder="Select a role..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Role</SelectItem>
-                    {roles.filter(r => r.active).map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Employees working this job will inherit the permissions from this role
-                </p>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Compensation Type</Label>
-                <Select value={compensationType} onValueChange={(v) => setCompensationType(v as "hourly" | "salaried")}>
-                  <SelectTrigger data-testid="select-compensation-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hourly">Hourly</SelectItem>
-                    <SelectItem value="salaried">Salaried</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="role">Role (for permissions)</Label>
+                  <Select value={roleId} onValueChange={setRoleId}>
+                    <SelectTrigger data-testid="select-job-role">
+                      <SelectValue placeholder="Select a role..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Role</SelectItem>
+                      {roles.filter(r => r.active).map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Employees working this job will inherit the permissions from this role
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Compensation Type</Label>
+                  <Select value={compensationType} onValueChange={(v) => setCompensationType(v as "hourly" | "salaried")}>
+                    <SelectTrigger data-testid="select-compensation-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hourly">Hourly</SelectItem>
+                      <SelectItem value="salaried">Salaried</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {compensationType === "hourly" && (
@@ -340,33 +342,34 @@ export default function JobsPage() {
                 </div>
               )}
 
-              <div className="grid gap-2">
-                <Label htmlFor="tipMode">Tip Mode</Label>
-                <Select value={tipMode} onValueChange={setTipMode}>
-                  <SelectTrigger data-testid="select-job-tip-mode">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="not_eligible">Not Eligible</SelectItem>
-                    <SelectItem value="pooled">Pooled Tips</SelectItem>
-                    <SelectItem value="direct">Direct Tips</SelectItem>
-                    <SelectItem value="both">Both</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="active"
-                  data-testid="switch-job-active"
-                  checked={active}
-                  onCheckedChange={setActive}
-                />
-                <Label htmlFor="active">Active</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="tipMode">Tip Mode</Label>
+                  <Select value={tipMode} onValueChange={setTipMode}>
+                    <SelectTrigger data-testid="select-job-tip-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="not_eligible">Not Eligible</SelectItem>
+                      <SelectItem value="pooled">Pooled Tips</SelectItem>
+                      <SelectItem value="direct">Direct Tips</SelectItem>
+                      <SelectItem value="both">Both</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch
+                    id="active"
+                    data-testid="switch-job-active"
+                    checked={active}
+                    onCheckedChange={setActive}
+                  />
+                  <Label htmlFor="active">Active</Label>
+                </div>
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button
                 type="button"
                 variant="outline"

@@ -721,12 +721,13 @@ export default function LoyaltyPage() {
       </Tabs>
 
       <Dialog open={programFormOpen} onOpenChange={(open) => { if (!open) { setProgramFormOpen(false); setEditingProgram(null); }}}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingProgram ? "Edit Program" : "Create Loyalty Program"}</DialogTitle>
             <DialogDescription>Configure your loyalty program settings</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="prog-property">Property</Label>
               <Select
@@ -755,6 +756,7 @@ export default function LoyaltyPage() {
                 placeholder="Rewards Program"
                 data-testid="input-program-name"
               />
+            </div>
             </div>
             <div className="space-y-2">
               <Label>Program Type</Label>
@@ -894,7 +896,7 @@ export default function LoyaltyPage() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => { setProgramFormOpen(false); setEditingProgram(null); }}>
               Cancel
             </Button>
@@ -948,12 +950,12 @@ export default function LoyaltyPage() {
       />
 
       <Dialog open={lookupDialogOpen} onOpenChange={setLookupDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Lookup Loyalty Member</DialogTitle>
             <DialogDescription>Enter email to find member</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
@@ -966,7 +968,7 @@ export default function LoyaltyPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setLookupDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => lookupMutation.mutate(lookupEmail)}
@@ -981,13 +983,14 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={memberDetailOpen} onOpenChange={setMemberDetailOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Member Details</DialogTitle>
             <DialogDescription>
               {selectedMember?.firstName} {selectedMember?.lastName}
             </DialogDescription>
           </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {selectedMember && (
             <Tabs defaultValue="info" className="mt-4">
               <TabsList>
@@ -1113,16 +1116,17 @@ export default function LoyaltyPage() {
               </TabsContent>
             </Tabs>
           )}
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={earnPointsOpen} onOpenChange={(open) => { setEarnPointsOpen(open); if (!open) setSelectedEnrollmentId(""); }}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Add Points</DialogTitle>
             <DialogDescription>Add points to {selectedMember?.firstName}'s account</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             {selectedMember?.enrollments && selectedMember.enrollments.length > 1 && (
               <div className="space-y-2">
                 <Label>Target Program (optional)</Label>
@@ -1142,30 +1146,32 @@ export default function LoyaltyPage() {
                 <p className="text-xs text-muted-foreground">Leave blank to add points to all active enrollments</p>
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="earnPoints">Points</Label>
-              <Input
-                id="earnPoints"
-                type="number"
-                min="1"
-                value={earnPoints}
-                onChange={(e) => setEarnPoints(e.target.value)}
-                placeholder="100"
-                data-testid="input-earn-points"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="earnReason">Reason</Label>
-              <Input
-                id="earnReason"
-                value={earnReason}
-                onChange={(e) => setEarnReason(e.target.value)}
-                placeholder="Purchase, bonus, promotion..."
-                data-testid="input-earn-reason"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="earnPoints">Points</Label>
+                <Input
+                  id="earnPoints"
+                  type="number"
+                  min="1"
+                  value={earnPoints}
+                  onChange={(e) => setEarnPoints(e.target.value)}
+                  placeholder="100"
+                  data-testid="input-earn-points"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="earnReason">Reason</Label>
+                <Input
+                  id="earnReason"
+                  value={earnReason}
+                  onChange={(e) => setEarnReason(e.target.value)}
+                  placeholder="Purchase, bonus, promotion..."
+                  data-testid="input-earn-reason"
+                />
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setEarnPointsOpen(false)}>Cancel</Button>
             <Button
               onClick={() => selectedMember && earnMutation.mutate({
@@ -1184,56 +1190,58 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={redeemRewardOpen} onOpenChange={(open) => { setRedeemRewardOpen(open); if (!open) { setSelectedRewardId(""); setSelectedEnrollmentId(""); }}}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Redeem Reward</DialogTitle>
             <DialogDescription>
               Select which program to redeem from
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Select Program</Label>
-              <Select value={selectedEnrollmentId} onValueChange={(val) => { setSelectedEnrollmentId(val); setSelectedRewardId(""); }}>
-                <SelectTrigger data-testid="select-redeem-enrollment">
-                  <SelectValue placeholder="Choose a program" />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectedMember?.enrollments?.filter(e => (e.currentPoints || 0) > 0).map((enrollment) => (
-                    <SelectItem key={enrollment.id} value={enrollment.id}>
-                      {enrollment.program?.name || "Unknown"} ({enrollment.currentPoints || 0} pts available)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedEnrollmentId && (
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Select Reward</Label>
-                <Select value={selectedRewardId} onValueChange={setSelectedRewardId}>
-                  <SelectTrigger data-testid="select-reward">
-                    <SelectValue placeholder="Choose a reward" />
+                <Label>Select Program</Label>
+                <Select value={selectedEnrollmentId} onValueChange={(val) => { setSelectedEnrollmentId(val); setSelectedRewardId(""); }}>
+                  <SelectTrigger data-testid="select-redeem-enrollment">
+                    <SelectValue placeholder="Choose a program" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(() => {
-                      const enrollment = selectedMember?.enrollments?.find(e => e.id === selectedEnrollmentId);
-                      const programRewards = rewards.filter(r => 
-                        r.active && 
-                        r.programId === enrollment?.programId && 
-                        (enrollment?.currentPoints || 0) >= (r.pointsCost || 0)
-                      );
-                      return programRewards.map((reward) => (
-                        <SelectItem key={reward.id} value={reward.id}>
-                          {reward.name} ({reward.pointsCost} pts)
-                        </SelectItem>
-                      ));
-                    })()}
+                    {selectedMember?.enrollments?.filter(e => (e.currentPoints || 0) > 0).map((enrollment) => (
+                      <SelectItem key={enrollment.id} value={enrollment.id}>
+                        {enrollment.program?.name || "Unknown"} ({enrollment.currentPoints || 0} pts available)
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
+              {selectedEnrollmentId && (
+                <div className="space-y-2">
+                  <Label>Select Reward</Label>
+                  <Select value={selectedRewardId} onValueChange={setSelectedRewardId}>
+                    <SelectTrigger data-testid="select-reward">
+                      <SelectValue placeholder="Choose a reward" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(() => {
+                        const enrollment = selectedMember?.enrollments?.find(e => e.id === selectedEnrollmentId);
+                        const programRewards = rewards.filter(r => 
+                          r.active && 
+                          r.programId === enrollment?.programId && 
+                          (enrollment?.currentPoints || 0) >= (r.pointsCost || 0)
+                        );
+                        return programRewards.map((reward) => (
+                          <SelectItem key={reward.id} value={reward.id}>
+                            {reward.name} ({reward.pointsCost} pts)
+                          </SelectItem>
+                        ));
+                      })()}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setRedeemRewardOpen(false)}>Cancel</Button>
             <Button
               onClick={() => {
@@ -1257,14 +1265,14 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={enrollInProgramOpen} onOpenChange={(open) => { setEnrollInProgramOpen(open); if (!open) setEnrollProgramId(""); }}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Enroll in Program</DialogTitle>
             <DialogDescription>
               Select a loyalty program to enroll {selectedMember?.firstName} in
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="space-y-2">
               <Label>Select Program</Label>
               <Select value={enrollProgramId} onValueChange={setEnrollProgramId}>
@@ -1288,7 +1296,7 @@ export default function LoyaltyPage() {
               </p>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setEnrollInProgramOpen(false)}>Cancel</Button>
             <Button
               onClick={() => {

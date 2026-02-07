@@ -386,7 +386,7 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle data-testid="text-form-title">
             {editingItem ? "Edit Printer" : "Add Printer"}
@@ -394,212 +394,221 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto -mx-6 px-6 pr-4">
-              <div className="space-y-4 py-4 pr-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Printer Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Kitchen Printer - Hot Line" {...field} data-testid="input-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="printerType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Printer Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Printer Name</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-printerType">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <Input placeholder="e.g., Kitchen Printer - Hot Line" {...field} data-testid="input-name" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="receipt">Receipt</SelectItem>
-                          <SelectItem value="kitchen">Kitchen</SelectItem>
-                          <SelectItem value="bar">Bar</SelectItem>
-                          <SelectItem value="prep">Prep</SelectItem>
-                          <SelectItem value="report">Report</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="propertyId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Property</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                  <FormField
+                    control={form.control}
+                    name="printerType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Printer Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-printerType">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="receipt">Receipt</SelectItem>
+                            <SelectItem value="kitchen">Kitchen</SelectItem>
+                            <SelectItem value="bar">Bar</SelectItem>
+                            <SelectItem value="prep">Prep</SelectItem>
+                            <SelectItem value="report">Report</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="propertyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Property</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-propertyId">
+                              <SelectValue placeholder="Select property" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {properties.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="connectionType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Connection Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-connectionType">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="network">Network (IP)</SelectItem>
+                            <SelectItem value="usb">USB</SelectItem>
+                            <SelectItem value="serial">Serial (Legacy)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="ipAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>IP Address</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-propertyId">
-                            <SelectValue placeholder="Select property" />
-                          </SelectTrigger>
+                          <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value || ""} data-testid="input-ipAddress" />
                         </FormControl>
-                        <SelectContent>
-                          {properties.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="connectionType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Connection Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                  <FormField
+                    control={form.control}
+                    name="subnetMask"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Subnet Mask</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-connectionType">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <Input placeholder="255.255.255.0" {...field} value={field.value || ""} data-testid="input-subnetMask" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="network">Network (IP)</SelectItem>
-                          <SelectItem value="usb">USB</SelectItem>
-                          <SelectItem value="serial">Serial (Legacy)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                <FormField
-                  control={form.control}
-                  name="ipAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>IP Address</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value || ""} data-testid="input-ipAddress" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="subnetMask"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Subnet Mask</FormLabel>
-                      <FormControl>
-                        <Input placeholder="255.255.255.0" {...field} value={field.value || ""} data-testid="input-subnetMask" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="port"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Port</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="9100" 
-                          {...field} 
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 9100)}
-                          data-testid="input-port" 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="driverProtocol"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Printer Brand</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "epson"}>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="port"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Port</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-driverProtocol">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <Input 
+                            type="number" 
+                            placeholder="9100" 
+                            {...field} 
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 9100)}
+                            data-testid="input-port" 
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="epson">Epson</SelectItem>
-                          <SelectItem value="star">Star Micronics</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="model"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Printer Model</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || modelOptions[0]?.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-model">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {modelOptions.map((m) => (
-                            <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="driverProtocol"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Printer Brand</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "epson"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-driverProtocol">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="epson">Epson</SelectItem>
+                            <SelectItem value="star">Star Micronics</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                <FormField
-                  control={form.control}
-                  name="characterWidth"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Character Width</FormLabel>
-                      <Select 
-                        onValueChange={(val) => field.onChange(parseInt(val))} 
-                        value={String(field.value || 42)}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-characterWidth">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {CHARACTER_WIDTHS.map((w) => (
-                            <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Printer Model</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || modelOptions[0]?.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-model">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {modelOptions.map((m) => (
+                              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="characterWidth"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Character Width</FormLabel>
+                        <Select 
+                          onValueChange={(val) => field.onChange(parseInt(val))} 
+                          value={String(field.value || 42)}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-characterWidth">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {CHARACTER_WIDTHS.map((w) => (
+                              <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
@@ -694,51 +703,52 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="retryAttempts"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Retry Attempts</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="3" 
-                          {...field} 
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 3)}
-                          data-testid="input-retryAttempts" 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="failureHandlingMode"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Failure Handling</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "alert_cashier"}>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="retryAttempts"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Retry Attempts</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-failureHandlingMode">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <Input 
+                            type="number" 
+                            placeholder="3" 
+                            {...field} 
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 3)}
+                            data-testid="input-retryAttempts" 
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="fail_silently">Fail Silently</SelectItem>
-                          <SelectItem value="alert_cashier">Alert Cashier</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="failureHandlingMode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Failure Handling</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "alert_cashier"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-failureHandlingMode">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="fail_silently">Fail Silently</SelectItem>
+                            <SelectItem value="alert_cashier">Alert Cashier</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
             </div>
 
-            <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
                 Cancel
               </Button>

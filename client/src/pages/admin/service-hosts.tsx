@@ -752,7 +752,7 @@ export default function ServiceHostsPage() {
       />
 
       <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
@@ -763,6 +763,7 @@ export default function ServiceHostsPage() {
             </DialogDescription>
           </DialogHeader>
           
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {createdHost && (
             <div className="space-y-4">
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-md">
@@ -817,8 +818,9 @@ export default function ServiceHostsPage() {
               </div>
             </div>
           )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
               I've Saved These Credentials
             </Button>
@@ -867,7 +869,7 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Register Service</DialogTitle>
           <DialogDescription>
@@ -876,7 +878,9 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
               name="name"
@@ -920,6 +924,7 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                 </FormItem>
               )}
             />
+            </div>
 
             <FormField
               control={form.control}
@@ -980,7 +985,8 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
               />
             )}
 
-            <DialogFooter>
+            </div>
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
                 Cancel
               </Button>

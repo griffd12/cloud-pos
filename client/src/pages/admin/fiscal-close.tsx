@@ -420,28 +420,30 @@ export default function FiscalClosePage() {
           setPin("");
         }
       }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Admin Authorization Required</DialogTitle>
             <DialogDescription>
               Enter your PIN to advance the business date to {targetDate}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="admin-pin">Employee PIN</Label>
-              <Input
-                id="admin-pin"
-                type="password"
-                placeholder="Enter PIN"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleConfirmAdvance()}
-                data-testid="input-admin-pin"
-              />
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="space-y-2">
+                <Label htmlFor="admin-pin">Employee PIN</Label>
+                <Input
+                  id="admin-pin"
+                  type="password"
+                  placeholder="Enter PIN"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleConfirmAdvance()}
+                  data-testid="input-admin-pin"
+                />
+              </div>
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => {

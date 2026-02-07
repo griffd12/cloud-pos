@@ -308,42 +308,46 @@ export default function OnlineOrderingPage() {
       )}
 
       <Dialog open={showSourceDialog} onOpenChange={(open) => { if (!open) resetSourceDialog(); setShowSourceDialog(open); }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingSource ? "Edit Order Source" : "Add Order Source"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Source Name</Label>
-              <Input value={sourceName} onChange={(e) => setSourceName(e.target.value)} placeholder="e.g., DoorDash" data-testid="input-source-name" />
-            </div>
-            <div className="space-y-2">
-              <Label>Source Type</Label>
-              <Select value={sourceType} onValueChange={setSourceType}>
-                <SelectTrigger data-testid="select-source-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ORDER_SOURCE_TYPES.map(t => (
-                    <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Source Name</Label>
+                <Input value={sourceName} onChange={(e) => setSourceName(e.target.value)} placeholder="e.g., DoorDash" data-testid="input-source-name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Source Type</Label>
+                <Select value={sourceType} onValueChange={setSourceType}>
+                  <SelectTrigger data-testid="select-source-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORDER_SOURCE_TYPES.map(t => (
+                      <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>API Endpoint (optional)</Label>
               <Input value={apiEndpoint} onChange={(e) => setApiEndpoint(e.target.value)} placeholder="https://..." data-testid="input-api-endpoint" />
             </div>
-            <div className="space-y-2">
-              <Label>Commission %</Label>
-              <Input type="number" step="0.1" value={commissionPercent} onChange={(e) => setCommissionPercent(e.target.value)} placeholder="0" data-testid="input-commission" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={isActive} onCheckedChange={setIsActive} data-testid="switch-active" />
-              <Label>Active</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Commission %</Label>
+                <Input type="number" step="0.1" value={commissionPercent} onChange={(e) => setCommissionPercent(e.target.value)} placeholder="0" data-testid="input-commission" />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <Switch checked={isActive} onCheckedChange={setIsActive} data-testid="switch-active" />
+                <Label>Active</Label>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={resetSourceDialog}>Cancel</Button>
             <Button onClick={handleSaveSource} disabled={!sourceName || createSourceMutation.isPending || updateSourceMutation.isPending} data-testid="button-save-source">
               {(createSourceMutation.isPending || updateSourceMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

@@ -338,7 +338,7 @@ export default function RvcsPage() {
       />
 
       <Dialog open={descriptorsOpen} onOpenChange={(open) => { if (!open) { setDescriptorsOpen(false); setDescriptorsRvc(null); } }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
@@ -349,7 +349,8 @@ export default function RvcsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-6 pr-2">
             <div className="flex flex-wrap gap-4 p-4 bg-muted/50 rounded-md">
               <div className="flex items-center gap-2">
                 <Switch
@@ -431,8 +432,8 @@ export default function RvcsPage() {
               </div>
             </div>
           </div>
-
-          <DialogFooter>
+          </div>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => { setDescriptorsOpen(false); setDescriptorsRvc(null); }}>
               Cancel
             </Button>

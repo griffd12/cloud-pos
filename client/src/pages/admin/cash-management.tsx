@@ -361,21 +361,23 @@ export default function CashManagementPage() {
       )}
 
       <Dialog open={showDrawerDialog} onOpenChange={(open) => { if (!open) resetDrawerDialog(); setShowDrawerDialog(open); }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Add Cash Drawer</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Drawer Name</Label>
-              <Input value={drawerName} onChange={(e) => setDrawerName(e.target.value)} placeholder="e.g., Register 1" data-testid="input-drawer-name" />
-            </div>
-            <div className="space-y-2">
-              <Label>Starting Balance</Label>
-              <Input type="number" step="0.01" value={drawerStartingBalance} onChange={(e) => setDrawerStartingBalance(e.target.value)} placeholder="0.00" data-testid="input-starting-balance" />
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Drawer Name</Label>
+                <Input value={drawerName} onChange={(e) => setDrawerName(e.target.value)} placeholder="e.g., Register 1" data-testid="input-drawer-name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Starting Balance</Label>
+                <Input type="number" step="0.01" value={drawerStartingBalance} onChange={(e) => setDrawerStartingBalance(e.target.value)} placeholder="0.00" data-testid="input-starting-balance" />
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={resetDrawerDialog}>Cancel</Button>
             <Button onClick={handleCreateDrawer} disabled={!drawerName || createDrawerMutation.isPending} data-testid="button-save-drawer">
               {createDrawerMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -386,36 +388,38 @@ export default function CashManagementPage() {
       </Dialog>
 
       <Dialog open={showTransactionDialog} onOpenChange={(open) => { if (!open) resetTransactionDialog(); setShowTransactionDialog(open); }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Record Cash Transaction</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Drawer</Label>
-              <Select value={selectedDrawerId} onValueChange={setSelectedDrawerId}>
-                <SelectTrigger data-testid="select-drawer">
-                  <SelectValue placeholder="Select drawer..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {cashDrawers.map(d => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Transaction Type</Label>
-              <Select value={transactionType} onValueChange={setTransactionType}>
-                <SelectTrigger data-testid="select-tx-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {transactionTypes.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Drawer</Label>
+                <Select value={selectedDrawerId} onValueChange={setSelectedDrawerId}>
+                  <SelectTrigger data-testid="select-drawer">
+                    <SelectValue placeholder="Select drawer..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cashDrawers.map(d => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Transaction Type</Label>
+                <Select value={transactionType} onValueChange={setTransactionType}>
+                  <SelectTrigger data-testid="select-tx-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {transactionTypes.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Amount</Label>
@@ -426,7 +430,7 @@ export default function CashManagementPage() {
               <Textarea value={transactionReason} onChange={(e) => setTransactionReason(e.target.value)} placeholder="Reason for transaction..." data-testid="input-tx-reason" />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={resetTransactionDialog}>Cancel</Button>
             <Button onClick={handleCreateTransaction} disabled={!selectedDrawerId || !transactionAmount || !transactionReason || createTransactionMutation.isPending} data-testid="button-save-tx">
               {createTransactionMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -437,11 +441,11 @@ export default function CashManagementPage() {
       </Dialog>
 
       <Dialog open={showSafeCountDialog} onOpenChange={(open) => { if (!open) resetSafeCountDialog(); setShowSafeCountDialog(open); }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Record Safe Count</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="space-y-2">
               <Label>Counted Amount</Label>
               <Input type="number" step="0.01" value={safeAmount} onChange={(e) => setSafeAmount(e.target.value)} placeholder="0.00" data-testid="input-safe-amount" />
@@ -451,7 +455,7 @@ export default function CashManagementPage() {
               <Textarea value={safeNotes} onChange={(e) => setSafeNotes(e.target.value)} placeholder="Any notes..." data-testid="input-safe-notes" />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={resetSafeCountDialog}>Cancel</Button>
             <Button onClick={handleCreateSafeCount} disabled={!safeAmount || createSafeCountMutation.isPending} data-testid="button-save-safe-count">
               {createSafeCountMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

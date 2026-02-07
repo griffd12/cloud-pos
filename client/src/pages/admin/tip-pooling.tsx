@@ -356,35 +356,37 @@ export default function TipPoolingPage() {
       )}
 
       <Dialog open={isCreatingPolicy} onOpenChange={setIsCreatingPolicy}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Create Tip Pool Policy</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Policy Name</label>
-              <Input
-                value={policyForm.name}
-                onChange={(e) => setPolicyForm({ ...policyForm, name: e.target.value })}
-                placeholder="e.g., Front of House Pool"
-                data-testid="input-policy-name"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Calculation Method</label>
-              <Select
-                value={policyForm.calcMethod}
-                onValueChange={(v) => setPolicyForm({ ...policyForm, calcMethod: v })}
-              >
-                <SelectTrigger data-testid="select-calc-method">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hours_based">Hours Based</SelectItem>
-                  <SelectItem value="points_based">Points Based</SelectItem>
-                  <SelectItem value="equal_split">Equal Split</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Policy Name</label>
+                <Input
+                  value={policyForm.name}
+                  onChange={(e) => setPolicyForm({ ...policyForm, name: e.target.value })}
+                  placeholder="e.g., Front of House Pool"
+                  data-testid="input-policy-name"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Calculation Method</label>
+                <Select
+                  value={policyForm.calcMethod}
+                  onValueChange={(v) => setPolicyForm({ ...policyForm, calcMethod: v })}
+                >
+                  <SelectTrigger data-testid="select-calc-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hours_based">Hours Based</SelectItem>
+                    <SelectItem value="points_based">Points Based</SelectItem>
+                    <SelectItem value="equal_split">Equal Split</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium">Pool Percentage</label>
@@ -398,7 +400,7 @@ export default function TipPoolingPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setIsCreatingPolicy(false)}>
               Cancel
             </Button>
@@ -421,40 +423,42 @@ export default function TipPoolingPage() {
       </Dialog>
 
       <Dialog open={isRunningSettlement} onOpenChange={setIsRunningSettlement}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Run Tip Pool Settlement</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Business Date</label>
-              <Input
-                type="date"
-                value={settlementDate}
-                onChange={(e) => setSettlementDate(e.target.value)}
-                data-testid="input-settlement-date"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Policy</label>
-              <Select
-                value={selectedPolicyId}
-                onValueChange={setSelectedPolicyId}
-              >
-                <SelectTrigger data-testid="select-settlement-policy">
-                  <SelectValue placeholder="Select a policy..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {policies.filter((p) => p.active).map((policy) => (
-                    <SelectItem key={policy.id} value={policy.id}>
-                      {policy.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Business Date</label>
+                <Input
+                  type="date"
+                  value={settlementDate}
+                  onChange={(e) => setSettlementDate(e.target.value)}
+                  data-testid="input-settlement-date"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Policy</label>
+                <Select
+                  value={selectedPolicyId}
+                  onValueChange={setSelectedPolicyId}
+                >
+                  <SelectTrigger data-testid="select-settlement-policy">
+                    <SelectValue placeholder="Select a policy..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {policies.filter((p) => p.active).map((policy) => (
+                      <SelectItem key={policy.id} value={policy.id}>
+                        {policy.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setIsRunningSettlement(false)}>
               Cancel
             </Button>

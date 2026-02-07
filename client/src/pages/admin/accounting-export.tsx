@@ -335,36 +335,42 @@ export default function AccountingExportPage() {
       )}
 
       <Dialog open={showMappingDialog} onOpenChange={(open) => { if (!open) resetMappingDialog(); setShowMappingDialog(open); }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingMapping ? "Edit GL Mapping" : "Add GL Mapping"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Mapping Type</Label>
-              <Select value={mappingType} onValueChange={setMappingType}>
-                <SelectTrigger data-testid="select-mapping-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {MAPPING_TYPES.map(t => (
-                    <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={mappingName} onChange={(e) => setMappingName(e.target.value)} placeholder="e.g., Food Sales" data-testid="input-mapping-name" />
-            </div>
-            <div className="space-y-2">
-              <Label>GL Account Code</Label>
-              <Input value={glAccountCode} onChange={(e) => setGlAccountCode(e.target.value)} placeholder="e.g., 4000" data-testid="input-gl-code" />
-            </div>
-            <div className="space-y-2">
-              <Label>GL Account Name (optional)</Label>
-              <Input value={glAccountName} onChange={(e) => setGlAccountName(e.target.value)} placeholder="e.g., Sales Revenue" data-testid="input-gl-name" />
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Mapping Type</Label>
+                  <Select value={mappingType} onValueChange={setMappingType}>
+                    <SelectTrigger data-testid="select-mapping-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MAPPING_TYPES.map(t => (
+                        <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value={mappingName} onChange={(e) => setMappingName(e.target.value)} placeholder="e.g., Food Sales" data-testid="input-mapping-name" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>GL Account Code</Label>
+                  <Input value={glAccountCode} onChange={(e) => setGlAccountCode(e.target.value)} placeholder="e.g., 4000" data-testid="input-gl-code" />
+                </div>
+                <div className="space-y-2">
+                  <Label>GL Account Name (optional)</Label>
+                  <Input value={glAccountName} onChange={(e) => setGlAccountName(e.target.value)} placeholder="e.g., Sales Revenue" data-testid="input-gl-name" />
+                </div>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={resetMappingDialog}>Cancel</Button>
             <Button onClick={handleSaveMapping} disabled={!mappingName || !glAccountCode || createMappingMutation.isPending || updateMappingMutation.isPending} data-testid="button-save-mapping">
               {(createMappingMutation.isPending || updateMappingMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -375,35 +381,37 @@ export default function AccountingExportPage() {
       </Dialog>
 
       <Dialog open={showExportDialog} onOpenChange={(open) => { if (!open) resetExportDialog(); setShowExportDialog(open); }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Generate Accounting Export</DialogTitle>
             <DialogDescription>Select a date range and format to generate an export file.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Date</Label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} data-testid="input-start-date" />
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Date</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} data-testid="input-start-date" />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Date</Label>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} data-testid="input-end-date" />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>End Date</Label>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} data-testid="input-end-date" />
+                <Label>Export Format</Label>
+                <Select value={exportFormat} onValueChange={setExportFormat}>
+                  <SelectTrigger data-testid="select-format"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">CSV (Comma Separated)</SelectItem>
+                    <SelectItem value="qbo">QBO (QuickBooks Online)</SelectItem>
+                    <SelectItem value="iif">IIF (QuickBooks Desktop)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Export Format</Label>
-              <Select value={exportFormat} onValueChange={setExportFormat}>
-                <SelectTrigger data-testid="select-format"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="csv">CSV (Comma Separated)</SelectItem>
-                  <SelectItem value="qbo">QBO (QuickBooks Online)</SelectItem>
-                  <SelectItem value="iif">IIF (QuickBooks Desktop)</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={resetExportDialog}>Cancel</Button>
             <Button onClick={handleGenerateExport} disabled={generateExportMutation.isPending} data-testid="button-generate-export">
               {generateExportMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

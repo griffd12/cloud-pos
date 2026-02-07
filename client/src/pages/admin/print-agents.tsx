@@ -354,7 +354,7 @@ export default function PrintAgentsPage() {
       />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen} modal={true}>
-        <DialogContent className="z-[9999]">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col z-[9999]">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Print Agent" : "Add Print Agent"}</DialogTitle>
             <DialogDescription>
@@ -362,7 +362,9 @@ export default function PrintAgentsPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -408,6 +410,7 @@ export default function PrintAgentsPage() {
                   </FormItem>
                 )}
               />
+              </div>
 
               <FormField
                 control={form.control}
@@ -428,7 +431,8 @@ export default function PrintAgentsPage() {
                 )}
               />
 
-              <DialogFooter>
+              </div>
+              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
                 <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
                   Cancel
                 </Button>
@@ -455,13 +459,14 @@ export default function PrintAgentsPage() {
           setRegeneratedToken(null);
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Agent Token</DialogTitle>
             <DialogDescription>
               Copy this token now. It will not be shown again.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           <Alert>
             <AlertTitle>Important</AlertTitle>
             <AlertDescription>
@@ -482,7 +487,8 @@ export default function PrintAgentsPage() {
               <Copy className="w-4 h-4" />
             </Button>
           </div>
-          <DialogFooter>
+          </div>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
               Done
             </Button>
@@ -491,14 +497,14 @@ export default function PrintAgentsPage() {
       </Dialog>
 
       <Dialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Regenerate Token?</DialogTitle>
             <DialogDescription>
               This will invalidate the current token. Any agent using the old token will need to be updated.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setRegenerateConfirmOpen(false)}>
               Cancel
             </Button>

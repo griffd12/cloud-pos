@@ -637,7 +637,7 @@ export default function UtilitiesPage() {
       </Card>
 
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <ShieldAlert className="w-5 h-5" />
@@ -650,7 +650,8 @@ export default function UtilitiesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <Alert variant="destructive">
               <Database className="h-4 w-4" />
               <AlertTitle>Warning</AlertTitle>
@@ -699,8 +700,9 @@ export default function UtilitiesPage() {
               />
             </div>
           </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => setShowResetDialog(false)}
@@ -732,7 +734,7 @@ export default function UtilitiesPage() {
 
       {/* Business Date Increment Dialog */}
       <Dialog open={showBdDialog} onOpenChange={setShowBdDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="w-5 h-5" />
@@ -743,7 +745,8 @@ export default function UtilitiesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-3 border rounded-md text-center">
                 <div className="text-xs text-muted-foreground mb-1">Current</div>
@@ -791,8 +794,9 @@ export default function UtilitiesPage() {
               />
             </div>
           </div>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => {

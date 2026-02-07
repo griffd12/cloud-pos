@@ -608,11 +608,11 @@ export default function DevicesPage() {
       </Tabs>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{selectedDevice ? "Edit Device" : "Add Device"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
@@ -663,19 +663,31 @@ export default function DevicesPage() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Property (Optional)</Label>
-              <Select value={formData.propertyId || "_none"} onValueChange={(v) => setFormData({ ...formData, propertyId: v === "_none" ? "" : v })} disabled={!formData.enterpriseId}>
-                <SelectTrigger data-testid="select-device-property">
-                  <SelectValue placeholder="Select property" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">No specific property</SelectItem>
-                  {filteredProperties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Property (Optional)</Label>
+                <Select value={formData.propertyId || "_none"} onValueChange={(v) => setFormData({ ...formData, propertyId: v === "_none" ? "" : v })} disabled={!formData.enterpriseId}>
+                  <SelectTrigger data-testid="select-device-property">
+                    <SelectValue placeholder="Select property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">No specific property</SelectItem>
+                    {filteredProperties.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="macAddress">MAC Address</Label>
+                <Input
+                  id="macAddress"
+                  value={formData.macAddress}
+                  onChange={(e) => setFormData({ ...formData, macAddress: e.target.value })}
+                  placeholder="00:1A:2B:3C:4D:5E"
+                  data-testid="input-device-mac"
+                />
+              </div>
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4">
@@ -722,18 +734,8 @@ export default function DevicesPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="macAddress">MAC Address</Label>
-              <Input
-                id="macAddress"
-                value={formData.macAddress}
-                onChange={(e) => setFormData({ ...formData, macAddress: e.target.value })}
-                placeholder="00:1A:2B:3C:4D:5E"
-                data-testid="input-device-mac"
-              />
-            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setFormOpen(false)} data-testid="button-cancel-device">
               Cancel
             </Button>
@@ -745,61 +747,65 @@ export default function DevicesPage() {
       </Dialog>
 
       <Dialog open={tokenFormOpen} onOpenChange={setTokenFormOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Generate Enrollment Token</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="tokenName">Token Name *</Label>
-              <Input
-                id="tokenName"
-                value={tokenFormData.name}
-                onChange={(e) => setTokenFormData({ ...tokenFormData, name: e.target.value })}
-                placeholder="New Store Devices"
-                data-testid="input-token-name"
-              />
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="tokenName">Token Name *</Label>
+                <Input
+                  id="tokenName"
+                  value={tokenFormData.name}
+                  onChange={(e) => setTokenFormData({ ...tokenFormData, name: e.target.value })}
+                  placeholder="New Store Devices"
+                  data-testid="input-token-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Enterprise *</Label>
+                <Select value={tokenFormData.enterpriseId} onValueChange={(v) => setTokenFormData({ ...tokenFormData, enterpriseId: v, propertyId: "" })}>
+                  <SelectTrigger data-testid="select-token-enterprise">
+                    <SelectValue placeholder="Select enterprise" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {enterprises.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Enterprise *</Label>
-              <Select value={tokenFormData.enterpriseId} onValueChange={(v) => setTokenFormData({ ...tokenFormData, enterpriseId: v, propertyId: "" })}>
-                <SelectTrigger data-testid="select-token-enterprise">
-                  <SelectValue placeholder="Select enterprise" />
-                </SelectTrigger>
-                <SelectContent>
-                  {enterprises.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Property (Optional)</Label>
-              <Select value={tokenFormData.propertyId || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, propertyId: v === "_any" ? "" : v })} disabled={!tokenFormData.enterpriseId}>
-                <SelectTrigger data-testid="select-token-property">
-                  <SelectValue placeholder="Any property" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_any">Any property</SelectItem>
-                  {tokenFilteredProperties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Device Type (Optional)</Label>
-              <Select value={tokenFormData.deviceType || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v === "_any" ? "" : v })}>
-                <SelectTrigger data-testid="select-token-device-type">
-                  <SelectValue placeholder="Any type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_any">Any type</SelectItem>
-                  {DEVICE_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Property (Optional)</Label>
+                <Select value={tokenFormData.propertyId || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, propertyId: v === "_any" ? "" : v })} disabled={!tokenFormData.enterpriseId}>
+                  <SelectTrigger data-testid="select-token-property">
+                    <SelectValue placeholder="Any property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_any">Any property</SelectItem>
+                    {tokenFilteredProperties.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Device Type (Optional)</Label>
+                <Select value={tokenFormData.deviceType || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v === "_any" ? "" : v })}>
+                  <SelectTrigger data-testid="select-token-device-type">
+                    <SelectValue placeholder="Any type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_any">Any type</SelectItem>
+                    {DEVICE_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -826,7 +832,7 @@ export default function DevicesPage() {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setTokenFormOpen(false)} data-testid="button-cancel-token">
               Cancel
             </Button>
@@ -838,12 +844,12 @@ export default function DevicesPage() {
       </Dialog>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Device Details</DialogTitle>
           </DialogHeader>
           {selectedDevice && (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-muted rounded-lg">
                   {DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)?.icon && (
@@ -955,7 +961,7 @@ export default function DevicesPage() {
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setDetailOpen(false)}>
               Close
             </Button>
@@ -973,11 +979,11 @@ export default function DevicesPage() {
       </Dialog>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Import Devices from Property</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <p className="text-sm text-muted-foreground">
               Import existing workstations and KDS devices from your property configuration into the device registry.
             </p>
@@ -1067,7 +1073,7 @@ export default function DevicesPage() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => { setImportOpen(false); setImportPropertyId(""); }}>
               Cancel
             </Button>

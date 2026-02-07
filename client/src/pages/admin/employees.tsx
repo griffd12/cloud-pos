@@ -380,271 +380,275 @@ export default function EmployeesPage() {
           resetForm();
         }
       }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Employee" : "Add Employee"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="employeeNumber">Employee Number (auto-assigned if blank)</Label>
-              <Input 
-                id="employeeNumber"
-                data-testid="input-employee-number"
-                value={employeeNumber} 
-                onChange={(e) => setEmployeeNumber(e.target.value)}
-                placeholder="Leave blank for auto-assign"
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name *</Label>
-                <Input 
-                  id="firstName"
-                  data-testid="input-first-name"
-                  value={firstName} 
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="First name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name *</Label>
-                <Input 
-                  id="lastName"
-                  data-testid="input-last-name"
-                  value={lastName} 
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Last name"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dateOfBirth">Date of Birth</Label>
-              <Input 
-                id="dateOfBirth"
-                data-testid="input-date-of-birth"
-                type="date"
-                value={dateOfBirth} 
-                onChange={(e) => setDateOfBirth(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Used to identify minor employees (under 18)
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="pinHash">PIN {editingItem ? "(leave blank to keep current)" : "*"}</Label>
-              <Input 
-                id="pinHash"
-                data-testid="input-pin"
-                type="password"
-                value={pinHash} 
-                onChange={(e) => setPinHash(e.target.value)}
-                placeholder="4-6 digit PIN"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="roleId">Default Role *</Label>
-              <Select value={roleId} onValueChange={setRoleId}>
-                <SelectTrigger data-testid="select-role">
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Fallback role when not clocked in to a specific job
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Job Assignments</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addJobAssignment}
-                  data-testid="button-add-job"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Add Job
-                </Button>
-              </div>
-              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-3">
-                {jobAssignments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No jobs assigned</p>
-                ) : (
-                  jobAssignments.map((assignment, index) => {
-                    const selectedJob = jobCodes.find(j => j.id === assignment.jobCodeId);
-                    const isSalaried = selectedJob?.compensationType === "salaried";
-                    return (
-                      <div key={index} className="space-y-2 border-b pb-2 last:border-b-0 last:pb-0">
-                        <div className="flex items-center gap-2">
-                          <Select
-                            value={assignment.jobCodeId}
-                            onValueChange={(v) => {
-                              updateJobAssignment(index, "jobCodeId", v);
-                              // Reset bypassClockIn if switching to a non-salaried job
-                              const newJob = jobCodes.find(j => j.id === v);
-                              if (newJob?.compensationType !== "salaried" && assignment.bypassClockIn) {
-                                updateJobAssignment(index, "bypassClockIn", false);
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="flex-1" data-testid={`select-job-${index}`}>
-                              <SelectValue placeholder="Select job..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {jobCodes.filter(j => j.active).map((job) => (
-                                <SelectItem key={job.id} value={job.id}>
-                                  {job.name} {job.compensationType === "salaried" ? "(Salaried)" : ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="Rate"
-                            className="w-24"
-                            value={assignment.payRate}
-                            onChange={(e) => updateJobAssignment(index, "payRate", e.target.value)}
-                            data-testid={`input-pay-rate-${index}`}
-                          />
-                          <div className="flex items-center gap-1">
-                            <Checkbox
-                              checked={assignment.isPrimary}
-                              onCheckedChange={(c) => updateJobAssignment(index, "isPrimary", !!c)}
-                              data-testid={`checkbox-primary-${index}`}
-                            />
-                            <span className="text-xs text-muted-foreground">Primary</span>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeJobAssignment(index)}
-                            data-testid={`button-remove-job-${index}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        {isSalaried && (
-                          <div className="flex items-center gap-2 pl-2">
-                            <Checkbox
-                              checked={assignment.bypassClockIn}
-                              onCheckedChange={(c) => updateJobAssignment(index, "bypassClockIn", !!c)}
-                              data-testid={`checkbox-bypass-clockin-${index}`}
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              Bypass clock-in (access POS without clocking in)
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Assign jobs with employee-specific pay rates. Primary job is the default.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Assigned Properties</Label>
-              <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
-                {properties.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No properties available</p>
-                ) : (
-                  properties.map((property) => (
-                    <div key={property.id} className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`property-${property.id}`}
-                        data-testid={`checkbox-property-${property.id}`}
-                        checked={selectedPropertyIds.includes(property.id)}
-                        onCheckedChange={() => toggleProperty(property.id)}
-                      />
-                      <Label htmlFor={`property-${property.id}`} className="text-sm font-normal cursor-pointer">
-                        {property.name}
-                      </Label>
-                    </div>
-                  ))
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Select one or more properties this employee can access
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">EMC Access</Label>
-              <p className="text-xs text-muted-foreground">
-                Grant this employee access to the Enterprise Management Console and the terminal installer program
-              </p>
-              <div className="border rounded-md p-3 space-y-3">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="emcEmail">EMC Email</Label>
-                  <Input
-                    id="emcEmail"
-                    data-testid="input-emc-email"
-                    type="email"
-                    value={emcEmail}
-                    onChange={(e) => setEmcEmail(e.target.value)}
-                    placeholder="email@company.com"
+                  <Label htmlFor="employeeNumber">Employee Number (auto if blank)</Label>
+                  <Input 
+                    id="employeeNumber"
+                    data-testid="input-employee-number"
+                    value={employeeNumber} 
+                    onChange={(e) => setEmployeeNumber(e.target.value)}
+                    placeholder="Leave blank for auto-assign"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="emcPassword">
-                    EMC Password {hasEmcAccess ? "(leave blank to keep current)" : ""}
-                  </Label>
-                  <Input
-                    id="emcPassword"
-                    data-testid="input-emc-password"
+                  <Label htmlFor="pinHash">PIN {editingItem ? "(blank = keep)" : "*"}</Label>
+                  <Input 
+                    id="pinHash"
+                    data-testid="input-pin"
                     type="password"
-                    value={emcPassword}
-                    onChange={(e) => setEmcPassword(e.target.value)}
-                    placeholder={hasEmcAccess ? "Leave blank to keep current" : "Minimum 8 characters"}
+                    value={pinHash} 
+                    onChange={(e) => setPinHash(e.target.value)}
+                    placeholder="4-6 digit PIN"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input 
+                    id="firstName"
+                    data-testid="input-first-name"
+                    value={firstName} 
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="First name"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="emcAccessLevel">Access Level</Label>
-                  <Select value={emcAccessLevel} onValueChange={setEmcAccessLevel}>
-                    <SelectTrigger data-testid="select-emc-access-level">
-                      <SelectValue placeholder="Select access level" />
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input 
+                    id="lastName"
+                    data-testid="input-last-name"
+                    value={lastName} 
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Last name"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Input 
+                    id="dateOfBirth"
+                    data-testid="input-date-of-birth"
+                    type="date"
+                    value={dateOfBirth} 
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used to identify minor employees (under 18)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="roleId">Default Role *</Label>
+                  <Select value={roleId} onValueChange={setRoleId}>
+                    <SelectTrigger data-testid="select-role">
+                      <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="property_admin">Property Admin</SelectItem>
-                      <SelectItem value="enterprise_admin">Enterprise Admin</SelectItem>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Property Admin can only access assigned properties. Enterprise Admin can access all properties in the enterprise.
+                    Fallback role when not clocked in to a specific job
                   </p>
                 </div>
               </div>
-            </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Job Assignments</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addJobAssignment}
+                      data-testid="button-add-job"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add Job
+                    </Button>
+                  </div>
+                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-3">
+                    {jobAssignments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No jobs assigned</p>
+                    ) : (
+                      jobAssignments.map((assignment, index) => {
+                        const selectedJob = jobCodes.find(j => j.id === assignment.jobCodeId);
+                        const isSalaried = selectedJob?.compensationType === "salaried";
+                        return (
+                          <div key={index} className="space-y-2 border-b pb-2 last:border-b-0 last:pb-0">
+                            <div className="flex items-center gap-2">
+                              <Select
+                                value={assignment.jobCodeId}
+                                onValueChange={(v) => {
+                                  updateJobAssignment(index, "jobCodeId", v);
+                                  const newJob = jobCodes.find(j => j.id === v);
+                                  if (newJob?.compensationType !== "salaried" && assignment.bypassClockIn) {
+                                    updateJobAssignment(index, "bypassClockIn", false);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="flex-1" data-testid={`select-job-${index}`}>
+                                  <SelectValue placeholder="Select job..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {jobCodes.filter(j => j.active).map((job) => (
+                                    <SelectItem key={job.id} value={job.id}>
+                                      {job.name} {job.compensationType === "salaried" ? "(Salaried)" : ""}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Rate"
+                                className="w-24"
+                                value={assignment.payRate}
+                                onChange={(e) => updateJobAssignment(index, "payRate", e.target.value)}
+                                data-testid={`input-pay-rate-${index}`}
+                              />
+                              <div className="flex items-center gap-1">
+                                <Checkbox
+                                  checked={assignment.isPrimary}
+                                  onCheckedChange={(c) => updateJobAssignment(index, "isPrimary", !!c)}
+                                  data-testid={`checkbox-primary-${index}`}
+                                />
+                                <span className="text-xs text-muted-foreground">Primary</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeJobAssignment(index)}
+                                data-testid={`button-remove-job-${index}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            {isSalaried && (
+                              <div className="flex items-center gap-2 pl-2">
+                                <Checkbox
+                                  checked={assignment.bypassClockIn}
+                                  onCheckedChange={(c) => updateJobAssignment(index, "bypassClockIn", !!c)}
+                                  data-testid={`checkbox-bypass-clockin-${index}`}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  Bypass clock-in (access POS without clocking in)
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Assign jobs with employee-specific pay rates. Primary job is the default.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Assigned Properties</Label>
+                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
+                    {properties.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No properties available</p>
+                    ) : (
+                      properties.map((property) => (
+                        <div key={property.id} className="flex items-center space-x-2">
+                          <Checkbox 
+                            id={`property-${property.id}`}
+                            data-testid={`checkbox-property-${property.id}`}
+                            checked={selectedPropertyIds.includes(property.id)}
+                            onCheckedChange={() => toggleProperty(property.id)}
+                          />
+                          <Label htmlFor={`property-${property.id}`} className="text-sm font-normal cursor-pointer">
+                            {property.name}
+                          </Label>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Select one or more properties this employee can access
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">EMC Access</Label>
+                <p className="text-xs text-muted-foreground">
+                  Grant this employee access to the Enterprise Management Console and the terminal installer program
+                </p>
+                <div className="border rounded-md p-3">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="emcEmail">EMC Email</Label>
+                      <Input
+                        id="emcEmail"
+                        data-testid="input-emc-email"
+                        type="email"
+                        value={emcEmail}
+                        onChange={(e) => setEmcEmail(e.target.value)}
+                        placeholder="email@company.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="emcPassword">
+                        Password {hasEmcAccess ? "(blank = keep)" : ""}
+                      </Label>
+                      <Input
+                        id="emcPassword"
+                        data-testid="input-emc-password"
+                        type="password"
+                        value={emcPassword}
+                        onChange={(e) => setEmcPassword(e.target.value)}
+                        placeholder={hasEmcAccess ? "Leave blank to keep" : "Min 8 characters"}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="emcAccessLevel">Access Level</Label>
+                      <Select value={emcAccessLevel} onValueChange={setEmcAccessLevel}>
+                        <SelectTrigger data-testid="select-emc-access-level">
+                          <SelectValue placeholder="Select level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="property_admin">Property Admin</SelectItem>
+                          <SelectItem value="enterprise_admin">Enterprise Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
             
-            <div className="flex items-center space-x-2">
-              <Switch 
-                id="active"
-                data-testid="switch-active"
-                checked={active}
-                onCheckedChange={setActive}
-              />
-              <Label htmlFor="active">Active</Label>
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="active"
+                  data-testid="switch-active"
+                  checked={active}
+                  onCheckedChange={setActive}
+                />
+                <Label htmlFor="active">Active</Label>
+              </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
               <Button 
                 type="button" 
                 variant="outline" 

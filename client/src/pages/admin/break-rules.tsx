@@ -396,7 +396,7 @@ export default function BreakRulesPage() {
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {editingRule ? "Edit Break Rule" : "Create Break Rule"}
@@ -406,6 +406,7 @@ export default function BreakRulesPage() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="meal">Meal Breaks</TabsTrigger>
@@ -723,8 +724,9 @@ export default function BreakRulesPage() {
               </div>
             </TabsContent>
           </Tabs>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)} data-testid="button-cancel">
               Cancel
             </Button>

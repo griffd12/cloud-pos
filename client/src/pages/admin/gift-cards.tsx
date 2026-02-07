@@ -303,12 +303,12 @@ export default function GiftCardsPage() {
       />
 
       <Dialog open={lookupDialogOpen} onOpenChange={setLookupDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Lookup Gift Card</DialogTitle>
             <DialogDescription>Enter the card number to check balance and details</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="space-y-2">
               <Label htmlFor="cardNumber">Card Number</Label>
               <Input
@@ -320,7 +320,7 @@ export default function GiftCardsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setLookupDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => lookupMutation.mutate(lookupCardNumber)}
@@ -335,103 +335,105 @@ export default function GiftCardsPage() {
       </Dialog>
 
       <Dialog open={cardDetailOpen} onOpenChange={setCardDetailOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Gift Card Details</DialogTitle>
             <DialogDescription>Card: {selectedCard?.cardNumber}</DialogDescription>
           </DialogHeader>
-          {selectedCard && (
-            <Tabs defaultValue="info" className="mt-4">
-              <TabsList>
-                <TabsTrigger value="info">Card Info</TabsTrigger>
-                <TabsTrigger value="history">Transaction History</TabsTrigger>
-              </TabsList>
-              <TabsContent value="info" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 py-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Current Balance</p>
-                    <p className="text-3xl font-bold text-green-600" data-testid="text-card-balance">
-                      ${parseFloat(selectedCard.currentBalance || "0").toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Status</p>
-                    <Badge variant={selectedCard.status === "active" ? "default" : "secondary"}>
-                      {selectedCard.status}
-                    </Badge>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Initial Balance</p>
-                    <p className="text-lg font-medium">${parseFloat(selectedCard.initialBalance || "0").toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Expires</p>
-                    <p className="text-lg font-medium">
-                      {selectedCard.expiresAt ? format(new Date(selectedCard.expiresAt), "MMM d, yyyy") : "Never"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={() => setReloadDialogOpen(true)} data-testid="button-reload-card">
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Reload Card
-                  </Button>
-                  <Button variant="outline" onClick={() => setRedeemDialogOpen(true)} data-testid="button-redeem-card">
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Redeem
-                  </Button>
-                  {selectedCard.status === "active" && (
-                    <Button
-                      variant="destructive"
-                      onClick={() => updateMutation.mutate({ ...selectedCard, status: "suspended" })}
-                      data-testid="button-suspend-card"
-                    >
-                      <Ban className="w-4 h-4 mr-2" />
-                      Suspend
-                    </Button>
-                  )}
-                </div>
-              </TabsContent>
-              <TabsContent value="history">
-                <div className="max-h-64 overflow-y-auto">
-                  {cardTransactions.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No transactions yet</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {cardTransactions.map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between p-3 border rounded-md">
-                          <div>
-                            <p className="font-medium capitalize">{tx.transactionType}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {tx.createdAt && format(new Date(tx.createdAt), "MMM d, yyyy h:mm a")}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className={`font-bold ${tx.transactionType === "redemption" ? "text-red-600" : "text-green-600"}`}>
-                              {tx.transactionType === "redemption" ? "-" : "+"}${parseFloat(tx.amount || "0").toFixed(2)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Balance: ${parseFloat(tx.balanceAfter || "0").toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {selectedCard && (
+              <Tabs defaultValue="info" className="mt-4">
+                <TabsList>
+                  <TabsTrigger value="info">Card Info</TabsTrigger>
+                  <TabsTrigger value="history">Transaction History</TabsTrigger>
+                </TabsList>
+                <TabsContent value="info" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 py-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Current Balance</p>
+                      <p className="text-3xl font-bold text-green-600" data-testid="text-card-balance">
+                        ${parseFloat(selectedCard.currentBalance || "0").toFixed(2)}
+                      </p>
                     </div>
-                  )}
-                </div>
-              </TabsContent>
-            </Tabs>
-          )}
+                    <div>
+                      <p className="text-sm text-muted-foreground">Status</p>
+                      <Badge variant={selectedCard.status === "active" ? "default" : "secondary"}>
+                        {selectedCard.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Initial Balance</p>
+                      <p className="text-lg font-medium">${parseFloat(selectedCard.initialBalance || "0").toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Expires</p>
+                      <p className="text-lg font-medium">
+                        {selectedCard.expiresAt ? format(new Date(selectedCard.expiresAt), "MMM d, yyyy") : "Never"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => setReloadDialogOpen(true)} data-testid="button-reload-card">
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Reload Card
+                    </Button>
+                    <Button variant="outline" onClick={() => setRedeemDialogOpen(true)} data-testid="button-redeem-card">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Redeem
+                    </Button>
+                    {selectedCard.status === "active" && (
+                      <Button
+                        variant="destructive"
+                        onClick={() => updateMutation.mutate({ ...selectedCard, status: "suspended" })}
+                        data-testid="button-suspend-card"
+                      >
+                        <Ban className="w-4 h-4 mr-2" />
+                        Suspend
+                      </Button>
+                    )}
+                  </div>
+                </TabsContent>
+                <TabsContent value="history">
+                  <div className="max-h-64 overflow-y-auto">
+                    {cardTransactions.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-8">No transactions yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {cardTransactions.map((tx) => (
+                          <div key={tx.id} className="flex items-center justify-between p-3 border rounded-md">
+                            <div>
+                              <p className="font-medium capitalize">{tx.transactionType}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {tx.createdAt && format(new Date(tx.createdAt), "MMM d, yyyy h:mm a")}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-bold ${tx.transactionType === "redemption" ? "text-red-600" : "text-green-600"}`}>
+                                {tx.transactionType === "redemption" ? "-" : "+"}${parseFloat(tx.amount || "0").toFixed(2)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Balance: ${parseFloat(tx.balanceAfter || "0").toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={reloadDialogOpen} onOpenChange={setReloadDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Reload Gift Card</DialogTitle>
             <DialogDescription>Add value to card {selectedCard?.cardNumber}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="space-y-2">
               <Label htmlFor="reloadAmount">Amount ($)</Label>
               <Input
@@ -446,7 +448,7 @@ export default function GiftCardsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setReloadDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => selectedCard && reloadMutation.mutate({ cardId: selectedCard.id, amount: reloadAmount })}
@@ -460,14 +462,14 @@ export default function GiftCardsPage() {
       </Dialog>
 
       <Dialog open={redeemDialogOpen} onOpenChange={setRedeemDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Redeem Gift Card</DialogTitle>
             <DialogDescription>
               Available balance: ${parseFloat(selectedCard?.currentBalance || "0").toFixed(2)}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
             <div className="space-y-2">
               <Label htmlFor="redeemAmount">Amount ($)</Label>
               <Input
@@ -483,7 +485,7 @@ export default function GiftCardsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
             <Button variant="outline" onClick={() => setRedeemDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => selectedCard && redeemMutation.mutate({ cardId: selectedCard.id, amount: redeemAmount })}
