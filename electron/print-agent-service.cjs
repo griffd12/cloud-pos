@@ -268,6 +268,7 @@ class PrintAgentService {
           break;
 
         case 'PONG':
+        case 'HEARTBEAT_ACK':
           break;
 
         default:

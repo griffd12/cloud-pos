@@ -1,4 +1,9 @@
 !macro customInstall
+  ; Force shell variable context to current user (not elevated admin)
+  ; This ensures $LOCALAPPDATA resolves to the logged-in user's path
+  ; even when the installer runs with admin elevation
+  SetShellVarContext current
+
   ; Initialize installer log
   CreateDirectory "$LOCALAPPDATA\Cloud POS\logs"
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
@@ -42,13 +47,16 @@
   FileWrite $0 "[OK] Data directories created: config, data, logs$\r$\n"
   FileClose $0
   
-  ; Set auto-launch in Windows registry (POS mode by default)
+  ; Set auto-launch in Windows registry for the current user (HKCU stays in current context)
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CloudPOS" '"$INSTDIR\Cloud POS.exe" --pos'
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
   FileSeek $0 0 END
   FileWrite $0 "[OK] Auto-launch registry entry set (HKCU\Run\CloudPOS)$\r$\n"
   FileClose $0
   
+  ; Switch to all-users context only for machine-wide HKLM registry entries
+  SetShellVarContext all
+
   ; Write uninstall info for Windows Add/Remove Programs
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "DisplayName" "Cloud POS"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "UninstallString" '"$INSTDIR\Uninstall Cloud POS.exe"'
@@ -56,6 +64,10 @@
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "Publisher" "Cloud POS Systems"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS" "NoRepair" 1
+
+  ; Switch back to current user context for logging and remaining operations
+  SetShellVarContext current
+
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
   FileSeek $0 0 END
   FileWrite $0 "[OK] Windows Add/Remove Programs registry entries written$\r$\n"
@@ -79,6 +91,9 @@
 !macroend
 
 !macro customUnInstall
+  ; Force current user context for correct path resolution
+  SetShellVarContext current
+
   ; Log uninstall start
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
   FileSeek $0 0 END
@@ -101,12 +116,18 @@
   ; Remove auto-launch registry entry
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CloudPOS"
   
+  ; Switch to all-users context for machine-wide registry cleanup
+  SetShellVarContext all
+
   ; Remove uninstall registry entries
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CloudPOS"
   
   ; Remove firewall rules
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Cloud POS Print Agent"'
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Cloud POS Print Agent Inbound"'
+
+  ; Switch back to current user for logging
+  SetShellVarContext current
 
   ; Log uninstall complete
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
