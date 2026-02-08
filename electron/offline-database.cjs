@@ -482,11 +482,17 @@ class OfflineDatabase {
     const endpoints = [
       { table: 'menu_items', url: `/api/menu-items?enterpriseId=${enterpriseId}` },
       { table: 'modifier_groups', url: `/api/modifier-groups?enterpriseId=${enterpriseId}` },
+      { table: 'condiment_groups', url: `/api/condiment-groups?enterpriseId=${enterpriseId}` },
+      { table: 'combo_meals', url: `/api/combo-meals?enterpriseId=${enterpriseId}` },
       { table: 'employees', url: `/api/employees?enterpriseId=${enterpriseId}` },
+      { table: 'tax_rates', url: `/api/tax-rates?enterpriseId=${enterpriseId}` },
       { table: 'discounts', url: `/api/discounts?enterpriseId=${enterpriseId}` },
+      { table: 'tender_types', url: `/api/tender-types?enterpriseId=${enterpriseId}` },
+      { table: 'order_types', url: `/api/order-types?enterpriseId=${enterpriseId}` },
       { table: 'service_charges', url: `/api/service-charges?enterpriseId=${enterpriseId}` },
       { table: 'major_groups', url: `/api/major-groups?enterpriseId=${enterpriseId}` },
       { table: 'family_groups', url: `/api/family-groups?enterpriseId=${enterpriseId}` },
+      { table: 'menu_item_classes', url: `/api/menu-item-classes?enterpriseId=${enterpriseId}` },
     ];
 
     if (propertyId) {
@@ -494,12 +500,15 @@ class OfflineDatabase {
         { table: 'revenue_centers', url: `/api/rvcs?propertyId=${propertyId}` },
         { table: 'printers', url: `/api/printers?propertyId=${propertyId}` },
         { table: 'workstations', url: `/api/workstations?propertyId=${propertyId}` },
+        { table: 'properties', url: `/api/properties?enterpriseId=${enterpriseId}` },
       );
     }
 
     if (rvcId) {
       endpoints.push(
         { key: `rvc_config_${rvcId}`, url: `/api/rvcs/${rvcId}` },
+        { key: `slus_${rvcId}`, url: `/api/slus?rvcId=${rvcId}` },
+        { key: `posLayout_default_${rvcId}`, url: `/api/pos-layouts/default/${rvcId}` },
       );
     }
 
@@ -528,6 +537,29 @@ class OfflineDatabase {
         }
       } catch (e) {
         results.errors.push({ endpoint: ep.url, error: e.message });
+      }
+    }
+
+    if (rvcId) {
+      try {
+        const layoutData = this.getCachedConfig(`posLayout_default_${rvcId}`);
+        if (layoutData && layoutData.id) {
+          const layoutId = layoutData.id;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 15000);
+          const cellsResponse = await fetch(`${serverUrl}/api/pos-layouts/${layoutId}/cells`, {
+            signal: controller.signal,
+            headers: { 'Content-Type': 'application/json' },
+          });
+          clearTimeout(timeout);
+          if (cellsResponse.ok) {
+            const cellsData = await cellsResponse.json();
+            this.cacheConfigData(`posLayoutCells_${layoutId}`, cellsData, enterpriseId, propertyId, rvcId);
+            results.synced.push({ key: `posLayoutCells_${layoutId}` });
+          }
+        }
+      } catch (e) {
+        results.errors.push({ endpoint: 'pos-layout-cells', error: e.message });
       }
     }
 

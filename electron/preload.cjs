@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   getOfflineMode: () => ipcRenderer.invoke('get-offline-mode'),
+  offlineSelfTest: () => ipcRenderer.invoke('offline-self-test'),
 
   // === Logging API ===
   openLogDirectory: () => ipcRenderer.invoke('open-log-directory'),

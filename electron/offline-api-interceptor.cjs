@@ -21,8 +21,6 @@ class OfflineApiInterceptor {
   }
 
   canHandleOffline(method, pathname) {
-    if (!this.isOffline) return false;
-
     if (method === 'GET') {
       const readEndpoints = [
         /^\/api\/menu-items/,
@@ -59,6 +57,7 @@ class OfflineApiInterceptor {
 
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       const writeEndpoints = [
+        /^\/api\/auth\/pin/,
         /^\/api\/checks/,
         /^\/api\/check-items/,
         /^\/api\/payments/,
@@ -66,6 +65,7 @@ class OfflineApiInterceptor {
         /^\/api\/time-clock/,
         /^\/api\/print-jobs/,
         /^\/api\/employees\/.*\/authenticate/,
+        /^\/api\/auth\/manager-approval/,
       ];
       return writeEndpoints.some(re => re.test(pathname));
     }
@@ -165,7 +165,7 @@ class OfflineApiInterceptor {
     const posLayoutDefaultMatch = pathname.match(/^\/api\/pos-layouts\/default\/([^/]+)$/);
     if (posLayoutDefaultMatch) {
       const rvcId = posLayoutDefaultMatch[1];
-      const layout = this.db.getCachedConfig(`posLayout_${rvcId}`);
+      const layout = this.db.getCachedConfig(`posLayout_default_${rvcId}`) || this.db.getCachedConfig(`posLayout_${rvcId}`);
       return { status: 200, data: layout || null };
     }
 
@@ -417,10 +417,16 @@ class OfflineApiInterceptor {
     }
 
     const employees = this.db.getEntityList('employees', this.config.enterpriseId);
-    const employee = employees.find(emp => emp.pin === pin || emp.posPin === pin);
+    appLogger.info('Interceptor', `Offline PIN auth attempt, ${employees.length} employees in cache`);
+    const employee = employees.find(emp => {
+      if (emp.pinHash === pin) return true;
+      if (emp.pin === pin) return true;
+      if (emp.posPin === pin) return true;
+      return false;
+    });
 
     if (employee) {
-      appLogger.info('Interceptor', `Offline PIN auth: ${employee.firstName} ${employee.lastName}`);
+      appLogger.info('Interceptor', `Offline PIN auth SUCCESS: ${employee.firstName} ${employee.lastName}`);
       return {
         status: 200,
         data: {
@@ -443,6 +449,7 @@ class OfflineApiInterceptor {
     const employees = this.db.getEntityList('employees');
 
     const employee = employees.find(emp => {
+      if (emp.pinHash === pin) return true;
       if (emp.pin === pin) return true;
       if (emp.posPin === pin) return true;
       return false;

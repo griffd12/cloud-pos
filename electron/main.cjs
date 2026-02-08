@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, dialog, protocol } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog, protocol, net: electronNet } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -20,6 +20,7 @@ let syncInterval = null;
 let isOnline = true;
 let emvManager = null;
 let dataSyncInterval = null;
+let protocolInterceptorRegistered = false;
 
 const APP_DATA_ROOT = process.platform === 'win32'
   ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Cloud POS')
@@ -450,7 +451,8 @@ function createWindow() {
     appLogger.error('Window', `Page load failed: ${errorDescription}`, { errorCode });
     if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
       isOnline = false;
-      mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+      if (offlineInterceptor) offlineInterceptor.setOffline(true);
+      appLogger.warn('Window', 'Load failed, protocol interceptor should handle offline serving');
     }
   });
 }
@@ -991,6 +993,115 @@ function setupIpcHandlers() {
     return { success: true };
   });
 
+  ipcMain.handle('offline-self-test', async () => {
+    const results = {
+      timestamp: new Date().toISOString(),
+      protocolInterceptorActive: protocolInterceptorRegistered,
+      isOnline,
+      offlineInterceptorInitialized: !!offlineInterceptor,
+      enhancedOfflineDbInitialized: !!enhancedOfflineDb,
+      tests: [],
+    };
+
+    if (enhancedOfflineDb) {
+      try {
+        const stats = enhancedOfflineDb.getStats();
+        results.dbStats = stats;
+        results.tests.push({
+          name: 'SQLite database accessible',
+          pass: stats.usingSqlite === true,
+          detail: stats.usingSqlite ? 'SQLite active' : 'Using JSON fallback',
+        });
+        results.tests.push({
+          name: 'Employees cached',
+          pass: (stats.cachedEmployees || 0) > 0,
+          detail: `${stats.cachedEmployees || 0} employees in cache`,
+        });
+        results.tests.push({
+          name: 'Menu items cached',
+          pass: (stats.cachedMenuItems || 0) > 0,
+          detail: `${stats.cachedMenuItems || 0} menu items in cache`,
+        });
+        results.tests.push({
+          name: 'Last sync completed',
+          pass: !!stats.lastSync,
+          detail: stats.lastSync || 'Never synced',
+        });
+      } catch (e) {
+        results.tests.push({ name: 'Database check', pass: false, detail: e.message });
+      }
+    } else {
+      results.tests.push({ name: 'Database check', pass: false, detail: 'enhancedOfflineDb not initialized' });
+    }
+
+    if (offlineInterceptor) {
+      try {
+        const canHandlePinAuth = offlineInterceptor.canHandleOffline('POST', '/api/auth/pin');
+        results.tests.push({
+          name: 'PIN auth endpoint registered',
+          pass: canHandlePinAuth,
+          detail: canHandlePinAuth ? 'POST /api/auth/pin is handled' : 'NOT handled - auth will fail offline',
+        });
+
+        const canHandleMenuItems = offlineInterceptor.canHandleOffline('GET', '/api/menu-items');
+        results.tests.push({
+          name: 'Menu items endpoint registered',
+          pass: canHandleMenuItems,
+          detail: canHandleMenuItems ? 'GET /api/menu-items is handled' : 'NOT handled',
+        });
+
+        const canHandleHealth = offlineInterceptor.canHandleOffline('GET', '/api/health');
+        results.tests.push({
+          name: 'Health endpoint registered',
+          pass: canHandleHealth,
+          detail: canHandleHealth ? 'GET /api/health is handled' : 'NOT handled',
+        });
+      } catch (e) {
+        results.tests.push({ name: 'Interceptor check', pass: false, detail: e.message });
+      }
+    } else {
+      results.tests.push({ name: 'Interceptor check', pass: false, detail: 'offlineInterceptor not initialized' });
+    }
+
+    results.tests.push({
+      name: 'Protocol interceptor registered',
+      pass: protocolInterceptorRegistered,
+      detail: protocolInterceptorRegistered ? 'HTTPS protocol handler active' : 'NOT registered - offline will not work',
+    });
+
+    const pageCacheExists = fs.existsSync(PAGE_CACHE_DIR);
+    let cachedPages = 0;
+    if (pageCacheExists) {
+      try {
+        const walkDir = (dir) => {
+          let count = 0;
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isFile() && !entry.name.endsWith('.meta')) count++;
+            else if (entry.isDirectory()) count += walkDir(path.join(dir, entry.name));
+          }
+          return count;
+        };
+        cachedPages = walkDir(PAGE_CACHE_DIR);
+      } catch {}
+    }
+    results.tests.push({
+      name: 'Page cache populated',
+      pass: cachedPages > 0,
+      detail: `${cachedPages} pages/assets cached for cold start`,
+    });
+
+    const allPass = results.tests.every(t => t.pass);
+    results.overallStatus = allPass ? 'READY FOR OFFLINE' : 'NOT READY - see failing tests';
+
+    appLogger.info('SelfTest', `Offline self-test: ${results.overallStatus}`, {
+      passed: results.tests.filter(t => t.pass).length,
+      failed: results.tests.filter(t => !t.pass).length,
+    });
+
+    return results;
+  });
+
   // === Setup Wizard IPC Handlers ===
   ipcMain.handle('wizard-test-connection', async (event, url) => {
     try {
@@ -1160,7 +1271,8 @@ function setupIpcHandlers() {
       appLogger.error('Window', `Page load failed after wizard: ${errorDescription}`, { errorCode });
       if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
         isOnline = false;
-        mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+        if (offlineInterceptor) offlineInterceptor.setOffline(true);
+        appLogger.warn('Window', 'Post-wizard load failed, protocol interceptor handles offline');
       }
     });
   });
@@ -1396,6 +1508,194 @@ async function performInitialDataSync() {
   }
 }
 
+const PAGE_CACHE_DIR = path.join(DATA_DIR, 'page-cache');
+
+function ensurePageCacheDir() {
+  if (!fs.existsSync(PAGE_CACHE_DIR)) {
+    fs.mkdirSync(PAGE_CACHE_DIR, { recursive: true });
+  }
+}
+
+function getCachePath(pathname) {
+  let safePath = pathname.replace(/[^a-zA-Z0-9._\/-]/g, '_');
+  if (safePath === '/' || safePath === '') safePath = '__root__';
+  if (safePath.startsWith('/')) safePath = safePath.substring(1);
+  return path.join(PAGE_CACHE_DIR, safePath);
+}
+
+async function cacheResponseToDisk(pathname, response) {
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.match(/html|javascript|css|json|text|font|svg|icon/)) return;
+
+    const cachePath = getCachePath(pathname);
+    const dir = path.dirname(cachePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(cachePath, buffer);
+    fs.writeFileSync(cachePath + '.meta', JSON.stringify({
+      contentType,
+      cachedAt: new Date().toISOString(),
+      pathname,
+    }));
+  } catch (e) {
+    appLogger.debug('PageCache', `Cache write error for ${pathname}`, e.message);
+  }
+}
+
+function getCachedResponseFromDisk(pathname) {
+  try {
+    const cachePath = getCachePath(pathname);
+    if (fs.existsSync(cachePath)) {
+      const buffer = fs.readFileSync(cachePath);
+      let contentType = 'text/html';
+      const metaPath = cachePath + '.meta';
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          contentType = meta.contentType || 'text/html';
+        } catch {}
+      }
+      appLogger.debug('PageCache', `Serving cached: ${pathname}`);
+      return new Response(buffer, {
+        status: 200,
+        headers: { 'Content-Type': contentType, 'X-Offline-Cache': 'true' },
+      });
+    }
+
+    if (!pathname.includes('.') && pathname !== '/api') {
+      const posPath = getCachePath('/pos');
+      if (fs.existsSync(posPath)) {
+        const buffer = fs.readFileSync(posPath);
+        appLogger.debug('PageCache', `Serving cached /pos for SPA route: ${pathname}`);
+        return new Response(buffer, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html', 'X-Offline-Cache': 'true' },
+        });
+      }
+    }
+
+    return null;
+  } catch (e) {
+    appLogger.debug('PageCache', `Cache read error for ${pathname}`, e.message);
+    return null;
+  }
+}
+
+async function parseRequestBody(req) {
+  if (req.method === 'GET' || req.method === 'HEAD') return null;
+  try {
+    const buf = await req.arrayBuffer();
+    const text = new TextDecoder().decode(buf);
+    if (!text || text.length === 0) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  } catch {
+    return null;
+  }
+}
+
+function routeToOfflineInterceptor(method, url, body) {
+  const queryParams = Object.fromEntries(url.searchParams);
+  if (offlineInterceptor.canHandleOffline(method, url.pathname)) {
+    const result = offlineInterceptor.handleRequest(method, url.pathname, queryParams, body);
+    if (result) {
+      appLogger.info('Interceptor', `OFFLINE -> ${method} ${url.pathname} -> ${result.status}`);
+      return new Response(JSON.stringify(result.data), {
+        status: result.status,
+        headers: { 'Content-Type': 'application/json', 'X-Offline-Mode': 'true' },
+      });
+    }
+  }
+  appLogger.warn('Interceptor', `No offline handler for: ${method} ${url.pathname}`);
+  return new Response(JSON.stringify({ error: 'Not available offline', offline: true }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json', 'X-Offline-Mode': 'true' },
+  });
+}
+
+function registerProtocolInterceptor() {
+  if (protocolInterceptorRegistered) return;
+  protocolInterceptorRegistered = true;
+  ensurePageCacheDir();
+
+  protocol.handle('https', async (request) => {
+    const url = new URL(request.url);
+    const serverUrl = getServerUrl();
+    let serverHost;
+    try { serverHost = new URL(serverUrl).hostname; } catch { return electronNet.fetch(request); }
+
+    if (url.hostname !== serverHost) {
+      return electronNet.fetch(request);
+    }
+
+    const isApiRequest = url.pathname.startsWith('/api/');
+
+    if (!isOnline && isApiRequest && offlineInterceptor) {
+      appLogger.info('Interceptor', `OFFLINE API: ${request.method} ${url.pathname}`);
+      const body = await parseRequestBody(request);
+      return routeToOfflineInterceptor(request.method, url, body);
+    }
+
+    const failoverClone = isApiRequest ? request.clone() : null;
+
+    try {
+      const response = await electronNet.fetch(request);
+
+      if (response.ok && request.method === 'GET') {
+        const cloned = response.clone();
+        cacheResponseToDisk(url.pathname, cloned).catch(() => {});
+      }
+
+      if (!isOnline && response.ok) {
+        isOnline = true;
+        if (offlineInterceptor) offlineInterceptor.setOffline(false);
+        if (mainWindow) mainWindow.webContents.send('online-status', true);
+        appLogger.info('Network', 'Connection restored via protocol handler');
+        syncOfflineData();
+      }
+
+      return response;
+    } catch (networkError) {
+      if (isOnline) {
+        isOnline = false;
+        if (offlineInterceptor) offlineInterceptor.setOffline(true);
+        if (mainWindow) mainWindow.webContents.send('online-status', false);
+        appLogger.warn('Network', `Connection lost: ${networkError.message}`);
+      }
+
+      if (isApiRequest && offlineInterceptor && failoverClone) {
+        appLogger.info('Interceptor', `FAILOVER API: ${request.method} ${url.pathname}`);
+        const body = await parseRequestBody(failoverClone);
+        return routeToOfflineInterceptor(request.method, url, body);
+      }
+
+      const cached = getCachedResponseFromDisk(url.pathname);
+      if (cached) return cached;
+
+      if (!url.pathname.includes('.')) {
+        appLogger.warn('PageCache', `No cached page for: ${url.pathname}, serving offline fallback`);
+        return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cloud POS - Offline</title>
+<style>body{font-family:system-ui;background:#0f1729;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
+.c{max-width:480px;padding:40px}h1{margin-bottom:12px}p{opacity:0.8;line-height:1.6;margin-bottom:20px}
+button{padding:12px 32px;font-size:16px;border:1px solid #4a4a6a;border-radius:8px;background:#2a2a4a;color:#fff;cursor:pointer}
+button:hover{background:#3a3a5a}.info{margin-top:20px;font-size:13px;opacity:0.5}</style></head>
+<body><div class="c"><h1>Cloud POS Offline</h1>
+<p>The server is unreachable and no cached pages are available. Please connect to the internet at least once to cache the POS application.</p>
+<button onclick="location.reload()">Retry Connection</button>
+<p class="info">Once connected, the app will automatically cache itself for offline use.</p></div></body></html>`, {
+          status: 503,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      return new Response('', { status: 503 });
+    }
+  });
+
+  appLogger.info('Interceptor', 'HTTPS protocol interceptor registered for offline support');
+}
+
 let servicesInitialized = false;
 let syncTimer = null;
 
@@ -1463,6 +1763,8 @@ app.whenReady().then(async () => {
   } else {
     appLogger.info('App', 'Setup not yet completed, launching Setup Wizard only (no services initialized)');
   }
+
+  registerProtocolInterceptor();
 
   createWindow();
 
