@@ -28,6 +28,7 @@ const SUBSYSTEMS = {
   IPC: 'IPC',
   CONFIG: 'CONFIG',
   RENDERER: 'RENDERER',
+  UPDATER: 'UPDATER',
 };
 
 let minLevel = LOG_LEVELS.DEBUG;
@@ -167,6 +168,7 @@ const sysLog = {
   ipc: createSubsystemLogger(SUBSYSTEMS.IPC),
   config: createSubsystemLogger(SUBSYSTEMS.CONFIG),
   renderer: createSubsystemLogger(SUBSYSTEMS.RENDERER),
+  updater: createSubsystemLogger(SUBSYSTEMS.UPDATER),
 };
 
 module.exports = {

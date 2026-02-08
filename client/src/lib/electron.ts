@@ -84,8 +84,25 @@ declare global {
       onPrintAgentStatus: (callback: (status: PrintAgentStatus) => void) => () => void;
       onPrintAgentJobCompleted: (callback: (info: { jobId: string; printer: string }) => void) => () => void;
       onPrintAgentJobFailed: (callback: (info: { jobId: string; printer: string; error: string }) => void) => () => void;
+      updater: {
+        getStatus: () => Promise<UpdateStatus>;
+        checkNow: () => Promise<{ success: boolean; status: string }>;
+        install: () => Promise<{ success: boolean }>;
+        getVersion: () => Promise<{ current: string; available: string | null; updateReady: boolean }>;
+      };
+      onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
   }
+}
+
+export interface UpdateStatus {
+  status: 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error';
+  currentVersion: string | null;
+  availableVersion: string | null;
+  downloadProgress: number;
+  lastChecked: string | null;
+  error: string | null;
+  updateReady: boolean;
 }
 
 export interface PrintAgentStatus {

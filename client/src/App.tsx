@@ -22,6 +22,7 @@ import EmcSetupPage from "@/pages/emc/setup";
 import EmcAdminLayout from "@/pages/emc/admin-layout";
 import OfflineTestPage from "@/pages/offline-test";
 import { OfflineStatusBanner } from "@/components/offline-status-banner";
+import { UpdateStatusBanner } from "@/components/update-status-banner";
 
 function GlobalWebSocket() {
   usePosWebSocket();
@@ -171,6 +172,7 @@ function App() {
           <DeviceProvider>
             <PosProvider>
               <OfflineStatusBanner />
+              <UpdateStatusBanner />
               <GlobalWebSocket />
               <Router />
               <Toaster />

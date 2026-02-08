@@ -7,7 +7,8 @@ const { EMVTerminalManager } = require('./emv-terminal.cjs');
 const { PrintAgentService } = require('./print-agent-service.cjs');
 const { OfflineDatabase } = require('./offline-database.cjs');
 const { OfflineApiInterceptor } = require('./offline-api-interceptor.cjs');
-const { appLogger, printLogger, LOG_DIR } = require('./logger.cjs');
+const { appLogger, printLogger, updaterLogger, LOG_DIR } = require('./logger.cjs');
+const { initAutoUpdater, getUpdateState } = require('./auto-updater.cjs');
 
 let mainWindow = null;
 let appMode = 'pos';
@@ -638,6 +639,7 @@ function setupIpcHandlers() {
       deviceName: config.deviceName || null,
       deviceType: config.deviceType || null,
       setupComplete: config.setupComplete || false,
+      updateStatus: getUpdateState(),
     };
   });
 
@@ -1105,14 +1107,24 @@ function setupIpcHandlers() {
   // === Setup Wizard IPC Handlers ===
   ipcMain.handle('wizard-test-connection', async (event, url) => {
     try {
+      const parsedUrl = new URL(url);
+      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch(`${url}/api/health`, { signal: controller.signal });
+      const response = await fetch(`${baseUrl}/api/health`, { signal: controller.signal });
       clearTimeout(timeout);
-      if (response.ok) {
-        return { success: true };
+      if (!response.ok) {
+        return { success: false, error: `Server responded with status ${response.status}` };
       }
-      return { success: false, error: `Server responded with status ${response.status}` };
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+          return { success: false, error: 'Server returned HTML instead of JSON. Check that the URL is correct and does not include extra path segments.' };
+        }
+      }
+      return { success: true, baseUrl };
     } catch (e) {
       return { success: false, error: e.name === 'AbortError' ? 'Connection timed out' : e.message };
     }
@@ -1120,15 +1132,31 @@ function setupIpcHandlers() {
 
   ipcMain.handle('wizard-emc-login', async (event, serverUrl, email, password) => {
     try {
+      let baseUrl = serverUrl;
+      try {
+        const parsed = new URL(serverUrl);
+        baseUrl = `${parsed.protocol}//${parsed.host}`;
+      } catch {}
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      const response = await fetch(`${serverUrl}/api/emc/wizard-login`, {
+      const response = await fetch(`${baseUrl}/api/emc/wizard-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
         signal: controller.signal,
       });
       clearTimeout(timeout);
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+          return { success: false, error: 'Server returned HTML instead of JSON. The server URL may be incorrect.' };
+        }
+        return { success: false, error: `Unexpected response format from server (${response.status})` };
+      }
+
       const data = await response.json();
       if (!response.ok) {
         return { success: false, error: data.message || `HTTP ${response.status}` };
@@ -1741,6 +1769,12 @@ async function initAllServices() {
   }, 300000);
 
   await performInitialDataSync();
+
+  try {
+    initAutoUpdater(updaterLogger);
+  } catch (e) {
+    appLogger.warn('App', 'Auto-updater init failed (expected in dev mode)', e.message);
+  }
 
   servicesInitialized = true;
   appLogger.info('App', 'All services initialized successfully');

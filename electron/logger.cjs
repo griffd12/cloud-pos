@@ -22,6 +22,7 @@ const SUBSYSTEM_MAP = {
   'print-agent': 'PRINT',
   'offline-db': 'OFFLINEDB',
   'installer': 'INSTALLER',
+  'updater': 'UPDATER',
 };
 
 let logDirCreated = false;
@@ -160,6 +161,7 @@ const appLogger = new Logger('app');
 const printLogger = new Logger('print-agent');
 const offlineDbLogger = new Logger('offline-db');
 const installerLogger = new Logger('installer');
+const updaterLogger = new Logger('updater');
 
 module.exports = {
   Logger,
@@ -167,6 +169,7 @@ module.exports = {
   printLogger,
   offlineDbLogger,
   installerLogger,
+  updaterLogger,
   LOG_DIR,
   UNIFIED_LOG_FILE,
 };

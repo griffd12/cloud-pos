@@ -551,7 +551,9 @@
         if (result.success) {
           statusEl.className = 'status-msg success';
           statusEl.textContent = 'Connected successfully';
-          state.serverUrl = url;
+          const cleanUrl = result.baseUrl || url;
+          state.serverUrl = cleanUrl;
+          urlInput.value = cleanUrl;
           state.connectionVerified = true;
           updateNextButton();
         } else {

@@ -16,12 +16,25 @@
     "node_modules/prebuild-install/**/*",
     "node_modules/node-abi/**/*",
     "node_modules/keytar/**/*",
-    "node_modules/ws/**/*"
+    "node_modules/ws/**/*",
+    "node_modules/electron-updater/**/*",
+    "node_modules/builder-util-runtime/**/*",
+    "node_modules/lazy-val/**/*",
+    "node_modules/semver/**/*",
+    "node_modules/tiny-typed-emitter/**/*"
   ],
   "extraResources": [
     {
       "from": "electron/assets",
       "to": "assets"
+    }
+  ],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "OWNER",
+      "repo": "REPO",
+      "releaseType": "release"
     }
   ],
   "win": {

@@ -78,6 +78,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   log: (level, subsystem, category, message, data) =>
     ipcRenderer.invoke('renderer-log', { level, subsystem, category, message, data }),
 
+  // === Auto-Updater API ===
+  updater: {
+    getStatus: () => ipcRenderer.invoke('updater-get-status'),
+    checkNow: () => ipcRenderer.invoke('updater-check-now'),
+    install: () => ipcRenderer.invoke('updater-install'),
+    getVersion: () => ipcRenderer.invoke('updater-get-version'),
+  },
+
+  onUpdateStatus: (callback) => {
+    const handler = (event, status) => callback(status);
+    ipcRenderer.on('update-status', handler);
+    return () => ipcRenderer.removeListener('update-status', handler);
+  },
+
   // === EMV Terminal API ===
   emvSendPayment: (config) => ipcRenderer.invoke('emv-send-payment', config),
   emvCancel: (address, port) => ipcRenderer.invoke('emv-cancel', { address, port }),

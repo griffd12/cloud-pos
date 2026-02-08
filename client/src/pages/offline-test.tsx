@@ -15,7 +15,9 @@ import {
   XCircle,
   Clock,
   AlertTriangle,
+  Download,
 } from "lucide-react";
+import { isElectron, type UpdateStatus } from "@/lib/electron";
 import { getIsOfflineMode, onOfflineModeChange, fetchWithTimeout } from "@/lib/queryClient";
 import { offlineStorage } from "@/lib/offline-storage";
 import type { CachedConfig } from "@/lib/offline-storage";
@@ -56,6 +58,8 @@ export default function OfflineTestPage() {
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [idbAvailable, setIdbAvailable] = useState<boolean | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const logIdRef = useRef(0);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
 
@@ -68,6 +72,30 @@ export default function OfflineTestPage() {
     checkIdbAvailability();
     refreshCacheData();
   }, []);
+
+  useEffect(() => {
+    if (!isElectron()) return;
+    const api = window.electronAPI;
+    if (!api?.updater) return;
+    api.updater.getStatus().then(setUpdateStatus).catch(() => {});
+    if (api.onUpdateStatus) {
+      const unsub = api.onUpdateStatus((status) => {
+        setUpdateStatus(status);
+        setCheckingUpdate(false);
+      });
+      return unsub;
+    }
+  }, []);
+
+  const handleCheckUpdate = async () => {
+    if (!isElectron() || !window.electronAPI?.updater) return;
+    setCheckingUpdate(true);
+    try {
+      await window.electronAPI.updater.checkNow();
+    } catch {
+      setCheckingUpdate(false);
+    }
+  };
 
   const checkIdbAvailability = async () => {
     const available = await offlineStorage.isAvailable();
@@ -318,6 +346,86 @@ export default function OfflineTestPage() {
             </div>
           </CardContent>
         </Card>
+
+        {isElectron() && (
+          <Card data-testid="card-software-update">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium">Software Updates</CardTitle>
+              <Download className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Current Version</span>
+                <span className="text-sm font-mono" data-testid="text-current-version">
+                  v{updateStatus?.currentVersion || "..."}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge
+                  variant={
+                    updateStatus?.status === "ready" ? "default" :
+                    updateStatus?.status === "error" ? "destructive" :
+                    updateStatus?.status === "downloading" ? "outline" :
+                    "secondary"
+                  }
+                  className="text-xs"
+                  data-testid="status-update"
+                >
+                  {updateStatus?.status === "ready" ? "Update Ready" :
+                   updateStatus?.status === "downloading" ? `Downloading ${updateStatus.downloadProgress}%` :
+                   updateStatus?.status === "checking" ? "Checking..." :
+                   updateStatus?.status === "up-to-date" ? "Up to Date" :
+                   updateStatus?.status === "error" ? "Error" :
+                   "Idle"}
+                </Badge>
+              </div>
+              {updateStatus?.availableVersion && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Available</span>
+                  <span className="text-sm font-mono" data-testid="text-available-version">
+                    v{updateStatus.availableVersion}
+                  </span>
+                </div>
+              )}
+              {updateStatus?.lastChecked && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Last Checked</span>
+                  <span className="text-sm text-muted-foreground" data-testid="text-last-checked">
+                    {new Date(updateStatus.lastChecked).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {updateStatus?.error && (
+                <div className="text-xs text-destructive mt-1" data-testid="text-update-error">
+                  {updateStatus.error}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCheckUpdate}
+                  disabled={checkingUpdate || updateStatus?.status === "downloading"}
+                  data-testid="button-check-update"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${checkingUpdate ? "animate-spin" : ""}`} />
+                  Check Now
+                </Button>
+                {updateStatus?.updateReady && (
+                  <Button
+                    size="sm"
+                    onClick={() => window.electronAPI?.updater.install()}
+                    data-testid="button-install-update"
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    Install & Restart
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card data-testid="card-storage-stats">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
