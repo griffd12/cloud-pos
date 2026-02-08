@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
-import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, getIsOfflineMode } from "@/lib/queryClient";
+import { offlineStore } from "@/lib/offline-store";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import BreakAttestationDialog from "@/components/pos/break-attestation-dialog";
 import type { Employee, Rvc, Property, Timecard, JobCode, Workstation, BreakRule } from "@shared/schema";
@@ -66,9 +67,22 @@ export default function LoginPage() {
     setCurrentWorkstation,
   } = usePosContext();
 
-  // Enable remote reload and heartbeat for devices at login screen
   useDeviceReload();
   useDeviceHeartbeat(true);
+
+  const { enterpriseId } = useDeviceContext();
+  const employeeSyncDone = useRef(false);
+
+  useEffect(() => {
+    if (!employeeSyncDone.current && !getIsOfflineMode()) {
+      employeeSyncDone.current = true;
+      offlineStore.syncEmployeesFromCloud(enterpriseId || undefined).then(count => {
+        if (count > 0) {
+          console.log(`[OfflineAuth] Cached ${count} employees for offline authentication`);
+        }
+      });
+    }
+  }, [enterpriseId]);
 
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
   const [pin, setPin] = useState("");
@@ -95,9 +109,6 @@ export default function LoginPage() {
     queryKey: ["/api/rvcs"],
     enabled: !workstationId,
   });
-
-  // Get enterprise ID from device context for filtering
-  const { enterpriseId } = useDeviceContext();
 
   // Fetch all workstations for selection when no workstation is set (filtered by enterprise if set)
   const { data: allWorkstations = [], isLoading: workstationsLoading } = useQuery<Workstation[]>({
@@ -214,7 +225,54 @@ export default function LoginPage() {
       }
       navigate("/pos");
     },
-    onError: () => {
+    onError: async (_error: any, pinCode: string) => {
+      const isNetworkError = _error instanceof TypeError || 
+        (_error?.message && (/fetch|network|timeout|abort/i.test(_error.message)));
+      const shouldTryOffline = getIsOfflineMode() || isNetworkError;
+      
+      if (shouldTryOffline) {
+        try {
+          const offlineEmp = await offlineStore.authenticateByPin(pinCode);
+          if (offlineEmp) {
+            const empAsEmployee = {
+              id: offlineEmp.id,
+              firstName: offlineEmp.firstName,
+              lastName: offlineEmp.lastName,
+              pinHash: offlineEmp.pinHash,
+              roleId: offlineEmp.roleId || null,
+              active: true,
+            } as Employee;
+            
+            setCurrentEmployee(empAsEmployee);
+            setPrivileges([
+              "fast_transaction", "send_to_kitchen", "void_unsent",
+              "apply_discount", "kds_access"
+            ]);
+            setIsClockedIn(true);
+            setIsSalariedBypass(false);
+            
+            const rvc = rvcs.find((r) => r.id === selectedRvcId);
+            if (!rvc) {
+              try {
+                const savedRvc = localStorage.getItem('pos_selected_rvc');
+                if (savedRvc) {
+                  const parsedRvc = JSON.parse(savedRvc) as Rvc;
+                  setCurrentRvc(parsedRvc);
+                }
+              } catch {}
+            } else {
+              setCurrentRvc(rvc);
+            }
+            
+            toast({
+              title: "Offline Sign In",
+              description: `Signed in as ${offlineEmp.firstName} (offline mode - limited features)`,
+            });
+            navigate("/pos");
+            return;
+          }
+        } catch {}
+      }
       setLoginError("Invalid PIN or employee not found");
       setPin("");
     },

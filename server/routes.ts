@@ -1419,13 +1419,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/auth/offline-employees", async (req, res) => {
+    try {
+      const enterpriseId = req.query.enterpriseId as string | undefined;
+      let data = await storage.getEmployees();
+      
+      if (enterpriseId) {
+        const properties = await storage.getProperties(enterpriseId);
+        const propertyIds = new Set(properties.map(p => p.id));
+        data = data.filter(emp => 
+          (emp.propertyId && propertyIds.has(emp.propertyId)) ||
+          (emp.enterpriseId === enterpriseId)
+        );
+      }
+      
+      const offlineEmployees = data
+        .filter(emp => emp.active)
+        .map(emp => ({
+          id: emp.id,
+          firstName: emp.firstName,
+          lastName: emp.lastName,
+          pinHash: emp.pinHash,
+          roleId: emp.roleId || '',
+          enterpriseId: emp.enterpriseId || '',
+          propertyId: emp.propertyId || '',
+        }));
+      
+      res.json(offlineEmployees);
+    } catch (error) {
+      console.error("Offline employees fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch employees for offline cache" });
+    }
+  });
+
   // ============================================================================
   // HEALTH CHECK
   // ============================================================================
 
   app.get("/api/health", (req, res) => {
-    // Simple health check - no auth or database query needed
-    // This endpoint just confirms the API server is responsive
     res.json({ 
       status: "ok", 
       timestamp: new Date().toISOString()

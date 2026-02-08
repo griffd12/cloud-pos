@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode, type Dispatch, type SetStateAction } from "react";
 import type { Employee, Rvc, Check, CheckItem, MenuItem, Slu, ModifierGroup, Modifier, OrderType, Timecard, JobCode, Workstation } from "@shared/schema";
+import { useDeviceContext } from "./device-context";
 
 const RVC_STORAGE_KEY = "pos_selected_rvc";
 const WORKSTATION_STORAGE_KEY = "pos_workstation_id";
@@ -82,16 +83,15 @@ function getInitialWorkstationId(): string | null {
 }
 
 export function PosProvider({ children }: { children: ReactNode }) {
+  const { linkedDeviceId, deviceType, isElectronLoading } = useDeviceContext();
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
   const [currentRvc, setCurrentRvcState] = useState<Rvc | null>(() => {
-    // Load saved RVC from localStorage on initialization
     try {
       const saved = localStorage.getItem(RVC_STORAGE_KEY);
       if (saved) {
         return JSON.parse(saved) as Rvc;
       }
     } catch {
-      // Ignore parse errors
     }
     return null;
   });
@@ -108,7 +108,22 @@ export function PosProvider({ children }: { children: ReactNode }) {
   const [workstationId, setWorkstationIdState] = useState<string | null>(getInitialWorkstationId);
   const [currentWorkstation, setCurrentWorkstation] = useState<Workstation | null>(null);
 
-  // Persist workstation ID to localStorage when it changes
+  useEffect(() => {
+    if (!isElectronLoading && linkedDeviceId && deviceType === 'pos' && !workstationId) {
+      setWorkstationIdState(linkedDeviceId);
+      localStorage.setItem(WORKSTATION_STORAGE_KEY, linkedDeviceId);
+    }
+  }, [isElectronLoading, linkedDeviceId, deviceType, workstationId]);
+
+  useEffect(() => {
+    if (!isElectronLoading && !workstationId) {
+      const stored = localStorage.getItem(WORKSTATION_STORAGE_KEY);
+      if (stored) {
+        setWorkstationIdState(stored);
+      }
+    }
+  }, [isElectronLoading]);
+
   const setWorkstationId = useCallback((id: string | null) => {
     setWorkstationIdState(id);
     if (id) {

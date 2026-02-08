@@ -317,6 +317,35 @@ class OfflineStore {
     });
   }
   
+  async authenticateByPin(pin: string): Promise<OfflineEmployee | null> {
+    const employees = await this.getEmployees();
+    const match = employees.find(emp => emp.pinHash === pin);
+    return match || null;
+  }
+  
+  async syncEmployeesFromCloud(enterpriseId?: string): Promise<number> {
+    try {
+      const url = enterpriseId 
+        ? `/api/auth/offline-employees?enterpriseId=${enterpriseId}`
+        : '/api/auth/offline-employees';
+      const headers: Record<string, string> = {};
+      const token = localStorage.getItem('pos_device_token');
+      if (token) {
+        headers['x-device-token'] = token;
+      }
+      const response = await fetch(url, { credentials: 'include', headers });
+      if (!response.ok) return 0;
+      
+      const employees: OfflineEmployee[] = await response.json();
+      if (employees.length > 0) {
+        await this.cacheEmployees(employees);
+      }
+      return employees.length;
+    } catch {
+      return 0;
+    }
+  }
+  
   // ============================================================================
   // CONFIG (property settings, tax rates, etc.)
   // ============================================================================
