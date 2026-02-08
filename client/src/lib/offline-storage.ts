@@ -221,6 +221,17 @@ class OfflineStorage {
     });
   }
 
+  async getAllConfigEntries(): Promise<CachedConfig[]> {
+    await this.initialize();
+
+    return new Promise((resolve, reject) => {
+      const store = this.getStore('config');
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result as CachedConfig[] || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // ============================================================================
   // OFFLINE CHECKS
   // ============================================================================

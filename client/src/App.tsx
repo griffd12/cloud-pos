@@ -20,6 +20,8 @@ import KdsDeviceSelectPage from "@/pages/kds-device-select";
 import EmcLoginPage from "@/pages/emc/login";
 import EmcSetupPage from "@/pages/emc/setup";
 import EmcAdminLayout from "@/pages/emc/admin-layout";
+import OfflineTestPage from "@/pages/offline-test";
+import { OfflineStatusBanner } from "@/components/offline-status-banner";
 
 function GlobalWebSocket() {
   usePosWebSocket();
@@ -76,6 +78,11 @@ function Router() {
     return <Redirect to={autoEnrollRedirect} />;
   }
   
+  // Offline test page - accessible without device enrollment
+  if (location === "/offline-test") {
+    return <OfflineTestPage />;
+  }
+
   // EMC routes bypass device enrollment completely - accessible from any browser
   if (location.startsWith("/emc")) {
     return (
@@ -163,6 +170,7 @@ function App() {
         <TooltipProvider>
           <DeviceProvider>
             <PosProvider>
+              <OfflineStatusBanner />
               <GlobalWebSocket />
               <Router />
               <Toaster />
