@@ -1,18 +1,120 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { offlineStorage } from './offline-storage';
 
 const EMC_SESSION_KEY = "emc_session_token";
-const DEVICE_TOKEN_KEY = "pos_device_token";  // Device token from CAL Setup Wizard (must match device-context.tsx)
+const DEVICE_TOKEN_KEY = "pos_device_token";
+const FETCH_TIMEOUT_MS = 8000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+let isOfflineMode = false;
+let offlineListeners: ((offline: boolean) => void)[] = [];
+
+export function getIsOfflineMode() { return isOfflineMode; }
+
+export function onOfflineModeChange(cb: (offline: boolean) => void) {
+  offlineListeners.push(cb);
+  return () => { offlineListeners = offlineListeners.filter(l => l !== cb); };
+}
+
+function setOfflineMode(val: boolean) {
+  if (isOfflineMode !== val) {
+    isOfflineMode = val;
+    offlineListeners.forEach(cb => cb(val));
+    logToElectron(val ? 'WARN' : 'INFO', 'NETWORK', 'Mode', val ? 'Switched to OFFLINE mode' : 'Switched to ONLINE mode');
+  }
+}
+
+function logToElectron(level: string, subsystem: string, category: string, message: string, data?: any) {
+  const w = window as any;
+  if (w.electronAPI?.log) {
+    w.electronAPI.log(level, subsystem, category, message, data).catch(() => {});
+  }
+}
+
+const URL_CACHE_KEY_MAP: Record<string, string> = {};
+
+function cacheKeyForUrl(url: string): string {
+  if (URL_CACHE_KEY_MAP[url]) return URL_CACHE_KEY_MAP[url];
+  const clean = url.replace(/^\/api\//, '').replace(/[?&]/g, '_').replace(/=/g, '-');
+  const key = `api_${clean}`;
+  URL_CACHE_KEY_MAP[url] = key;
+  return key;
+}
+
+function createTimeoutSignal(ms: number): AbortSignal {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
+
+export async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: createTimeoutSignal(FETCH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      setOfflineMode(false);
+      if (isGetRequest(options)) {
+        cacheResponseInBackground(url, res.clone());
+      }
+    }
+    return res;
+  } catch (err: any) {
+    if (err.name === 'AbortError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      if (isGetRequest(options)) {
+        const cached = await tryGetCachedResponse(url);
+        if (cached) {
+          setOfflineMode(true);
+          logToElectron('INFO', 'NETWORK', 'CacheFallback', `Serving cached: ${url}`);
+          return cached;
+        }
+      }
+      setOfflineMode(true);
+    }
+    throw err;
+  }
+}
+
+function isGetRequest(options: RequestInit): boolean {
+  return !options.method || options.method.toUpperCase() === 'GET';
+}
+
+async function cacheResponseInBackground(url: string, response: Response): Promise<void> {
+  try {
+    const data = await response.json();
+    const key = cacheKeyForUrl(url);
+    await offlineStorage.initialize();
+    await offlineStorage.cacheConfig(key, data, CACHE_TTL_MS);
+  } catch {
+  }
+}
+
+async function tryGetCachedResponse(url: string): Promise<Response | null> {
+  try {
+    const key = cacheKeyForUrl(url);
+    await offlineStorage.initialize();
+    const data = await offlineStorage.getConfig<any>(key);
+    if (data !== null) {
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        statusText: 'OK (offline cache)',
+        headers: { 'Content-Type': 'application/json', 'X-Offline-Cache': 'true' },
+      });
+    }
+  } catch {
+  }
+  return null;
+}
 
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   
-  // Check for EMC session token (for EMC admin access) - uses sessionStorage for security
   const emcToken = sessionStorage.getItem(EMC_SESSION_KEY);
   if (emcToken) {
     headers["X-EMC-Session"] = emcToken;
   }
   
-  // Check for device token (for enrolled POS/KDS devices) - uses localStorage for persistence
   const deviceToken = localStorage.getItem(DEVICE_TOKEN_KEY);
   if (deviceToken) {
     headers["X-Device-Token"] = deviceToken;
@@ -47,6 +149,7 @@ export async function apiRequest(
     headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
+    signal: createTimeoutSignal(FETCH_TIMEOUT_MS),
   });
 
   await throwIfResNotOk(res);
@@ -64,6 +167,7 @@ export const getQueryFn: <T>(options: {
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",
       headers: authHeaders,
+      signal: createTimeoutSignal(FETCH_TIMEOUT_MS),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

@@ -649,6 +649,16 @@ function setupIpcHandlers() {
 
   ipcMain.handle('get-log-content', async (event, { logName, lines }) => {
     try {
+      if (logName === 'system') {
+        const { UNIFIED_LOG_FILE } = require('./logger.cjs');
+        const fs = require('fs');
+        if (fs.existsSync(UNIFIED_LOG_FILE)) {
+          const content = fs.readFileSync(UNIFIED_LOG_FILE, 'utf8');
+          const allLines = content.split('\n');
+          return { success: true, content: allLines.slice(-(lines || 300)).join('\n'), path: UNIFIED_LOG_FILE };
+        }
+        return { success: true, content: '', path: UNIFIED_LOG_FILE };
+      }
       const allowedLogs = ['app', 'print-agent', 'offline-db', 'installer'];
       const safeName = allowedLogs.includes(logName) ? logName : 'app';
       const { Logger } = require('./logger.cjs');
@@ -656,6 +666,32 @@ function setupIpcHandlers() {
       return { success: true, content: logger.readRecentLines(lines || 200), path: logger.getLogPath() };
     } catch (e) {
       return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('renderer-log', (event, payload) => {
+    try {
+      if (!payload || typeof payload !== 'object') return { success: false };
+      const allowedLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+      const allowedSubsystems = ['RENDERER', 'NETWORK', 'POS', 'KDS', 'SYNC', 'UI', 'AUTH'];
+      const safeLevel = allowedLevels.includes(payload.level) ? payload.level : 'INFO';
+      const safeSubsystem = allowedSubsystems.includes(payload.subsystem)
+        ? payload.subsystem : 'RENDERER';
+      const safeCategory = String(payload.category || 'General').substring(0, 32).replace(/[\r\n]/g, '');
+      const safeMessage = String(payload.message || '').substring(0, 1000).replace(/[\r\n]/g, ' ');
+      let safeData = payload.data;
+      if (safeData !== undefined && safeData !== null) {
+        try {
+          const serialized = JSON.stringify(safeData);
+          if (serialized.length > 2000) safeData = serialized.substring(0, 2000) + '...(truncated)';
+        } catch { safeData = '[unserializable]'; }
+      }
+      const { Logger } = require('./logger.cjs');
+      const rendererLogger = new Logger('app');
+      rendererLogger.write(safeLevel, `R:${safeSubsystem}:${safeCategory}`, safeMessage, safeData);
+      return { success: true };
+    } catch {
+      return { success: false };
     }
   });
 
@@ -1319,6 +1355,12 @@ async function initEnhancedOfflineDb() {
   await enhancedOfflineDb.initialize();
 
   offlineInterceptor = new OfflineApiInterceptor(enhancedOfflineDb);
+  const config = loadConfig();
+  offlineInterceptor.setConfig({
+    enterpriseId: config.enterpriseId || null,
+    propertyId: config.propertyId || null,
+    rvcId: config.rvcId || null,
+  });
   appLogger.info('OfflineDB', 'Enhanced offline database initialized');
 }
 

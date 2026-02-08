@@ -1,13 +1,23 @@
 const crypto = require('crypto');
+const { appLogger } = require('./logger.cjs');
 
 class OfflineApiInterceptor {
   constructor(offlineDb) {
     this.db = offlineDb;
     this.isOffline = false;
+    this.config = {};
   }
 
   setOffline(offline) {
+    const changed = this.isOffline !== offline;
     this.isOffline = offline;
+    if (changed) {
+      appLogger.info('Interceptor', `Offline mode ${offline ? 'ENABLED' : 'DISABLED'}`);
+    }
+  }
+
+  setConfig(config) {
+    this.config = config || {};
   }
 
   canHandleOffline(method, pathname) {
@@ -21,8 +31,10 @@ class OfflineApiInterceptor {
         /^\/api\/combo-meals/,
         /^\/api\/employees/,
         /^\/api\/tax-rates/,
+        /^\/api\/tax-groups/,
         /^\/api\/discounts/,
         /^\/api\/tender-types/,
+        /^\/api\/tenders/,
         /^\/api\/order-types/,
         /^\/api\/service-charges/,
         /^\/api\/major-groups/,
@@ -30,11 +42,17 @@ class OfflineApiInterceptor {
         /^\/api\/menu-item-classes/,
         /^\/api\/menu-item-availability/,
         /^\/api\/revenue-centers/,
+        /^\/api\/rvcs/,
+        /^\/api\/slus/,
         /^\/api\/properties/,
         /^\/api\/printers/,
         /^\/api\/workstations/,
         /^\/api\/checks/,
+        /^\/api\/pos-layouts/,
         /^\/api\/health/,
+        /^\/api\/auth\/manager-approval/,
+        /^\/api\/loyalty-members/,
+        /^\/api\/offline\//,
       ];
       return readEndpoints.some(re => re.test(pathname));
     }
@@ -91,8 +109,10 @@ class OfflineApiInterceptor {
       '/api/combo-meals': 'combo_meals',
       '/api/employees': 'employees',
       '/api/tax-rates': 'tax_rates',
+      '/api/tax-groups': 'tax_rates',
       '/api/discounts': 'discounts',
       '/api/tender-types': 'tender_types',
+      '/api/tenders': 'tender_types',
       '/api/order-types': 'order_types',
       '/api/service-charges': 'service_charges',
       '/api/major-groups': 'major_groups',
@@ -100,10 +120,91 @@ class OfflineApiInterceptor {
       '/api/menu-item-classes': 'menu_item_classes',
       '/api/menu-item-availability': 'menu_item_availability',
       '/api/revenue-centers': 'revenue_centers',
+      '/api/rvcs': 'revenue_centers',
       '/api/properties': 'properties',
       '/api/printers': 'printers',
       '/api/workstations': 'workstations',
     };
+
+    const wsContextMatch = pathname.match(/^\/api\/workstations\/([^/]+)\/context$/);
+    if (wsContextMatch) {
+      const wsId = wsContextMatch[1];
+      const workstation = this.db.getEntity('workstations', wsId);
+      const propertyId = this.config.propertyId || query?.propertyId;
+      const rvcs = this.db.getEntityList('revenue_centers', null)
+        .filter(r => !propertyId || r.propertyId === propertyId);
+      const property = propertyId ? this.db.getEntity('properties', propertyId) : null;
+      return {
+        status: 200,
+        data: {
+          workstation: workstation || { id: wsId, name: 'Offline Workstation' },
+          rvcs: rvcs || [],
+          property: property || (propertyId ? { id: propertyId, name: 'Offline Property' } : null),
+          offlineMode: true,
+        },
+      };
+    }
+
+    const sluMatch = pathname.match(/^\/api\/slus/);
+    if (sluMatch) {
+      const rvcId = query?.rvcId || this.config.rvcId;
+      const cacheKey = rvcId ? `slus_${rvcId}` : 'slus';
+      return { status: 200, data: this.db.getCachedConfig(cacheKey) || [] };
+    }
+
+    const rvcConfigMatch = pathname.match(/^\/api\/rvcs\/([^/]+)$/);
+    if (rvcConfigMatch) {
+      const rvcId = rvcConfigMatch[1];
+      const cached = this.db.getCachedConfig(`rvc_config_${rvcId}`);
+      if (cached) return { status: 200, data: cached };
+      const entity = this.db.getEntity('revenue_centers', rvcId);
+      if (entity) return { status: 200, data: entity };
+      return { status: 404, data: { message: 'RVC not found (offline)' } };
+    }
+
+    const posLayoutDefaultMatch = pathname.match(/^\/api\/pos-layouts\/default\/([^/]+)$/);
+    if (posLayoutDefaultMatch) {
+      const rvcId = posLayoutDefaultMatch[1];
+      const layout = this.db.getCachedConfig(`posLayout_${rvcId}`);
+      return { status: 200, data: layout || null };
+    }
+
+    const posLayoutCellsMatch = pathname.match(/^\/api\/pos-layouts\/([^/]+)\/cells$/);
+    if (posLayoutCellsMatch) {
+      const layoutId = posLayoutCellsMatch[1];
+      const cells = this.db.getCachedConfig(`posLayoutCells_${layoutId}`);
+      return { status: 200, data: cells || [] };
+    }
+
+    const checkPaymentsMatch = pathname.match(/^\/api\/checks\/([^/]+)\/payments$/);
+    if (checkPaymentsMatch) {
+      const checkId = checkPaymentsMatch[1];
+      const check = this.db.getOfflineCheck(checkId);
+      if (check) {
+        const payments = check.payments || [];
+        const paidAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+        return { status: 200, data: { payments, paidAmount } };
+      }
+      return { status: 200, data: { payments: [], paidAmount: 0 } };
+    }
+
+    if (pathname.match(/^\/api\/auth\/manager-approval$/)) {
+      return { status: 503, data: { error: 'Manager approval unavailable in offline mode' } };
+    }
+
+    if (pathname.match(/^\/api\/loyalty-members/)) {
+      return { status: 200, data: null };
+    }
+
+    if (pathname === '/api/offline/sales-report') {
+      const businessDate = query?.date || new Date().toISOString().split('T')[0];
+      const rvcId = query?.rvcId || this.config.rvcId;
+      return { status: 200, data: this.db.getLocalSalesData(businessDate, rvcId) };
+    }
+
+    if (pathname === '/api/offline/stats') {
+      return { status: 200, data: this.db.getStats() };
+    }
 
     const idMatch = pathname.match(/^(\/api\/[\w-]+)\/([a-f0-9-]+)$/);
     if (idMatch) {
@@ -131,10 +232,15 @@ class OfflineApiInterceptor {
       return { status: 200, data: checks };
     }
 
+    appLogger.debug('Interceptor', `No offline handler for GET ${pathname}`);
     return null;
   }
 
   handlePost(pathname, body) {
+    if (pathname === '/api/auth/pin' || pathname === '/api/auth/pin/') {
+      return this.authenticateByPin(body);
+    }
+
     if (pathname === '/api/checks' || pathname === '/api/checks/') {
       return this.createOfflineCheck(body);
     }
@@ -143,12 +249,27 @@ class OfflineApiInterceptor {
       return this.addOfflineCheckItem(pathname, body);
     }
 
+    if (pathname.match(/^\/api\/checks\/[^/]+\/payments/)) {
+      const checkIdMatch = pathname.match(/^\/api\/checks\/([^/]+)\/payments/);
+      if (checkIdMatch) {
+        return this.createOfflinePayment({ ...body, checkId: checkIdMatch[1] });
+      }
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/unlock/)) {
+      return { status: 200, data: { success: true } };
+    }
+
     if (pathname === '/api/payments' || pathname === '/api/payments/') {
       return this.createOfflinePayment(body);
     }
 
     if (pathname.match(/^\/api\/employees\/[^/]+\/authenticate/)) {
       return this.authenticateOffline(pathname, body);
+    }
+
+    if (pathname === '/api/auth/manager-approval') {
+      return { status: 503, data: { error: 'Manager approval unavailable in offline mode' } };
     }
 
     if (pathname === '/api/time-clock/punch' || pathname.match(/^\/api\/time-punches/)) {
@@ -287,6 +408,31 @@ class OfflineApiInterceptor {
     this.db.queueOperation('create_payment', '/api/payments', 'POST', body, 1);
 
     return { status: 201, data: payment };
+  }
+
+  authenticateByPin(body) {
+    const pin = body?.pin;
+    if (!pin) {
+      return { status: 400, data: { success: false, message: 'PIN required' } };
+    }
+
+    const employees = this.db.getEntityList('employees', this.config.enterpriseId);
+    const employee = employees.find(emp => emp.pin === pin || emp.posPin === pin);
+
+    if (employee) {
+      appLogger.info('Interceptor', `Offline PIN auth: ${employee.firstName} ${employee.lastName}`);
+      return {
+        status: 200,
+        data: {
+          success: true,
+          employee,
+          privileges: employee.privileges || employee.rolePrivileges || [],
+          offlineAuth: true,
+        },
+      };
+    }
+
+    return { status: 401, data: { success: false, message: 'Invalid PIN (offline)' } };
   }
 
   authenticateOffline(pathname, body) {

@@ -42,7 +42,7 @@ import { SoldOutConfirmDialog } from "@/components/pos/sold-out-confirm-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { useItemAvailability } from "@/hooks/use-item-availability";
-import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
 import { apiClient } from "@/lib/api-client";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
@@ -128,7 +128,7 @@ export default function PosPage() {
   const { data: wsContext } = useQuery<{ workstation: any; rvcs: any[]; property: any }>({
     queryKey: ["/api/workstations", workstationId, "context"],
     queryFn: async () => {
-      const res = await fetch(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
         throw new Error("Failed to fetch workstation context");
       }
@@ -261,7 +261,7 @@ export default function PosPage() {
   const healthQuery = useQuery({
     queryKey: ["/api/health"],
     queryFn: async () => {
-      const res = await fetch("/api/health", { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout("/api/health", { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("API health check failed");
       return res.json();
     },
@@ -278,7 +278,7 @@ export default function PosPage() {
     queryKey: ["/api/checks", currentCheck?.id, "payments"],
     queryFn: async () => {
       if (!currentCheck?.id) return { payments: [], paidAmount: 0 };
-      const res = await fetch(`/api/checks/${currentCheck.id}/payments`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/checks/${currentCheck.id}/payments`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch payments");
       return res.json();
     },
@@ -298,7 +298,7 @@ export default function PosPage() {
     queryKey: ["/api/loyalty-members", currentCheck?.customerId],
     queryFn: async () => {
       if (!currentCheck?.customerId) return null;
-      const res = await fetch(`/api/loyalty-members/${currentCheck.customerId}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/loyalty-members/${currentCheck.customerId}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) return null;
       return res.json();
     },
@@ -331,7 +331,7 @@ export default function PosPage() {
       // If this is a pending reopen check and the payment belongs to this check, reopen it first
       if (pendingReopenCheckId && currentCheck?.id === pendingReopenCheckId) {
         // First, fetch fresh check status to see if it's actually still closed
-        const checkRes = await fetch(`/api/checks/${pendingReopenCheckId}`);
+        const checkRes = await fetchWithTimeout(`/api/checks/${pendingReopenCheckId}`);
         if (checkRes.ok) {
           const checkData = await checkRes.json();
           // Only attempt reopen if check is still closed
@@ -349,7 +349,7 @@ export default function PosPage() {
         setPendingReopenCheckId(null);
       }
       
-      const res = await fetch(`/api/check-payments/${payment.id}/void`, {
+      const res = await fetchWithTimeout(`/api/check-payments/${payment.id}/void`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -446,7 +446,7 @@ export default function PosPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (currentRvc?.id) params.append("rvcId", currentRvc.id);
-      const res = await fetch(`/api/slus?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/slus?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch SLUs");
       return res.json();
     },
@@ -459,7 +459,7 @@ export default function PosPage() {
       const params = new URLSearchParams();
       if (selectedSlu?.id) params.append("sluId", selectedSlu.id);
       if (currentRvc?.id) params.append("rvcId", currentRvc.id);
-      const res = await fetch(`/api/menu-items?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/menu-items?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) {
         throw new Error("Failed to fetch menu items");
       }
@@ -473,7 +473,7 @@ export default function PosPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (currentRvc?.id) params.append("rvcId", currentRvc.id);
-      const res = await fetch(`/api/tenders?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/tenders?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch tenders");
       return res.json();
     },
@@ -496,7 +496,7 @@ export default function PosPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (currentRvc?.id) params.append("rvcId", currentRvc.id);
-      const res = await fetch(`/api/tax-groups?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/tax-groups?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch tax groups");
       return res.json();
     },
@@ -508,7 +508,7 @@ export default function PosPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (currentRvc?.id) params.append("rvcId", currentRvc.id);
-      const res = await fetch(`/api/discounts?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/discounts?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch discounts");
       return res.json();
     },
@@ -520,7 +520,7 @@ export default function PosPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (currentRvc?.id) params.append("rvcId", currentRvc.id);
-      const res = await fetch(`/api/menu-items?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/menu-items?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
@@ -530,7 +530,7 @@ export default function PosPage() {
   const { data: activeLayout } = useQuery<PosLayout | null>({
     queryKey: ["/api/pos-layouts/default", currentRvc?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/pos-layouts/default/${currentRvc?.id}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/pos-layouts/default/${currentRvc?.id}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) return null;
       return res.json();
     },
@@ -541,7 +541,7 @@ export default function PosPage() {
     queryKey: ["/api/pos-layouts", activeLayout?.id, "cells"],
     queryFn: async () => {
       if (!activeLayout?.id) return [];
-      const res = await fetch(`/api/pos-layouts/${activeLayout.id}/cells`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/pos-layouts/${activeLayout.id}/cells`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) return [];
       return res.json();
     },
@@ -843,7 +843,7 @@ export default function PosPage() {
   const loadClosedCheckForViewing = useCallback(async (checkId: string) => {
     setIsLoadingClosedCheck(true);
     try {
-      const res = await fetch(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setCurrentCheck(data.check);
@@ -1023,7 +1023,7 @@ export default function PosPage() {
       toast({ title: "Price Updated", description: "Item price has been overridden" });
       if (currentCheck) {
         try {
-          const res = await fetch(`/api/checks/${currentCheck.id}`, { credentials: "include", headers: getAuthHeaders() });
+          const res = await fetchWithTimeout(`/api/checks/${currentCheck.id}`, { credentials: "include", headers: getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
             setCurrentCheck(data.check);
@@ -1096,7 +1096,7 @@ export default function PosPage() {
         }
       }
 
-      const res = await fetch(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/checks/${checkId}`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to load check");
       const data = await res.json();
       setCurrentCheck(data.check);
@@ -1123,7 +1123,7 @@ export default function PosPage() {
 
   const handleRefundManagerApproval = async (managerPin: string) => {
     try {
-      const res = await fetch("/api/auth/manager-approval", {
+      const res = await fetchWithTimeout("/api/auth/manager-approval", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         credentials: "include",
@@ -1188,7 +1188,7 @@ export default function PosPage() {
       }
       // Check for linked modifier groups before opening COM
       try {
-        const res = await fetch(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
+        const res = await fetchWithTimeout(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
         const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
         const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
         
@@ -1248,7 +1248,7 @@ export default function PosPage() {
 
     // Fetch modifier groups for this specific item
     try {
-      const res = await fetch(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
       const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
       
       // Check if any groups have modifiers AND are required (or have at least minSelect > 0)
@@ -1400,7 +1400,7 @@ export default function PosPage() {
     setEditingItem(item);
     try {
       // Fetch the link records for this menu item
-      const linksRes = await fetch(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include", headers: getAuthHeaders() });
+      const linksRes = await fetchWithTimeout(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include", headers: getAuthHeaders() });
       if (!linksRes.ok) {
         toast({ title: "Failed to load modifiers", variant: "destructive" });
         setEditingItem(null);
@@ -1409,7 +1409,7 @@ export default function PosPage() {
       const links = await linksRes.json();
       
       // Fetch all modifier groups with their modifiers
-      const groupsRes = await fetch("/api/modifier-groups", { credentials: "include", headers: getAuthHeaders() });
+      const groupsRes = await fetchWithTimeout("/api/modifier-groups", { credentials: "include", headers: getAuthHeaders() });
       if (!groupsRes.ok) {
         toast({ title: "Failed to load modifier groups", variant: "destructive" });
         setEditingItem(null);
@@ -1888,7 +1888,7 @@ export default function PosPage() {
                       const allModifiers = [...pendingStandardModifiers, ...comModifiers];
                       
                       if (editingCOMCheckItem) {
-                        const res = await fetch(`/api/check-items/${editingCOMCheckItem.id}/modifiers`, {
+                        const res = await fetchWithTimeout(`/api/check-items/${editingCOMCheckItem.id}/modifiers`, {
                           method: "PUT",
                           headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
                           body: JSON.stringify({ modifiers: allModifiers }),
@@ -2420,7 +2420,7 @@ export default function PosPage() {
             }
             
             // Refresh the check data
-            const refreshRes = await fetch(`/api/checks/${checkToUse?.id}`, { credentials: "include", headers: getAuthHeaders() });
+            const refreshRes = await fetchWithTimeout(`/api/checks/${checkToUse?.id}`, { credentials: "include", headers: getAuthHeaders() });
             if (refreshRes.ok) {
               const data = await refreshRes.json();
               setCurrentCheck(data.check);

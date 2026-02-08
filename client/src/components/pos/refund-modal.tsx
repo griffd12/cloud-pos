@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
 import { RefreshCw, DollarSign, AlertTriangle, Check as CheckIcon } from "lucide-react";
 import type { Check, CheckItem, CheckPayment } from "@shared/schema";
 import { format } from "date-fns";
@@ -64,7 +64,7 @@ export function RefundModal({
   }>({
     queryKey: ["/api/checks", check?.id, "full-details"],
     queryFn: async () => {
-      const res = await fetch(`/api/checks/${check?.id}/full-details`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/checks/${check?.id}/full-details`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch check details");
       return res.json();
     },

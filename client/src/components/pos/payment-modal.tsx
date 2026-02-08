@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, fetchWithTimeout } from "@/lib/queryClient";
 import type { Tender, Check, TerminalDevice, TerminalSession, CheckPayment } from "@shared/schema";
 import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor, Clock, Receipt, Star, ChevronDown, ChevronUp, User } from "lucide-react";
 import { StripeCardForm } from "./stripe-card-form";
@@ -127,7 +127,7 @@ export function PaymentModal({
     queryKey: ["/api/checks", check?.id, "payments-modal"],
     queryFn: async () => {
       if (!check?.id) return [];
-      const res = await fetch(`/api/checks/${check.id}/payments`, {
+      const res = await fetchWithTimeout(`/api/checks/${check.id}/payments`, {
         credentials: "include",
       });
       if (!res.ok) return [];
@@ -415,7 +415,7 @@ export function PaymentModal({
     
     try {
       // First get active loyalty programs for this property
-      const programsRes = await fetch(`/api/loyalty-programs?active=true`, {
+      const programsRes = await fetchWithTimeout(`/api/loyalty-programs?active=true`, {
         credentials: "include",
       });
       
@@ -435,7 +435,7 @@ export function PaymentModal({
       setLoyaltyProgram(activeProgram);
       
       // Now look up the member by phone
-      const membersRes = await fetch(`/api/loyalty-members?programId=${activeProgram.id}&phone=${encodeURIComponent(loyaltyPhone.trim())}`, {
+      const membersRes = await fetchWithTimeout(`/api/loyalty-members?programId=${activeProgram.id}&phone=${encodeURIComponent(loyaltyPhone.trim())}`, {
         credentials: "include",
       });
       

@@ -3,51 +3,83 @@ const path = require('path');
 const os = require('os');
 
 const LOG_DIR = path.join(
-  process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
-  'Cloud POS',
+  process.platform === 'win32'
+    ? (process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'))
+    : os.homedir(),
+  process.platform === 'win32' ? 'Cloud POS' : '.cloudpos',
   'logs'
 );
 
-const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_LOG_SIZE = 5 * 1024 * 1024;
 const MAX_LOG_FILES = 5;
+const UNIFIED_MAX_SIZE = 10 * 1024 * 1024;
+const UNIFIED_LOG_FILE = path.join(LOG_DIR, 'system.log');
 
 const LOG_LEVELS = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
+
+const SUBSYSTEM_MAP = {
+  'app': 'APP',
+  'print-agent': 'PRINT',
+  'offline-db': 'OFFLINEDB',
+  'installer': 'INSTALLER',
+};
+
+let logDirCreated = false;
+
+function ensureLogDir() {
+  if (logDirCreated) return;
+  try {
+    if (!fs.existsSync(LOG_DIR)) {
+      fs.mkdirSync(LOG_DIR, { recursive: true });
+    }
+    logDirCreated = true;
+  } catch (e) {
+    console.error(`[Logger] Failed to create log directory: ${e.message}`);
+  }
+}
+
+function rotateFile(filePath, maxSize, maxFiles) {
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const stats = fs.statSync(filePath);
+    if (stats.size < maxSize) return;
+
+    for (let i = maxFiles - 1; i >= 1; i--) {
+      const older = `${filePath}.${i}`;
+      const newer = i === 1 ? filePath : `${filePath}.${i - 1}`;
+      if (fs.existsSync(newer)) {
+        if (fs.existsSync(older)) fs.unlinkSync(older);
+        fs.renameSync(newer, older);
+      }
+    }
+  } catch (e) {
+    console.error(`[Logger] Rotation error: ${e.message}`);
+  }
+}
+
+function writeToUnifiedLog(subsystemTag, line) {
+  try {
+    rotateFile(UNIFIED_LOG_FILE, UNIFIED_MAX_SIZE, MAX_LOG_FILES);
+    const parts = line.match(/^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(.*)/s);
+    let unifiedLine;
+    if (parts) {
+      const [, timestamp, level, category, rest] = parts;
+      unifiedLine = `[${timestamp}] [${level.padEnd(5)}] [${subsystemTag.padEnd(12)}] [${category}] ${rest}`;
+    } else {
+      unifiedLine = `[${new Date().toISOString()}] [INFO ] [${subsystemTag.padEnd(12)}] ${line}`;
+    }
+    fs.appendFileSync(UNIFIED_LOG_FILE, unifiedLine + '\n', 'utf8');
+  } catch {
+  }
+}
 
 class Logger {
   constructor(logName, options = {}) {
     this.logName = logName;
     this.minLevel = LOG_LEVELS[options.minLevel || 'DEBUG'];
     this.logFile = path.join(LOG_DIR, `${logName}.log`);
-    this.ensureLogDir();
-  }
-
-  ensureLogDir() {
-    try {
-      if (!fs.existsSync(LOG_DIR)) {
-        fs.mkdirSync(LOG_DIR, { recursive: true });
-      }
-    } catch (e) {
-      console.error(`[Logger] Failed to create log directory: ${e.message}`);
-    }
-  }
-
-  rotateIfNeeded() {
-    try {
-      if (!fs.existsSync(this.logFile)) return;
-      const stats = fs.statSync(this.logFile);
-      if (stats.size < MAX_LOG_SIZE) return;
-
-      for (let i = MAX_LOG_FILES - 1; i >= 1; i--) {
-        const older = `${this.logFile}.${i}`;
-        const newer = i === 1 ? this.logFile : `${this.logFile}.${i - 1}`;
-        if (fs.existsSync(newer)) {
-          if (fs.existsSync(older)) fs.unlinkSync(older);
-          fs.renameSync(newer, older);
-        }
-      }
-    } catch (e) {
-      console.error(`[Logger] Rotation error: ${e.message}`);
-    }
+    this.subsystemTag = SUBSYSTEM_MAP[logName] || logName.toUpperCase();
+    ensureLogDir();
   }
 
   formatMessage(level, category, message, data) {
@@ -78,11 +110,13 @@ class Logger {
     console[consoleMethod](line);
 
     try {
-      this.rotateIfNeeded();
+      rotateFile(this.logFile, MAX_LOG_SIZE, MAX_LOG_FILES);
       fs.appendFileSync(this.logFile, line + '\n', 'utf8');
     } catch (e) {
       console.error(`[Logger] Write failed: ${e.message}`);
     }
+
+    writeToUnifiedLog(this.subsystemTag, line);
   }
 
   debug(category, message, data) { this.write('DEBUG', category, message, data); }
@@ -93,16 +127,22 @@ class Logger {
   separator(title) {
     const line = `\n${'='.repeat(80)}\n  ${title} - ${new Date().toISOString()}\n${'='.repeat(80)}`;
     try {
-      this.rotateIfNeeded();
+      rotateFile(this.logFile, MAX_LOG_SIZE, MAX_LOG_FILES);
       fs.appendFileSync(this.logFile, line + '\n', 'utf8');
     } catch (e) {
       console.error(`[Logger] Write failed: ${e.message}`);
+    }
+    try {
+      rotateFile(UNIFIED_LOG_FILE, UNIFIED_MAX_SIZE, MAX_LOG_FILES);
+      fs.appendFileSync(UNIFIED_LOG_FILE, `\n${'='.repeat(100)}\n  [${this.subsystemTag}] ${title} - ${new Date().toISOString()}\n${'='.repeat(100)}\n`, 'utf8');
+    } catch {
     }
   }
 
   getLogPath() { return this.logFile; }
 
   static getLogDirectory() { return LOG_DIR; }
+  static getUnifiedLogPath() { return UNIFIED_LOG_FILE; }
 
   readRecentLines(count = 200) {
     try {
@@ -128,4 +168,5 @@ module.exports = {
   offlineDbLogger,
   installerLogger,
   LOG_DIR,
+  UNIFIED_LOG_FILE,
 };

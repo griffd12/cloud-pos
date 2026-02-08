@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { getAuthHeaders } from "@/lib/queryClient";
+import { getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
 import type { MenuItem, MenuItemRecipeIngredient, IngredientPrefix, Modifier, CheckItem } from "@shared/schema";
 import { X } from "lucide-react";
 
@@ -38,7 +38,7 @@ export function HorizontalCOMPanel({
   const { data: ingredientPrefixes = [] } = useQuery<IngredientPrefix[]>({
     queryKey: ["/api/ingredient-prefixes", { enterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/ingredient-prefixes?enterpriseId=${enterpriseId}`, { headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/ingredient-prefixes?enterpriseId=${enterpriseId}`, { headers: getAuthHeaders() });
       return res.json();
     },
     enabled: !!enterpriseId,
@@ -48,7 +48,7 @@ export function HorizontalCOMPanel({
     queryKey: ["/api/menu-items", activeMenuItem?.id, "recipe-ingredients"],
     queryFn: async () => {
       if (!activeMenuItem) return [];
-      const res = await fetch(`/api/menu-items/${activeMenuItem.id}/recipe-ingredients`, { headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/menu-items/${activeMenuItem.id}/recipe-ingredients`, { headers: getAuthHeaders() });
       return res.json();
     },
     enabled: !!activeMenuItem?.menuBuildEnabled,
@@ -57,7 +57,7 @@ export function HorizontalCOMPanel({
   const { data: modifiers = [] } = useQuery<Modifier[]>({
     queryKey: ["/api/modifiers", { enterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/modifiers?enterpriseId=${enterpriseId}`, { headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/modifiers?enterpriseId=${enterpriseId}`, { headers: getAuthHeaders() });
       return res.json();
     },
     enabled: !!enterpriseId,

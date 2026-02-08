@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getAuthHeaders } from "@/lib/queryClient";
+import { getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ export function ReopenCheckModal({
     queryKey: ["/api/rvcs", rvcId, "closed-checks"],
     queryFn: async () => {
       if (!rvcId) return [];
-      const res = await fetch(`/api/rvcs/${rvcId}/closed-checks?limit=50`, { credentials: "include", headers: getAuthHeaders() });
+      const res = await fetchWithTimeout(`/api/rvcs/${rvcId}/closed-checks?limit=50`, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch closed checks");
       return res.json();
     },

@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // === Logging API ===
   openLogDirectory: () => ipcRenderer.invoke('open-log-directory'),
   getLogContent: (logName, lines) => ipcRenderer.invoke('get-log-content', { logName, lines }),
+  getSystemLog: (lines) => ipcRenderer.invoke('get-log-content', { logName: 'system', lines: lines || 300 }),
+  log: (level, subsystem, category, message, data) =>
+    ipcRenderer.invoke('renderer-log', { level, subsystem, category, message, data }),
 
   // === EMV Terminal API ===
   emvSendPayment: (config) => ipcRenderer.invoke('emv-send-payment', config),

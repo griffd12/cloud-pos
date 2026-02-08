@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
 import type { Check, CheckItem, LoyaltyMember, LoyaltyReward, LoyaltyTransaction, LoyaltyProgram } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -98,7 +98,7 @@ export function CustomerModal({
     queryKey: ["/api/pos/customers/search", searchQuery],
     queryFn: async () => {
       if (!searchQuery || searchQuery.length < 2) return [];
-      const res = await fetch(`/api/pos/customers/search?query=${encodeURIComponent(searchQuery)}`, {
+      const res = await fetchWithTimeout(`/api/pos/customers/search?query=${encodeURIComponent(searchQuery)}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       });
@@ -111,7 +111,7 @@ export function CustomerModal({
   const { data: customerDetails, isLoading: isLoadingDetails } = useQuery<CustomerDetailsResponse>({
     queryKey: ["/api/pos/customers", selectedCustomer?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/pos/customers/${selectedCustomer?.id}`, {
+      const res = await fetchWithTimeout(`/api/pos/customers/${selectedCustomer?.id}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       });

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Clock, Receipt, ShoppingBag, Send, Loader2, Lock, User, DollarSign } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getAuthHeaders } from "@/lib/queryClient";
+import { getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface OpenCheck {
@@ -129,7 +129,7 @@ export function OpenChecksModal({
     queryKey: ["/api/checks/open", { rvcId }],
     queryFn: async () => {
       if (!rvcId) return [];
-      const res = await fetch(`/api/checks/open?rvcId=${rvcId}`, {
+      const res = await fetchWithTimeout(`/api/checks/open?rvcId=${rvcId}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       });
@@ -150,7 +150,7 @@ export function OpenChecksModal({
       params.append("rvcId", rvcId);
       if (workstationId) params.append("workstationId", workstationId);
       
-      const res = await fetch(`/api/checks/locks?${params.toString()}`, {
+      const res = await fetchWithTimeout(`/api/checks/locks?${params.toString()}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       });
