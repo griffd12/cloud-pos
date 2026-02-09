@@ -43,8 +43,8 @@
   "publish": [
     {
       "provider": "github",
-      "owner": "OWNER",
-      "repo": "REPO",
+      "owner": "griffd12",
+      "repo": "cloud-pos",
       "releaseType": "release"
     }
   ],

@@ -23,6 +23,7 @@ import EmcAdminLayout from "@/pages/emc/admin-layout";
 import OfflineTestPage from "@/pages/offline-test";
 import { OfflineStatusBanner } from "@/components/offline-status-banner";
 import { UpdateStatusBanner } from "@/components/update-status-banner";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function GlobalWebSocket() {
   usePosWebSocket();
@@ -166,21 +167,23 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="light" storageKey="pos-ui-theme">
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <DeviceProvider>
-            <PosProvider>
-              <OfflineStatusBanner />
-              <UpdateStatusBanner />
-              <GlobalWebSocket />
-              <Router />
-              <Toaster />
-            </PosProvider>
-          </DeviceProvider>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider defaultTheme="light" storageKey="pos-ui-theme">
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <DeviceProvider>
+              <PosProvider>
+                <OfflineStatusBanner />
+                <UpdateStatusBanner />
+                <GlobalWebSocket />
+                <Router />
+                <Toaster />
+              </PosProvider>
+            </DeviceProvider>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

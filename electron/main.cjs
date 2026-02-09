@@ -315,7 +315,7 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'setup-wizard.html'));
   } else {
     const serverUrl = getServerUrl();
-    const startPath = appMode === 'kds' ? '/kds' : '/pos';
+    const startPath = appMode === 'kds' ? '/kds' : '/';
     mainWindow.loadURL(`${serverUrl}${startPath}`);
   }
 
@@ -408,7 +408,7 @@ function createWindow() {
               });
               if (result.response === 1) {
                 await mainWindow.webContents.session.clearStorageData();
-                const startPath = appMode === 'kds' ? '/kds' : '/pos';
+                const startPath = appMode === 'kds' ? '/kds' : '/';
                 mainWindow.loadURL(`${getServerUrl()}${startPath}`);
               }
             },
@@ -465,7 +465,7 @@ function switchMode(mode) {
   saveConfig(config);
   appLogger.info('App', `Mode switched to ${mode}`);
   const serverUrl = getServerUrl();
-  const startPath = mode === 'kds' ? '/kds' : '/pos';
+  const startPath = mode === 'kds' ? '/kds' : '/';
   mainWindow.loadURL(`${serverUrl}${startPath}`);
 }
 
@@ -511,7 +511,7 @@ async function showServerConfig() {
         const cleanUrl = newUrl.trim().replace(/\/+$/, '');
         config.serverUrl = cleanUrl;
         saveConfig(config);
-        const startPath = appMode === 'kds' ? '/kds' : '/pos';
+        const startPath = appMode === 'kds' ? '/kds' : '/';
         mainWindow.loadURL(`${cleanUrl}${startPath}`);
       }
       newUrlWin.close();
@@ -526,7 +526,7 @@ async function showServerConfig() {
   } else if (response === 2) {
     delete config.serverUrl;
     saveConfig(config);
-    const startPath = appMode === 'kds' ? '/kds' : '/pos';
+    const startPath = appMode === 'kds' ? '/kds' : '/';
     mainWindow.loadURL(`${getServerUrl()}${startPath}`);
   }
 }
@@ -1289,7 +1289,7 @@ function setupIpcHandlers() {
     mainWindow = new BrowserWindow(windowConfig);
 
     const serverUrl = config.serverUrl || getServerUrl();
-    const startPath = appMode === 'kds' ? '/kds' : '/pos';
+    const startPath = appMode === 'kds' ? '/kds' : '/';
 
     mainWindow.loadURL(`${serverUrl}${startPath}`);
 
