@@ -1,4 +1,10 @@
-const { autoUpdater } = require('electron-updater');
+let autoUpdater = null;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+} catch (e) {
+  console.warn('[AutoUpdater] electron-updater module not available:', e.message);
+}
+
 const { app, ipcMain, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -18,6 +24,14 @@ function initAutoUpdater(updaterLogger) {
   logger = updaterLogger || { info: console.log, warn: console.warn, error: console.error, debug: console.log };
 
   updateState.currentVersion = app.getVersion();
+
+  if (!autoUpdater) {
+    logger.warn('Init', 'electron-updater module not available - auto-updates disabled');
+    updateState.status = 'unavailable';
+    updateState.error = 'Auto-updater module not available';
+    setupIpcHandlers();
+    return;
+  }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -101,6 +115,7 @@ function initAutoUpdater(updaterLogger) {
 }
 
 function checkForUpdates() {
+  if (!autoUpdater) return;
   if (updateState.status === 'downloading') {
     logger.info('Check', 'Skipping update check - download already in progress');
     return;
@@ -115,6 +130,7 @@ function checkForUpdates() {
 }
 
 function installUpdate() {
+  if (!autoUpdater) return false;
   if (!updateState.updateReady) {
     logger.warn('Install', 'No update ready to install');
     return false;
