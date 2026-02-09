@@ -316,7 +316,22 @@ function createWindow() {
   } else {
     const serverUrl = getServerUrl();
     const startPath = appMode === 'kds' ? '/kds' : '/';
-    mainWindow.loadURL(`${serverUrl}${startPath}`);
+    const targetUrl = `${serverUrl}${startPath}`;
+    appLogger.info('Window', `Loading URL: ${targetUrl}`);
+
+    const loadingHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cloud POS</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f1729;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
+.c{max-width:480px;padding:40px}.spinner{width:40px;height:40px;border:3px solid #2a3a52;border-top-color:#6366f1;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px}
+@keyframes spin{to{transform:rotate(360deg)}}h2{margin:0 0 8px;font-weight:500}p{opacity:0.6;font-size:14px;margin:0}</style></head>
+<body><div class="c"><div class="spinner"></div><h2>Cloud POS</h2><p>Connecting to server...</p></div></body></html>`;
+
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadingHtml)}`).then(() => {
+      appLogger.info('Window', 'Loading screen shown, navigating to server...');
+      mainWindow.loadURL(targetUrl);
+    }).catch((err) => {
+      appLogger.error('Window', `Failed to show loading screen: ${err.message}`);
+      mainWindow.loadURL(targetUrl);
+    });
   }
 
   if (process.env.NODE_ENV !== 'production' && !isKiosk) {
@@ -448,12 +463,40 @@ function createWindow() {
     }
   });
 
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    appLogger.error('Window', `Page load failed: ${errorDescription}`, { errorCode });
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    appLogger.error('Window', `Page load failed: ${errorDescription}`, { errorCode, url: validatedURL });
+
+    if (errorCode === -3) {
+      appLogger.info('Window', 'Navigation cancelled (error -3), ignoring');
+      return;
+    }
+
     if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
       isOnline = false;
       if (offlineInterceptor) offlineInterceptor.setOffline(true);
-      appLogger.warn('Window', 'Load failed, protocol interceptor should handle offline serving');
+    }
+
+    const serverUrl = getServerUrl();
+    const startPath = appMode === 'kds' ? '/kds' : '/';
+    const retryUrl = `${serverUrl}${startPath}`;
+
+    const errorHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cloud POS - Connection Error</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f1729;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
+.c{max-width:520px;padding:40px}h1{margin:0 0 12px;font-size:22px}p{opacity:0.8;line-height:1.6;margin:0 0 20px;font-size:14px}
+button{padding:12px 32px;font-size:16px;border:1px solid #4a4a6a;border-radius:8px;background:#2a2a4a;color:#fff;cursor:pointer;margin:4px}
+button:hover{background:#3a3a5a}.info{margin-top:20px;font-size:12px;opacity:0.4;font-family:monospace}</style></head>
+<body><div class="c"><h1>Cannot Connect to Server</h1>
+<p>Unable to reach the Cloud POS server. Please check your internet connection and verify the server URL is correct.</p>
+<button onclick="location.href='${retryUrl.replace(/'/g, "\\'")}'" id="retryBtn">Retry Connection</button>
+<p class="info">Server: ${serverUrl}<br>Error: ${errorDescription} (${errorCode})</p></div></body></html>`;
+
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`).catch(() => {});
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    const url = mainWindow.webContents.getURL();
+    if (!url.startsWith('data:')) {
+      appLogger.info('Window', `Page loaded successfully: ${url}`);
     }
   });
 }
@@ -1290,17 +1333,53 @@ function setupIpcHandlers() {
 
     const serverUrl = config.serverUrl || getServerUrl();
     const startPath = appMode === 'kds' ? '/kds' : '/';
+    const targetUrl = `${serverUrl}${startPath}`;
+    appLogger.info('Wizard', `Post-wizard loading URL: ${targetUrl}`);
 
-    mainWindow.loadURL(`${serverUrl}${startPath}`);
+    const loadingHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cloud POS</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f1729;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
+.c{max-width:480px;padding:40px}.spinner{width:40px;height:40px;border:3px solid #2a3a52;border-top-color:#6366f1;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px}
+@keyframes spin{to{transform:rotate(360deg)}}h2{margin:0 0 8px;font-weight:500}p{opacity:0.6;font-size:14px;margin:0}</style></head>
+<body><div class="c"><div class="spinner"></div><h2>Cloud POS</h2><p>Connecting to server...</p></div></body></html>`;
+
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadingHtml)}`).then(() => {
+      appLogger.info('Wizard', 'Post-wizard loading screen shown, navigating to server...');
+      mainWindow.loadURL(targetUrl);
+    }).catch((err) => {
+      appLogger.error('Wizard', `Failed to show loading screen: ${err.message}`);
+      mainWindow.loadURL(targetUrl);
+    });
 
     mainWindow.on('closed', () => { mainWindow = null; });
 
-    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-      appLogger.error('Window', `Page load failed after wizard: ${errorDescription}`, { errorCode });
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+      appLogger.error('Window', `Page load failed after wizard: ${errorDescription}`, { errorCode, url: validatedURL });
+
+      if (errorCode === -3) return;
+
       if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
         isOnline = false;
         if (offlineInterceptor) offlineInterceptor.setOffline(true);
-        appLogger.warn('Window', 'Post-wizard load failed, protocol interceptor handles offline');
+      }
+
+      const retryUrl = `${serverUrl}${startPath}`;
+      const errorHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cloud POS - Connection Error</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f1729;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
+.c{max-width:520px;padding:40px}h1{margin:0 0 12px;font-size:22px}p{opacity:0.8;line-height:1.6;margin:0 0 20px;font-size:14px}
+button{padding:12px 32px;font-size:16px;border:1px solid #4a4a6a;border-radius:8px;background:#2a2a4a;color:#fff;cursor:pointer;margin:4px}
+button:hover{background:#3a3a5a}.info{margin-top:20px;font-size:12px;opacity:0.4;font-family:monospace}</style></head>
+<body><div class="c"><h1>Cannot Connect to Server</h1>
+<p>Unable to reach the Cloud POS server. Please check your internet connection and verify the server URL is correct.</p>
+<button onclick="location.href='${retryUrl.replace(/'/g, "\\'")}'" id="retryBtn">Retry Connection</button>
+<p class="info">Server: ${serverUrl}<br>Error: ${errorDescription} (${errorCode})</p></div></body></html>`;
+
+      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`).catch(() => {});
+    });
+
+    mainWindow.webContents.on('did-finish-load', () => {
+      const url = mainWindow.webContents.getURL();
+      if (!url.startsWith('data:')) {
+        appLogger.info('Window', `Post-wizard page loaded: ${url}`);
       }
     });
   });
