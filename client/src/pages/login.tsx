@@ -22,7 +22,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { useDeviceReload } from "@/hooks/use-device-reload";
 import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
-import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle, Monitor, Maximize, Minimize } from "lucide-react";
+import { Building2, Delete, LogIn, Clock, CheckCircle2, LogOut, XCircle, Monitor, Maximize, Minimize, Settings, Activity, RotateCcw } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -70,7 +77,7 @@ export default function LoginPage() {
   useDeviceReload();
   useDeviceHeartbeat(true);
 
-  const { enterpriseId } = useDeviceContext();
+  const { enterpriseId, clearDeviceConfig } = useDeviceContext();
   const employeeSyncDone = useRef(false);
 
   useEffect(() => {
@@ -665,6 +672,30 @@ export default function LoginPage() {
           </Button>
         )}
         <ThemeToggle />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" title="Settings" data-testid="button-login-settings">
+              <Settings className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => navigate("/offline-test")} data-testid="menu-system-diagnostics">
+              <Activity className="w-4 h-4 mr-2" />
+              System Diagnostics
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                clearDeviceConfig();
+                navigate("/device-type");
+              }}
+              data-testid="menu-reset-device"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset Device
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex min-h-screen">
