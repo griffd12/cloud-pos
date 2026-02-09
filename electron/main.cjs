@@ -471,6 +471,8 @@ function createWindow() {
       return;
     }
 
+    if (!mainWindow) return;
+
     if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
       isOnline = false;
       if (offlineInterceptor) offlineInterceptor.setOffline(true);
@@ -490,10 +492,11 @@ button:hover{background:#3a3a5a}.info{margin-top:20px;font-size:12px;opacity:0.4
 <button onclick="location.href='${retryUrl.replace(/'/g, "\\'")}'" id="retryBtn">Retry Connection</button>
 <p class="info">Server: ${serverUrl}<br>Error: ${errorDescription} (${errorCode})</p></div></body></html>`;
 
-    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`).catch(() => {});
+    if (mainWindow) mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`).catch(() => {});
   });
 
   mainWindow.webContents.on('did-finish-load', () => {
+    if (!mainWindow) return;
     const url = mainWindow.webContents.getURL();
     if (!url.startsWith('data:')) {
       appLogger.info('Window', `Page loaded successfully: ${url}`);
@@ -1356,6 +1359,7 @@ function setupIpcHandlers() {
       appLogger.error('Window', `Page load failed after wizard: ${errorDescription}`, { errorCode, url: validatedURL });
 
       if (errorCode === -3) return;
+      if (!mainWindow) return;
 
       if (errorCode === -106 || errorCode === -105 || errorCode === -2) {
         isOnline = false;
@@ -1373,10 +1377,11 @@ button:hover{background:#3a3a5a}.info{margin-top:20px;font-size:12px;opacity:0.4
 <button onclick="location.href='${retryUrl.replace(/'/g, "\\'")}'" id="retryBtn">Retry Connection</button>
 <p class="info">Server: ${serverUrl}<br>Error: ${errorDescription} (${errorCode})</p></div></body></html>`;
 
-      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`).catch(() => {});
+      if (mainWindow) mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`).catch(() => {});
     });
 
     mainWindow.webContents.on('did-finish-load', () => {
+      if (!mainWindow) return;
       const url = mainWindow.webContents.getURL();
       if (!url.startsWith('data:')) {
         appLogger.info('Window', `Post-wizard page loaded: ${url}`);
