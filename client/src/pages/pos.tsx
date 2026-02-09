@@ -1041,6 +1041,13 @@ export default function PosPage() {
 
   const printCheckMutation = useMutation({
     mutationFn: async (checkId: string) => {
+      const unsentItems = checkItems.filter(item => !item.sent && !item.voided);
+      if (unsentItems.length > 0) {
+        await apiRequest("POST", `/api/checks/${checkId}/send`, {
+          employeeId: currentEmployee?.id,
+        });
+      }
+
       const response = await apiRequest("POST", `/api/checks/${checkId}/print`, {
         employeeId: currentEmployee?.id,
       });
@@ -1048,12 +1055,17 @@ export default function PosPage() {
     },
     onSuccess: () => {
       toast({ title: "Receipt Printed", description: "Check has been sent to the printer" });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+      releaseCurrentCheckLock();
+      setCurrentCheck(null);
+      setCheckItems([]);
+      logout();
     },
     onError: (error: any) => {
-      // Parse the error message - apiRequest throws "status: text" format
       let errorMessage = "Could not print receipt";
       if (error.message) {
-        // Try to extract JSON message from error text
         const match = error.message.match(/\{.*"message"\s*:\s*"([^"]+)".*\}/);
         if (match) {
           errorMessage = match[1];
