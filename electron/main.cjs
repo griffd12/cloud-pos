@@ -1633,7 +1633,20 @@ function getCachePath(pathname) {
   let safePath = pathname.replace(/[^a-zA-Z0-9._\/-]/g, '_');
   if (safePath === '/' || safePath === '') safePath = '__root__';
   if (safePath.startsWith('/')) safePath = safePath.substring(1);
-  return path.join(PAGE_CACHE_DIR, safePath);
+  return path.join(PAGE_CACHE_DIR, safePath + '.cache');
+}
+
+function ensureCacheDirRecursive(dir) {
+  if (fs.existsSync(dir)) {
+    if (fs.statSync(dir).isDirectory()) return;
+    fs.unlinkSync(dir);
+    try { fs.unlinkSync(dir + '.meta'); } catch {}
+  }
+  const parent = path.dirname(dir);
+  if (parent !== dir && parent.startsWith(PAGE_CACHE_DIR)) {
+    ensureCacheDirRecursive(parent);
+  }
+  fs.mkdirSync(dir, { recursive: true });
 }
 
 async function cacheResponseToDisk(pathname, response) {
@@ -1643,7 +1656,8 @@ async function cacheResponseToDisk(pathname, response) {
 
     const cachePath = getCachePath(pathname);
     const dir = path.dirname(cachePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    ensureCacheDirRecursive(dir);
 
     const buffer = Buffer.from(await response.arrayBuffer());
     fs.writeFileSync(cachePath, buffer);
@@ -1657,13 +1671,21 @@ async function cacheResponseToDisk(pathname, response) {
   }
 }
 
+function findCachedFile(cachePath) {
+  if (fs.existsSync(cachePath) && fs.statSync(cachePath).isFile()) return cachePath;
+  const legacyPath = cachePath.replace(/\.cache$/, '');
+  if (legacyPath !== cachePath && fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile()) return legacyPath;
+  return null;
+}
+
 function getCachedResponseFromDisk(pathname) {
   try {
     const cachePath = getCachePath(pathname);
-    if (fs.existsSync(cachePath)) {
-      const buffer = fs.readFileSync(cachePath);
+    const found = findCachedFile(cachePath);
+    if (found) {
+      const buffer = fs.readFileSync(found);
       let contentType = 'text/html';
-      const metaPath = cachePath + '.meta';
+      const metaPath = found + '.meta';
       if (fs.existsSync(metaPath)) {
         try {
           const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
@@ -1679,8 +1701,9 @@ function getCachedResponseFromDisk(pathname) {
 
     if (!pathname.includes('.') && pathname !== '/api') {
       const posPath = getCachePath('/pos');
-      if (fs.existsSync(posPath)) {
-        const buffer = fs.readFileSync(posPath);
+      const posFound = findCachedFile(posPath);
+      if (posFound) {
+        const buffer = fs.readFileSync(posFound);
         appLogger.debug('PageCache', `Serving cached /pos for SPA route: ${pathname}`);
         return new Response(buffer, {
           status: 200,

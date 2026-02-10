@@ -571,6 +571,12 @@ class OfflineDatabase {
     this.syncInProgress = false;
 
     offlineDbLogger.info('Sync', `Sync complete. ${results.synced.length} tables synced, ${results.errors.length} errors`);
+    if (results.errors.length > 0) {
+      results.errors.forEach((err, i) => {
+        const detail = err.status ? `HTTP ${err.status}` : err.error || 'unknown';
+        offlineDbLogger.warn('Sync', `  Error ${i + 1}: ${err.endpoint} - ${detail}`);
+      });
+    }
     return results;
   }
 
