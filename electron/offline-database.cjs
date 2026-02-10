@@ -95,6 +95,7 @@ class OfflineDatabase {
       this.usingSqlite = true;
 
       this.createTables();
+      this.migrateSchema();
       offlineDbLogger.info('Init', 'SQLite database initialized', this.dbPath);
       offlineDbLogger.info('Init', `Encryption: ${this.encryptionActive ? 'ENABLED (AES-256-CBC)' : 'DISABLED (build with SQLCipher to enable)'}`);
       return true;
@@ -233,6 +234,7 @@ class OfflineDatabase {
       -- Printers cache
       CREATE TABLE IF NOT EXISTS printers (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         property_id TEXT,
         data TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
@@ -241,6 +243,7 @@ class OfflineDatabase {
       -- Workstations cache
       CREATE TABLE IF NOT EXISTS workstations (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         property_id TEXT,
         data TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
@@ -289,6 +292,7 @@ class OfflineDatabase {
       -- Modifier group to modifier linkage cache
       CREATE TABLE IF NOT EXISTS modifier_group_modifiers (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         modifier_group_id TEXT,
         modifier_id TEXT,
         data TEXT NOT NULL,
@@ -298,6 +302,7 @@ class OfflineDatabase {
       -- Menu item to modifier group linkage cache
       CREATE TABLE IF NOT EXISTS menu_item_modifier_groups (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         menu_item_id TEXT,
         modifier_group_id TEXT,
         data TEXT NOT NULL,
@@ -307,6 +312,7 @@ class OfflineDatabase {
       -- KDS devices cache
       CREATE TABLE IF NOT EXISTS kds_devices (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         property_id TEXT,
         data TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
@@ -323,6 +329,7 @@ class OfflineDatabase {
       -- Order device to printer linkage cache
       CREATE TABLE IF NOT EXISTS order_device_printers (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         order_device_id TEXT,
         data TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
@@ -331,6 +338,7 @@ class OfflineDatabase {
       -- Order device to KDS linkage cache
       CREATE TABLE IF NOT EXISTS order_device_kds (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         order_device_id TEXT,
         data TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
@@ -363,6 +371,7 @@ class OfflineDatabase {
       -- Menu item recipe ingredients cache (conversational ordering)
       CREATE TABLE IF NOT EXISTS menu_item_recipe_ingredients (
         id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
         menu_item_id TEXT,
         data TEXT NOT NULL,
         updated_at TEXT DEFAULT (datetime('now'))
@@ -461,6 +470,32 @@ class OfflineDatabase {
         created_at TEXT DEFAULT (datetime('now'))
       );
     `);
+  }
+
+  migrateSchema() {
+    const tablesToMigrate = [
+      'modifier_group_modifiers',
+      'menu_item_modifier_groups',
+      'menu_item_recipe_ingredients',
+      'printers',
+      'workstations',
+      'kds_devices',
+      'order_device_printers',
+      'order_device_kds',
+    ];
+
+    for (const table of tablesToMigrate) {
+      try {
+        const columns = this.db.pragma(`table_info(${table})`);
+        const hasEnterpriseId = columns.some(col => col.name === 'enterprise_id');
+        if (!hasEnterpriseId) {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN enterprise_id TEXT`);
+          offlineDbLogger.info('Migration', `Added enterprise_id column to ${table}`);
+        }
+      } catch (e) {
+        offlineDbLogger.warn('Migration', `Migration skipped for ${table}: ${e.message}`);
+      }
+    }
   }
 
   initJsonStorage() {
