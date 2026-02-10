@@ -115,8 +115,17 @@ function initAutoUpdater(updaterLogger) {
 
   autoUpdater.on('error', (error) => {
     updateState.status = 'error';
-    updateState.error = error.message || String(error);
-    logger.error('Error', `Auto-update error: ${updateState.error}`);
+    const rawError = error.message || String(error);
+    logger.error('Error', `Auto-update error: ${rawError}`);
+    if (rawError.includes('404') || rawError.includes('authentication token')) {
+      updateState.error = 'Unable to check for updates. Please verify your GitHub token and release configuration.';
+    } else if (rawError.includes('net::') || rawError.includes('ENOTFOUND') || rawError.includes('ECONNREFUSED')) {
+      updateState.error = 'Unable to check for updates. No internet connection.';
+    } else if (rawError.length > 150) {
+      updateState.error = rawError.substring(0, 150).split('\n')[0];
+    } else {
+      updateState.error = rawError.split('\n')[0];
+    }
     if (error.stack) {
       logger.debug('Error', `Stack trace: ${error.stack}`);
     }
@@ -145,9 +154,16 @@ function checkForUpdates() {
   }
   logger.info('Check', 'Initiating update check...');
   autoUpdater.checkForUpdates().catch((err) => {
-    logger.error('Check', `Failed to check for updates: ${err.message}`);
+    const rawMsg = err.message || String(err);
+    logger.error('Check', `Failed to check for updates: ${rawMsg}`);
     updateState.status = 'error';
-    updateState.error = err.message;
+    if (rawMsg.includes('404') || rawMsg.includes('authentication token')) {
+      updateState.error = 'Unable to check for updates. Please verify your GitHub token and release configuration.';
+    } else if (rawMsg.includes('net::') || rawMsg.includes('ENOTFOUND') || rawMsg.includes('ECONNREFUSED')) {
+      updateState.error = 'Unable to check for updates. No internet connection.';
+    } else {
+      updateState.error = rawMsg.split('\n')[0].substring(0, 150);
+    }
     broadcastUpdateStatus();
   });
 }
