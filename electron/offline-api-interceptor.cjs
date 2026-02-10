@@ -40,6 +40,7 @@ class OfflineApiInterceptor {
         /^\/api\/family-groups/,
         /^\/api\/menu-item-classes/,
         /^\/api\/menu-item-availability/,
+        /^\/api\/item-availability/,
         /^\/api\/revenue-centers/,
         /^\/api\/rvcs/,
         /^\/api\/slus/,
@@ -51,6 +52,7 @@ class OfflineApiInterceptor {
         /^\/api\/health/,
         /^\/api\/auth\/manager-approval/,
         /^\/api\/loyalty-members/,
+        /^\/api\/gift-cards/,
         /^\/api\/offline\//,
         /^\/api\/kds-devices/,
         /^\/api\/order-devices/,
@@ -63,6 +65,7 @@ class OfflineApiInterceptor {
         /^\/api\/break-rules/,
         /^\/api\/time-punches\/status/,
         /^\/api\/employees\/[^/]+\/job-codes\/details/,
+        /^\/api\/system-status/,
       ];
       return readEndpoints.some(re => re.test(pathname));
     }
@@ -79,6 +82,9 @@ class OfflineApiInterceptor {
         /^\/api\/print-jobs/,
         /^\/api\/employees\/.*\/authenticate/,
         /^\/api\/auth\/manager-approval/,
+        /^\/api\/system-status/,
+        /^\/api\/gift-cards/,
+        /^\/api\/loyalty/,
       ];
       return writeEndpoints.some(re => re.test(pathname));
     }
@@ -265,12 +271,47 @@ class OfflineApiInterceptor {
       return { status: 200, data: { payments: [], paidAmount: 0 } };
     }
 
+    if (pathname === '/api/item-availability' || pathname.match(/^\/api\/item-availability/)) {
+      return { status: 200, data: [] };
+    }
+
+    if (pathname === '/api/checks/open') {
+      const rvcId = query?.rvcId || this.config.rvcId;
+      const checks = this.db.getOfflineChecks(rvcId, 'open');
+      return { status: 200, data: checks };
+    }
+
+    if (pathname === '/api/checks/locks') {
+      return { status: 200, data: {} };
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/full-details$/)) {
+      const detailMatch = pathname.match(/^\/api\/checks\/([^/]+)\/full-details$/);
+      if (detailMatch) {
+        const check = this.db.getOfflineCheck(detailMatch[1]);
+        if (check) return { status: 200, data: check };
+        return { status: 404, data: { message: 'Check not found (offline)' } };
+      }
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/discounts$/)) {
+      const discMatch = pathname.match(/^\/api\/checks\/([^/]+)\/discounts$/);
+      if (discMatch) {
+        const check = this.db.getOfflineCheck(discMatch[1]);
+        return { status: 200, data: check?.discounts || [] };
+      }
+    }
+
     if (pathname.match(/^\/api\/auth\/manager-approval$/)) {
       return { status: 503, data: { error: 'Manager approval unavailable in offline mode' } };
     }
 
     if (pathname.match(/^\/api\/loyalty-members/)) {
       return { status: 200, data: null };
+    }
+
+    if (pathname.match(/^\/api\/gift-cards/)) {
+      return { status: 503, data: { error: 'Gift card lookup requires a cloud connection', offline: true } };
     }
 
     if (pathname === '/api/pos/modifier-map' || (pathname === '/api/modifier-groups' && query?.menuItemId)) {
@@ -403,6 +444,75 @@ class OfflineApiInterceptor {
 
     if (pathname.match(/^\/api\/checks\/[^/]+\/unlock/)) {
       return { status: 200, data: { success: true } };
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/lock/)) {
+      return { status: 200, data: { success: true, offline: true } };
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/send/)) {
+      const sendCheckMatch = pathname.match(/^\/api\/checks\/([^/]+)\/send/);
+      if (sendCheckMatch) {
+        const checkId = sendCheckMatch[1];
+        const check = this.db.getOfflineCheck(checkId);
+        if (check) {
+          if (check.items) {
+            check.items.forEach(item => { item.sent = true; });
+          }
+          check.updatedAt = new Date().toISOString();
+          this.db.saveOfflineCheck(check);
+          this.db.queueOperation('send_check', `/api/checks/${checkId}/send`, 'POST', body || {}, 2);
+        }
+        return { status: 202, data: { message: 'Order sent (offline)', offline: true } };
+      }
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/print/)) {
+      const printCheckMatch = pathname.match(/^\/api\/checks\/([^/]+)\/print/);
+      if (printCheckMatch) {
+        const checkId = printCheckMatch[1];
+        const check = this.db.getOfflineCheck(checkId);
+        if (check) {
+          this.db.queueOperation('print_check', `/api/checks/${checkId}/print`, 'POST', body || {}, 3);
+        }
+        return { status: 202, data: { message: 'Print queued for sync (offline)', offline: true } };
+      }
+    }
+
+    if (pathname.match(/^\/api\/checks\/[^/]+\/discount/)) {
+      const discountMatch = pathname.match(/^\/api\/checks\/([^/]+)\/discount/);
+      if (discountMatch) {
+        const checkId = discountMatch[1];
+        const check = this.db.getOfflineCheck(checkId);
+        if (check) {
+          if (!check.discounts) check.discounts = [];
+          check.discounts.push(body);
+          const discountAmt = parseFloat(body.amount) || 0;
+          if (!isNaN(discountAmt) && discountAmt > 0) {
+            check.discountTotal = ((parseFloat(check.discountTotal) || 0) + discountAmt).toFixed(2);
+            const subtotal = parseFloat(check.subtotal) || 0;
+            const taxTotal = parseFloat(check.taxTotal) || 0;
+            const newTotal = subtotal - (parseFloat(check.discountTotal) || 0) + taxTotal;
+            check.total = (newTotal < 0 ? 0 : newTotal).toFixed(2);
+          }
+          check.updatedAt = new Date().toISOString();
+          this.db.saveOfflineCheck(check);
+          this.db.queueOperation('check_discount', `/api/checks/${checkId}/discount`, 'POST', body, 2);
+        }
+        return { status: 200, data: check || { message: 'Discount applied (offline)', offline: true } };
+      }
+    }
+
+    if (pathname.match(/^\/api\/system-status\/workstation\/heartbeat/) || pathname.match(/^\/api\/system-status/)) {
+      return { status: 200, data: { status: 'offline', offline: true } };
+    }
+
+    if (pathname.match(/^\/api\/gift-cards/)) {
+      return { status: 503, data: { error: 'Gift card operations require a cloud connection', offline: true } };
+    }
+
+    if (pathname.match(/^\/api\/loyalty/)) {
+      return { status: 503, data: { error: 'Loyalty features require a cloud connection', offline: true } };
     }
 
     if (pathname === '/api/payments' || pathname === '/api/payments/') {

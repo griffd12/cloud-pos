@@ -473,7 +473,7 @@ class OfflineDatabase {
   }
 
   migrateSchema() {
-    const tablesToMigrate = [
+    const enterpriseIdTables = [
       'modifier_group_modifiers',
       'menu_item_modifier_groups',
       'menu_item_recipe_ingredients',
@@ -484,7 +484,7 @@ class OfflineDatabase {
       'order_device_kds',
     ];
 
-    for (const table of tablesToMigrate) {
+    for (const table of enterpriseIdTables) {
       try {
         const columns = this.db.pragma(`table_info(${table})`);
         const hasEnterpriseId = columns.some(col => col.name === 'enterprise_id');
@@ -494,6 +494,40 @@ class OfflineDatabase {
         }
       } catch (e) {
         offlineDbLogger.warn('Migration', `Migration skipped for ${table}: ${e.message}`);
+      }
+    }
+
+    const additionalMigrations = [
+      { table: 'offline_checks', column: 'check_number', type: 'INTEGER' },
+      { table: 'offline_checks', column: 'rvc_id', type: 'TEXT' },
+      { table: 'offline_checks', column: 'employee_id', type: 'TEXT' },
+      { table: 'offline_checks', column: 'order_type', type: 'TEXT' },
+      { table: 'offline_checks', column: 'status', type: "TEXT DEFAULT 'open'" },
+      { table: 'offline_checks', column: 'updated_at', type: 'TEXT' },
+      { table: 'offline_checks', column: 'synced', type: 'INTEGER DEFAULT 0' },
+      { table: 'offline_checks', column: 'synced_at', type: 'TEXT' },
+      { table: 'offline_checks', column: 'cloud_id', type: 'TEXT' },
+      { table: 'offline_queue', column: 'priority', type: 'INTEGER DEFAULT 5' },
+      { table: 'offline_queue', column: 'retry_count', type: 'INTEGER DEFAULT 0' },
+      { table: 'offline_queue', column: 'error', type: 'TEXT' },
+      { table: 'offline_payments', column: 'tender_id', type: 'TEXT' },
+      { table: 'offline_payments', column: 'tender_name', type: 'TEXT' },
+      { table: 'offline_payments', column: 'amount', type: 'TEXT' },
+      { table: 'offline_payments', column: 'check_id', type: 'TEXT' },
+      { table: 'offline_payments', column: 'synced', type: 'INTEGER DEFAULT 0' },
+      { table: 'offline_payments', column: 'synced_at', type: 'TEXT' },
+    ];
+
+    for (const { table, column, type } of additionalMigrations) {
+      try {
+        const columns = this.db.pragma(`table_info(${table})`);
+        const hasColumn = columns.some(col => col.name === column);
+        if (!hasColumn) {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+          offlineDbLogger.info('Migration', `Added ${column} column to ${table}`);
+        }
+      } catch (e) {
+        offlineDbLogger.warn('Migration', `Migration skipped for ${table}.${column}: ${e.message}`);
       }
     }
   }
@@ -709,6 +743,35 @@ class OfflineDatabase {
       }
     }
 
+    if (rvcId) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const checksResponse = await fetch(`${serverUrl}/api/checks/open?rvcId=${rvcId}`, {
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+        });
+        clearTimeout(timeout);
+        if (checksResponse.ok) {
+          const openChecks = await checksResponse.json();
+          if (Array.isArray(openChecks)) {
+            for (const check of openChecks) {
+              this.saveOfflineCheck({
+                ...check,
+                isOffline: false,
+                synced: 1,
+                cloud_id: check.id,
+              });
+            }
+            results.synced.push({ key: 'open_checks', count: openChecks.length });
+            offlineDbLogger.info('Sync', `Synced ${openChecks.length} open checks for offline access`);
+          }
+        }
+      } catch (e) {
+        results.errors.push({ endpoint: 'open-checks', error: e.message });
+      }
+    }
+
     this.setSyncMetadata('lastFullSync', new Date().toISOString());
     this.setSyncMetadata('enterpriseId', enterpriseId);
     this.setSyncMetadata('propertyId', propertyId || '');
@@ -793,9 +856,9 @@ class OfflineDatabase {
     try {
       if (this.usingSqlite) {
         this.db.prepare(`
-          INSERT OR REPLACE INTO offline_checks (id, check_number, rvc_id, employee_id, order_type, status, data, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        `).run(check.id, check.checkNumber, check.rvcId, check.employeeId, check.orderType, check.status || 'open', JSON.stringify(check));
+          INSERT OR REPLACE INTO offline_checks (id, check_number, rvc_id, employee_id, order_type, status, data, updated_at, synced, cloud_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+        `).run(check.id, check.checkNumber, check.rvcId, check.employeeId, check.orderType, check.status || 'open', JSON.stringify(check), check.synced || 0, check.cloud_id || null);
       } else {
         const checksPath = path.join(this.dataDir, 'offline_checks.json');
         const checks = JSON.parse(fs.readFileSync(checksPath, 'utf-8'));
@@ -812,7 +875,7 @@ class OfflineDatabase {
   getOfflineChecks(rvcId, status) {
     try {
       if (this.usingSqlite) {
-        let query = 'SELECT data FROM offline_checks WHERE synced = 0';
+        let query = 'SELECT data FROM offline_checks WHERE 1=1';
         const params = [];
         if (rvcId) { query += ' AND rvc_id = ?'; params.push(rvcId); }
         if (status) { query += ' AND status = ?'; params.push(status); }
@@ -833,12 +896,15 @@ class OfflineDatabase {
   getOfflineCheck(id) {
     try {
       if (this.usingSqlite) {
-        const row = this.db.prepare('SELECT data FROM offline_checks WHERE id = ?').get(id);
+        let row = this.db.prepare('SELECT data FROM offline_checks WHERE id = ?').get(id);
+        if (!row) {
+          row = this.db.prepare('SELECT data FROM offline_checks WHERE cloud_id = ?').get(id);
+        }
         return row ? JSON.parse(row.data) : null;
       } else {
         const checksPath = path.join(this.dataDir, 'offline_checks.json');
         const checks = JSON.parse(fs.readFileSync(checksPath, 'utf-8'));
-        return checks.find(c => c.id === id) || null;
+        return checks.find(c => c.id === id || c.cloud_id === id) || null;
       }
     } catch (e) {
       return null;

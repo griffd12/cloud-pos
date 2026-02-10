@@ -16,6 +16,10 @@ export function onOfflineModeChange(cb: (offline: boolean) => void) {
   return () => { offlineListeners = offlineListeners.filter(l => l !== cb); };
 }
 
+export function setOfflineModeExternal(val: boolean) {
+  setOfflineMode(val);
+}
+
 function setOfflineMode(val: boolean) {
   if (isOfflineMode !== val) {
     isOfflineMode = val;
