@@ -3462,6 +3462,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // OFFLINE SYNC ALIAS ROUTES
+  // These endpoints are requested by the Electron offline database sync.
+  // ============================================================================
+
+  app.get("/api/tender-types", async (req, res) => {
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    let data = await storage.getTenders();
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    res.json(data);
+  });
+
+  app.get("/api/tax-rates", async (req, res) => {
+    let enterpriseId = req.query.enterpriseId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
+    const propertyId = req.query.propertyId as string | undefined;
+    if (!enterpriseId && (rvcId || propertyId)) {
+      enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+    }
+    let data = await storage.getTaxGroups();
+    if (enterpriseId) {
+      const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+      data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    res.json(data);
+  });
+
+  app.get("/api/condiment-groups", async (_req, res) => {
+    res.json([]);
+  });
+
+  app.get("/api/combo-meals", async (_req, res) => {
+    res.json([]);
+  });
+
+  app.get("/api/order-types", async (_req, res) => {
+    res.json(["dine_in", "take_out", "delivery", "pickup"]);
+  });
+
+  app.get("/api/menu-item-classes", async (_req, res) => {
+    res.json([]);
+  });
+
+  // ============================================================================
   // DISCOUNT ROUTES
   // ============================================================================
 
