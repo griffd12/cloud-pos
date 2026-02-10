@@ -22027,46 +22027,5 @@ connect();
     }
   });
 
-  app.post("/api/admin/seed-data", async (req: Request, res: Response) => {
-    try {
-      const seedKey = req.headers["x-seed-key"];
-      if (seedKey !== "cloud-pos-seed-2025") {
-        return res.status(403).json({ error: "Unauthorized" });
-      }
-      
-      const { table, rows } = req.body;
-      if (!table || !rows || !Array.isArray(rows) || rows.length === 0) {
-        return res.status(400).json({ error: "Invalid payload" });
-      }
-      
-      const columns = Object.keys(rows[0]);
-      const colList = columns.map(c => `"${c}"`).join(", ");
-      
-      let inserted = 0;
-      for (let i = 0; i < rows.length; i += 10) {
-        const batch = rows.slice(i, i + 10);
-        const valuesClause = batch.map(row => {
-          const vals = columns.map(col => {
-            const v = row[col];
-            if (v === null || v === undefined) return "NULL";
-            if (typeof v === "boolean") return v ? "true" : "false";
-            if (typeof v === "number") return String(v);
-            if (Array.isArray(v) || typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
-            return `'${String(v).replace(/'/g, "''")}'`;
-          });
-          return `(${vals.join(", ")})`;
-        }).join(", ");
-        
-        await db.execute(sql.raw(`INSERT INTO "${table}" (${colList}) VALUES ${valuesClause} ON CONFLICT DO NOTHING`));
-        inserted += batch.length;
-      }
-      
-      res.json({ success: true, table, inserted });
-    } catch (error: any) {
-      console.error("Seed error:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   return httpServer;
 }
