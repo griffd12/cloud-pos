@@ -94,7 +94,7 @@ export default function PosPage() {
   usePosWebSocket();
   
   // Get device context for reload filtering
-  const { registeredDeviceId, propertyId, clearDeviceConfig } = useDeviceContext();
+  const { registeredDeviceId, propertyId } = useDeviceContext();
   
   // Listen for remote reload commands from EMC
   useDeviceReload({ registeredDeviceId: registeredDeviceId || undefined, propertyId: propertyId || undefined });
@@ -176,18 +176,6 @@ export default function PosPage() {
     }
     logout();
   }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout]);
-
-  // Reset device - logs out employee, clears device config, and navigates to device type selection
-  const handleResetDevice = useCallback(async () => {
-    if (currentCheck?.id && workstationId) {
-      await releaseCurrentCheckLock();
-    }
-    logout();
-    setWorkstationId(null);
-    setCurrentRvc(null);
-    clearDeviceConfig();
-    navigate("/device-type");
-  }, [currentCheck?.id, workstationId, releaseCurrentCheckLock, logout, setWorkstationId, setCurrentRvc, clearDeviceConfig, navigate]);
 
   // Auto-set RVC from workstation if not already set
   useEffect(() => {
@@ -2253,14 +2241,12 @@ export default function PosPage() {
             description: "Table assignment will be available in a future update",
           });
         }}
-        onResetDevice={handleResetDevice}
         privileges={{
           canTransfer: hasPrivilege("transfer_check"),
           canSplit: hasPrivilege("split_check"),
           canMerge: hasPrivilege("merge_checks"),
           canReopen: hasPrivilege("reopen_check"),
           canPriceOverride: hasPrivilege("modify_price"),
-          canResetDevice: hasPrivilege("reopen_check") || hasPrivilege("void_sent"),
         }}
         propertyId={currentRvc?.propertyId}
         workstation={wsContext?.workstation ? {

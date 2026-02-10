@@ -1,5 +1,11 @@
 # Cloud POS v1.3.0 - Release Notes
 
+## Security: Removed Reset Device from POS Interface
+- **Removed "Reset Device" button** from the Functions modal on the POS screen
+- **Removed "Reset Device" menu item** from the login screen settings dropdown
+- This prevents unauthorized users or customers from switching the terminal to a different enterprise/workstation
+- To reconfigure a terminal, the app must be uninstalled and reinstalled
+
 ## Comprehensive Offline Mode Fixes
 
 ### Database Migrations (Auto-applied on startup)
