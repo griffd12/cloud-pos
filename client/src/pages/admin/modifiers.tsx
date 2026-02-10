@@ -6,22 +6,20 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertModifierSchema, type Modifier, type InsertModifier } from "@shared/schema";
 
 export default function ModifiersPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Modifier | null>(null);
 
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: modifiers = [], isLoading } = useQuery<Modifier[]>({
-    queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/modifiers", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/modifiers${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/modifiers${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifiers");
       return res.json();
     },
@@ -71,7 +69,7 @@ export default function ModifiersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", filterKeys] });
       setFormOpen(false);
       toast({ title: "Modifier created" });
     },
@@ -86,7 +84,7 @@ export default function ModifiersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Modifier updated" });
@@ -101,7 +99,7 @@ export default function ModifiersPage() {
       await apiRequest("DELETE", "/api/modifiers/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifiers", filterKeys] });
       toast({ title: "Modifier deleted" });
     },
     onError: () => {

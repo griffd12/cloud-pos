@@ -6,7 +6,7 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertTaxGroupSchema, type TaxGroup, type InsertTaxGroup } from "@shared/schema";
 
 export default function TaxGroupsPage() {
@@ -14,13 +14,12 @@ export default function TaxGroupsPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TaxGroup | null>(null);
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
 
   const { data: taxGroups = [], isLoading } = useQuery<TaxGroup[]>({
-    queryKey: ["/api/tax-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/tax-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/tax-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/tax-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -73,7 +72,7 @@ export default function TaxGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", filterKeys] });
       setFormOpen(false);
       toast({ title: "Tax group created" });
     },
@@ -88,7 +87,7 @@ export default function TaxGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Tax group updated" });
@@ -103,7 +102,7 @@ export default function TaxGroupsPage() {
       await apiRequest("DELETE", "/api/tax-groups/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", filterKeys] });
       toast({ title: "Tax group deleted" });
     },
     onError: () => {

@@ -192,3 +192,19 @@ export function useEmc() {
   }
   return context;
 }
+
+export function useEmcFilter() {
+  const { selectedEnterpriseId, selectedPropertyId } = useEmc();
+
+  const filterParam = (() => {
+    const params = new URLSearchParams();
+    if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
+    if (selectedPropertyId) params.set("propertyId", selectedPropertyId);
+    const str = params.toString();
+    return str ? `?${str}` : "";
+  })();
+
+  const filterKeys = { enterpriseId: selectedEnterpriseId, propertyId: selectedPropertyId };
+
+  return { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId };
+}

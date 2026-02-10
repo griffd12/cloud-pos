@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,8 +76,7 @@ type EmployeeJobCodeWithDetails = EmployeeJobCode & { jobCode: JobCode };
 export default function SchedulingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   
   useEffect(() => {
@@ -113,18 +112,18 @@ export default function SchedulingPage() {
   );
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/employees", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/employees${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employees");
       return res.json();
     },
@@ -133,9 +132,9 @@ export default function SchedulingPage() {
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/rvcs", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/rvcs${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch rvcs");
       return res.json();
     },
@@ -144,9 +143,9 @@ export default function SchedulingPage() {
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/job-codes", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/job-codes${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch job codes");
       return res.json();
     },
@@ -155,9 +154,9 @@ export default function SchedulingPage() {
   });
 
   const { data: employeeAssignments = [] } = useQuery<EmployeeAssignment[]>({
-    queryKey: ["/api/employee-assignments", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/employee-assignments", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/employee-assignments${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/employee-assignments${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employee assignments");
       return res.json();
     },
@@ -186,7 +185,7 @@ export default function SchedulingPage() {
   });
 
   const { data: employeeJobCodesMap = {} } = useQuery<Record<string, EmployeeJobCodeWithDetails[]>>({
-    queryKey: ["/api/properties", selectedProperty, "employee-job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", selectedProperty, "employee-job-codes", filterKeys],
     queryFn: async () => {
       if (!selectedProperty) return {};
       const baseUrl = `/api/properties/${selectedProperty}/employee-job-codes`;

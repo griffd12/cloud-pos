@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
 import {
   Dialog,
@@ -37,44 +37,41 @@ import {
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Workstation | null>(null);
 
-  // Build URLs with enterprise filtering for multi-tenancy
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: workstations = [], isLoading } = useQuery<Workstation[]>({
-    queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/workstations", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/workstations${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/workstations${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch workstations");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/rvcs", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/rvcs${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch rvcs");
       return res.json();
     },
   });
 
   const { data: printers = [] } = useQuery<Printer[]>({
-    queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/printers", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/printers${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/printers${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch printers");
       return res.json();
     },
@@ -130,7 +127,7 @@ export default function WorkstationsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
       setFormOpen(false);
       toast({ title: "Workstation created" });
     },
@@ -149,7 +146,7 @@ export default function WorkstationsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Workstation updated" });
@@ -164,7 +161,7 @@ export default function WorkstationsPage() {
       await apiRequest("DELETE", "/api/workstations/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
       toast({ title: "Workstation deleted" });
     },
     onError: () => {

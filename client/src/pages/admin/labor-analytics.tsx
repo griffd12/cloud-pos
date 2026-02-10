@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,25 +83,24 @@ interface TipsReport {
 
 export default function LaborAnalyticsPage() {
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/employees", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/employees${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employees");
       return res.json();
     },

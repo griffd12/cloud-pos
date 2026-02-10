@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Plus, Edit, Trash2, Monitor, Tv, Server, RefreshCw, CheckCircle, XCircle, Clock, Key, Copy, Cpu, Activity, Download } from "lucide-react";
 import type { Device, DeviceEnrollmentToken, Enterprise, Property } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -36,7 +36,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 
 export default function DevicesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [tab, setTab] = useState("devices");
   const [formOpen, setFormOpen] = useState(false);
   const [tokenFormOpen, setTokenFormOpen] = useState(false);
@@ -48,9 +48,6 @@ export default function DevicesPage() {
   const [filterPropertyId, setFilterPropertyId] = useState<string>("");
   const [filterDeviceType, setFilterDeviceType] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
-
-  // Build URLs with enterprise filtering for multi-tenancy
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -75,18 +72,18 @@ export default function DevicesPage() {
   });
 
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
-    queryKey: ["/api/enterprises", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/enterprises", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/enterprises${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/enterprises${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch enterprises");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -105,7 +102,7 @@ export default function DevicesPage() {
   };
 
   const { data: devices = [], isLoading: devicesLoading } = useQuery<Device[]>({
-    queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }, filterEnterpriseId, filterPropertyId, filterDeviceType, filterStatus],
+    queryKey: ["/api/devices", filterKeys, filterEnterpriseId, filterPropertyId, filterDeviceType, filterStatus],
     queryFn: async () => {
       const res = await fetch(buildDevicesQuery());
       if (!res.ok) throw new Error("Failed to fetch devices");
@@ -114,9 +111,9 @@ export default function DevicesPage() {
   });
 
   const { data: enrollmentTokens = [], isLoading: tokensLoading } = useQuery<DeviceEnrollmentToken[]>({
-    queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/device-enrollment-tokens", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/device-enrollment-tokens${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/device-enrollment-tokens${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch enrollment tokens");
       return res.json();
     },
@@ -125,7 +122,7 @@ export default function DevicesPage() {
   const createDevice = useMutation({
     mutationFn: (data: typeof formData) => apiRequest("POST", "/api/devices", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", filterKeys] });
       toast({ title: "Device created successfully" });
       setFormOpen(false);
       resetForm();
@@ -137,7 +134,7 @@ export default function DevicesPage() {
     mutationFn: ({ id, data }: { id: string; data: Partial<typeof formData & { status: string }> }) =>
       apiRequest("PATCH", `/api/devices/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", filterKeys] });
       toast({ title: "Device updated successfully" });
       setFormOpen(false);
       setSelectedDevice(null);
@@ -149,7 +146,7 @@ export default function DevicesPage() {
   const deleteDevice = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/devices/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", filterKeys] });
       toast({ title: "Device deleted successfully" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete device", description: err.message, variant: "destructive" }),
@@ -173,7 +170,7 @@ export default function DevicesPage() {
       return apiRequest("POST", "/api/device-enrollment-tokens", payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens", filterKeys] });
       toast({ title: "Enrollment token created successfully" });
       setTokenFormOpen(false);
       resetTokenForm();
@@ -184,7 +181,7 @@ export default function DevicesPage() {
   const deleteToken = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/device-enrollment-tokens/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/device-enrollment-tokens", filterKeys] });
       toast({ title: "Token deleted successfully" });
     },
     onError: (err: Error) => toast({ title: "Failed to delete token", description: err.message, variant: "destructive" }),
@@ -226,7 +223,7 @@ export default function DevicesPage() {
       return res.json() as Promise<{ imported: number; skipped: number }>;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/devices", filterKeys] });
       toast({ title: `Imported ${data.imported} devices`, description: data.skipped > 0 ? `${data.skipped} already existed` : undefined });
       setImportOpen(false);
       setImportPropertyId("");

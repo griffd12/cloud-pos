@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
 import { EntityForm, FormFieldConfig } from "@/components/admin/entity-form";
@@ -42,8 +42,7 @@ import { format } from "date-fns";
 export default function LoyaltyPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [activeTab, setActiveTab] = useState("programs");
   
   const [programFormOpen, setProgramFormOpen] = useState(false);
@@ -81,54 +80,54 @@ export default function LoyaltyPage() {
   const [enrollProgramId, setEnrollProgramId] = useState("");
 
   const { data: programs = [], isLoading: programsLoading } = useQuery<LoyaltyProgram[]>({
-    queryKey: ["/api/loyalty-programs", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/loyalty-programs", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/loyalty-programs${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/loyalty-programs${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch loyalty programs");
       return res.json();
     },
   });
 
   const { data: members = [], isLoading: membersLoading } = useQuery<MemberWithEnrollments[]>({
-    queryKey: ["/api/loyalty-members", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/loyalty-members", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/loyalty-members${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/loyalty-members${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch loyalty members");
       return res.json();
     },
   });
 
   const { data: rewards = [], isLoading: rewardsLoading } = useQuery<LoyaltyReward[]>({
-    queryKey: ["/api/loyalty-rewards", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/loyalty-rewards", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/loyalty-rewards${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/loyalty-rewards${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch loyalty rewards");
       return res.json();
     },
   });
 
   const { data: menuItems = [] } = useQuery<MenuItem[]>({
-    queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/menu-items", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-items${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/menu-items${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: memberTransactions = [] } = useQuery<(LoyaltyTransaction & { programName?: string })[]>({
-    queryKey: ["/api/loyalty-transactions", selectedMember?.id, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/loyalty-transactions", selectedMember?.id, filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/loyalty-transactions/${selectedMember?.id}${enterpriseParam}`, { headers: getAuthHeaders(), credentials: "include" });
+      const res = await fetch(`/api/loyalty-transactions/${selectedMember?.id}${filterParam}`, { headers: getAuthHeaders(), credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
@@ -331,7 +330,7 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-programs", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-programs", filterKeys] });
       setProgramFormOpen(false);
       setEditingProgram(null);
       toast({ title: editingProgram ? "Program updated" : "Program created" });
@@ -351,7 +350,7 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", filterKeys] });
       setMemberFormOpen(false);
       setEditingMember(null);
       toast({ title: editingMember ? "Member updated" : "Member enrolled" });
@@ -377,7 +376,7 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-rewards", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-rewards", filterKeys] });
       setRewardFormOpen(false);
       setEditingReward(null);
       toast({ title: editingReward ? "Reward updated" : "Reward created" });
@@ -394,7 +393,7 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-rewards", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-rewards", filterKeys] });
       toast({ title: "Reward deleted" });
     },
     onError: () => {
@@ -408,8 +407,8 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-transactions", selectedMember?.id, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-transactions", selectedMember?.id, filterKeys] });
       setEarnPointsOpen(false);
       setEarnPoints("");
       setEarnReason("");
@@ -427,8 +426,8 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-transactions", selectedMember?.id, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-transactions", selectedMember?.id, filterKeys] });
       setRedeemRewardOpen(false);
       setSelectedRewardId("");
       setSelectedEnrollmentId("");
@@ -445,7 +444,7 @@ export default function LoyaltyPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", filterKeys] });
       setEnrollInProgramOpen(false);
       setEnrollProgramId("");
       toast({ title: "Enrolled in program successfully" });

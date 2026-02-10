@@ -34,7 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup, type MajorGroup, type FamilyGroup, type IngredientPrefix, type MenuItemRecipeIngredient, type Modifier } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -42,7 +42,7 @@ import { Download, Upload, Unlink, Plus, X } from "lucide-react";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -52,12 +52,10 @@ export default function MenuItemsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: menuItems = [], isLoading } = useQuery<MenuItem[]>({
-    queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/menu-items", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-items${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/menu-items${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu items");
       return res.json();
     },
@@ -65,9 +63,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
-    queryKey: ["/api/tax-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/tax-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/tax-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/tax-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch tax groups");
       return res.json();
     },
@@ -75,9 +73,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: printClasses = [] } = useQuery<PrintClass[]>({
-    queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/print-classes", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/print-classes${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/print-classes${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch print classes");
       return res.json();
     },
@@ -85,9 +83,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: slus = [] } = useQuery<Slu[]>({
-    queryKey: ["/api/slus", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/slus", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/slus${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/slus${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch slus");
       return res.json();
     },
@@ -95,9 +93,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: allMenuItemSlus = [] } = useQuery<MenuItemSlu[]>({
-    queryKey: ["/api/menu-item-slus", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/menu-item-slus", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-item-slus${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/menu-item-slus${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch menu item slus");
       return res.json();
     },
@@ -105,9 +103,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: modifierGroups = [] } = useQuery<ModifierGroup[]>({
-    queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/modifier-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/modifier-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/modifier-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifier groups");
       return res.json();
     },
@@ -115,9 +113,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: majorGroups = [] } = useQuery<MajorGroup[]>({
-    queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/major-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/major-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/major-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch major groups");
       return res.json();
     },
@@ -125,9 +123,9 @@ export default function MenuItemsPage() {
   });
 
   const { data: familyGroups = [] } = useQuery<FamilyGroup[]>({
-    queryKey: ["/api/family-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/family-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/family-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/family-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch family groups");
       return res.json();
     },
@@ -219,8 +217,8 @@ export default function MenuItemsPage() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", filterKeys] });
       toast({ title: "Menu item deleted" });
     },
     onError: (error: Error) => {
@@ -234,7 +232,7 @@ export default function MenuItemsPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", filterKeys] });
       toast({ 
         title: "Import Complete",
         description: data.message || `Processed ${data.imported} items: ${data.created || 0} created, ${data.updated || 0} updated`
@@ -251,8 +249,8 @@ export default function MenuItemsPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", filterKeys] });
       toast({ title: data.message || "Item unlinked from categories and deactivated" });
     },
     onError: () => {
@@ -389,7 +387,7 @@ export default function MenuItemsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", filterKeys] });
       toast({ title: "Menu item duplicated" });
     },
     onError: () => {
@@ -512,7 +510,7 @@ function MenuItemFormDialog({
   familyGroups,
 }: MenuItemFormDialogProps) {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   
   const initialSluIds = editingItem 
     ? existingSlus.filter(l => l.menuItemId === editingItem.id).map(l => l.sluId)
@@ -542,18 +540,18 @@ function MenuItemFormDialog({
   const [recipeIngredients, setRecipeIngredients] = useState<Array<{modifierId: string; defaultPrefixId: string | null; sortOrder: number}>>([]);
 
   const { data: ingredientPrefixes = [] } = useQuery<IngredientPrefix[]>({
-    queryKey: ["/api/ingredient-prefixes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/ingredient-prefixes", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/ingredient-prefixes?enterpriseId=${selectedEnterpriseId}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/ingredient-prefixes${filterParam}`, { headers: getAuthHeaders() });
       return res.json();
     },
     enabled: !!selectedEnterpriseId && menuBuildEnabled,
   });
 
   const { data: modifiers = [] } = useQuery<Modifier[]>({
-    queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/modifiers", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/modifiers?enterpriseId=${selectedEnterpriseId}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/modifiers${filterParam}`, { headers: getAuthHeaders() });
       return res.json();
     },
     enabled: !!selectedEnterpriseId && menuBuildEnabled,
@@ -664,8 +662,8 @@ function MenuItemFormDialog({
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-items", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/menu-item-slus", filterKeys] });
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items", menuItemId, "modifier-groups"] });
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items", menuItemId, "recipe-ingredients"] });
       

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,7 @@ const EXPORT_FORMATS = ["csv", "qbo", "iif"];
 
 export default function AccountingExportPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -38,16 +37,16 @@ export default function AccountingExportPage() {
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: glMappings = [], isLoading: mappingsLoading } = useQuery<GlMapping[]>({
-    queryKey: ["/api/gl-mappings", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/gl-mappings", selectedPropertyId, filterKeys],
     enabled: !!selectedPropertyId,
     queryFn: async () => {
       const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";
@@ -58,7 +57,7 @@ export default function AccountingExportPage() {
   });
 
   const { data: exports = [], isLoading: exportsLoading } = useQuery<AccountingExport[]>({
-    queryKey: ["/api/accounting-exports", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/accounting-exports", selectedPropertyId, filterKeys],
     enabled: !!selectedPropertyId,
     queryFn: async () => {
       const entParam = selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : "";

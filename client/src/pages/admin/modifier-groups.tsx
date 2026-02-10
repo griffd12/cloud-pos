@@ -9,33 +9,31 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertModifierGroupSchema, type ModifierGroup, type InsertModifierGroup, type Modifier, type ModifierGroupModifier } from "@shared/schema";
 import { Link2 } from "lucide-react";
 
 export default function ModifierGroupsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ModifierGroup | null>(null);
   const [linkingGroup, setLinkingGroup] = useState<ModifierGroup | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Set<string>>(new Set());
 
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: modifierGroups = [], isLoading } = useQuery<ModifierGroup[]>({
-    queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/modifier-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/modifier-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/modifier-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifier groups");
       return res.json();
     },
   });
 
   const { data: allModifiers = [] } = useQuery<Modifier[]>({
-    queryKey: ["/api/modifiers", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/modifiers", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/modifiers${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/modifiers${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch modifiers");
       return res.json();
     },
@@ -84,7 +82,7 @@ export default function ModifierGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", filterKeys] });
       setFormOpen(false);
       toast({ title: "Modifier group created" });
     },
@@ -99,7 +97,7 @@ export default function ModifierGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Modifier group updated" });
@@ -114,7 +112,7 @@ export default function ModifierGroupsPage() {
       await apiRequest("DELETE", "/api/modifier-groups/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", filterKeys] });
       toast({ title: "Modifier group deleted" });
     },
     onError: () => {
@@ -166,7 +164,7 @@ export default function ModifierGroupsPage() {
 
   const handleCloseLinkDialog = () => {
     setLinkingGroup(null);
-    queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", { enterpriseId: selectedEnterpriseId }] });
+    queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", filterKeys] });
   };
 
   return (

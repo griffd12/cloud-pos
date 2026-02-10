@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const EMC_SESSION_KEY = "emc_session_token";
@@ -441,8 +441,7 @@ export default function ReportsPage() {
   // Enable real-time updates via WebSocket
   usePosWebSocket();
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   
   const searchParams = useSearch();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -493,18 +492,18 @@ export default function ReportsPage() {
   }, [searchParams]);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await authFetch(`/api/properties${enterpriseParam}`);
+      const res = await authFetch(`/api/properties${filterParam}`);
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/rvcs", filterKeys],
     queryFn: async () => {
-      const res = await authFetch(`/api/rvcs${enterpriseParam}`);
+      const res = await authFetch(`/api/rvcs${filterParam}`);
       if (!res.ok) throw new Error("Failed to fetch rvcs");
       return res.json();
     },

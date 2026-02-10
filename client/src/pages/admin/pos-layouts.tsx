@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Plus, Edit, Trash2, Grid3X3, LayoutGrid, Save, X, GripVertical, Star, Upload, Image } from "lucide-react";
 import type { PosLayout, PosLayoutCell, MenuItem, Rvc, Property, PosLayoutRvcAssignment } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -249,8 +249,7 @@ function PropertyBrandingSection({ properties, toast }: { properties: Property[]
 
 export default function PosLayoutsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [designerOpen, setDesignerOpen] = useState(false);
   const [editingLayout, setEditingLayout] = useState<LayoutWithCells | null>(null);
@@ -324,36 +323,36 @@ export default function PosLayoutsPage() {
   };
 
   const { data: layouts = [], isLoading } = useQuery<PosLayout[]>({
-    queryKey: ["/api/pos-layouts", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/pos-layouts", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/pos-layouts${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/pos-layouts${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: rvcs = [] } = useQuery<Rvc[]>({
-    queryKey: ["/api/rvcs", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/rvcs", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/rvcs${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/rvcs${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: menuItems = [] } = useQuery<MenuItem[]>({
-    queryKey: ["/api/menu-items", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/menu-items", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/menu-items${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/menu-items${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -365,7 +364,7 @@ export default function PosLayoutsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", filterKeys] });
       setFormOpen(false);
       resetForm();
       toast({ title: "Layout created" });
@@ -381,7 +380,7 @@ export default function PosLayoutsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", filterKeys] });
       setFormOpen(false);
       resetForm();
       toast({ title: "Layout updated" });
@@ -396,7 +395,7 @@ export default function PosLayoutsPage() {
       await apiRequest("DELETE", `/api/pos-layouts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", filterKeys] });
       toast({ title: "Layout deleted" });
     },
     onError: () => {
@@ -410,7 +409,7 @@ export default function PosLayoutsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", filterKeys] });
       toast({ title: "Layout cells saved" });
     },
     onError: () => {
@@ -424,7 +423,7 @@ export default function PosLayoutsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pos-layouts", filterKeys] });
     },
   });
 

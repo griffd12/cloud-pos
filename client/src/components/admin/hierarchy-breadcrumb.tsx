@@ -29,6 +29,7 @@ interface HierarchyBreadcrumbProps {
   onRvcChange: (id: string | null) => void;
   showOverrideBadge?: boolean;
   isPropertyLocked?: boolean;
+  showPropertyFilter?: boolean;
 }
 
 export function HierarchyBreadcrumb({
@@ -43,6 +44,7 @@ export function HierarchyBreadcrumb({
   onRvcChange,
   showOverrideBadge = false,
   isPropertyLocked = false,
+  showPropertyFilter = true,
 }: HierarchyBreadcrumbProps) {
   const filteredProperties = selectedEnterprise
     ? properties.filter((p) => p.enterpriseId === selectedEnterprise.id)
@@ -69,8 +71,7 @@ export function HierarchyBreadcrumb({
             </div>
           </BreadcrumbItem>
 
-          {/* Property selector - only shown after enterprise is selected */}
-          {selectedEnterprise && (
+          {showPropertyFilter && selectedEnterprise && (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
@@ -106,7 +107,7 @@ export function HierarchyBreadcrumb({
             </>
           )}
 
-          {selectedProperty && (
+          {showPropertyFilter && selectedProperty && (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>

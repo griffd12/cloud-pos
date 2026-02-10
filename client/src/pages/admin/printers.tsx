@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
 import { Printer as PrinterIcon } from "lucide-react";
 import {
@@ -90,26 +90,23 @@ const CHARACTER_WIDTHS = [
 
 export default function PrintersPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Printer | null>(null);
 
-  // Build URLs with enterprise filtering for multi-tenancy
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: printers = [], isLoading } = useQuery<Printer[]>({
-    queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/printers", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/printers${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/printers${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch printers");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -170,7 +167,7 @@ export default function PrintersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", filterKeys] });
       setFormOpen(false);
       toast({ title: "Printer created" });
     },
@@ -185,7 +182,7 @@ export default function PrintersPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Printer updated" });
@@ -200,7 +197,7 @@ export default function PrintersPage() {
       await apiRequest("DELETE", "/api/printers/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", filterKeys] });
       toast({ title: "Printer deleted" });
     },
     onError: () => {
@@ -214,7 +211,7 @@ export default function PrintersPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/printers", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/printers", filterKeys] });
       toast({ title: data.message || "Test print sent successfully" });
     },
     onError: (error: Error) => {

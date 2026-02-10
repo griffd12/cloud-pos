@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { type Employee, type Role, type Property, type EmployeeAssignment, type JobCode, type EmployeeJobCode } from "@shared/schema";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -25,7 +25,7 @@ interface JobAssignment {
 
 export default function EmployeesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId, selectedPropertyId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId } = useEmcFilter();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -48,40 +48,37 @@ export default function EmployeesPage() {
   const [hasEmcAccess, setHasEmcAccess] = useState(false);
   const [emcLoading, setEmcLoading] = useState(false);
 
-  // Build URLs with enterprise filtering for multi-tenancy
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/employees", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/employees${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employees");
       return res.json();
     },
   });
 
   const { data: roles = [] } = useQuery<Role[]>({
-    queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/roles", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/roles${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/roles${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch roles");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/job-codes", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/job-codes${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch job codes");
       return res.json();
     },
@@ -197,7 +194,7 @@ export default function EmployeesPage() {
       return created;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -234,7 +231,7 @@ export default function EmployeesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -250,7 +247,7 @@ export default function EmployeesPage() {
       await apiRequest("DELETE", "/api/employees/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees", filterKeys] });
       toast({ title: "Employee deleted" });
     },
     onError: () => {

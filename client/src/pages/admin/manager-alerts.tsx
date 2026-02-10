@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,25 +23,27 @@ const ALERT_SEVERITIES = ["info", "warning", "critical"];
 
 export default function ManagerAlertsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
   const [selectedAlertTypes, setSelectedAlertTypes] = useState<string[]>([]);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: alerts = [], isLoading: alertsLoading } = useQuery<ManagerAlert[]>({
-    queryKey: ["/api/manager-alerts", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/manager-alerts", selectedPropertyId, filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/manager-alerts?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      params.set("propertyId", selectedPropertyId);
+      if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
+      const res = await fetch(`/api/manager-alerts?${params.toString()}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch alerts");
       return res.json();
     },
@@ -49,9 +51,12 @@ export default function ManagerAlertsPage() {
   });
 
   const { data: unreadCount = 0 } = useQuery<number>({
-    queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/manager-alerts/unread-count?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      params.set("propertyId", selectedPropertyId);
+      if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
+      const res = await fetch(`/api/manager-alerts/unread-count?${params.toString()}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch unread count");
       return res.json();
     },
@@ -59,9 +64,12 @@ export default function ManagerAlertsPage() {
   });
 
   const { data: subscriptions = [] } = useQuery<AlertSubscription[]>({
-    queryKey: ["/api/alert-subscriptions", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/alert-subscriptions", selectedPropertyId, filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/alert-subscriptions?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      params.set("propertyId", selectedPropertyId);
+      if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
+      const res = await fetch(`/api/alert-subscriptions?${params.toString()}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch subscriptions");
       return res.json();
     },
@@ -74,8 +82,8 @@ export default function ManagerAlertsPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts", selectedPropertyId, filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, filterKeys] });
       toast({ title: "Alert Acknowledged" });
     },
     onError: (error: Error) => {
@@ -89,8 +97,8 @@ export default function ManagerAlertsPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts", selectedPropertyId, filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, filterKeys] });
     },
   });
 
@@ -100,8 +108,8 @@ export default function ManagerAlertsPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts", selectedPropertyId, filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/manager-alerts/unread-count", selectedPropertyId, filterKeys] });
       toast({ title: "All Alerts Marked as Read" });
     },
   });

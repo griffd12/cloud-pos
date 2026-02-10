@@ -5,22 +5,20 @@ import { DataTable, type Column } from "@/components/admin/data-table";
 import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertPropertySchema, type Property, type InsertProperty, type Enterprise } from "@shared/schema";
 
 export default function PropertiesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Property | null>(null);
 
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: properties = [], isLoading } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -143,7 +141,7 @@ export default function PropertiesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties", filterKeys] });
       setFormOpen(false);
       toast({ title: "Property created" });
     },
@@ -158,7 +156,7 @@ export default function PropertiesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Property updated" });
@@ -173,7 +171,7 @@ export default function PropertiesPage() {
       await apiRequest("DELETE", "/api/properties/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties", filterKeys] });
       toast({ title: "Property deleted" });
     },
     onError: () => {

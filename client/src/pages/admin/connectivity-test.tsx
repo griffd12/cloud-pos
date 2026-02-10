@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -117,8 +117,7 @@ const modeConfig: Record<ConnectionMode, {
 
 export default function ConnectivityTestPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const { mode, status, forceCheck } = useConnectionMode();
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunningTest, setIsRunningTest] = useState(false);
@@ -129,18 +128,18 @@ export default function ConnectivityTestPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: serviceHosts = [], isLoading: hostsLoading } = useQuery<ServiceHostStatus[]>({
-    queryKey: ["/api/service-hosts/status-summary", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/service-hosts/status-summary", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/service-hosts/status-summary${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/service-hosts/status-summary${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch service hosts");
       return res.json();
     },
@@ -148,9 +147,9 @@ export default function ConnectivityTestPage() {
   });
 
   const { data: registeredDevices = [] } = useQuery<DeviceStatus[]>({
-    queryKey: ["/api/registered-devices/status-summary", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/registered-devices/status-summary", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/registered-devices/status-summary${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/registered-devices/status-summary${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch registered devices");
       return res.json();
     },
@@ -171,9 +170,9 @@ export default function ConnectivityTestPage() {
     serviceHosts: { connected: boolean; count: number };
     timestamp: string;
   }>({
-    queryKey: ["/api/connectivity-status", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/connectivity-status", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/connectivity-status${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/connectivity-status${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch connectivity status");
       return res.json();
     },

@@ -5,20 +5,19 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertMajorGroupSchema, type MajorGroup, type InsertMajorGroup } from "@shared/schema";
 
 export default function MajorGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MajorGroup | null>(null);
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
 
   const { data: majorGroups = [], isLoading } = useQuery<MajorGroup[]>({
-    queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/major-groups", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/major-groups${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/major-groups${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -52,7 +51,7 @@ export default function MajorGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", filterKeys] });
       setFormOpen(false);
       toast({ title: "Major group created" });
     },
@@ -67,7 +66,7 @@ export default function MajorGroupsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Major group updated" });
@@ -82,7 +81,7 @@ export default function MajorGroupsPage() {
       await apiRequest("DELETE", "/api/major-groups/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/major-groups", filterKeys] });
       toast({ title: "Major group deleted" });
     },
     onError: () => {

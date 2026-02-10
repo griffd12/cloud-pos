@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { format, addDays, subDays } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,22 +19,21 @@ import type { Property, SalesForecast, LaborForecast } from "@shared/schema";
 export default function ForecastingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [forecastDate, setForecastDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: salesForecasts = [], isLoading: salesLoading } = useQuery<SalesForecast[]>({
-    queryKey: ["/api/sales-forecasts", selectedPropertyId, forecastDate, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/sales-forecasts", selectedPropertyId, forecastDate, filterKeys],
     queryFn: async () => {
       const res = await fetch(`/api/sales-forecasts?propertyId=${selectedPropertyId}&date=${forecastDate}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch sales forecasts");
@@ -44,7 +43,7 @@ export default function ForecastingPage() {
   });
 
   const { data: laborForecasts = [], isLoading: laborLoading } = useQuery<LaborForecast[]>({
-    queryKey: ["/api/labor-forecasts", selectedPropertyId, forecastDate, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/labor-forecasts", selectedPropertyId, forecastDate, filterKeys],
     queryFn: async () => {
       const res = await fetch(`/api/labor-forecasts?propertyId=${selectedPropertyId}&date=${forecastDate}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch labor forecasts");
@@ -59,8 +58,8 @@ export default function ForecastingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sales-forecasts", selectedPropertyId, forecastDate, { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/labor-forecasts", selectedPropertyId, forecastDate, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales-forecasts", selectedPropertyId, forecastDate, filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/labor-forecasts", selectedPropertyId, forecastDate, filterKeys] });
       toast({ title: "Forecast Generated", description: "Sales and labor forecasts have been generated." });
     },
     onError: (error: Error) => {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,7 @@ import { type Role, type Privilege } from "@shared/schema";
 export default function RolesPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Role | null>(null);
   
@@ -32,18 +31,18 @@ export default function RolesPage() {
   const [selectedPrivileges, setSelectedPrivileges] = useState<string[]>([]);
 
   const { data: roles = [], isLoading } = useQuery<Role[]>({
-    queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/roles", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/roles${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/roles${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch roles");
       return res.json();
     },
   });
 
   const { data: privileges = [] } = useQuery<Privilege[]>({
-    queryKey: ["/api/privileges", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/privileges", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/privileges${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/privileges${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch privileges");
       return res.json();
     },
@@ -90,7 +89,7 @@ export default function RolesPage() {
       return created;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/roles", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -108,7 +107,7 @@ export default function RolesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/roles", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       resetForm();
@@ -124,7 +123,7 @@ export default function RolesPage() {
       await apiRequest("DELETE", "/api/roles/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/roles", filterKeys] });
       toast({ title: "Role deleted" });
     },
     onError: () => {
@@ -137,7 +136,7 @@ export default function RolesPage() {
       await apiRequest("POST", "/api/privileges/seed", {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/privileges", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/privileges", filterKeys] });
       toast({ title: "Privileges seeded successfully" });
     },
     onError: () => {
@@ -150,10 +149,10 @@ export default function RolesPage() {
       if (!selectedEnterpriseId) {
         throw new Error("No enterprise selected");
       }
-      await apiRequest("POST", "/api/roles/seed", { enterpriseId: selectedEnterpriseId });
+      await apiRequest("POST", "/api/roles/seed", filterKeys);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/roles", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/roles", filterKeys] });
       toast({ title: "Roles seeded successfully with privileges from matrix" });
     },
     onError: () => {

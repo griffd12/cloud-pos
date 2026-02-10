@@ -6,22 +6,20 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertSluSchema, type Slu, type InsertSlu } from "@shared/schema";
 
 export default function SlusPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Slu | null>(null);
 
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
   const { data: slus = [], isLoading } = useQuery<Slu[]>({
-    queryKey: ["/api/slus", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/slus", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/slus${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/slus${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch slus");
       return res.json();
     },
@@ -62,7 +60,7 @@ export default function SlusPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slus", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/slus", filterKeys] });
       setFormOpen(false);
       toast({ title: "SLU created" });
     },
@@ -77,7 +75,7 @@ export default function SlusPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slus", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/slus", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "SLU updated" });
@@ -92,7 +90,7 @@ export default function SlusPage() {
       await apiRequest("DELETE", "/api/slus/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slus", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/slus", filterKeys] });
       toast({ title: "SLU deleted" });
     },
     onError: () => {

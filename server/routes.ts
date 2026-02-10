@@ -481,6 +481,41 @@ function filterByEnterprise<T extends { enterpriseId?: string | null; propertyId
   });
 }
 
+// Filter entities by specific property - narrows results from enterprise filter
+// Shows: items directly assigned to this property, enterprise-level items (visible everywhere),
+// and items assigned to RVCs under this property
+async function filterByPropertyScope<T extends { enterpriseId?: string | null; propertyId?: string | null; rvcId?: string | null }>(
+  data: T[],
+  propertyId: string,
+  rvcId?: string
+): T[] {
+  // Get RVCs belonging to this property
+  const propertyRvcs = await storage.getRvcs(propertyId);
+  const propertyRvcIds = new Set(propertyRvcs.map(r => r.id));
+
+  let filtered = data.filter(item => {
+    // Item directly assigned to this property
+    if (item.propertyId === propertyId) return true;
+    // Enterprise-level item (no property/rvc restriction) - visible to all properties
+    if (item.enterpriseId && !item.propertyId && !item.rvcId) return true;
+    // Item assigned to an RVC under this property
+    if (item.rvcId && propertyRvcIds.has(item.rvcId)) return true;
+    return false;
+  });
+
+  // Further filter by specific RVC if provided
+  if (rvcId) {
+    filtered = filtered.filter(item => {
+      if (item.rvcId === rvcId) return true;
+      // Keep items visible at higher levels (enterprise-level or property-level without rvc restriction)
+      if (!item.rvcId) return true;
+      return false;
+    });
+  }
+
+  return filtered;
+}
+
 // Shared helper to send unsent items to KDS with proper round and ticket creation
 async function sendItemsToKds(
   checkId: string,
@@ -1855,12 +1890,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/roles", async (req, res) => {
     const enterpriseId = await getEnforcedEnterpriseId(req);
+    const propertyId = req.query.propertyId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
     let data = await storage.getRoles();
     
     // Filter by enterprise if specified (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -2158,12 +2198,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/major-groups", async (req, res) => {
     const enterpriseId = await getEnforcedEnterpriseId(req);
+    const propertyId = req.query.propertyId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
     let data = await storage.getMajorGroups();
     
     // Filter by enterprise if specified (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -2208,12 +2253,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/family-groups", async (req, res) => {
     const majorGroupId = req.query.majorGroupId as string | undefined;
     const enterpriseId = await getEnforcedEnterpriseId(req);
+    const propertyId = req.query.propertyId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
     let data = await storage.getFamilyGroups(majorGroupId);
     
     // Filter by enterprise if specified (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -2279,6 +2329,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get SLUs by RVC ID (path param version for frontend convenience)
   app.get("/api/slus/:rvcId", async (req, res) => {
     const rvcId = req.params.rvcId;
+    const propertyId = req.query.propertyId as string | undefined;
     
     // Auto-derive enterpriseId from rvcId for proper filtering
     const enterpriseId = await getEnterpriseIdFromContext({ rvcId });
@@ -2289,6 +2340,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -2700,6 +2755,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
         allGroups = filterByEnterprise(allGroups, enterpriseId, propertyIds, rvcIds);
       }
+      if (propertyId) {
+        allGroups = await filterByPropertyScope(allGroups, propertyId, rvcId);
+      }
       const groupsById = new Map(allGroups.map(g => [g.id, g]));
       const result: Record<string, typeof allGroups> = {};
       for (const link of allLinkages) {
@@ -2981,12 +3039,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/print-classes", async (req, res) => {
     const enterpriseId = await getEnforcedEnterpriseId(req);
+    const propertyId = req.query.propertyId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
     let data = await storage.getPrintClasses();
     
     // Filter by enterprise if specified (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -3465,6 +3528,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Get tenders by RVC ID (path param version for frontend convenience)
   app.get("/api/tenders/:rvcId", async (req, res) => {
     const rvcId = req.params.rvcId;
+    const propertyId = req.query.propertyId as string | undefined;
     
     // Auto-derive enterpriseId from rvcId for proper filtering
     const enterpriseId = await getEnterpriseIdFromContext({ rvcId });
@@ -3475,6 +3539,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -3521,6 +3589,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
     }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
+    }
     res.json(data);
   });
 
@@ -3535,6 +3606,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     res.json(data);
   });
@@ -3859,12 +3933,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/service-charges", async (req, res) => {
     const enterpriseId = await getEnforcedEnterpriseId(req);
+    const propertyId = req.query.propertyId as string | undefined;
+    const rvcId = req.query.rvcId as string | undefined;
     let data = await storage.getServiceCharges();
     
     // Filter by enterprise if specified (multi-tenancy)
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -6669,6 +6748,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         orderDevices = filterByEnterprise(orderDevices, enterpriseId as string, propertyIds, rvcIds);
         registeredDevices = filterByEnterprise(registeredDevices, enterpriseId as string, propertyIds, rvcIds);
         properties = filterByEnterprise(properties, enterpriseId as string, propertyIds, rvcIds);
+      }
+      if (propertyId) {
+        workstations = await filterByPropertyScope(workstations, propertyId as string);
+        printers = await filterByPropertyScope(printers, propertyId as string);
+        kdsDevices = await filterByPropertyScope(kdsDevices, propertyId as string);
+        orderDevices = await filterByPropertyScope(orderDevices, propertyId as string);
+        registeredDevices = await filterByPropertyScope(registeredDevices, propertyId as string);
+        properties = await filterByPropertyScope(properties, propertyId as string);
       }
       
       // Build a property lookup map
@@ -10555,12 +10642,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/job-codes", async (req, res) => {
     try {
       const { propertyId, enterpriseId } = req.query;
+      const rvcId = req.query.rvcId as string | undefined;
       let jobCodesData = await storage.getJobCodes(propertyId as string);
       
       // Filter by enterprise if specified (multi-tenancy)
       if (enterpriseId) {
         const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId as string);
         jobCodesData = filterByEnterprise(jobCodesData, enterpriseId as string, propertyIds, rvcIds);
+      }
+      if (propertyId) {
+        jobCodesData = await filterByPropertyScope(jobCodesData, propertyId as string, rvcId);
       }
       
       res.json(jobCodesData);

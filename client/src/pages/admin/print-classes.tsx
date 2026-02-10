@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { 
   insertPrintClassSchema, 
   type PrintClass, 
@@ -38,42 +38,41 @@ import { Switch } from "@/components/ui/switch";
 
 export default function PrintClassesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintClass | null>(null);
 
   const { data: printClasses = [], isLoading } = useQuery<PrintClass[]>({
-    queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/print-classes", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/print-classes${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/print-classes${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: orderDevices = [] } = useQuery<OrderDevice[]>({
-    queryKey: ["/api/order-devices", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/order-devices", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/order-devices${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/order-devices${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: allRoutings = [] } = useQuery<PrintClassRouting[]>({
-    queryKey: ["/api/print-class-routing", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/print-class-routing", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/print-class-routing${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/print-class-routing${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -117,8 +116,8 @@ export default function PrintClassesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-classes", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", filterKeys] });
     },
     onError: () => {
       toast({ title: "Failed to create print class", variant: "destructive" });
@@ -131,8 +130,8 @@ export default function PrintClassesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-classes", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", filterKeys] });
     },
     onError: () => {
       toast({ title: "Failed to update print class", variant: "destructive" });
@@ -144,8 +143,8 @@ export default function PrintClassesPage() {
       await apiRequest("DELETE", "/api/print-classes/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-classes", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-classes", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", filterKeys] });
       toast({ title: "Print class deleted" });
     },
     onError: (error: any) => {
@@ -217,7 +216,7 @@ export default function PrintClassesPage() {
               await apiRequest("DELETE", `/api/print-class-routing/${routing.id}`);
             }
 
-            queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", { enterpriseId: selectedEnterpriseId }] });
+            queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", filterKeys] });
             setFormOpen(false);
             setEditingItem(null);
             toast({ title: editingItem ? "Print class updated" : "Print class created" });

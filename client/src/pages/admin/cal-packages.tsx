@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -88,8 +88,7 @@ const PACKAGE_TYPE_LABELS: Record<string, string> = {
 
 export default function CalPackagesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPackage, setSelectedPackage] = useState<CalPackage | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<CalPackageVersion | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
@@ -100,10 +99,10 @@ export default function CalPackagesPage() {
   const [showDeployDialog, setShowDeployDialog] = useState(false);
 
   const { data: packages = [], isLoading: packagesLoading } = useQuery<CalPackage[]>({
-    queryKey: ["/api/cal-packages", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/cal-packages", filterKeys],
     queryFn: async () => {
       if (!selectedEnterpriseId) return [];
-      const res = await fetch(`/api/cal-packages${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/cal-packages${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch CAL packages");
       return res.json();
     },
@@ -111,10 +110,10 @@ export default function CalPackagesPage() {
   });
 
   const { data: versions = [] } = useQuery<CalPackageVersion[]>({
-    queryKey: ["/api/cal-packages", selectedPackage?.id, "versions", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/cal-packages", selectedPackage?.id, "versions", filterKeys],
     queryFn: async () => {
       if (!selectedPackage) return [];
-      const res = await fetch(`/api/cal-packages/${selectedPackage.id}/versions${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/cal-packages/${selectedPackage.id}/versions${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch versions");
       return res.json();
     },
@@ -122,10 +121,10 @@ export default function CalPackagesPage() {
   });
 
   const { data: deployments = [] } = useQuery<CalDeployment[]>({
-    queryKey: ["/api/cal-deployments", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/cal-deployments", filterKeys],
     queryFn: async () => {
       if (!selectedEnterpriseId) return [];
-      const res = await fetch(`/api/cal-deployments${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/cal-deployments${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch deployments");
       return res.json();
     },
@@ -160,7 +159,7 @@ export default function CalPackagesPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", filterKeys] });
       setShowPackageDialog(false);
       toast({ title: "CAL package created" });
     },
@@ -178,7 +177,7 @@ export default function CalPackagesPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", selectedPackage?.id, "versions", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", selectedPackage?.id, "versions", filterKeys] });
       setShowVersionDialog(false);
       toast({ title: "Version created" });
     },
@@ -193,7 +192,7 @@ export default function CalPackagesPage() {
       return res.json();
     },
     onSuccess: (updatedPackage) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", filterKeys] });
       setShowEditPackageDialog(false);
       setSelectedPackage(updatedPackage);
       toast({ title: "Package updated" });
@@ -208,7 +207,7 @@ export default function CalPackagesPage() {
       await apiRequest("DELETE", `/api/cal-packages/${selectedPackage?.id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", filterKeys] });
       setShowDeleteConfirm(false);
       setSelectedPackage(null);
       setSelectedVersion(null);

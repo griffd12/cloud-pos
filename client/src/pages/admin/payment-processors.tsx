@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertPaymentProcessorSchema, type PaymentProcessor, type InsertPaymentProcessor, type Property } from "@shared/schema";
 import {
   Dialog,
@@ -57,22 +57,21 @@ export default function PaymentProcessorsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PaymentProcessor | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
 
   const { data: processors = [], isLoading } = useQuery<PaymentProcessor[]>({
-    queryKey: ["/api/payment-processors", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/payment-processors", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/payment-processors${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/payment-processors${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -141,7 +140,7 @@ export default function PaymentProcessorsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-processors", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-processors", filterKeys] });
       setFormOpen(false);
       form.reset();
       toast({ title: "Payment processor created" });
@@ -157,7 +156,7 @@ export default function PaymentProcessorsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-processors", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-processors", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       form.reset();
@@ -173,7 +172,7 @@ export default function PaymentProcessorsPage() {
       await apiRequest("DELETE", "/api/payment-processors/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-processors", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-processors", filterKeys] });
       toast({ title: "Payment processor deleted" });
     },
     onError: () => {

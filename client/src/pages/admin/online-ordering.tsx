@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,8 +23,7 @@ const ORDER_SOURCE_TYPES = ["doordash", "ubereats", "grubhub", "direct", "other"
 export default function OnlineOrderingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [editingSource, setEditingSource] = useState<OnlineOrderSource | null>(null);
@@ -36,18 +35,21 @@ export default function OnlineOrderingPage() {
   const [isActive, setIsActive] = useState(true);
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: orderSources = [], isLoading: sourcesLoading } = useQuery<OnlineOrderSource[]>({
-    queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/online-order-sources", selectedPropertyId, filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/online-order-sources?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      params.set("propertyId", selectedPropertyId);
+      if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
+      const res = await fetch(`/api/online-order-sources?${params.toString()}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch order sources");
       return res.json();
     },
@@ -55,9 +57,12 @@ export default function OnlineOrderingPage() {
   });
 
   const { data: onlineOrders = [], isLoading: ordersLoading } = useQuery<OnlineOrder[]>({
-    queryKey: ["/api/online-orders", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/online-orders", selectedPropertyId, filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/online-orders?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      params.set("propertyId", selectedPropertyId);
+      if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
+      const res = await fetch(`/api/online-orders?${params.toString()}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch online orders");
       return res.json();
     },
@@ -70,7 +75,7 @@ export default function OnlineOrderingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources", selectedPropertyId, filterKeys] });
       resetSourceDialog();
       toast({ title: "Source Created", description: "Online order source has been created." });
     },
@@ -85,7 +90,7 @@ export default function OnlineOrderingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/online-order-sources", selectedPropertyId, filterKeys] });
       resetSourceDialog();
       toast({ title: "Source Updated", description: "Online order source has been updated." });
     },
@@ -100,7 +105,7 @@ export default function OnlineOrderingPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/online-orders", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/online-orders", selectedPropertyId, filterKeys] });
       toast({ title: "Order Injected", description: "Order has been sent to the POS." });
     },
     onError: (error: Error) => {

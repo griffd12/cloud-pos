@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,8 +63,7 @@ interface TimecardReport {
 }
 
 export default function TimecardReportPage() {
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(() => {
     const now = new Date();
@@ -75,9 +74,9 @@ export default function TimecardReportPage() {
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -87,7 +86,7 @@ export default function TimecardReportPage() {
   const endDateStr = format(dateRange.to, "yyyy-MM-dd");
 
   const { data: report, isLoading } = useQuery<TimecardReport>({
-    queryKey: ["/api/reports/timecard", selectedPropertyId, startDateStr, endDateStr, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/reports/timecard", selectedPropertyId, startDateStr, endDateStr, filterKeys],
     enabled: !!selectedPropertyId,
     queryFn: async () => {
       const authHeaders = getAuthHeaders();

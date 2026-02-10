@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ const DEVICE_TYPE_CONFIG = {
 
 export default function DevicesHubPage() {
   const [, navigate] = useLocation();
-  const { selectedEnterpriseId } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPropertyId, setFilterPropertyId] = useState<string>("");
   const [filterDeviceType, setFilterDeviceType] = useState<string>("");
@@ -68,14 +68,13 @@ export default function DevicesHubPage() {
   const queryPath = buildQueryPath();
 
   const { data: hubData, isLoading } = useQuery<HubResponse>({
-    queryKey: [queryPath, { enterpriseId: selectedEnterpriseId }],
+    queryKey: [queryPath, filterKeys],
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const params = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-      const res = await fetch(`/api/properties${params}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },

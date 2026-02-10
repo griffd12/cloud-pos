@@ -6,7 +6,7 @@ import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertDiscountSchema, type Discount, type InsertDiscount } from "@shared/schema";
 
 export default function DiscountsPage() {
@@ -14,13 +14,12 @@ export default function DiscountsPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Discount | null>(null);
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
 
   const { data: discounts = [], isLoading } = useQuery<Discount[]>({
-    queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/discounts", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/discounts${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/discounts${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -76,7 +75,7 @@ export default function DiscountsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts", filterKeys] });
       setFormOpen(false);
       toast({ title: "Discount created" });
     },
@@ -91,7 +90,7 @@ export default function DiscountsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Discount updated" });
@@ -106,7 +105,7 @@ export default function DiscountsPage() {
       await apiRequest("DELETE", "/api/discounts/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/discounts", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discounts", filterKeys] });
       toast({ title: "Discount deleted" });
     },
     onError: () => {

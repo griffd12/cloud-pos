@@ -200,9 +200,13 @@ function EmcDashboard() {
   );
 }
 
+const ENTERPRISE_LEVEL_ROUTES = ["/emc/enterprises", "/emc/dashboard", "/emc"];
+
 export default function EmcAdminLayout() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { user, isAuthenticated, logout, isLoading, selectedEnterpriseId, setSelectedEnterpriseId, selectedPropertyId, setSelectedPropertyId } = useEmc();
+
+  const showPropertyFilter = !ENTERPRISE_LEVEL_ROUTES.includes(location);
 
   // Real-time sync for all data changes across the system
   usePosWebSocket();
@@ -411,6 +415,7 @@ export default function EmcAdminLayout() {
             onPropertyChange={handlePropertyChange}
             onRvcChange={handleRvcChange}
             isPropertyLocked={user?.accessLevel === "property_admin"}
+            showPropertyFilter={showPropertyFilter}
           />
 
           <main className="flex-1 overflow-auto">

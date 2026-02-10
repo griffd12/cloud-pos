@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,7 @@ const TRANSACTION_TYPES = ["receive", "sale", "waste", "transfer", "adjustment",
 export default function InventoryPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
@@ -47,16 +46,16 @@ export default function InventoryPage() {
   const [txNotes, setTxNotes] = useState("");
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
 
   const { data: inventoryItems = [], isLoading: itemsLoading } = useQuery<InventoryItem[]>({
-    queryKey: ["/api/inventory-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/inventory-items", selectedPropertyId, filterKeys],
     queryFn: async () => {
       const res = await fetch(`/api/inventory-items?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch inventory items");
@@ -66,7 +65,7 @@ export default function InventoryPage() {
   });
 
   const { data: inventoryStock = [] } = useQuery<InventoryStock[]>({
-    queryKey: ["/api/inventory-stock", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/inventory-stock", selectedPropertyId, filterKeys],
     queryFn: async () => {
       const res = await fetch(`/api/inventory-stock?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch inventory stock");
@@ -76,7 +75,7 @@ export default function InventoryPage() {
   });
 
   const { data: inventoryTransactions = [] } = useQuery<InventoryTransaction[]>({
-    queryKey: ["/api/inventory-transactions", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/inventory-transactions", selectedPropertyId, filterKeys],
     queryFn: async () => {
       const res = await fetch(`/api/inventory-transactions?propertyId=${selectedPropertyId}${selectedEnterpriseId ? `&enterpriseId=${selectedEnterpriseId}` : ""}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch inventory transactions");
@@ -91,7 +90,7 @@ export default function InventoryPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items", selectedPropertyId, filterKeys] });
       resetItemDialog();
       toast({ title: "Item Created", description: "Inventory item has been created." });
     },
@@ -106,7 +105,7 @@ export default function InventoryPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items", selectedPropertyId, filterKeys] });
       resetItemDialog();
       toast({ title: "Item Updated", description: "Inventory item has been updated." });
     },
@@ -121,8 +120,8 @@ export default function InventoryPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory-transactions", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory-stock", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-transactions", selectedPropertyId, filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-stock", selectedPropertyId, filterKeys] });
       resetTransactionDialog();
       toast({ title: "Transaction Recorded", description: "Inventory transaction has been recorded." });
     },
@@ -137,7 +136,7 @@ export default function InventoryPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items", selectedPropertyId, { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-items", selectedPropertyId, filterKeys] });
       if (data.imported > 0) {
         toast({ 
           title: "Menu Items Imported", 

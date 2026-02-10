@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
 import { EntityForm, FormFieldConfig } from "@/components/admin/entity-form";
@@ -20,8 +20,7 @@ import { format } from "date-fns";
 export default function GiftCardsPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftCard | null>(null);
   const [lookupDialogOpen, setLookupDialogOpen] = useState(false);
@@ -34,18 +33,18 @@ export default function GiftCardsPage() {
   const [redeemAmount, setRedeemAmount] = useState("");
 
   const { data: giftCards = [], isLoading } = useQuery<GiftCard[]>({
-    queryKey: ["/api/gift-cards", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/gift-cards", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/gift-cards${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/gift-cards${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch gift cards");
       return res.json();
     },
   });
 
   const { data: cardTransactions = [] } = useQuery<GiftCardTransaction[]>({
-    queryKey: ["/api/gift-cards", selectedCard?.id, "transactions", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/gift-cards", selectedCard?.id, "transactions", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/gift-cards/${selectedCard?.id}/transactions${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/gift-cards/${selectedCard?.id}/transactions${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
@@ -118,7 +117,7 @@ export default function GiftCardsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", filterKeys] });
       setFormOpen(false);
       toast({ title: "Gift card created successfully" });
     },
@@ -133,7 +132,7 @@ export default function GiftCardsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Gift card updated" });
@@ -149,8 +148,8 @@ export default function GiftCardsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", selectedCard?.id, "transactions", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", selectedCard?.id, "transactions", filterKeys] });
       setReloadDialogOpen(false);
       setReloadAmount("");
       toast({ title: "Card reloaded successfully" });
@@ -166,8 +165,8 @@ export default function GiftCardsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", { enterpriseId: selectedEnterpriseId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", selectedCard?.id, "transactions", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", selectedCard?.id, "transactions", filterKeys] });
       setRedeemDialogOpen(false);
       setRedeemAmount("");
       toast({ title: "Redemption successful" });

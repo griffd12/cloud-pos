@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,8 +106,7 @@ interface ClearResult {
 
 export default function UtilitiesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [pin, setPin] = useState("");
@@ -123,9 +122,9 @@ export default function UtilitiesPage() {
 
   // Fetch all properties for selection
   const { data: properties, isLoading: propertiesLoading } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -133,7 +132,7 @@ export default function UtilitiesPage() {
 
   // Fetch summary for selected property
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<SalesDataSummary>({
-    queryKey: ["/api/admin/sales-data-summary", selectedPropertyId, { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/admin/sales-data-summary", selectedPropertyId, filterKeys],
     enabled: !!selectedPropertyId,
     queryFn: async () => {
       const entParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";

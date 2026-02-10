@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmc, useEmcFilter } from "@/lib/emc-context";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,8 @@ interface PunchPair {
 
 export default function TimecardsPage() {
   const { toast } = useToast();
-  const { user: emcUser, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { user: emcUser } = useEmc();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -75,9 +75,9 @@ export default function TimecardsPage() {
   const [punchEditForm, setPunchEditForm] = useState({ date: "", time: "", reason: "" });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -87,18 +87,18 @@ export default function TimecardsPage() {
   const selectedPropertyTimezone = properties.find(p => p.id === selectedProperty)?.timezone || "America/New_York";
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/employees", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/employees${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/employees${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch employees");
       return res.json();
     },
   });
 
   const { data: jobCodes = [] } = useQuery<JobCode[]>({
-    queryKey: ["/api/job-codes", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/job-codes", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/job-codes${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/job-codes${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch job codes");
       return res.json();
     },

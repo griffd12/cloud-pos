@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { useEmc } from "@/lib/emc-context";
+import { useEmcFilter } from "@/lib/emc-context";
 import { insertPrintAgentSchema, type PrintAgent, type InsertPrintAgent, type Property } from "@shared/schema";
 import { Copy, Download, RefreshCw, KeyRound, Wifi, WifiOff, Plus } from "lucide-react";
 import {
@@ -58,8 +58,7 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function PrintAgentsPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintAgent | null>(null);
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
@@ -69,18 +68,18 @@ export default function PrintAgentsPage() {
   const [regeneratedToken, setRegeneratedToken] = useState<string | null>(null);
 
   const { data: agents = [], isLoading } = useQuery<PrintAgent[]>({
-    queryKey: ["/api/print-agents", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/print-agents", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/print-agents${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/print-agents${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", { enterpriseId: selectedEnterpriseId }],
+    queryKey: ["/api/properties", filterKeys],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${enterpriseParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -144,7 +143,7 @@ export default function PrintAgentsPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", filterKeys] });
       setFormOpen(false);
       form.reset();
       if (data.agentToken) {
@@ -164,7 +163,7 @@ export default function PrintAgentsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
       form.reset();
@@ -180,7 +179,7 @@ export default function PrintAgentsPage() {
       await apiRequest("DELETE", "/api/print-agents/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", filterKeys] });
       toast({ title: "Print agent deleted" });
     },
     onError: () => {
@@ -194,7 +193,7 @@ export default function PrintAgentsPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", filterKeys] });
       setRegenerateConfirmOpen(false);
       setAgentToRegenerate(null);
       if (data.agentToken) {
@@ -214,7 +213,7 @@ export default function PrintAgentsPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", { enterpriseId: selectedEnterpriseId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/print-agents", filterKeys] });
       toast({ title: "Agent status updated" });
     },
     onError: () => {
