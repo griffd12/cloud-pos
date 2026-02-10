@@ -60,6 +60,7 @@ export default function OfflineTestPage() {
   const [idbAvailable, setIdbAvailable] = useState<boolean | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const logIdRef = useRef(0);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
 
@@ -76,6 +77,11 @@ export default function OfflineTestPage() {
   useEffect(() => {
     if (!isElectron()) return;
     const api = window.electronAPI;
+    if (api?.getAppInfo) {
+      api.getAppInfo().then((info: any) => {
+        if (info?.version) setAppVersion(info.version);
+      }).catch(() => {});
+    }
     if (!api?.updater) return;
     api.updater.getStatus().then(setUpdateStatus).catch(() => {});
     if (api.onUpdateStatus) {
@@ -343,6 +349,12 @@ export default function OfflineTestPage() {
               >
                 {simulatedOffline ? "Active" : "Inactive"}
               </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">App Version</span>
+              <span className="text-sm font-mono" data-testid="text-app-version">
+                {appVersion ? `v${appVersion}` : "Web Browser"}
+              </span>
             </div>
           </CardContent>
         </Card>
