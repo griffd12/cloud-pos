@@ -1,0 +1,113 @@
+Cache Key
+Data
+Cached
+Expires
+api_checks/09058a72-7b71-477d-b635-b8466f940251/payments
+Object{payments, paidAmount}
+57m ago
+23h
+api_checks/3c506752-49a3-493b-84b8-6b2ddf2129a1
+Object{check, items, payments}
+1h ago
+23h
+api_checks/3c506752-49a3-493b-84b8-6b2ddf2129a1/payments
+Object{payments, paidAmount}
+1h ago
+23h
+api_checks/3f137387-9bed-4ca8-b929-b7d5ebd63a90/payments
+Object{payments, paidAmount}
+1h ago
+23h
+api_checks/71694b58-644a-421c-b786-6df83e86c5bf
+Object{check, items, payments}
+1h ago
+23h
+api_checks/71694b58-644a-421c-b786-6df83e86c5bf/payments
+Object{payments, paidAmount}
+1h ago
+23h
+api_checks/8143f20b-4aef-49f8-b351-f170555a212b
+Object{check, items, payments}
+1h ago
+23h
+api_checks/8143f20b-4aef-49f8-b351-f170555a212b/payments
+Object{payments, paidAmount}
+1h ago
+23h
+api_checks/85188eed-1471-44cb-8ea1-70ad30b23df2
+Object{check, items, payments}
+1h ago
+23h
+api_checks/85188eed-1471-44cb-8ea1-70ad30b23df2/payments
+Object{payments, paidAmount}
+1h ago
+23h
+api_checks/cd597657-0f44-4d0d-bbe5-f3429b8142c2
+Object{check, items, payments}
+1h ago
+23h
+api_checks/cd597657-0f44-4d0d-bbe5-f3429b8142c2/payments
+Object{payments, paidAmount}
+1h ago
+23h
+api_checks/cfce20c0-6c48-4320-a2c8-c1f7448b9a35/payments
+Object{payments, paidAmount}
+57m ago
+23h
+api_checks/locks_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08_workstationId-fe5e8ca2-5be5-425c-a057-df716699e116
+Object{lockStatus}
+1h ago
+23h
+api_checks/open_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08
+Array[4]
+1h ago
+23h
+api_discounts_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08
+Array[4]
+57m ago
+23h
+api_health
+Object{status, timestamp}
+57m ago
+23h
+api_item-availability_propertyId-b0c038b1-5c55-4c63-85fe-5ea9dc64a767
+Array[0]
+57m ago
+23h
+api_kds-tickets/bumped_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08_limit-100
+Array[6]
+1h ago
+23h
+api_menu-items_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08
+Array[19]
+57m ago
+23h
+api_modifier-groups_menuItemId-0dbd998b-577e-48dd-8b4c-42126653bb25
+Array[0]
+1h ago
+23h
+api_modifier-groups_menuItemId-532d6f6a-7359-4646-9a75-15df86698746
+Array[3]
+57m ago
+23h
+api_pos-layouts/c18f9f12-0f85-4d80-9349-1f6ad91cbf45/cells
+Array[20]
+57m ago
+23h
+api_pos-layouts/default/95a4ebcf-2b84-432d-9a5b-325eae839a08
+Object{id, enterpriseId, propertyId...}
+57m ago
+23h
+api_slus_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08
+Array[4]
+57m ago
+23h
+api_tax-groups_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08
+Array[2]
+57m ago
+23h
+api_tenders_rvcId-95a4ebcf-2b84-432d-9a5b-325eae839a08
+Array[4]
+57m ago
+23h
+api_workstations/fe5e8ca2-5be5-425c-a057-df716699e116/context
