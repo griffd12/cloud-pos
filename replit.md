@@ -5,6 +5,7 @@ This project is an enterprise cloud-based Quick Service Restaurant (QSR) Point o
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
+- **Release Notes Requirement**: Whenever a new Electron installer version is created (version bump in `electron/electron-builder.json`), always generate release notes summarizing all changes included in that version. Format them for use as GitHub Release descriptions.
 
 ## System Architecture
 
