@@ -2601,6 +2601,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  app.get("/api/pos/modifier-map", async (req, res) => {
+    try {
+      let enterpriseId = req.query.enterpriseId as string | undefined;
+      const rvcId = req.query.rvcId as string | undefined;
+      const propertyId = req.query.propertyId as string | undefined;
+      if (!enterpriseId && (rvcId || propertyId)) {
+        enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
+      }
+      const allLinkages = await storage.getMenuItemModifierGroups();
+      let allGroups = await storage.getModifierGroups();
+      if (enterpriseId) {
+        const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
+        allGroups = filterByEnterprise(allGroups, enterpriseId, propertyIds, rvcIds);
+      }
+      const groupsById = new Map(allGroups.map(g => [g.id, g]));
+      const result: Record<string, typeof allGroups> = {};
+      for (const link of allLinkages) {
+        const group = groupsById.get(link.modifierGroupId);
+        if (!group) continue;
+        if (!result[link.menuItemId]) result[link.menuItemId] = [];
+        if (!result[link.menuItemId].some(g => g.id === group.id)) {
+          result[link.menuItemId].push(group);
+        }
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Error building modifier map:", error);
+      res.status(500).json({ message: "Failed to build modifier map" });
+    }
+  });
+
   // ============================================================================
   // MENU ITEM MODIFIER GROUP LINKAGE ROUTES
   // ============================================================================

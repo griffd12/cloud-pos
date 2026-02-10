@@ -489,6 +489,19 @@ export default function PosPage() {
     return mapping;
   }, [tenders]);
 
+  const { data: modifierMap } = useQuery<Record<string, (ModifierGroup & { modifiers: Modifier[] })[]>>({
+    queryKey: ["/api/pos/modifier-map", currentRvc?.id],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentRvc?.id) params.append("rvcId", currentRvc.id);
+      const res = await fetchWithTimeout(`/api/pos/modifier-map?${params.toString()}`, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: !!currentRvc?.id,
+    staleTime: 300000,
+  });
+
   const [itemModifierGroups, setItemModifierGroups] = useState<(ModifierGroup & { modifiers: Modifier[] })[]>([]);
 
   const { data: taxGroups = [] } = useQuery<TaxGroup[]>({
@@ -1198,21 +1211,15 @@ export default function PosPage() {
           return;
         }
       }
-      // Check for linked modifier groups before opening COM
-      try {
-        const res = await fetchWithTimeout(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
-        const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
-        const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
-        
-        if (hasRequiredModifiers) {
-          // Show modifier modal first; COM will open after modifiers are confirmed
-          setItemModifierGroups(groups);
-          setPendingItem(item);
-          setShowModifierModal(true);
-          return;
-        }
-      } catch {
-        // If modifier fetch fails, proceed to COM without modifiers
+      // Check for linked modifier groups using pre-fetched map (instant, no network call)
+      const groups = modifierMap?.[item.id] || [];
+      const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
+      
+      if (hasRequiredModifiers) {
+        setItemModifierGroups(groups);
+        setPendingItem(item);
+        setShowModifierModal(true);
+        return;
       }
       // No required modifiers — go straight to COM panel
       setPendingStandardModifiers([]);

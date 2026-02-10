@@ -324,7 +324,7 @@ export interface IStorage {
   updateModifierGroupModifier(id: string, data: Partial<InsertModifierGroupModifier>): Promise<ModifierGroupModifier | undefined>;
 
   // Menu Item to Modifier Group linkage
-  getMenuItemModifierGroups(menuItemId: string): Promise<MenuItemModifierGroup[]>;
+  getMenuItemModifierGroups(menuItemId?: string): Promise<MenuItemModifierGroup[]>;
   linkModifierGroupToMenuItem(data: InsertMenuItemModifierGroup): Promise<MenuItemModifierGroup>;
   unlinkModifierGroupFromMenuItem(menuItemId: string, modifierGroupId: string): Promise<boolean>;
 
@@ -1667,31 +1667,32 @@ export class DatabaseStorage implements IStorage {
       groups = await db.select().from(modifierGroups).where(eq(modifierGroups.active, true)).orderBy(modifierGroups.displayOrder);
     }
 
-    const result: (ModifierGroup & { modifiers: (Modifier & { isDefault: boolean; displayOrder: number })[] })[] = [];
-    for (const group of groups) {
-      // Get modifiers through the join table
-      const linkages = await db.select().from(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierGroupId, group.id)).orderBy(modifierGroupModifiers.displayOrder);
-      const modifierIds = linkages.map(l => l.modifierId);
-      
-      if (modifierIds.length === 0) {
-        result.push({ ...group, modifiers: [] });
-        continue;
-      }
-      
-      const mods = await db.select().from(modifiers).where(and(inArray(modifiers.id, modifierIds), eq(modifiers.active, true)));
-      // Add isDefault and displayOrder from the linkage
-      const modsWithMeta = mods.map(m => {
-        const linkage = linkages.find(l => l.modifierId === m.id);
-        return {
-          ...m,
-          isDefault: linkage?.isDefault ?? false,
-          displayOrder: linkage?.displayOrder ?? 0,
-        };
-      }).sort((a, b) => a.displayOrder - b.displayOrder);
-      
-      result.push({ ...group, modifiers: modsWithMeta });
-    }
-    return result;
+    if (groups.length === 0) return [];
+
+    const allGroupIds = groups.map(g => g.id);
+    const allLinkages = await db.select().from(modifierGroupModifiers).where(inArray(modifierGroupModifiers.modifierGroupId, allGroupIds)).orderBy(modifierGroupModifiers.displayOrder);
+    const allModifierIds = [...new Set(allLinkages.map(l => l.modifierId))];
+    const allMods = allModifierIds.length > 0
+      ? await db.select().from(modifiers).where(and(inArray(modifiers.id, allModifierIds), eq(modifiers.active, true)))
+      : [];
+    const modsById = new Map(allMods.map(m => [m.id, m]));
+
+    return groups.map(group => {
+      const groupLinkages = allLinkages.filter(l => l.modifierGroupId === group.id);
+      const modsWithMeta = groupLinkages
+        .map(linkage => {
+          const mod = modsById.get(linkage.modifierId);
+          if (!mod) return null;
+          return {
+            ...mod,
+            isDefault: linkage.isDefault ?? false,
+            displayOrder: linkage.displayOrder ?? 0,
+          };
+        })
+        .filter((m): m is NonNullable<typeof m> => m !== null)
+        .sort((a, b) => a.displayOrder - b.displayOrder);
+      return { ...group, modifiers: modsWithMeta };
+    });
   }
 
   async getModifierGroup(id: string): Promise<ModifierGroup | undefined> {
@@ -1740,8 +1741,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Menu Item to Modifier Group linkage
-  async getMenuItemModifierGroups(menuItemId: string): Promise<MenuItemModifierGroup[]> {
-    return db.select().from(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, menuItemId)).orderBy(menuItemModifierGroups.displayOrder);
+  async getMenuItemModifierGroups(menuItemId?: string): Promise<MenuItemModifierGroup[]> {
+    if (menuItemId) {
+      return db.select().from(menuItemModifierGroups).where(eq(menuItemModifierGroups.menuItemId, menuItemId)).orderBy(menuItemModifierGroups.displayOrder);
+    }
+    return db.select().from(menuItemModifierGroups).orderBy(menuItemModifierGroups.displayOrder);
   }
 
   async linkModifierGroupToMenuItem(data: InsertMenuItemModifierGroup): Promise<MenuItemModifierGroup> {
