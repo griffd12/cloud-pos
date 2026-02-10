@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEmc } from "@/lib/emc-context";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import type { Enterprise, Property, Rvc } from "@shared/schema";
 import {
@@ -90,7 +91,7 @@ function EmcDashboard() {
   }>({
     queryKey: ["/api/admin/stats", { enterpriseId: selectedEnterpriseId }],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/stats${enterpriseParam}`);
+      const res = await fetch(`/api/admin/stats${enterpriseParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },

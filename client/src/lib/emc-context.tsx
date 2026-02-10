@@ -70,6 +70,14 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const autoSetEnterpriseForUser = useCallback((emcUser: EmcUser) => {
+    const isSystem = emcUser.accessLevel === "system_admin" || emcUser.accessLevel === "super_admin";
+    if (!isSystem && emcUser.enterpriseId) {
+      setSelectedEnterpriseIdState(emcUser.enterpriseId);
+      sessionStorage.setItem(EMC_SELECTED_ENTERPRISE_KEY, emcUser.enterpriseId);
+    }
+  }, []);
+
   const validateSession = useCallback(async (token: string) => {
     try {
       const response = await fetch("/api/emc/validate-session", {
@@ -83,6 +91,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
         if (data.valid) {
           setUser(data.user);
           setSessionToken(token);
+          autoSetEnterpriseForUser(data.user);
           return true;
         }
       }
@@ -91,7 +100,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     } catch {
       return false;
     }
-  }, []);
+  }, [autoSetEnterpriseForUser]);
 
   useEffect(() => {
     const storedToken = sessionStorage.getItem(EMC_SESSION_KEY);
@@ -118,6 +127,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     sessionStorage.setItem(EMC_SESSION_KEY, data.sessionToken);
     setSessionToken(data.sessionToken);
     setUser(data.user);
+    autoSetEnterpriseForUser(data.user);
   };
 
   const logout = async () => {

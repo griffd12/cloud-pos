@@ -41,7 +41,7 @@ export default function ModifiersPage() {
       },
     },
     {
-      key: "isActive",
+      key: "active",
       header: "Status",
       render: (value) => (
         value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>
@@ -62,7 +62,7 @@ export default function ModifiersPage() {
   const formFields: FormFieldConfig[] = [
     { name: "name", label: "Modifier Name", type: "text", placeholder: "e.g., Extra Cheese", required: true },
     { name: "priceDelta", label: "Price Delta", type: "decimal", placeholder: "0.00", defaultValue: "0" },
-    { name: "isActive", label: "Active", type: "switch", defaultValue: true },
+    { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 
   const createMutation = useMutation({
