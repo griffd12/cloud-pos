@@ -1,0 +1,18 @@
+{
+  "serverUrl": "https://onpoint-pos.replit.app",
+  "enterpriseId": "587bd7b1-db7e-487c-b1f7-2315ab093502",
+  "enterpriseName": "Blue Oceans Management",
+  "enterpriseCode": null,
+  "propertyId": "b0c038b1-5c55-4c63-85fe-5ea9dc64a767",
+  "propertyName": "SNS-Newport Beach",
+  "rvcId": "95a4ebcf-2b84-432d-9a5b-325eae839a08",
+  "rvcName": "SNS-001 Shop",
+  "mode": "pos",
+  "deviceId": "fe5e8ca2-5be5-425c-a057-df716699e116",
+  "deviceName": "SNS-001-WS02",
+  "deviceType": "workstation",
+  "setupComplete": true,
+  "setupDate": "2026-02-10T04:34:51.346Z",
+  "printAgentId": "ad2cf382-3fbc-4891-8643-4b211f60edbf",
+  "printAgentToken": "f0c4ce63-1a3d-4043-9b08-82ccd23d0cf3-4fd66118737cfc0bca8344ea6cd04302a025826aa1ea3f78c79e8a3628fc8a2b"
+}
