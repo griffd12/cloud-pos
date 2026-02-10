@@ -282,16 +282,16 @@ export interface IStorage {
   deleteOrderDevice(id: string): Promise<boolean>;
 
   // Order Device Linkages
-  getOrderDevicePrinters(orderDeviceId: string): Promise<OrderDevicePrinter[]>;
+  getOrderDevicePrinters(orderDeviceId?: string): Promise<OrderDevicePrinter[]>;
   linkPrinterToOrderDevice(data: InsertOrderDevicePrinter): Promise<OrderDevicePrinter>;
   unlinkPrinterFromOrderDevice(id: string): Promise<boolean>;
-  getOrderDeviceKdsList(orderDeviceId: string): Promise<OrderDeviceKds[]>;
+  getOrderDeviceKdsList(orderDeviceId?: string): Promise<OrderDeviceKds[]>;
   linkKdsToOrderDevice(data: InsertOrderDeviceKds): Promise<OrderDeviceKds>;
   unlinkKdsFromOrderDevice(id: string): Promise<boolean>;
 
   // Print Class Routing
   getAllPrintClassRoutings(): Promise<PrintClassRouting[]>;
-  getPrintClassRouting(printClassId: string, propertyId?: string, rvcId?: string): Promise<PrintClassRouting[]>;
+  getPrintClassRouting(printClassId?: string, propertyId?: string, rvcId?: string): Promise<PrintClassRouting[]>;
   createPrintClassRouting(data: InsertPrintClassRouting): Promise<PrintClassRouting>;
   deletePrintClassRouting(id: string): Promise<boolean>;
   resolveDevicesForMenuItem(menuItemId: string, rvcId: string): Promise<{ printers: Printer[]; kdsDevices: KdsDevice[] }>;
@@ -318,7 +318,7 @@ export interface IStorage {
   deleteModifierGroup(id: string): Promise<boolean>;
 
   // Modifier Group to Modifier linkage
-  getModifierGroupModifiers(modifierGroupId: string): Promise<ModifierGroupModifier[]>;
+  getModifierGroupModifiers(modifierGroupId?: string): Promise<ModifierGroupModifier[]>;
   linkModifierToGroup(data: InsertModifierGroupModifier): Promise<ModifierGroupModifier>;
   unlinkModifierFromGroup(modifierGroupId: string, modifierId: string): Promise<boolean>;
   updateModifierGroupModifier(id: string, data: Partial<InsertModifierGroupModifier>): Promise<ModifierGroupModifier | undefined>;
@@ -336,7 +336,7 @@ export interface IStorage {
   deleteIngredientPrefix(id: string): Promise<boolean>;
 
   // Menu Item Recipe Ingredients (Conversational Ordering)
-  getMenuItemRecipeIngredients(menuItemId: string): Promise<MenuItemRecipeIngredient[]>;
+  getMenuItemRecipeIngredients(menuItemId?: string): Promise<MenuItemRecipeIngredient[]>;
   getMenuItemRecipeIngredient(id: string): Promise<MenuItemRecipeIngredient | undefined>;
   createMenuItemRecipeIngredient(data: InsertMenuItemRecipeIngredient): Promise<MenuItemRecipeIngredient>;
   updateMenuItemRecipeIngredient(id: string, data: Partial<InsertMenuItemRecipeIngredient>): Promise<MenuItemRecipeIngredient | undefined>;
@@ -1438,8 +1438,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Order Device Linkages
-  async getOrderDevicePrinters(orderDeviceId: string): Promise<OrderDevicePrinter[]> {
-    return db.select().from(orderDevicePrinters).where(eq(orderDevicePrinters.orderDeviceId, orderDeviceId));
+  async getOrderDevicePrinters(orderDeviceId?: string): Promise<OrderDevicePrinter[]> {
+    if (orderDeviceId) {
+      return db.select().from(orderDevicePrinters).where(eq(orderDevicePrinters.orderDeviceId, orderDeviceId));
+    }
+    return db.select().from(orderDevicePrinters);
   }
 
   async linkPrinterToOrderDevice(data: InsertOrderDevicePrinter): Promise<OrderDevicePrinter> {
@@ -1466,8 +1469,11 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  async getOrderDeviceKdsList(orderDeviceId: string): Promise<OrderDeviceKds[]> {
-    return db.select().from(orderDeviceKds).where(eq(orderDeviceKds.orderDeviceId, orderDeviceId));
+  async getOrderDeviceKdsList(orderDeviceId?: string): Promise<OrderDeviceKds[]> {
+    if (orderDeviceId) {
+      return db.select().from(orderDeviceKds).where(eq(orderDeviceKds.orderDeviceId, orderDeviceId));
+    }
+    return db.select().from(orderDeviceKds);
   }
 
   async linkKdsToOrderDevice(data: InsertOrderDeviceKds): Promise<OrderDeviceKds> {
@@ -1719,8 +1725,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Modifier Group to Modifier linkage
-  async getModifierGroupModifiers(modifierGroupId: string): Promise<ModifierGroupModifier[]> {
-    return db.select().from(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierGroupId, modifierGroupId)).orderBy(modifierGroupModifiers.displayOrder);
+  async getModifierGroupModifiers(modifierGroupId?: string): Promise<ModifierGroupModifier[]> {
+    if (modifierGroupId) {
+      return db.select().from(modifierGroupModifiers).where(eq(modifierGroupModifiers.modifierGroupId, modifierGroupId)).orderBy(modifierGroupModifiers.displayOrder);
+    }
+    return db.select().from(modifierGroupModifiers).orderBy(modifierGroupModifiers.displayOrder);
   }
 
   async linkModifierToGroup(data: InsertModifierGroupModifier): Promise<ModifierGroupModifier> {
@@ -1786,9 +1795,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Menu Item Recipe Ingredients (Conversational Ordering)
-  async getMenuItemRecipeIngredients(menuItemId: string): Promise<MenuItemRecipeIngredient[]> {
+  async getMenuItemRecipeIngredients(menuItemId?: string): Promise<MenuItemRecipeIngredient[]> {
+    if (menuItemId) {
+      return db.select().from(menuItemRecipeIngredients)
+        .where(and(eq(menuItemRecipeIngredients.menuItemId, menuItemId), eq(menuItemRecipeIngredients.active, true)))
+        .orderBy(menuItemRecipeIngredients.displayOrder);
+    }
     return db.select().from(menuItemRecipeIngredients)
-      .where(and(eq(menuItemRecipeIngredients.menuItemId, menuItemId), eq(menuItemRecipeIngredients.active, true)))
+      .where(eq(menuItemRecipeIngredients.active, true))
       .orderBy(menuItemRecipeIngredients.displayOrder);
   }
 

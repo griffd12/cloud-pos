@@ -2601,6 +2601,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  app.get("/api/sync/modifier-group-modifiers", async (req, res) => {
+    try {
+      const data = await storage.getModifierGroupModifiers();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch modifier group modifiers" });
+    }
+  });
+
+  app.get("/api/sync/menu-item-modifier-groups", async (req, res) => {
+    try {
+      const data = await storage.getMenuItemModifierGroups();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch menu item modifier groups" });
+    }
+  });
+
+  app.get("/api/sync/order-device-printers", async (req, res) => {
+    try {
+      const data = await storage.getOrderDevicePrinters();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch order device printers" });
+    }
+  });
+
+  app.get("/api/sync/order-device-kds", async (req, res) => {
+    try {
+      const data = await storage.getOrderDeviceKdsList();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch order device KDS links" });
+    }
+  });
+
+  app.get("/api/sync/menu-item-recipe-ingredients", async (req, res) => {
+    try {
+      const data = await storage.getMenuItemRecipeIngredients();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch recipe ingredients" });
+    }
+  });
+
   app.get("/api/pos/modifier-map", async (req, res) => {
     try {
       let enterpriseId = req.query.enterpriseId as string | undefined;
@@ -2884,6 +2929,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
   // PRINT CLASS ROUTES
   // ============================================================================
+
+  app.get("/api/print-class-routings", async (req, res) => {
+    try {
+      const data = await storage.getAllPrintClassRoutings();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch print class routings" });
+    }
+  });
 
   app.get("/api/print-classes", async (req, res) => {
     const enterpriseId = req.query.enterpriseId as string | undefined;

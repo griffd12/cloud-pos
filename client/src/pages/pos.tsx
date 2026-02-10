@@ -1265,10 +1265,9 @@ export default function PosPage() {
       }
     }
 
-    // Fetch modifier groups for this specific item
+    // Use pre-fetched modifier map (instant lookup, no network call)
     try {
-      const res = await fetchWithTimeout(`/api/modifier-groups?menuItemId=${item.id}`, { credentials: "include", headers: getAuthHeaders() });
-      const groups: (ModifierGroup & { modifiers: Modifier[] })[] = await res.json();
+      const groups = modifierMap?.[item.id] || [];
       
       // Check if any groups have modifiers AND are required (or have at least minSelect > 0)
       const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
@@ -1415,30 +1414,10 @@ export default function PosPage() {
       return;
     }
     
-    // Standard modifier editing flow
+    // Standard modifier editing flow - use pre-fetched modifier map (instant, no network call)
     setEditingItem(item);
     try {
-      // Fetch the link records for this menu item
-      const linksRes = await fetchWithTimeout(`/api/menu-items/${menuItem.id}/modifier-groups`, { credentials: "include", headers: getAuthHeaders() });
-      if (!linksRes.ok) {
-        toast({ title: "Failed to load modifiers", variant: "destructive" });
-        setEditingItem(null);
-        return;
-      }
-      const links = await linksRes.json();
-      
-      // Fetch all modifier groups with their modifiers
-      const groupsRes = await fetchWithTimeout("/api/modifier-groups", { credentials: "include", headers: getAuthHeaders() });
-      if (!groupsRes.ok) {
-        toast({ title: "Failed to load modifier groups", variant: "destructive" });
-        setEditingItem(null);
-        return;
-      }
-      const allGroups = await groupsRes.json();
-      
-      // Filter to only the groups linked to this menu item
-      const linkedGroupIds = new Set(links.map((l: any) => l.modifierGroupId));
-      const groups = allGroups.filter((g: any) => linkedGroupIds.has(g.id));
+      const groups = modifierMap?.[menuItem.id] || [];
       
       setItemModifierGroups(groups);
       setPendingItem(menuItem as any);

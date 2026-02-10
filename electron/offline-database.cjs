@@ -276,6 +276,104 @@ class OfflineDatabase {
         updated_at TEXT DEFAULT (datetime('now'))
       );
 
+      -- Standalone modifiers cache
+      CREATE TABLE IF NOT EXISTS modifiers (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Modifier group to modifier linkage cache
+      CREATE TABLE IF NOT EXISTS modifier_group_modifiers (
+        id TEXT PRIMARY KEY,
+        modifier_group_id TEXT,
+        modifier_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Menu item to modifier group linkage cache
+      CREATE TABLE IF NOT EXISTS menu_item_modifier_groups (
+        id TEXT PRIMARY KEY,
+        menu_item_id TEXT,
+        modifier_group_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- KDS devices cache
+      CREATE TABLE IF NOT EXISTS kds_devices (
+        id TEXT PRIMARY KEY,
+        property_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Order devices cache
+      CREATE TABLE IF NOT EXISTS order_devices (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Order device to printer linkage cache
+      CREATE TABLE IF NOT EXISTS order_device_printers (
+        id TEXT PRIMARY KEY,
+        order_device_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Order device to KDS linkage cache
+      CREATE TABLE IF NOT EXISTS order_device_kds (
+        id TEXT PRIMARY KEY,
+        order_device_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Print classes cache
+      CREATE TABLE IF NOT EXISTS print_classes (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Print class routing cache
+      CREATE TABLE IF NOT EXISTS print_class_routings (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Ingredient prefixes cache (conversational ordering)
+      CREATE TABLE IF NOT EXISTS ingredient_prefixes (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Menu item recipe ingredients cache (conversational ordering)
+      CREATE TABLE IF NOT EXISTS menu_item_recipe_ingredients (
+        id TEXT PRIMARY KEY,
+        menu_item_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Payment terminals cache
+      CREATE TABLE IF NOT EXISTS payment_terminals (
+        id TEXT PRIMARY KEY,
+        property_id TEXT,
+        data TEXT NOT NULL,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
       -- Offline checks (local orders)
       CREATE TABLE IF NOT EXISTS offline_checks (
         id TEXT PRIMARY KEY,
@@ -482,6 +580,7 @@ class OfflineDatabase {
     const endpoints = [
       { table: 'menu_items', url: `/api/menu-items?enterpriseId=${enterpriseId}` },
       { table: 'modifier_groups', url: `/api/modifier-groups?enterpriseId=${enterpriseId}` },
+      { table: 'modifiers', url: `/api/modifiers?enterpriseId=${enterpriseId}` },
       { table: 'condiment_groups', url: `/api/condiment-groups?enterpriseId=${enterpriseId}` },
       { table: 'combo_meals', url: `/api/combo-meals?enterpriseId=${enterpriseId}` },
       { table: 'employees', url: `/api/employees?enterpriseId=${enterpriseId}` },
@@ -493,6 +592,12 @@ class OfflineDatabase {
       { table: 'major_groups', url: `/api/major-groups?enterpriseId=${enterpriseId}` },
       { table: 'family_groups', url: `/api/family-groups?enterpriseId=${enterpriseId}` },
       { table: 'menu_item_classes', url: `/api/menu-item-classes?enterpriseId=${enterpriseId}` },
+      { table: 'print_classes', url: `/api/print-classes?enterpriseId=${enterpriseId}` },
+      { table: 'print_class_routings', url: `/api/print-class-routings` },
+      { table: 'ingredient_prefixes', url: `/api/ingredient-prefixes?enterpriseId=${enterpriseId}` },
+      { table: 'modifier_group_modifiers', url: `/api/sync/modifier-group-modifiers` },
+      { table: 'menu_item_modifier_groups', url: `/api/sync/menu-item-modifier-groups` },
+      { table: 'menu_item_recipe_ingredients', url: `/api/sync/menu-item-recipe-ingredients` },
     ];
 
     if (propertyId) {
@@ -501,6 +606,10 @@ class OfflineDatabase {
         { table: 'printers', url: `/api/printers?propertyId=${propertyId}` },
         { table: 'workstations', url: `/api/workstations?propertyId=${propertyId}` },
         { table: 'properties', url: `/api/properties?enterpriseId=${enterpriseId}` },
+        { table: 'kds_devices', url: `/api/kds-devices?propertyId=${propertyId}` },
+        { table: 'order_devices', url: `/api/order-devices?propertyId=${propertyId}` },
+        { table: 'order_device_printers', url: `/api/sync/order-device-printers` },
+        { table: 'order_device_kds', url: `/api/sync/order-device-kds` },
       );
     }
 

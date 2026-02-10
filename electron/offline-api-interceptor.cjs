@@ -25,6 +25,7 @@ class OfflineApiInterceptor {
       const readEndpoints = [
         /^\/api\/menu-items/,
         /^\/api\/modifier-groups/,
+        /^\/api\/modifiers/,
         /^\/api\/condiment-groups/,
         /^\/api\/combo-meals/,
         /^\/api\/employees/,
@@ -51,6 +52,13 @@ class OfflineApiInterceptor {
         /^\/api\/auth\/manager-approval/,
         /^\/api\/loyalty-members/,
         /^\/api\/offline\//,
+        /^\/api\/kds-devices/,
+        /^\/api\/order-devices/,
+        /^\/api\/print-classes/,
+        /^\/api\/print-class-routings/,
+        /^\/api\/ingredient-prefixes/,
+        /^\/api\/pos\/modifier-map/,
+        /^\/api\/sync\//,
       ];
       return readEndpoints.some(re => re.test(pathname));
     }
@@ -105,6 +113,7 @@ class OfflineApiInterceptor {
     const entityMap = {
       '/api/menu-items': 'menu_items',
       '/api/modifier-groups': 'modifier_groups',
+      '/api/modifiers': 'modifiers',
       '/api/condiment-groups': 'condiment_groups',
       '/api/combo-meals': 'combo_meals',
       '/api/employees': 'employees',
@@ -124,6 +133,16 @@ class OfflineApiInterceptor {
       '/api/properties': 'properties',
       '/api/printers': 'printers',
       '/api/workstations': 'workstations',
+      '/api/kds-devices': 'kds_devices',
+      '/api/order-devices': 'order_devices',
+      '/api/print-classes': 'print_classes',
+      '/api/print-class-routings': 'print_class_routings',
+      '/api/ingredient-prefixes': 'ingredient_prefixes',
+      '/api/sync/modifier-group-modifiers': 'modifier_group_modifiers',
+      '/api/sync/menu-item-modifier-groups': 'menu_item_modifier_groups',
+      '/api/sync/order-device-printers': 'order_device_printers',
+      '/api/sync/order-device-kds': 'order_device_kds',
+      '/api/sync/menu-item-recipe-ingredients': 'menu_item_recipe_ingredients',
     };
 
     const wsContextMatch = pathname.match(/^\/api\/workstations\/([^/]+)\/context$/);
@@ -194,6 +213,70 @@ class OfflineApiInterceptor {
 
     if (pathname.match(/^\/api\/loyalty-members/)) {
       return { status: 200, data: null };
+    }
+
+    if (pathname === '/api/pos/modifier-map' || (pathname === '/api/modifier-groups' && query?.menuItemId)) {
+      const allLinkages = this.db.getEntityList('menu_item_modifier_groups', null);
+      const allGroups = this.db.getEntityList('modifier_groups', null);
+      const allModLinkages = this.db.getEntityList('modifier_group_modifiers', null);
+      const allModifiers = this.db.getEntityList('modifiers', null);
+
+      const groupMap = {};
+      for (const g of allGroups) { groupMap[g.id] = g; }
+      const modMap = {};
+      for (const m of allModifiers) { modMap[m.id] = m; }
+
+      const modsByGroup = {};
+      for (const link of allModLinkages) {
+        if (!modsByGroup[link.modifierGroupId]) modsByGroup[link.modifierGroupId] = [];
+        const mod = modMap[link.modifierId];
+        if (mod) {
+          modsByGroup[link.modifierGroupId].push({
+            ...mod,
+            isDefault: link.isDefault || false,
+            displayOrder: link.displayOrder || 0,
+          });
+        }
+      }
+      for (const gid in modsByGroup) {
+        modsByGroup[gid].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      }
+
+      if (pathname === '/api/pos/modifier-map') {
+        const result = {};
+        for (const link of allLinkages) {
+          const miId = link.menuItemId;
+          const group = groupMap[link.modifierGroupId];
+          if (!group) continue;
+          if (!result[miId]) result[miId] = [];
+          result[miId].push({
+            ...group,
+            modifiers: modsByGroup[group.id] || [],
+            displayOrder: link.displayOrder || 0,
+          });
+        }
+        for (const miId in result) {
+          result[miId].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+        }
+        return { status: 200, data: result };
+      } else {
+        const menuItemId = query.menuItemId;
+        const filteredLinkages = allLinkages
+          .filter(l => l.menuItemId === menuItemId)
+          .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+
+        const result = filteredLinkages
+          .map(link => {
+            const group = groupMap[link.modifierGroupId];
+            if (!group) return null;
+            return {
+              ...group,
+              modifiers: modsByGroup[group.id] || [],
+            };
+          })
+          .filter(Boolean);
+        return { status: 200, data: result };
+      }
     }
 
     if (pathname === '/api/offline/sales-report') {
