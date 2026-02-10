@@ -60,8 +60,10 @@ class OfflineDatabase {
       let Database;
       try {
         Database = require('better-sqlite3');
+        offlineDbLogger.info('Init', 'better-sqlite3 native module loaded successfully');
       } catch (e) {
-        offlineDbLogger.warn('Init', 'better-sqlite3 not available, using JSON file storage');
+        offlineDbLogger.warn('Init', `better-sqlite3 not available: ${e.message}`);
+        offlineDbLogger.warn('Init', 'Falling back to JSON file storage');
         return this.initJsonStorage();
       }
 
