@@ -1736,10 +1736,10 @@ function registerProtocolInterceptor() {
     const url = new URL(request.url);
     const serverUrl = getServerUrl();
     let serverHost;
-    try { serverHost = new URL(serverUrl).hostname; } catch { return electronNet.fetch(request); }
+    try { serverHost = new URL(serverUrl).hostname; } catch { return electronNet.fetch(request, { bypassCustomProtocolHandlers: true }); }
 
     if (url.hostname !== serverHost) {
-      return electronNet.fetch(request);
+      return electronNet.fetch(request, { bypassCustomProtocolHandlers: true });
     }
 
     const isApiRequest = url.pathname.startsWith('/api/');
@@ -1753,7 +1753,7 @@ function registerProtocolInterceptor() {
     const failoverClone = isApiRequest ? request.clone() : null;
 
     try {
-      const response = await electronNet.fetch(request);
+      const response = await electronNet.fetch(request, { bypassCustomProtocolHandlers: true });
 
       if (response.ok && request.method === 'GET') {
         const cloned = response.clone();

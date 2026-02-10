@@ -54,6 +54,7 @@ function initAutoUpdater(updaterLogger) {
 
   const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || loadGhToken();
   if (ghToken) {
+    process.env.GH_TOKEN = ghToken;
     autoUpdater.requestHeaders = { Authorization: `token ${ghToken}` };
     logger.info('Init', 'GitHub token configured for private repo access');
   } else {
