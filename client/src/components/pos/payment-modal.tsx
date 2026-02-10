@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient, fetchWithTimeout } from "@/lib/queryClient";
+import { apiRequest, queryClient, fetchWithTimeout, getAuthHeaders } from "@/lib/queryClient";
 import type { Tender, Check, TerminalDevice, TerminalSession, CheckPayment } from "@shared/schema";
 import { Banknote, CreditCard, Gift, DollarSign, Check as CheckIcon, X, ArrowLeft, Loader2, Wifi, WifiOff, Smartphone, Monitor, Clock, Receipt, Star, ChevronDown, ChevronUp, User } from "lucide-react";
 import { StripeCardForm } from "./stripe-card-form";
@@ -142,30 +142,45 @@ export function PaymentModal({
     (p) => p.paymentStatus === "authorized"
   );
   
-  // Query terminal devices for property when modal is open (using apiRequest to include device token)
+  const [terminalFetchError, setTerminalFetchError] = useState<string | null>(null);
+  
+  // Query terminal devices for property when modal is open (using raw fetch to avoid apiRequest throwing)
   const { data: terminalDevices = [], isLoading: isLoadingTerminals } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices", { propertyId }],
     queryFn: async () => {
+      setTerminalFetchError(null);
       console.log("[PaymentModal] Fetching terminal devices for propertyId:", propertyId);
       if (!propertyId) {
-        console.log("[PaymentModal] No propertyId, returning empty terminals");
+        setTerminalFetchError("No propertyId");
         return [];
       }
       try {
+        const authHeaders = getAuthHeaders();
         const url = `/api/terminal-devices?propertyId=${propertyId}`;
-        console.log("[PaymentModal] Terminal devices request URL:", url);
-        const res = await apiRequest("GET", url);
+        console.log("[PaymentModal] Terminal devices request URL:", url, "headers:", JSON.stringify(authHeaders));
+        const res = await fetch(url, {
+          method: "GET",
+          headers: authHeaders,
+          credentials: "include",
+        });
         console.log("[PaymentModal] Terminal devices response status:", res.status, res.statusText);
         if (!res.ok) {
           const errorText = await res.text();
-          console.error("[PaymentModal] Terminal devices fetch failed:", res.status, errorText);
+          const errMsg = `HTTP ${res.status}: ${errorText.substring(0, 100)}`;
+          console.error("[PaymentModal] Terminal devices fetch failed:", errMsg);
+          setTerminalFetchError(errMsg);
           return [];
         }
         const devices = await res.json();
         console.log("[PaymentModal] Terminal devices received:", devices.length, JSON.stringify(devices));
+        if (devices.length === 0) {
+          setTerminalFetchError("Server returned 0 devices");
+        }
         return devices;
-      } catch (error) {
-        console.error("[PaymentModal] Terminal devices fetch exception:", error);
+      } catch (error: any) {
+        const errMsg = error?.message || String(error);
+        console.error("[PaymentModal] Terminal devices fetch exception:", errMsg);
+        setTerminalFetchError(`Exception: ${errMsg}`);
         return [];
       }
     },
@@ -1940,8 +1955,13 @@ export function PaymentModal({
                     <WifiOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p>No terminals available</p>
                     <p className="text-xs mt-1 opacity-70">
-                      Property: {propertyId || "none"} | Devices loaded: {terminalDevices.length} | Loading: {isLoadingTerminals ? "yes" : "no"}
+                      Property: {propertyId ? propertyId.substring(0, 8) + "..." : "none"} | Devices: {terminalDevices.length} | Loading: {isLoadingTerminals ? "yes" : "no"}
                     </p>
+                    {terminalFetchError && (
+                      <p className="text-destructive mt-1 text-xs">
+                        {terminalFetchError}
+                      </p>
+                    )}
                     {isTerminalOnlyProcessor && (
                       <p className="text-destructive mt-2 text-xs">
                         Heartland EMV requires a terminal device. Configure terminals in EMC.
