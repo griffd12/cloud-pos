@@ -776,7 +776,7 @@ export default function LoginPage() {
                     <CardTitle className="text-xl font-semibold" data-testid="text-login-title">
                       Employee Sign In
                     </CardTitle>
-                    <p className="text-muted-foreground text-sm">Enter your PIN to access POS</p>
+                    <p className="text-muted-foreground text-base">Enter your PIN to access POS</p>
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <div className="flex justify-center gap-2">
@@ -795,7 +795,7 @@ export default function LoginPage() {
 
                     {loginError && (
                       <div
-                        className="text-center text-destructive text-sm font-medium"
+                        className="text-center text-destructive text-base font-medium"
                         data-testid="text-login-error"
                       >
                         {loginError}
@@ -807,7 +807,7 @@ export default function LoginPage() {
                         <Button
                           key={digit}
                           variant="secondary"
-                          className="h-14 text-xl font-semibold"
+                          className="h-16 text-xl font-semibold"
                           onClick={() => handleDigit(digit)}
                           disabled={loginMutation.isPending}
                           data-testid={`button-pin-${digit}`}
@@ -817,7 +817,7 @@ export default function LoginPage() {
                       ))}
                       <Button
                         variant="ghost"
-                        className="h-14 text-xs"
+                        className="h-16 text-sm"
                         onClick={handleClear}
                         disabled={loginMutation.isPending}
                         data-testid="button-pin-clear"
@@ -826,7 +826,7 @@ export default function LoginPage() {
                       </Button>
                       <Button
                         variant="secondary"
-                        className="h-14 text-xl font-semibold"
+                        className="h-16 text-xl font-semibold"
                         onClick={() => handleDigit("0")}
                         disabled={loginMutation.isPending}
                         data-testid="button-pin-0"
@@ -835,7 +835,7 @@ export default function LoginPage() {
                       </Button>
                       <Button
                         variant="ghost"
-                        className="h-14"
+                        className="h-16"
                         onClick={handleDelete}
                         disabled={loginMutation.isPending}
                         data-testid="button-pin-delete"
@@ -884,7 +884,7 @@ export default function LoginPage() {
 
           {clockStep === "pin" && (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center">
+              <p className="text-base text-muted-foreground text-center">
                 Enter your PIN to clock in or out
               </p>
               
@@ -903,7 +903,7 @@ export default function LoginPage() {
               </div>
 
               {clockError && (
-                <div className="text-center text-destructive text-sm font-medium">
+                <div className="text-center text-destructive text-base font-medium">
                   {clockError}
                 </div>
               )}
@@ -913,7 +913,7 @@ export default function LoginPage() {
                   <Button
                     key={digit}
                     variant="secondary"
-                    className="h-12 text-lg font-semibold"
+                    className="h-16 text-lg font-semibold"
                     onClick={() => handleClockDigit(digit)}
                     disabled={clockAuthMutation.isPending}
                     data-testid={`button-clock-pin-${digit}`}
@@ -923,7 +923,7 @@ export default function LoginPage() {
                 ))}
                 <Button
                   variant="ghost"
-                  className="h-12 text-xs"
+                  className="h-16 text-sm"
                   onClick={handleClockClear}
                   disabled={clockAuthMutation.isPending}
                   data-testid="button-clock-pin-clear"
@@ -932,7 +932,7 @@ export default function LoginPage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  className="h-12 text-lg font-semibold"
+                  className="h-16 text-lg font-semibold"
                   onClick={() => handleClockDigit("0")}
                   disabled={clockAuthMutation.isPending}
                   data-testid="button-clock-pin-0"
@@ -941,7 +941,7 @@ export default function LoginPage() {
                 </Button>
                 <Button
                   variant="ghost"
-                  className="h-12"
+                  className="h-16"
                   onClick={handleClockDelete}
                   disabled={clockAuthMutation.isPending}
                   data-testid="button-clock-pin-delete"
@@ -967,13 +967,13 @@ export default function LoginPage() {
                 <h3 className="text-lg font-semibold">
                   {clockEmployee.firstName} {clockEmployee.lastName}
                 </h3>
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="text-base text-muted-foreground mt-2">
                   Select the job you are working today
                 </p>
               </div>
 
               {clockError && (
-                <div className="text-center text-destructive text-sm font-medium">
+                <div className="text-center text-destructive text-base font-medium">
                   {clockError}
                 </div>
               )}
@@ -1029,7 +1029,7 @@ export default function LoginPage() {
                     </Badge>
                   )}
                   {clockStatus?.clockedInAt && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-base text-muted-foreground">
                       Since {format(new Date(clockStatus.clockedInAt), "h:mm a")}
                     </p>
                   )}
@@ -1037,7 +1037,7 @@ export default function LoginPage() {
               </div>
 
               {clockError && (
-                <div className="text-center text-destructive text-sm font-medium">
+                <div className="text-center text-destructive text-base font-medium">
                   {clockError}
                 </div>
               )}
@@ -1083,13 +1083,13 @@ export default function LoginPage() {
                 <h3 className="text-lg font-semibold">
                   {clockEmployee.firstName} {clockEmployee.lastName}
                 </h3>
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="text-base text-muted-foreground mt-2">
                   Are you going on break or ending your shift?
                 </p>
               </div>
 
               {clockError && (
-                <div className="text-center text-destructive text-sm font-medium">
+                <div className="text-center text-destructive text-base font-medium">
                   {clockError}
                 </div>
               )}
@@ -1132,13 +1132,13 @@ export default function LoginPage() {
                 <h3 className="text-lg font-semibold">
                   {clockEmployee.firstName} {clockEmployee.lastName}
                 </h3>
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="text-base text-muted-foreground mt-2">
                   Select your break type
                 </p>
               </div>
 
               {clockError && (
-                <div className="text-center text-destructive text-sm font-medium">
+                <div className="text-center text-destructive text-base font-medium">
                   {clockError}
                 </div>
               )}

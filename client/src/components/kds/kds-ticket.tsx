@@ -269,7 +269,7 @@ export function KdsTicket({
           >
             {ORDER_TYPE_LABELS[orderType] || orderType}
           </Badge>
-          <div className={`flex items-center gap-1 text-sm font-bold tabular-nums ${hasAlert ? "" : getTimerColorClass()}`}>
+          <div className={`flex items-center gap-1 text-base font-bold tabular-nums ${hasAlert ? "" : getTimerColorClass()}`}>
             <Clock className="w-3.5 h-3.5" />
             {formatTime(elapsedSeconds)}
           </div>
@@ -279,7 +279,7 @@ export function KdsTicket({
       <Separator className={hasAlert ? "bg-current/20" : ""} />
 
       {isRecalled && (
-        <div className="px-3 py-1.5 text-center text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+        <div className="px-3 py-1.5 text-center text-base font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
           Recalled
         </div>
       )}
@@ -297,7 +297,7 @@ export function KdsTicket({
             data-testid={`kds-item-${item.id}`}
           >
             <div
-              className={`w-7 h-7 flex-shrink-0 rounded-md flex items-center justify-center text-sm font-bold ${
+              className={`w-7 h-7 flex-shrink-0 rounded-md flex items-center justify-center text-base font-bold ${
                 item.isReady
                   ? (hasAlert ? "bg-black/30 text-current" : "bg-green-500/20 text-green-600")
                   : item.status === "bumped"
@@ -345,7 +345,7 @@ export function KdsTicket({
                     .map((mod, idx) => (
                     <span
                       key={idx}
-                      className={`block text-xs pl-1 ${
+                      className={`block text-sm pl-1 ${
                         item.itemStatus === "pending" 
                           ? (hasAlert ? "opacity-80" : "text-amber-600 dark:text-amber-400 font-medium")
                           : (hasAlert ? "opacity-80" : "text-muted-foreground")
@@ -387,8 +387,8 @@ export function KdsTicket({
         <>
           <Separator className={hasAlert ? "bg-current/20" : ""} />
           <div className={`px-4 py-2 flex items-center justify-between ${hasAlert ? "" : "text-muted-foreground"}`}>
-            <span className="text-sm font-medium">Subtotal</span>
-            <span className="text-sm font-bold tabular-nums">${parseFloat(subtotal).toFixed(2)}</span>
+            <span className="text-base font-medium">Subtotal</span>
+            <span className="text-base font-bold tabular-nums">${parseFloat(subtotal).toFixed(2)}</span>
           </div>
         </>
       )}
@@ -407,17 +407,17 @@ export function KdsTicket({
           </Button>
         )}
         {!isDraft && activeItems.some((i) => i.itemStatus === "pending") && (
-          <div className={`w-full h-12 flex items-center justify-center text-sm font-medium animate-pulse ${hasAlert ? "" : "text-amber-600 dark:text-amber-400"}`}>
+          <div className={`w-full h-12 flex items-center justify-center text-base font-medium animate-pulse ${hasAlert ? "" : "text-amber-600 dark:text-amber-400"}`}>
             Item being configured...
           </div>
         )}
         {isPreview && !activeItems.some((i) => i.itemStatus === "pending") && (
-          <div className={`w-full h-12 flex items-center justify-center text-sm font-medium ${hasAlert ? "" : "text-amber-600 dark:text-amber-400"}`}>
+          <div className={`w-full h-12 flex items-center justify-center text-base font-medium ${hasAlert ? "" : "text-amber-600 dark:text-amber-400"}`}>
             Preview - awaiting send/payment
           </div>
         )}
         {isDraft && (
-          <div className={`w-full h-12 flex items-center justify-center text-sm ${hasAlert ? "" : "text-muted-foreground"}`}>
+          <div className={`w-full h-12 flex items-center justify-center text-base ${hasAlert ? "" : "text-muted-foreground"}`}>
             Waiting for send...
           </div>
         )}

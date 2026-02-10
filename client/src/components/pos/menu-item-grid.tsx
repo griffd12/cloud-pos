@@ -112,7 +112,7 @@ export function MenuItemGrid({ items, onSelectItem, isLoading }: MenuItemGridPro
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <span className="text-base">Select a category to view items</span>
+        <span className="text-lg">Select a category to view items</span>
       </div>
     );
   }
@@ -144,14 +144,14 @@ export function MenuItemGrid({ items, onSelectItem, isLoading }: MenuItemGridPro
                 data-testid={`button-menu-item-${item.id}`}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold text-center line-clamp-2">
+                  <span className="text-base font-semibold text-center line-clamp-2">
                     {item.shortName || item.name}
                   </span>
                   {item.hasRequiredModifiers && (
                     <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                   )}
                 </div>
-                <span className="text-base font-bold tabular-nums">
+                <span className="text-lg font-bold tabular-nums">
                   {formatPrice(item.price)}
                 </span>
                 

@@ -182,7 +182,7 @@ function SwipeableItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1">
               {item.quantity && item.quantity > 1 && (
-                <span className="text-sm font-semibold text-primary">{item.quantity}x</span>
+                <span className="text-base font-semibold text-primary">{item.quantity}x</span>
               )}
               <span className="font-medium text-base truncate">
                 {item.menuItemName}
@@ -209,7 +209,7 @@ function SwipeableItem({
                     <button
                       key={idx}
                       type="button"
-                      className={`block text-left text-sm rounded ${
+                      className={`block text-left text-base rounded ${
                         !item.sent 
                           ? "cursor-pointer text-muted-foreground hover:text-foreground" 
                           : "text-muted-foreground/70 cursor-default"
@@ -358,7 +358,7 @@ export function CheckPanel({
     return (
       <div className="h-full flex flex-col bg-card">
         <div className="flex-shrink-0 px-4 py-3 border-b bg-muted/30">
-          <span className="text-base font-semibold text-muted-foreground">No Active Check</span>
+          <span className="text-lg font-semibold text-muted-foreground">No Active Check</span>
         </div>
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center space-y-3">
@@ -390,7 +390,7 @@ export function CheckPanel({
           </Badge>
         </div>
         {check.tableNumber && (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-base text-muted-foreground">
             Tbl {check.tableNumber}
           </span>
         )}
@@ -400,7 +400,7 @@ export function CheckPanel({
         <div className="flex-shrink-0 px-4 py-2 border-b bg-blue-50 dark:bg-blue-950/30 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <User className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300 truncate" data-testid="text-customer-name">
+            <span className="text-base font-medium text-blue-700 dark:text-blue-300 truncate" data-testid="text-customer-name">
               {customerName}
             </span>
           </div>
@@ -422,7 +422,7 @@ export function CheckPanel({
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-1">
           {activeItems.length === 0 ? (
-            <p className="text-center text-muted-foreground text-sm py-12">
+            <p className="text-center text-muted-foreground text-base py-12">
               No items on this check
             </p>
           ) : (
@@ -462,7 +462,7 @@ export function CheckPanel({
           <div className="px-3 py-2">
             <div className="flex items-center gap-2 mb-2">
               <CreditCard className="w-4 h-4 text-green-600 dark:text-green-400" />
-              <span className="text-sm font-medium text-green-700 dark:text-green-300">
+              <span className="text-base font-medium text-green-700 dark:text-green-300">
                 Payments
               </span>
             </div>
@@ -563,7 +563,7 @@ export function CheckPanel({
         <div className="flex-shrink-0 px-3 py-2 border-t bg-amber-50 dark:bg-amber-950/30">
           <div className="flex items-center gap-2 mb-2">
             <CircleDollarSign className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            <span className="text-base font-medium text-amber-700 dark:text-amber-300">
               Pending Authorization{authorizedPayments.length > 1 ? 's' : ''}
             </span>
           </div>
@@ -574,7 +574,7 @@ export function CheckPanel({
                 className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-card rounded-md border border-amber-200 dark:border-amber-800"
               >
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium">{formatPrice(payment.amount)}</span>
+                  <span className="text-base font-medium">{formatPrice(payment.amount)}</span>
                   <span className="text-xs text-muted-foreground">Awaiting tip</span>
                 </div>
                 <Button

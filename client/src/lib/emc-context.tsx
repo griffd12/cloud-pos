@@ -5,7 +5,7 @@ interface EmcUser {
   email: string;
   displayName: string;
   role: string;
-  accessLevel: "super_admin" | "enterprise_admin" | "property_admin";
+  accessLevel: "system_admin" | "super_admin" | "enterprise_admin" | "property_admin";
   enterpriseId: string | null;
   propertyId: string | null;
 }

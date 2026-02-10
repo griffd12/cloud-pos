@@ -400,7 +400,7 @@ export function KdsDisplay({
             <div className="flex items-center gap-4">
               <div className="flex rounded-lg border overflow-hidden">
                 <button
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`px-4 py-2 text-base font-medium transition-colors ${
                     viewMode === "completed"
                       ? "bg-muted text-muted-foreground"
                       : "bg-background text-foreground"
@@ -411,7 +411,7 @@ export function KdsDisplay({
                   Completed
                 </button>
                 <button
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`px-4 py-2 text-base font-medium transition-colors ${
                     viewMode === "open"
                       ? "bg-primary text-primary-foreground"
                       : "bg-background text-foreground"
@@ -568,7 +568,7 @@ export function KdsDisplay({
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-bold text-lg">#{ticket.checkNumber}</span>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-base text-muted-foreground">
                           {formatTimeAgo(ticket.bumpedAt)}
                         </span>
                       </div>
@@ -581,13 +581,13 @@ export function KdsDisplay({
 
                       <div className="flex-1 space-y-1 mb-3">
                         {ticket.items?.slice(0, 4).map((item, idx) => (
-                          <div key={idx} className="text-sm flex items-center gap-2">
+                          <div key={idx} className="text-base flex items-center gap-2">
                             <span className="font-medium">{item.quantity}</span>
                             <span className="text-muted-foreground truncate">{item.name}</span>
                           </div>
                         ))}
                         {ticket.items && ticket.items.length > 4 && (
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-sm text-muted-foreground">
                             +{ticket.items.length - 4} more items
                           </div>
                         )}

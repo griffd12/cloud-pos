@@ -207,11 +207,11 @@ export default function EmcAdminLayout() {
   usePosWebSocket();
 
   // Determine the effective enterprise ID to use for filtering
-  // - super_admin: can choose any enterprise, uses selectedEnterpriseId from context
+  // - system_admin / super_admin: can choose any enterprise, uses selectedEnterpriseId from context
   // - enterprise_admin: locked to their assigned enterprise
   // - property_admin: locked to their assigned enterprise (via property)
-  const isSuperAdmin = user?.accessLevel === "super_admin";
-  const effectiveEnterpriseId = isSuperAdmin 
+  const isSystemAdmin = user?.accessLevel === "system_admin" || user?.accessLevel === "super_admin";
+  const effectiveEnterpriseId = isSystemAdmin 
     ? selectedEnterpriseId 
     : user?.enterpriseId || null;
 
@@ -222,12 +222,12 @@ export default function EmcAdminLayout() {
 
   // Filter enterprises based on access level
   const enterprises = useMemo(() => {
-    if (isSuperAdmin) {
+    if (isSystemAdmin) {
       return allEnterprises;
     }
-    // Non-super admins only see their assigned enterprise
+    // Non-system admins only see their assigned enterprise
     return allEnterprises.filter(e => e.id === user?.enterpriseId);
-  }, [allEnterprises, isSuperAdmin, user?.enterpriseId]);
+  }, [allEnterprises, isSystemAdmin, user?.enterpriseId]);
 
   const { data: allProperties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -318,7 +318,7 @@ export default function EmcAdminLayout() {
     setSelectedProperty(null);
     setSelectedRvc(null);
     // For super_admin, also update context
-    if (isSuperAdmin) {
+    if (isSystemAdmin) {
       setSelectedEnterpriseId(id);
     }
   };
@@ -367,7 +367,7 @@ export default function EmcAdminLayout() {
           <header className="flex items-center justify-between gap-4 px-4 py-2 border-b">
             <div className="flex items-center gap-4">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              {isSuperAdmin && (
+              {isSystemAdmin && (
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-muted-foreground" />
                   <Select
@@ -413,7 +413,7 @@ export default function EmcAdminLayout() {
           />
 
           <main className="flex-1 overflow-auto">
-            {isSuperAdmin && !effectiveEnterpriseId ? (
+            {isSystemAdmin && !effectiveEnterpriseId ? (
               <div className="flex items-center justify-center h-full">
                 <Card className="max-w-md">
                   <CardContent className="pt-6 text-center space-y-4">

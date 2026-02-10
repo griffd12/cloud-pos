@@ -67,6 +67,34 @@ import {
 
 const clients: Map<string, Set<WebSocket>> = new Map();
 
+// Helper to check if user has system-level (cross-enterprise) access
+function isSystemLevel(accessLevel: string): boolean {
+  return accessLevel === "system_admin" || accessLevel === "super_admin";
+}
+
+// Helper to enforce enterprise scoping on API requests
+// For system_admin/super_admin: uses the requested enterpriseId (from query param)
+// For enterprise_admin: forces their own enterprise, ignoring client request
+// For property_admin: forces their own enterprise, ignoring client request
+async function getEnforcedEnterpriseId(req: Request): Promise<string | null> {
+  const sessionToken = req.headers["x-emc-session"] as string;
+  if (!sessionToken) return req.query.enterpriseId as string || null;
+  
+  const sessionTokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+  const session = await storage.getEmcSessionByToken(sessionTokenHash);
+  if (!session) return req.query.enterpriseId as string || null;
+  
+  const user = await storage.getEmcUser(session.userId);
+  if (!user) return req.query.enterpriseId as string || null;
+  
+  if (isSystemLevel(user.accessLevel)) {
+    return req.query.enterpriseId as string || null;
+  }
+  
+  // For enterprise_admin and property_admin, enforce their own enterprise
+  return user.enterpriseId || null;
+}
+
 // Helper to get a payment adapter for a processor
 async function getPaymentAdapter(processorId: string) {
   const processor = await storage.getPaymentProcessor(processorId);
@@ -1421,7 +1449,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/auth/offline-employees", async (req, res) => {
     try {
-      const enterpriseId = req.query.enterpriseId as string | undefined;
+      const enterpriseId = await getEnforcedEnterpriseId(req);
       let data = await storage.getEmployees();
       
       if (enterpriseId) {
@@ -1650,11 +1678,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/enterprises", async (req, res) => {
-    const data = await storage.getEnterprises();
+    let data = await storage.getEnterprises();
+    const enforcedEntId = await getEnforcedEnterpriseId(req);
+    if (enforcedEntId) {
+      data = data.filter(e => e.id === enforcedEntId);
+    }
     res.json(data);
   });
 
   app.get("/api/enterprises/:id", async (req, res) => {
+    const enforcedEntId = await getEnforcedEnterpriseId(req);
+    if (enforcedEntId && req.params.id !== enforcedEntId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
     const data = await storage.getEnterprise(req.params.id);
     if (!data) return res.status(404).json({ message: "Not found" });
     res.json(data);
@@ -1695,7 +1731,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/properties", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     const data = await storage.getProperties(enterpriseId);
     res.json(data);
   });
@@ -1703,6 +1739,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/properties/:id", async (req, res) => {
     const data = await storage.getProperty(req.params.id);
     if (!data) return res.status(404).json({ message: "Not found" });
+    const enforcedEntId = await getEnforcedEnterpriseId(req);
+    if (enforcedEntId && data.enterpriseId !== enforcedEntId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
     res.json(data);
   });
 
@@ -1756,7 +1796,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/rvcs", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     
     let data = await storage.getRvcs(propertyId);
     
@@ -1814,7 +1854,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/roles", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getRoles();
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -1872,7 +1912,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   app.get("/api/employees", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getEmployees();
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -2117,7 +2157,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/major-groups", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getMajorGroups();
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -2167,7 +2207,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/family-groups", async (req, res) => {
     const majorGroupId = req.query.majorGroupId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getFamilyGroups(majorGroupId);
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -2217,7 +2257,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/slus", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const propertyId = req.query.propertyId as string | undefined;
     
     // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
@@ -2284,7 +2324,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/menu-items", async (req, res) => {
     const sluId = req.query.sluId as string | undefined;
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     
@@ -2347,7 +2387,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/menu-items/import", async (req, res) => {
     try {
-      const enterpriseId = req.query.enterpriseId as string | undefined;
+      const enterpriseId = await getEnforcedEnterpriseId(req);
       if (!enterpriseId) {
         return res.status(400).json({ message: "Enterprise ID is required for import" });
       }
@@ -2470,7 +2510,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/modifiers", async (req, res) => {
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     
@@ -2527,7 +2567,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/modifier-groups", async (req, res) => {
     const menuItemId = req.query.menuItemId as string | undefined;
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     
@@ -2648,7 +2688,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/pos/modifier-map", async (req, res) => {
     try {
-      let enterpriseId = req.query.enterpriseId as string | undefined;
+      let enterpriseId = await getEnforcedEnterpriseId(req);
       const rvcId = req.query.rvcId as string | undefined;
       const propertyId = req.query.propertyId as string | undefined;
       if (!enterpriseId && (rvcId || propertyId)) {
@@ -2746,7 +2786,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/ingredient-prefixes", async (req, res) => {
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     
@@ -2876,7 +2916,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/tax-groups", async (req, res) => {
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     
@@ -2940,7 +2980,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/print-classes", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getPrintClasses();
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -2988,7 +3028,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/order-devices", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getOrderDevices(propertyId);
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -3077,7 +3117,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/workstations", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     
     let data = await storage.getWorkstations(propertyId);
     
@@ -3105,12 +3145,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const property = await storage.getProperty(workstation.propertyId);
     if (!property) return res.status(404).json({ message: "Property not found" });
     
+    const enterprise = await storage.getEnterprise(property.enterpriseId);
+    
     // Get only RVCs from this workstation's property
     const rvcs = await storage.getRvcs(workstation.propertyId);
     
     res.json({
       workstation,
       property,
+      enterprise,
       rvcs,
     });
   });
@@ -3201,7 +3244,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/printers", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     
     let data = await storage.getPrinters(propertyId);
     
@@ -3316,7 +3359,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/kds-devices", async (req, res) => {
     const propertyId = req.query.propertyId as string | undefined;
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     
     let data = await storage.getKdsDevices(propertyId);
     
@@ -3400,7 +3443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/tenders", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const propertyId = req.query.propertyId as string | undefined;
     
     // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
@@ -3467,7 +3510,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/tender-types", async (req, res) => {
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     if (!enterpriseId && (rvcId || propertyId)) {
@@ -3482,7 +3525,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/tax-rates", async (req, res) => {
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     if (!enterpriseId && (rvcId || propertyId)) {
@@ -3517,7 +3560,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/discounts", async (req, res) => {
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const rvcId = req.query.rvcId as string | undefined;
     const propertyId = req.query.propertyId as string | undefined;
     
@@ -3815,7 +3858,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/service-charges", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     let data = await storage.getServiceCharges();
     
     // Filter by enterprise if specified (multi-tenancy)
@@ -6120,7 +6163,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ============================================================================
 
   app.get("/api/admin/stats", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     const stats = await storage.getAdminStats(enterpriseId);
     res.json(stats);
   });
@@ -6465,7 +6508,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/pos-layouts", async (req, res) => {
     const rvcId = req.query.rvcId as string | undefined;
-    let enterpriseId = req.query.enterpriseId as string | undefined;
+    let enterpriseId = await getEnforcedEnterpriseId(req);
     const propertyId = req.query.propertyId as string | undefined;
     
     // Auto-derive enterpriseId from rvcId or propertyId if not explicitly provided
@@ -6851,7 +6894,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Get all enrollment tokens
   app.get("/api/device-enrollment-tokens", async (req, res) => {
-    const enterpriseId = req.query.enterpriseId as string | undefined;
+    const enterpriseId = await getEnforcedEnterpriseId(req);
     const tokens = await storage.getDeviceEnrollmentTokens(enterpriseId);
     res.json(tokens);
   });
@@ -15405,7 +15448,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/print-agents", async (req, res) => {
     try {
       const propertyId = req.query.propertyId as string | undefined;
-      const enterpriseId = req.query.enterpriseId as string | undefined;
+      const enterpriseId = await getEnforcedEnterpriseId(req);
       let agents = await storage.getPrintAgents(propertyId);
       
       // Filter by enterprise if specified (multi-tenancy)
@@ -15835,7 +15878,7 @@ connect();
         passwordHash,
         firstName,
         lastName,
-        accessLevel: "enterprise_admin", // First user gets highest level access
+        accessLevel: "system_admin", // First user gets system-level access (POS product owner)
         enterpriseId: enterpriseId || null,
         propertyId: null,
         active: true,
@@ -16039,7 +16082,7 @@ connect();
       let accessibleEnterprises: any[] = [];
       let accessibleProperties: any[] = [];
 
-      if (user.accessLevel === "super_admin") {
+      if (isSystemLevel(user.accessLevel)) {
         accessibleEnterprises = await db.select().from(enterprises);
         accessibleProperties = await db.select().from(properties);
       } else if (user.accessLevel === "enterprise_admin") {
@@ -16218,7 +16261,7 @@ connect();
       // Get properties based on user access level
       let properties: any[] = [];
       
-      if (user.accessLevel === "super_admin" || user.accessLevel === "enterprise_admin") {
+      if (isSystemLevel(user.accessLevel) || user.accessLevel === "enterprise_admin") {
         // Get all properties for the enterprise
         if (user.enterpriseId) {
           properties = await storage.getProperties(user.enterpriseId);
@@ -16280,7 +16323,7 @@ connect();
       }
 
       // Verify user has access to this property
-      if (user.accessLevel !== "super_admin" && user.accessLevel !== "enterprise_admin") {
+      if (!isSystemLevel(user.accessLevel) && user.accessLevel !== "enterprise_admin") {
         if (user.propertyId !== propertyId) {
           return res.status(403).json({ message: "Access denied to this property" });
         }
@@ -16806,7 +16849,7 @@ connect();
       }
 
       // Verify user has access to this workstation's property
-      if (user.accessLevel !== "super_admin" && user.accessLevel !== "enterprise_admin") {
+      if (!isSystemLevel(user.accessLevel) && user.accessLevel !== "enterprise_admin") {
         if (user.propertyId !== workstation.propertyId) {
           return res.status(403).json({ message: "Access denied to this workstation" });
         }

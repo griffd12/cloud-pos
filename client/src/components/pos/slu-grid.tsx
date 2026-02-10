@@ -15,7 +15,7 @@ export function SluGrid({ slus, selectedSluId, onSelectSlu, isLoading }: SluGrid
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="h-14 bg-muted animate-pulse rounded-md"
+            className="h-16 bg-muted animate-pulse rounded-md"
           />
         ))}
       </div>
@@ -36,7 +36,7 @@ export function SluGrid({ slus, selectedSluId, onSelectSlu, isLoading }: SluGrid
         <Button
           key={slu.id}
           variant={selectedSluId === slu.id ? "default" : "secondary"}
-          className="h-14 text-sm font-medium relative overflow-visible"
+          className="h-16 text-base font-medium relative overflow-visible"
           onClick={() => onSelectSlu(slu)}
           data-testid={`button-slu-${slu.id}`}
         >

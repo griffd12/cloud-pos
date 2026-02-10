@@ -124,8 +124,14 @@ export default function PosPage() {
     logout,
   } = usePosContext();
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Fetch workstation context (always fetch when workstationId is available for settings like auto-logout)
-  const { data: wsContext } = useQuery<{ workstation: any; rvcs: any[]; property: any }>({
+  const { data: wsContext } = useQuery<{ workstation: any; rvcs: any[]; property: any; enterprise: any }>({
     queryKey: ["/api/workstations", workstationId, "context"],
     queryFn: async () => {
       const res = await fetchWithTimeout(`/api/workstations/${workstationId}/context`, { credentials: "include", headers: getAuthHeaders() });
@@ -1511,14 +1517,17 @@ export default function PosPage() {
               <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold leading-tight" data-testid="text-rvc-name">
+              <span className="text-base font-semibold leading-tight" data-testid="text-rvc-name">
+                {wsContext?.enterprise?.name && (
+                  <span className="font-semibold">{wsContext.enterprise.name} - </span>
+                )}
                 {currentRvc.name}
                 {wsContext?.workstation?.name && (
                   <span className="text-muted-foreground font-normal"> - {wsContext.workstation.name}</span>
                 )}
               </span>
-              <span className="text-xs text-muted-foreground leading-tight" data-testid="text-pos-title">
-                Cloud POS
+              <span className="text-sm text-muted-foreground leading-tight" data-testid="text-pos-title">
+                {currentTime.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} {currentTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
@@ -1528,7 +1537,7 @@ export default function PosPage() {
               <User className="w-3.5 h-3.5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-medium leading-tight" data-testid="text-employee-name">
+              <span className="text-base font-medium leading-tight" data-testid="text-employee-name">
                 {currentEmployee.firstName} {currentEmployee.lastName}
               </span>
               <span className="text-xs text-muted-foreground leading-tight">

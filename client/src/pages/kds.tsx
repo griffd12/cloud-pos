@@ -401,7 +401,7 @@ export default function KdsPage() {
               </Button>
             </Link>
           )}
-          <h1 className="text-lg font-semibold">
+          <h1 className="text-xl font-semibold">
             {isDedicatedKds && deviceName ? deviceName : "Kitchen Display"}
           </h1>
           <div className="flex items-center gap-2">

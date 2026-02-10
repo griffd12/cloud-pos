@@ -781,7 +781,7 @@ export const emcUsers = pgTable("emc_users", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   // Access level
-  accessLevel: text("access_level").notNull().default("property_admin"), // super_admin, enterprise_admin, property_admin
+  accessLevel: text("access_level").notNull().default("property_admin"), // system_admin, enterprise_admin, property_admin
   enterpriseId: varchar("enterprise_id").references(() => enterprises.id), // null for super_admin
   propertyId: varchar("property_id").references(() => properties.id), // null for enterprise_admin and above
   employeeId: varchar("employee_id").references(() => employees.id),
