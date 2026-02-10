@@ -55,7 +55,7 @@
         "arch": ["x64"]
       }
     ],
-    "artifactName": "${productName}-${version}-Setup.${ext}",
+    "artifactName": "Cloud-POS-${version}-Setup.${ext}",
     "icon": "electron/assets/icon.png",
     "requestedExecutionLevel": "requireAdministrator"
   },
