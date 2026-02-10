@@ -9,6 +9,20 @@ const { app, ipcMain, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+function loadGhToken() {
+  try {
+    const settingsPath = path.join(
+      process.env.LOCALAPPDATA || app.getPath('userData'),
+      'Cloud POS', 'config', 'settings.json'
+    );
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      return settings.ghToken || settings.GH_TOKEN || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
 let logger = null;
 let updateState = {
   status: 'idle',
@@ -37,6 +51,14 @@ function initAutoUpdater(updaterLogger) {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.allowDowngrade = false;
+
+  const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || loadGhToken();
+  if (ghToken) {
+    autoUpdater.requestHeaders = { Authorization: `token ${ghToken}` };
+    logger.info('Init', 'GitHub token configured for private repo access');
+  } else {
+    logger.warn('Init', 'No GitHub token found - auto-update will only work with public repos');
+  }
 
   autoUpdater.logger = {
     info: (msg) => logger.info('Core', msg),

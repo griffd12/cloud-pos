@@ -1332,7 +1332,8 @@ function setupIpcHandlers() {
       fullscreen: isKiosk,
     };
 
-    mainWindow = new BrowserWindow(windowConfig);
+    const newWindow = new BrowserWindow(windowConfig);
+    mainWindow = newWindow;
 
     const serverUrl = config.serverUrl || getServerUrl();
     const startPath = appMode === 'kds' ? '/kds' : '/';
@@ -1345,12 +1346,12 @@ function setupIpcHandlers() {
 @keyframes spin{to{transform:rotate(360deg)}}h2{margin:0 0 8px;font-weight:500}p{opacity:0.6;font-size:14px;margin:0}</style></head>
 <body><div class="c"><div class="spinner"></div><h2>Cloud POS</h2><p>Connecting to server...</p></div></body></html>`;
 
-    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadingHtml)}`).then(() => {
+    newWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadingHtml)}`).then(() => {
       appLogger.info('Wizard', 'Post-wizard loading screen shown, navigating to server...');
-      mainWindow.loadURL(targetUrl);
+      if (!newWindow.isDestroyed()) newWindow.loadURL(targetUrl);
     }).catch((err) => {
       appLogger.error('Wizard', `Failed to show loading screen: ${err.message}`);
-      mainWindow.loadURL(targetUrl);
+      if (!newWindow.isDestroyed()) newWindow.loadURL(targetUrl);
     });
 
     mainWindow.on('closed', () => { mainWindow = null; });
