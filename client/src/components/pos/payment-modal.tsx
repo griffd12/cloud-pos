@@ -143,13 +143,22 @@ export function PaymentModal({
   );
   
   // Query terminal devices for property when modal is open (using apiRequest to include device token)
-  const { data: terminalDevices = [] } = useQuery<TerminalDevice[]>({
+  const { data: terminalDevices = [], isLoading: isLoadingTerminals } = useQuery<TerminalDevice[]>({
     queryKey: ["/api/terminal-devices", { propertyId }],
     queryFn: async () => {
-      if (!propertyId) return [];
+      console.log("[PaymentModal] Fetching terminal devices for propertyId:", propertyId);
+      if (!propertyId) {
+        console.log("[PaymentModal] No propertyId, returning empty terminals");
+        return [];
+      }
       const res = await apiRequest("GET", `/api/terminal-devices?propertyId=${propertyId}`);
-      if (!res.ok) return [];
-      return res.json();
+      if (!res.ok) {
+        console.log("[PaymentModal] Terminal devices fetch failed:", res.status);
+        return [];
+      }
+      const devices = await res.json();
+      console.log("[PaymentModal] Terminal devices received:", devices.length, devices);
+      return devices;
     },
     enabled: !!propertyId && open,
   });
