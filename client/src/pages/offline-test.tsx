@@ -274,7 +274,7 @@ export default function OfflineTestPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation("/emc")}
+          onClick={() => setLocation("/")}
           data-testid="button-back"
         >
           <ArrowLeft />
