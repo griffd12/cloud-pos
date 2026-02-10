@@ -1778,7 +1778,7 @@ function registerProtocolInterceptor() {
     try {
       const response = await electronNet.fetch(request, { bypassCustomProtocolHandlers: true });
 
-      if (response.ok && request.method === 'GET') {
+      if (response.ok && request.method === 'GET' && !isApiRequest) {
         const cloned = response.clone();
         cacheResponseToDisk(url.pathname, cloned).catch(() => {});
       }

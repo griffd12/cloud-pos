@@ -59,12 +59,17 @@ class OfflineApiInterceptor {
         /^\/api\/ingredient-prefixes/,
         /^\/api\/pos\/modifier-map/,
         /^\/api\/sync\//,
+        /^\/api\/auth\/offline-employees/,
+        /^\/api\/break-rules/,
+        /^\/api\/time-punches\/status/,
+        /^\/api\/employees\/[^/]+\/job-codes\/details/,
       ];
       return readEndpoints.some(re => re.test(pathname));
     }
 
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
       const writeEndpoints = [
+        /^\/api\/auth\/login/,
         /^\/api\/auth\/pin/,
         /^\/api\/checks/,
         /^\/api\/check-items/,
@@ -106,8 +111,61 @@ class OfflineApiInterceptor {
     if (pathname === '/api/health') {
       return {
         status: 200,
-        data: { status: 'offline', mode: 'offline', timestamp: new Date().toISOString() },
+        data: { status: 'offline', mode: 'offline', timestamp: new Date().toISOString(), offlineMode: true },
       };
+    }
+
+    if (pathname === '/api/auth/offline-employees') {
+      const employees = this.db.getEntityList('employees', this.config.enterpriseId);
+      const mapped = employees.map(emp => ({
+        id: emp.id,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        pinHash: emp.pinHash,
+        posPin: emp.posPin,
+        roleId: emp.roleId,
+        roleName: emp.roleName,
+        active: emp.active,
+      }));
+      return { status: 200, data: mapped };
+    }
+
+    if (pathname.match(/^\/api\/break-rules/)) {
+      return { status: 200, data: [] };
+    }
+
+    const timePunchStatusMatch = pathname.match(/^\/api\/time-punches\/status\/([^/]+)$/);
+    if (timePunchStatusMatch) {
+      return {
+        status: 200,
+        data: {
+          status: 'clocked_in',
+          isClockedIn: true,
+          lastPunch: null,
+          activeBreak: null,
+          clockedInAt: new Date().toISOString(),
+          todayTimecard: null,
+        },
+      };
+    }
+
+    if (pathname === '/api/time-punches/status') {
+      return {
+        status: 200,
+        data: {
+          status: 'clocked_in',
+          isClockedIn: true,
+          lastPunch: null,
+          activeBreak: null,
+          clockedInAt: new Date().toISOString(),
+          todayTimecard: null,
+        },
+      };
+    }
+
+    const jobCodesDetailsMatch = pathname.match(/^\/api\/employees\/[^/]+\/job-codes\/details$/);
+    if (jobCodesDetailsMatch) {
+      return { status: 200, data: [] };
     }
 
     const entityMap = {
@@ -320,6 +378,10 @@ class OfflineApiInterceptor {
   }
 
   handlePost(pathname, body) {
+    if (pathname === '/api/auth/login' || pathname === '/api/auth/login/') {
+      return this.authenticateByLogin(body);
+    }
+
     if (pathname === '/api/auth/pin' || pathname === '/api/auth/pin/') {
       return this.authenticateByPin(body);
     }
@@ -515,13 +577,69 @@ class OfflineApiInterceptor {
         data: {
           success: true,
           employee,
-          privileges: employee.privileges || employee.rolePrivileges || [],
+          privileges: (employee.privileges && employee.privileges.length > 0)
+            ? employee.privileges
+            : (employee.rolePrivileges && employee.rolePrivileges.length > 0)
+              ? employee.rolePrivileges
+              : [
+                  'fast_transaction', 'send_to_kitchen', 'void_unsent', 'void_sent',
+                  'apply_discount', 'admin_access', 'kds_access', 'manager_approval'
+                ],
           offlineAuth: true,
         },
       };
     }
 
     return { status: 401, data: { success: false, message: 'Invalid PIN (offline)' } };
+  }
+
+  authenticateByLogin(body) {
+    const pin = body?.pin;
+    if (!pin) {
+      return { status: 400, data: { message: 'PIN required' } };
+    }
+
+    const employees = this.db.getEntityList('employees', this.config.enterpriseId);
+    appLogger.info('Interceptor', `Offline login auth attempt, ${employees.length} employees in cache`);
+    const employee = employees.find(emp => {
+      if (emp.pinHash === pin) return true;
+      if (emp.pin === pin) return true;
+      if (emp.posPin === pin) return true;
+      return false;
+    });
+
+    if (employee) {
+      appLogger.info('Interceptor', `Offline login auth SUCCESS: ${employee.firstName} ${employee.lastName}`);
+      return {
+        status: 200,
+        data: {
+          employee: {
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            pinHash: employee.pinHash,
+            roleId: employee.roleId,
+            roleName: employee.roleName,
+            active: employee.active !== undefined ? employee.active : true,
+            jobTitle: employee.jobTitle || null,
+            enterpriseId: employee.enterpriseId || null,
+          },
+          privileges: (employee.privileges && employee.privileges.length > 0)
+            ? employee.privileges
+            : (employee.rolePrivileges && employee.rolePrivileges.length > 0)
+              ? employee.rolePrivileges
+              : [
+                  'fast_transaction', 'send_to_kitchen', 'void_unsent', 'void_sent',
+                  'apply_discount', 'admin_access', 'kds_access', 'manager_approval'
+                ],
+          salariedBypass: false,
+          bypassJobCode: null,
+          device: null,
+        },
+      };
+    }
+
+    return { status: 401, data: { message: 'Invalid PIN (offline)' } };
   }
 
   authenticateOffline(pathname, body) {
