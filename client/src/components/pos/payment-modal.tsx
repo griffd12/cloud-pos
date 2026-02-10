@@ -151,14 +151,23 @@ export function PaymentModal({
         console.log("[PaymentModal] No propertyId, returning empty terminals");
         return [];
       }
-      const res = await apiRequest("GET", `/api/terminal-devices?propertyId=${propertyId}`);
-      if (!res.ok) {
-        console.log("[PaymentModal] Terminal devices fetch failed:", res.status);
+      try {
+        const url = `/api/terminal-devices?propertyId=${propertyId}`;
+        console.log("[PaymentModal] Terminal devices request URL:", url);
+        const res = await apiRequest("GET", url);
+        console.log("[PaymentModal] Terminal devices response status:", res.status, res.statusText);
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("[PaymentModal] Terminal devices fetch failed:", res.status, errorText);
+          return [];
+        }
+        const devices = await res.json();
+        console.log("[PaymentModal] Terminal devices received:", devices.length, JSON.stringify(devices));
+        return devices;
+      } catch (error) {
+        console.error("[PaymentModal] Terminal devices fetch exception:", error);
         return [];
       }
-      const devices = await res.json();
-      console.log("[PaymentModal] Terminal devices received:", devices.length, devices);
-      return devices;
     },
     enabled: !!propertyId && open,
   });
@@ -168,11 +177,19 @@ export function PaymentModal({
     queryKey: ["/api/payment-processors", { propertyId, active: true }],
     queryFn: async () => {
       if (!propertyId) return null;
-      const res = await apiRequest("GET", `/api/payment-processors?propertyId=${propertyId}&active=true`);
-      if (!res.ok) return null;
-      const processors = await res.json();
-      // Return the first active processor for this property
-      return processors.length > 0 ? processors[0] : null;
+      try {
+        const res = await apiRequest("GET", `/api/payment-processors?propertyId=${propertyId}&active=true`);
+        if (!res.ok) {
+          console.error("[PaymentModal] Payment processors fetch failed:", res.status);
+          return null;
+        }
+        const processors = await res.json();
+        console.log("[PaymentModal] Payment processors received:", processors.length, JSON.stringify(processors));
+        return processors.length > 0 ? processors[0] : null;
+      } catch (error) {
+        console.error("[PaymentModal] Payment processors fetch exception:", error);
+        return null;
+      }
     },
     enabled: !!propertyId && open,
   });
@@ -1922,6 +1939,9 @@ export function PaymentModal({
                   <div className="text-center py-4 text-muted-foreground text-sm">
                     <WifiOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p>No terminals available</p>
+                    <p className="text-xs mt-1 opacity-70">
+                      Property: {propertyId || "none"} | Devices loaded: {terminalDevices.length} | Loading: {isLoadingTerminals ? "yes" : "no"}
+                    </p>
                     {isTerminalOnlyProcessor && (
                       <p className="text-destructive mt-2 text-xs">
                         Heartland EMV requires a terminal device. Configure terminals in EMC.

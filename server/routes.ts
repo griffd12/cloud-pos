@@ -13619,7 +13619,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/terminal-devices", async (req, res) => {
     try {
       const { propertyId, enterpriseId } = req.query;
+      console.log("[terminal-devices] GET request - propertyId:", propertyId, "enterpriseId:", enterpriseId);
       let devices = await storage.getTerminalDevices(propertyId as string);
+      console.log("[terminal-devices] Found", devices.length, "devices for propertyId:", propertyId);
       
       // Filter by enterprise if specified (multi-tenancy)
       if (enterpriseId && !propertyId) {
