@@ -1,0 +1,9 @@
+version: 1.2.5
+files:
+  - url: Cloud-POS-1.2.5-Setup.exe
+    sha512: Hh/DDhw3oZuORcIhnHE6MIH99qJZ0jqHgFeiDUpr0scgmhepMJSz+KS/z56Y2u1nG/FMuv6qVDLp/lgoZ6XvCA==
+    size: 147059710
+    isAdminRightsRequired: true
+path: Cloud-POS-1.2.5-Setup.exe
+sha512: Hh/DDhw3oZuORcIhnHE6MIH99qJZ0jqHgFeiDUpr0scgmhepMJSz+KS/z56Y2u1nG/FMuv6qVDLp/lgoZ6XvCA==
+releaseDate: '2026-02-10T07:13:27.103Z'
