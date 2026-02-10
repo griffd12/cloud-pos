@@ -22051,12 +22051,7 @@ connect();
             if (v === null || v === undefined) return "NULL";
             if (typeof v === "boolean") return v ? "true" : "false";
             if (typeof v === "number") return String(v);
-            if (Array.isArray(v)) {
-              if (v.length === 0) return "'{}'";
-              const escaped = v.map((item: any) => typeof item === "string" ? `"${item.replace(/"/g, '\\"')}"` : String(item));
-              return `'{${escaped.join(",")}}'`;
-            }
-            if (typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
+            if (Array.isArray(v) || typeof v === "object") return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
             return `'${String(v).replace(/'/g, "''")}'`;
           });
           return `(${vals.join(", ")})`;
