@@ -1,4 +1,4 @@
-# Cloud POS v1.2.9 - Release Notes
+# Cloud POS v1.3.0 - Release Notes
 
 ## Comprehensive Offline Mode Fixes
 
