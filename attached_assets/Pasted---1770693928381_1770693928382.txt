@@ -1,0 +1,141 @@
+
+====================================================================================================
+  [APP] APPLICATION STARTUP - 2026-02-10T03:21:08.992Z
+====================================================================================================
+[2026-02-10T03:21:08.992Z] [INFO ] [APP         ] [App] Cloud POS starting | DATA: {"version":"1.2.1","mode":"pos","kiosk":false,"platform":"win32"}
+[2026-02-10T03:21:08.994Z] [INFO ] [APP         ] [App] Directories | DATA: {"config":"C:\\Users\\griff\\AppData\\Local\\Cloud POS\\config","data":"C:\\Users\\griff\\AppData\\Local\\Cloud POS\\data","logs":"C:\\Users\\griff\\AppData\\Local\\Cloud POS\\logs"}
+[2026-02-10T03:21:08.995Z] [INFO ] [APP         ] [App] Setup not yet completed, launching Setup Wizard only (no services initialized)
+[2026-02-10T03:21:09.001Z] [INFO ] [APP         ] [Interceptor] HTTPS protocol interceptor registered for offline support
+[2026-02-10T03:21:09.043Z] [INFO ] [APP         ] [Window] Opening setup wizard | DATA: {"kiosk":false}
+[2026-02-10T03:21:10.849Z] [INFO ] [APP         ] [Window] Page loaded successfully: file:///C:/Program%20Files/Cloud%20POS/Cloud%20POS/resources/app.asar/electron/setup-wizard.html
+[2026-02-10T03:21:56.732Z] [INFO ] [APP         ] [Wizard] Setup wizard completed | DATA: {"enterprise":"Blue Oceans Management","property":"SNS-Newport Beach","mode":"pos","device":"SNS-001-WS02"}
+[2026-02-10T03:21:57.744Z] [INFO ] [APP         ] [Wizard] Launching app after wizard completion
+[2026-02-10T03:21:57.747Z] [INFO ] [APP         ] [Wizard] Initializing all services after setup completion
+[2026-02-10T03:21:57.750Z] [INFO ] [APP         ] [App] Initializing services after setup verification
+[2026-02-10T03:21:57.753Z] [WARN ] [APP         ] [OfflineDB] better-sqlite3 not available, using JSON file storage
+[2026-02-10T03:21:57.757Z] [INFO ] [APP         ] [OfflineDB] Using JSON-based offline storage | DATA: {"path":"C:\\Users\\griff\\AppData\\Local\\Cloud POS\\data"}
+[2026-02-10T03:21:57.765Z] [WARN ] [OFFLINEDB   ] [Init] better-sqlite3 not available, using JSON file storage
+[2026-02-10T03:21:57.772Z] [INFO ] [OFFLINEDB   ] [Init] JSON file storage initialized | DATA: C:\Users\griff\AppData\Local\Cloud POS\data
+[2026-02-10T03:21:57.774Z] [INFO ] [APP         ] [OfflineDB] Enhanced offline database initialized
+[2026-02-10T03:21:57.778Z] [INFO ] [PRINT       ] [Init] No agent ID/token configured, attempting auto-registration
+[2026-02-10T03:21:57.782Z] [INFO ] [PRINT       ] [AutoRegister] Registering embedded print agent for device: SNS-001-WS02
+[2026-02-10T03:21:58.274Z] [INFO ] [PRINT       ] [AutoRegister] Print agent registered: SNS-001-WS02 (Embedded Agent) (70fe6bcd-99a3-43c7-9143-79c59c665b12)
+[2026-02-10T03:21:58.279Z] [INFO ] [PRINT       ] [Service] Starting print agent service
+[2026-02-10T03:21:58.342Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-10T03:21:58.680Z] [INFO ] [PRINT       ] [Connect] WebSocket connected, authenticating
+[2026-02-10T03:21:58.689Z] [INFO ] [APP         ] [OfflineDB] Cloud reachable, starting initial data sync
+[2026-02-10T03:21:58.692Z] [INFO ] [OFFLINEDB   ] [Sync] Starting full sync from cloud...
+[2026-02-10T03:21:58.776Z] [INFO ] [PRINT       ] [Auth] Authenticated as: SNS-001-WS02 (Embedded Agent) (70fe6bcd-99a3-43c7-9143-79c59c665b12)
+[2026-02-10T03:21:58.779Z] [INFO ] [PRINT       ] [Status] connected=true, auth=true
+[2026-02-10T03:22:08.811Z] [INFO ] [OFFLINEDB   ] [Sync] Sync complete. 15 tables synced, 6 errors
+[2026-02-10T03:22:08.813Z] [INFO ] [APP         ] [OfflineDB] Initial sync completed | DATA: {"tables":15,"errors":6}
+[2026-02-10T03:22:08.815Z] [INFO ] [UPDATER     ] [Init] Auto-updater initialized (v1.2.1)
+[2026-02-10T03:22:08.817Z] [INFO ] [UPDATER     ] [Init] Auto-download: true, Auto-install on quit: true
+[2026-02-10T03:22:08.819Z] [INFO ] [APP         ] [App] All services initialized successfully
+[2026-02-10T03:22:08.863Z] [INFO ] [APP         ] [Wizard] Post-wizard loading URL: https://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/
+[2026-02-10T03:22:09.837Z] [INFO ] [APP         ] [Wizard] Post-wizard loading screen shown, navigating to server...
+[2026-02-10T03:22:09.838Z] [ERROR] [APP         ] [Wizard] Failed to show loading screen: Cannot read properties of null (reading 'loadURL')
+[2026-02-10T03:22:23.825Z] [INFO ] [UPDATER     ] [Check] Initiating update check...
+[2026-02-10T03:22:23.827Z] [INFO ] [UPDATER     ] [Core] Checking for update
+[2026-02-10T03:22:23.828Z] [INFO ] [UPDATER     ] [Check] Checking for updates...
+[2026-02-10T03:22:23.839Z] [INFO ] [UPDATER     ] [Core] Generated new staging user ID: df45b9d5-6727-507b-98c8-513dac79a95a
+[2026-02-10T03:22:24.225Z] [ERROR] [UPDATER     ] [Core] Error: HttpError: 404 
+"method: GET url: https://github.com/griffd12/cloud-pos/releases.atom\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "cache-control": "no-cache",
+  "content-length": "9",
+  "content-security-policy": "default-src 'none'; base-uri 'self'; connect-src 'self'; form-action 'self'; img-src 'self' data:; script-src 'self'; style-src 'unsafe-inline'",
+  "content-type": "text/plain; charset=utf-8",
+  "date": "Tue, 10 Feb 2026 03:22:24 GMT",
+  "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+  "server": "github.com",
+  "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+  "vary": "X-PJAX, X-PJAX-Container, Turbo-Visit, Turbo-Frame, X-Requested-With,Accept-Encoding, Accept, X-Requested-With",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "deny",
+  "x-github-request-id": "D34C:2A1B38:252B9F:304BDB:698AA470",
+  "x-xss-protection": "0",
+  "set-cookie": [
+    "_gh_sess=WnKirtwhqV6AUv1hjF5qg1Uk3ayosC7rIm2aKUzbUFBLXUZXDoUkfGPiGgRSXsw%2BAPz%2Fa6dMgxmQvh9v2uUomnq2%2Fklfs4h%2FGnkbkjSTkVfA5Yow3YtSxNfTrZgELfbhbDI4tt1WiBxfiPVCJzqe1vQp3k1QdxiNH3QRBy6iSUQp2g9KjegMZgAzir8jVHIi7kKptQIuAT46mGJlYaoE4J5CbrSP3LXJTO0CeN6QwXkadjdFLI3EstlQSFKG0cKDNJo2%2BPhp3EajjkvwitUrmQ%3D%3D--kuZTxCaMA8dcjhOy--7wNQ1St6UlvlNPR%2B70NHgg%3D%3D; Path=/; HttpOnly; Secure; SameSite=Lax",
+    "_octo=GH1.1.169822690.1770693744; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; Secure; SameSite=Lax",
+    "logged_in=no; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; HttpOnly; Secure; SameSite=Lax"
+  ]
+}
+    at createHttpError (C:\Program Files\Cloud POS\Cloud POS\resources\app.asar\node_modules\builder-util-runtime\out\httpExecutor.js:21:12)
+    at ElectronHttpExecutor.handleResponse (C:\Program Files\Cloud POS\Cloud POS\resources\app.asar\node_modules\builder-util-runtime\out\httpExecutor.js:121:20)
+    at ClientRequest.<anonymous> (C:\Program Files\Cloud POS\Cloud POS\resources\app.asar\node_modules\builder-util-runtime\out\httpExecutor.js:87:26)
+    at ClientRequest.emit (node:events:508:28)
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:133958)
+    at SimpleURLLoaderWrapper.emit (node:events:508:28)
+[2026-02-10T03:22:24.231Z] [ERROR] [UPDATER     ] [Error] Auto-update error: 404 
+"method: GET url: https://github.com/griffd12/cloud-pos/releases.atom\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "cache-control": "no-cache",
+  "content-length": "9",
+  "content-security-policy": "default-src 'none'; base-uri 'self'; connect-src 'self'; form-action 'self'; img-src 'self' data:; script-src 'self'; style-src 'unsafe-inline'",
+  "content-type": "text/plain; charset=utf-8",
+  "date": "Tue, 10 Feb 2026 03:22:24 GMT",
+  "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+  "server": "github.com",
+  "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+  "vary": "X-PJAX, X-PJAX-Container, Turbo-Visit, Turbo-Frame, X-Requested-With,Accept-Encoding, Accept, X-Requested-With",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "deny",
+  "x-github-request-id": "D34C:2A1B38:252B9F:304BDB:698AA470",
+  "x-xss-protection": "0",
+  "set-cookie": [
+    "_gh_sess=WnKirtwhqV6AUv1hjF5qg1Uk3ayosC7rIm2aKUzbUFBLXUZXDoUkfGPiGgRSXsw%2BAPz%2Fa6dMgxmQvh9v2uUomnq2%2Fklfs4h%2FGnkbkjSTkVfA5Yow3YtSxNfTrZgELfbhbDI4tt1WiBxfiPVCJzqe1vQp3k1QdxiNH3QRBy6iSUQp2g9KjegMZgAzir8jVHIi7kKptQIuAT46mGJlYaoE4J5CbrSP3LXJTO0CeN6QwXkadjdFLI3EstlQSFKG0cKDNJo2%2BPhp3EajjkvwitUrmQ%3D%3D--kuZTxCaMA8dcjhOy--7wNQ1St6UlvlNPR%2B70NHgg%3D%3D; Path=/; HttpOnly; Secure; SameSite=Lax",
+    "_octo=GH1.1.169822690.1770693744; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; Secure; SameSite=Lax",
+    "logged_in=no; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; HttpOnly; Secure; SameSite=Lax"
+  ]
+}
+[2026-02-10T03:22:24.232Z] [DEBUG] [UPDATER     ] [Error] Stack trace: HttpError: 404 
+"method: GET url: https://github.com/griffd12/cloud-pos/releases.atom\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "cache-control": "no-cache",
+  "content-length": "9",
+  "content-security-policy": "default-src 'none'; base-uri 'self'; connect-src 'self'; form-action 'self'; img-src 'self' data:; script-src 'self'; style-src 'unsafe-inline'",
+  "content-type": "text/plain; charset=utf-8",
+  "date": "Tue, 10 Feb 2026 03:22:24 GMT",
+  "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+  "server": "github.com",
+  "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+  "vary": "X-PJAX, X-PJAX-Container, Turbo-Visit, Turbo-Frame, X-Requested-With,Accept-Encoding, Accept, X-Requested-With",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "deny",
+  "x-github-request-id": "D34C:2A1B38:252B9F:304BDB:698AA470",
+  "x-xss-protection": "0",
+  "set-cookie": [
+    "_gh_sess=WnKirtwhqV6AUv1hjF5qg1Uk3ayosC7rIm2aKUzbUFBLXUZXDoUkfGPiGgRSXsw%2BAPz%2Fa6dMgxmQvh9v2uUomnq2%2Fklfs4h%2FGnkbkjSTkVfA5Yow3YtSxNfTrZgELfbhbDI4tt1WiBxfiPVCJzqe1vQp3k1QdxiNH3QRBy6iSUQp2g9KjegMZgAzir8jVHIi7kKptQIuAT46mGJlYaoE4J5CbrSP3LXJTO0CeN6QwXkadjdFLI3EstlQSFKG0cKDNJo2%2BPhp3EajjkvwitUrmQ%3D%3D--kuZTxCaMA8dcjhOy--7wNQ1St6UlvlNPR%2B70NHgg%3D%3D; Path=/; HttpOnly; Secure; SameSite=Lax",
+    "_octo=GH1.1.169822690.1770693744; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; Secure; SameSite=Lax",
+    "logged_in=no; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; HttpOnly; Secure; SameSite=Lax"
+  ]
+}
+    at createHttpError (C:\Program Files\Cloud POS\Cloud POS\resources\app.asar\node_modules\builder-util-runtime\out\httpExecutor.js:21:12)
+    at ElectronHttpExecutor.handleResponse (C:\Program Files\Cloud POS\Cloud POS\resources\app.asar\node_modules\builder-util-runtime\out\httpExecutor.js:121:20)
+    at ClientRequest.<anonymous> (C:\Program Files\Cloud POS\Cloud POS\resources\app.asar\node_modules\builder-util-runtime\out\httpExecutor.js:87:26)
+    at ClientRequest.emit (node:events:508:28)
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:133958)
+    at SimpleURLLoaderWrapper.emit (node:events:508:28)
+[2026-02-10T03:22:24.234Z] [ERROR] [UPDATER     ] [Check] Failed to check for updates: 404 
+"method: GET url: https://github.com/griffd12/cloud-pos/releases.atom\n\nPlease double check that your authentication token is correct. Due to security reasons, actual status maybe not reported, but 404.\n"
+Headers: {
+  "cache-control": "no-cache",
+  "content-length": "9",
+  "content-security-policy": "default-src 'none'; base-uri 'self'; connect-src 'self'; form-action 'self'; img-src 'self' data:; script-src 'self'; style-src 'unsafe-inline'",
+  "content-type": "text/plain; charset=utf-8",
+  "date": "Tue, 10 Feb 2026 03:22:24 GMT",
+  "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+  "server": "github.com",
+  "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+  "vary": "X-PJAX, X-PJAX-Container, Turbo-Visit, Turbo-Frame, X-Requested-With,Accept-Encoding, Accept, X-Requested-With",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "deny",
+  "x-github-request-id": "D34C:2A1B38:252B9F:304BDB:698AA470",
+  "x-xss-protection": "0",
+  "set-cookie": [
+    "_gh_sess=WnKirtwhqV6AUv1hjF5qg1Uk3ayosC7rIm2aKUzbUFBLXUZXDoUkfGPiGgRSXsw%2BAPz%2Fa6dMgxmQvh9v2uUomnq2%2Fklfs4h%2FGnkbkjSTkVfA5Yow3YtSxNfTrZgELfbhbDI4tt1WiBxfiPVCJzqe1vQp3k1QdxiNH3QRBy6iSUQp2g9KjegMZgAzir8jVHIi7kKptQIuAT46mGJlYaoE4J5CbrSP3LXJTO0CeN6QwXkadjdFLI3EstlQSFKG0cKDNJo2%2BPhp3EajjkvwitUrmQ%3D%3D--kuZTxCaMA8dcjhOy--7wNQ1St6UlvlNPR%2B70NHgg%3D%3D; Path=/; HttpOnly; Secure; SameSite=Lax",
+    "_octo=GH1.1.169822690.1770693744; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; Secure; SameSite=Lax",
+    "logged_in=no; Path=/; Domain=github.com; Expires=Wed, 10 Feb 2027 03:22:24 GMT; HttpOnly; Secure; SameSite=Lax"
+  ]
+}
