@@ -781,7 +781,7 @@ export interface IStorage {
   // LOYALTY PROGRAMS
   // ============================================================================
 
-  getLoyaltyPrograms(enterpriseId?: string): Promise<LoyaltyProgram[]>;
+  getLoyaltyPrograms(enterpriseId?: string, propertyId?: string): Promise<LoyaltyProgram[]>;
   createLoyaltyProgram(data: InsertLoyaltyProgram): Promise<LoyaltyProgram>;
   updateLoyaltyProgram(id: string, data: Partial<InsertLoyaltyProgram>): Promise<LoyaltyProgram | undefined>;
   
@@ -5200,9 +5200,12 @@ export class DatabaseStorage implements IStorage {
   // LOYALTY PROGRAMS
   // ============================================================================
 
-  async getLoyaltyPrograms(enterpriseId?: string): Promise<LoyaltyProgram[]> {
-    if (enterpriseId) {
-      return db.select().from(loyaltyPrograms).where(eq(loyaltyPrograms.enterpriseId, enterpriseId));
+  async getLoyaltyPrograms(enterpriseId?: string, propertyId?: string): Promise<LoyaltyProgram[]> {
+    const conditions = [];
+    if (enterpriseId) conditions.push(eq(loyaltyPrograms.enterpriseId, enterpriseId));
+    if (propertyId) conditions.push(eq(loyaltyPrograms.propertyId, propertyId));
+    if (conditions.length > 0) {
+      return db.select().from(loyaltyPrograms).where(and(...conditions));
     }
     return db.select().from(loyaltyPrograms);
   }

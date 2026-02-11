@@ -4824,18 +4824,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (check?.customerId) {
           try {
             const allEnrollments = await storage.getLoyaltyEnrollments(check.customerId);
-            // Only process active enrollments
             const enrollments = allEnrollments.filter(e => e.status === "active");
             const programs = await storage.getLoyaltyPrograms();
             const checkTotal = parseFloat(check.total || "0");
             
-            // Get the property from the RVC
             const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
             const propertyId = rvc?.propertyId;
             
             for (const enrollment of enrollments) {
               const program = programs.find(p => p.id === enrollment.programId);
               if (!program || !program.active) continue;
+              if (propertyId && program.propertyId !== propertyId) continue;
               
               const pointsPerDollar = parseFloat(program.pointsPerDollar || "1");
               let pointsToAward = 0;
@@ -18040,8 +18039,8 @@ connect();
 
   app.get("/api/loyalty-programs", async (req, res) => {
     try {
-      const { enterpriseId } = req.query;
-      const programs = await storage.getLoyaltyPrograms(enterpriseId as string);
+      const { enterpriseId, propertyId } = req.query;
+      const programs = await storage.getLoyaltyPrograms(enterpriseId as string, propertyId as string);
       res.json(programs);
     } catch (error) {
       res.status(500).json({ message: "Failed to get loyalty programs" });
@@ -19742,14 +19741,15 @@ connect();
         lastName,
         phone,
         email,
+        enterpriseId: enterpriseId || null,
         propertyId: propertyId || null,
         status: "active",
       });
 
       const enrolledPrograms: string[] = [];
-      if (enterpriseId) {
+      if (propertyId || enterpriseId) {
         try {
-          const programs = await storage.getLoyaltyPrograms(enterpriseId);
+          const programs = await storage.getLoyaltyPrograms(enterpriseId, propertyId);
           const activePrograms = programs.filter(p => p.active);
           for (const program of activePrograms) {
             await storage.createLoyaltyEnrollment({

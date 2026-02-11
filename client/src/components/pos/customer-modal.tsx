@@ -55,6 +55,7 @@ interface CustomerModalProps {
   currentCustomerId: string | null;
   employeeId: string | undefined;
   enterpriseId?: string;
+  propertyId?: string;
   onCustomerAttached?: (customer: LoyaltyMember) => void;
   onReorderRequested?: (items: CheckItem[]) => void;
 }
@@ -66,6 +67,7 @@ export function CustomerModal({
   currentCustomerId,
   employeeId,
   enterpriseId,
+  propertyId,
   onCustomerAttached,
   onReorderRequested,
 }: CustomerModalProps) {
@@ -123,11 +125,15 @@ export function CustomerModal({
     enabled: !!selectedCustomer?.id,
   });
 
-  const loyaltyProgramsUrl = enterpriseId 
-    ? `/api/loyalty-programs?enterpriseId=${enterpriseId}` 
-    : "/api/loyalty-programs";
+  const loyaltyProgramsUrl = (() => {
+    const params = new URLSearchParams();
+    if (enterpriseId) params.set("enterpriseId", enterpriseId);
+    if (propertyId) params.set("propertyId", propertyId);
+    const str = params.toString();
+    return str ? `/api/loyalty-programs?${str}` : "/api/loyalty-programs";
+  })();
   const { data: loyaltyPrograms = [], isLoading: isLoadingPrograms } = useQuery<LoyaltyProgram[]>({
-    queryKey: ["/api/loyalty-programs", enterpriseId],
+    queryKey: ["/api/loyalty-programs", enterpriseId, propertyId],
     queryFn: async () => {
       const res = await fetchWithTimeout(loyaltyProgramsUrl, {
         credentials: "include",
@@ -202,6 +208,7 @@ export function CustomerModal({
       const res = await apiRequest("POST", "/api/pos/loyalty/enroll", {
         ...enrollForm,
         enterpriseId: enterpriseId || undefined,
+        propertyId: propertyId || undefined,
       });
       return res.json();
     },

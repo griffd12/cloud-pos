@@ -2726,7 +2726,8 @@ export type MemberStatus = typeof MEMBER_STATUSES[number];
 // Customer profile - can be enrolled in multiple loyalty programs
 export const loyaltyMembers = pgTable("loyalty_members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  propertyId: varchar("property_id").references(() => properties.id), // Property where member was created
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
   memberNumber: text("member_number").notNull().unique(),
   firstName: text("first_name"),
   lastName: text("last_name"),

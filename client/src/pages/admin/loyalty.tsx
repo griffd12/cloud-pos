@@ -342,11 +342,12 @@ export default function LoyaltyPage() {
 
   const memberMutation = useMutation({
     mutationFn: async (data: InsertLoyaltyMember) => {
+      const enrichedData = { ...data, enterpriseId: selectedEnterpriseId || null };
       if (editingMember) {
-        const response = await apiRequest("PUT", `/api/loyalty-members/${editingMember.id}`, data);
+        const response = await apiRequest("PUT", `/api/loyalty-members/${editingMember.id}`, enrichedData);
         return response.json();
       }
-      const response = await apiRequest("POST", "/api/loyalty-members", data);
+      const response = await apiRequest("POST", "/api/loyalty-members", enrichedData);
       return response.json();
     },
     onSuccess: () => {
