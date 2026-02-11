@@ -2374,6 +2374,7 @@ export default function PosPage() {
         currentCheck={currentCheck}
         currentCustomerId={currentCheck?.customerId || null}
         employeeId={currentEmployee?.id}
+        enterpriseId={wsContext?.property?.enterpriseId || ""}
         onCustomerAttached={(customer) => {
           toast({
             title: "Customer Attached",

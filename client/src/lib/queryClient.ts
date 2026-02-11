@@ -166,20 +166,44 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const url = queryKey.join("/") as string;
     const authHeaders = getAuthHeaders();
     
-    const res = await fetch(queryKey.join("/") as string, {
-      credentials: "include",
-      headers: authHeaders,
-      signal: createTimeoutSignal(FETCH_TIMEOUT_MS),
-    });
+    try {
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: authHeaders,
+        signal: createTimeoutSignal(FETCH_TIMEOUT_MS),
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      if (res.ok) {
+        setOfflineMode(false);
+        const data = await res.json();
+        cacheResponseInBackground(url, new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }));
+        return data;
+      }
+
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (err: any) {
+      if (err.name === 'AbortError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+        const cached = await tryGetCachedResponse(url);
+        if (cached) {
+          setOfflineMode(true);
+          logToElectron('INFO', 'NETWORK', 'CacheFallback', `QueryFn serving cached: ${url}`);
+          return await cached.json();
+        }
+        setOfflineMode(true);
+      }
+      throw err;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({

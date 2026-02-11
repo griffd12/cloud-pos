@@ -54,6 +54,7 @@ interface CustomerModalProps {
   currentCheck: Check | null;
   currentCustomerId: string | null;
   employeeId: string | undefined;
+  enterpriseId?: string;
   onCustomerAttached?: (customer: LoyaltyMember) => void;
   onReorderRequested?: (items: CheckItem[]) => void;
 }
@@ -64,6 +65,7 @@ export function CustomerModal({
   currentCheck,
   currentCustomerId,
   employeeId,
+  enterpriseId,
   onCustomerAttached,
   onReorderRequested,
 }: CustomerModalProps) {
@@ -121,8 +123,19 @@ export function CustomerModal({
     enabled: !!selectedCustomer?.id,
   });
 
+  const loyaltyProgramsUrl = enterpriseId 
+    ? `/api/loyalty-programs?enterpriseId=${enterpriseId}` 
+    : "/api/loyalty-programs";
   const { data: loyaltyPrograms = [], isLoading: isLoadingPrograms } = useQuery<LoyaltyProgram[]>({
-    queryKey: ["/api/loyalty-programs"],
+    queryKey: ["/api/loyalty-programs", enterpriseId],
+    queryFn: async () => {
+      const res = await fetchWithTimeout(loyaltyProgramsUrl, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to fetch loyalty programs");
+      return res.json();
+    },
     enabled: open && (showEnrollForm || showEnrollInProgram),
   });
 

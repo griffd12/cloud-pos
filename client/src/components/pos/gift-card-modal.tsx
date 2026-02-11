@@ -157,18 +157,29 @@ export function GiftCardModal({
         propertyId,
         employeeId,
         checkId,
+        rvcId,
       });
       return res.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Gift Card Reloaded",
-        description: `Added $${data.reloadAmount}. New balance: $${data.newBalance}`,
+        title: "Reload Added to Check",
+        description: `$${amount} reload added. Complete payment to apply funds to card.`,
       });
+      setCardNumber("");
       setAmount("");
-      if (balanceResult) {
-        setBalanceResult({ ...balanceResult, currentBalance: data.newBalance });
+
+      const workingCheckId = data.check?.id || checkId;
+      if (workingCheckId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", workingCheckId, "items"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/checks", workingCheckId] });
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
+
+      if (data.checkItem && onGiftCardSold) {
+        onGiftCardSold(data.checkItem, data.check);
+      }
+      onClose();
     },
     onError: (error: any) => {
       toast({
@@ -478,7 +489,7 @@ export function GiftCardModal({
               ) : (
                 <RefreshCcw className="w-4 h-4 mr-2" />
               )}
-              Reload ${amount || "0.00"}
+              Add Reload ${amount || "0.00"} to Check
             </Button>
           </TabsContent>
 

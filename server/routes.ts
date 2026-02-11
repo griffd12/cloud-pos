@@ -4749,21 +4749,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           tipTotal: tipTotal.toFixed(2), // Store total tips from all payments
         });
 
-        // Activate any pending gift cards on this check (sold but not yet activated)
+        // Activate any pending gift cards and process reloads on this check
         try {
           const checkItemsForGC = await storage.getCheckItems(checkId);
           for (const item of checkItemsForGC) {
-            // Skip voided items - don't activate their gift cards
             if (item.voided) continue;
             
-            // Gift card items have no menuItemId and name starts with "Gift Card"
+            const modifiers = item.modifiers as any[] || [];
+
+            // Handle new gift card sales (pending activation)
             if (!item.menuItemId && item.menuItemName.startsWith("Gift Card")) {
-              // Get gift card ID from modifiers (stored during sale)
-              const modifiers = item.modifiers as any[] || [];
               const gcModifier = modifiers.find((m: any) => m.name === "__giftCardId");
               
               if (gcModifier?.giftCardId) {
-                // Activate the specific gift card by ID
                 const pendingCard = await storage.getGiftCard(gcModifier.giftCardId);
                 if (pendingCard && pendingCard.status === "pending") {
                   await storage.updateGiftCard(pendingCard.id, {
@@ -4772,7 +4770,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                     activatedAt: new Date(),
                     activatedById: employeeId,
                   });
-                  // Create activation transaction
                   await storage.createGiftCardTransaction({
                     giftCardId: pendingCard.id,
                     transactionType: "activate",
@@ -4788,9 +4785,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 }
               }
             }
+
+            // Handle gift card reloads (add funds after payment)
+            if (!item.menuItemId && item.menuItemName.startsWith("GC Reload")) {
+              const reloadModifier = modifiers.find((m: any) => m.name === "__giftCardReload");
+              
+              if (reloadModifier?.giftCardId) {
+                const reloadCard = await storage.getGiftCard(reloadModifier.giftCardId);
+                if (reloadCard && reloadCard.status === "active") {
+                  const currentBalance = parseFloat(reloadCard.currentBalance || "0");
+                  const reloadAmt = parseFloat(reloadModifier.reloadAmount || item.unitPrice || "0");
+                  const newBalance = (currentBalance + reloadAmt).toFixed(2);
+                  
+                  await storage.updateGiftCard(reloadCard.id, {
+                    currentBalance: newBalance,
+                  });
+                  await storage.createGiftCardTransaction({
+                    giftCardId: reloadCard.id,
+                    transactionType: "reload",
+                    amount: reloadAmt.toFixed(2),
+                    balanceBefore: currentBalance.toFixed(2),
+                    balanceAfter: newBalance,
+                    propertyId: reloadCard.propertyId || undefined,
+                    checkId,
+                    employeeId,
+                    notes: "Reloaded after payment",
+                  });
+                  console.log("Reloaded gift card:", reloadCard.cardNumber, "New balance:", newBalance);
+                }
+              }
+            }
           }
         } catch (e) {
-          console.error("Gift card activation error:", e);
+          console.error("Gift card activation/reload error:", e);
         }
 
         // Award loyalty points/spend/visits if check has linked member
@@ -19870,7 +19897,7 @@ connect();
   // Reload an existing gift card
   app.post("/api/pos/gift-cards/reload", async (req, res) => {
     try {
-      const { cardNumber, amount, propertyId, employeeId, checkId } = req.body;
+      const { cardNumber, amount, propertyId, employeeId, checkId, rvcId } = req.body;
 
       const giftCard = await storage.getGiftCardByNumber(cardNumber);
       if (!giftCard) {
@@ -19881,35 +19908,88 @@ connect();
         return res.status(400).json({ message: `Gift card is ${giftCard.status}` });
       }
 
-      const currentBalance = parseFloat(giftCard.currentBalance || "0");
       const reloadAmount = parseFloat(amount);
-      const newBalance = (currentBalance + reloadAmount).toFixed(2);
+      if (isNaN(reloadAmount) || reloadAmount <= 0) {
+        return res.status(400).json({ message: "Invalid reload amount" });
+      }
+      const reloadStr = reloadAmount.toFixed(2);
 
-      // Update gift card balance
-      await storage.updateGiftCard(giftCard.id, {
-        currentBalance: newBalance,
+      let workingCheckId = checkId;
+      let createdCheck = null;
+
+      if (!workingCheckId) {
+        const rvc = rvcId ? await storage.getRvc(rvcId) : null;
+        if (!rvc) {
+          return res.status(400).json({ message: "Revenue center (RVC) required to create a check" });
+        }
+        const orderType = "take_out";
+        const property = rvc.propertyId ? await storage.getProperty(rvc.propertyId) : null;
+        const businessDate = property?.currentBusinessDate || new Date().toISOString().split("T")[0];
+        const existingChecks = await storage.getChecks();
+        const rvcChecks = existingChecks.filter(c => c.rvcId === rvcId);
+        const checkNumber = rvcChecks.length + 1;
+
+        createdCheck = await storage.createCheck({
+          rvcId,
+          employeeId,
+          checkNumber,
+          orderType,
+          status: "open",
+          subtotal: "0",
+          taxTotal: "0",
+          discountTotal: "0",
+          serviceChargeTotal: "0",
+          total: "0",
+          guestCount: 1,
+          businessDate,
+        });
+        workingCheckId = createdCheck.id;
+      }
+
+      const checkItem = await storage.createCheckItem({
+        checkId: workingCheckId,
+        menuItemId: null,
+        menuItemName: `GC Reload ${cardNumber.slice(-4)}`,
+        quantity: 1,
+        unitPrice: reloadStr,
+        modifiers: [{ name: "__giftCardReload", priceDelta: "0", giftCardId: giftCard.id, cardNumber, reloadAmount: reloadStr }] as any,
+        sent: true,
+        voided: false,
+        taxRateAtSale: "0",
+        taxAmount: "0",
+        taxableAmount: reloadStr,
+        isNonRevenue: true,
+        nonRevenueType: "gift_card_reload",
       });
 
-      // Create reload transaction
-      await storage.createGiftCardTransaction({
-        giftCardId: giftCard.id,
-        transactionType: "reload",
-        amount,
-        balanceBefore: giftCard.currentBalance,
-        balanceAfter: newBalance,
-        propertyId,
-        checkId,
-        employeeId,
-        notes: `Reloaded $${amount}`,
-      });
+      const check = await storage.getCheck(workingCheckId);
+      if (check) {
+        const allItems = await storage.getCheckItems(workingCheckId);
+        const itemsSubtotal = allItems
+          .filter(item => !item.voided)
+          .reduce((sum, item) => {
+            const price = parseFloat(item.unitPrice || "0");
+            const qty = item.quantity || 1;
+            return sum + (price * qty);
+          }, 0);
+        const currentTax = parseFloat(check.taxTotal || "0");
+        const newSubtotal = itemsSubtotal.toFixed(2);
+        const newTotal = (itemsSubtotal + currentTax).toFixed(2);
+        await storage.updateCheck(workingCheckId, {
+          subtotal: newSubtotal,
+          total: newTotal,
+        });
+      }
 
       broadcastGiftCardUpdate(giftCard.id);
-      res.json({
+      broadcastDashboardUpdate(propertyId);
+
+      res.status(201).json({
         success: true,
-        cardNumber: giftCard.cardNumber,
-        previousBalance: currentBalance.toFixed(2),
-        reloadAmount: reloadAmount.toFixed(2),
-        newBalance,
+        giftCard,
+        checkItem,
+        check: createdCheck,
+        message: `Gift card reload added to check. Complete payment to apply $${reloadStr} to card.`,
       });
     } catch (error: any) {
       console.error("Gift card reload error:", error);
