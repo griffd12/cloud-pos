@@ -12,7 +12,7 @@ export default function ServiceChargesPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ServiceCharge | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
 
   const { data: serviceCharges = [], isLoading } = useQuery<ServiceCharge[]>({
     queryKey: ["/api/service-charges", filterKeys],
@@ -120,7 +120,7 @@ export default function ServiceChargesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...formattedData });
     } else {
-      createMutation.mutate({ ...formattedData, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...formattedData, ...scopePayload });
     }
   };
 

@@ -204,7 +204,7 @@ const ENTERPRISE_LEVEL_ROUTES = ["/emc/enterprises", "/emc/dashboard", "/emc"];
 
 export default function EmcAdminLayout() {
   const [location, navigate] = useLocation();
-  const { user, isAuthenticated, logout, isLoading, selectedEnterpriseId, setSelectedEnterpriseId, selectedPropertyId, setSelectedPropertyId } = useEmc();
+  const { user, isAuthenticated, logout, isLoading, selectedEnterpriseId, setSelectedEnterpriseId, selectedPropertyId, setSelectedPropertyId, selectedRvcId, setSelectedRvcId } = useEmc();
 
   const showPropertyFilter = !ENTERPRISE_LEVEL_ROUTES.includes(location);
 
@@ -290,6 +290,17 @@ export default function EmcAdminLayout() {
     }
   }, [selectedPropertyId, properties, selectedProperty?.id]);
 
+  useEffect(() => {
+    if (selectedRvcId && rvcs.length > 0) {
+      const rvc = rvcs.find(r => r.id === selectedRvcId);
+      if (rvc && selectedRvc?.id !== rvc.id) {
+        setSelectedRvc(rvc);
+      }
+    } else if (!selectedRvcId) {
+      setSelectedRvc(null);
+    }
+  }, [selectedRvcId, rvcs, selectedRvc?.id]);
+
   // Auto-select property: use user's assigned property for property_admin, or first available property
   useEffect(() => {
     if (properties.length > 0 && !selectedPropertyId) {
@@ -339,6 +350,7 @@ export default function EmcAdminLayout() {
   const handleRvcChange = (id: string | null) => {
     const rvc = rvcs.find((r) => r.id === id) || null;
     setSelectedRvc(rvc);
+    setSelectedRvcId(id);
   };
 
   const handleLogout = () => {

@@ -25,7 +25,7 @@ interface JobAssignment {
 
 export default function EmployeesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, scopePayload } = useEmcFilter();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -302,7 +302,7 @@ export default function EmployeesPage() {
       createMutation.mutate({ 
         employee: { 
           ...employeeData, 
-          enterpriseId: selectedEnterpriseId!,
+          ...scopePayload,
           propertyId: primaryPropertyId,
         } as Employee, 
         propertyIds: propertyIdsToAssign, 

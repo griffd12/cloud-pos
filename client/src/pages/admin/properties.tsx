@@ -10,7 +10,7 @@ import { insertPropertySchema, type Property, type InsertProperty, type Enterpri
 
 export default function PropertiesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Property | null>(null);
@@ -183,7 +183,7 @@ export default function PropertiesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

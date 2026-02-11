@@ -14,7 +14,7 @@ export default function TendersPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Tender | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
 
   const { data: tenders = [], isLoading } = useQuery<Tender[]>({
     queryKey: ["/api/tenders", filterKeys],
@@ -106,7 +106,7 @@ export default function TendersPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

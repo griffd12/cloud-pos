@@ -11,7 +11,7 @@ import { insertModifierSchema, type Modifier, type InsertModifier } from "@share
 
 export default function ModifiersPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Modifier | null>(null);
@@ -111,7 +111,7 @@ export default function ModifiersPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

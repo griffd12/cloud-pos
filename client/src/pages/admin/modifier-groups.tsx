@@ -15,7 +15,7 @@ import { Link2 } from "lucide-react";
 
 export default function ModifierGroupsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ModifierGroup | null>(null);
   const [linkingGroup, setLinkingGroup] = useState<ModifierGroup | null>(null);
@@ -142,7 +142,7 @@ export default function ModifierGroupsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

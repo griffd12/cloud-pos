@@ -249,7 +249,7 @@ function PropertyBrandingSection({ properties, toast }: { properties: Property[]
 
 export default function PosLayoutsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [designerOpen, setDesignerOpen] = useState(false);
   const [editingLayout, setEditingLayout] = useState<LayoutWithCells | null>(null);
@@ -494,7 +494,7 @@ export default function PosLayoutsPage() {
         }
       });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! }, {
+      createMutation.mutate({ ...data, ...scopePayload }, {
         onSuccess: (newLayout: PosLayout) => {
           // Save RVC assignments for the newly created layout
           if (selectedRvcAssignments.length > 0) {

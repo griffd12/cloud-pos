@@ -42,7 +42,7 @@ import { Download, Upload, Unlink, Plus, X } from "lucide-react";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -228,7 +228,11 @@ export default function MenuItemsPage() {
 
   const importMutation = useMutation({
     mutationFn: async (items: any[]) => {
-      const response = await apiRequest("POST", `/api/menu-items/import?enterpriseId=${selectedEnterpriseId}`, items);
+      const importParams = new URLSearchParams();
+      if (scopePayload.enterpriseId) importParams.set("enterpriseId", scopePayload.enterpriseId);
+      if (scopePayload.propertyId) importParams.set("propertyId", scopePayload.propertyId);
+      if (scopePayload.rvcId) importParams.set("rvcId", scopePayload.rvcId);
+      const response = await apiRequest("POST", `/api/menu-items/import?${importParams.toString()}`, items);
       return response.json();
     },
     onSuccess: (data) => {
@@ -630,7 +634,7 @@ function MenuItemFormDialog({
         majorGroupId: data.majorGroupId === "__none__" ? null : (data.majorGroupId || null),
         familyGroupId: data.familyGroupId === "__none__" ? null : (data.familyGroupId || null),
         menuBuildEnabled,
-        enterpriseId: selectedEnterpriseId!,
+        ...scopePayload,
       };
 
       let menuItemId: string;

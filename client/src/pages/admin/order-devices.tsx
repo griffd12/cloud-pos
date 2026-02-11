@@ -10,7 +10,7 @@ import { useEmcFilter } from "@/lib/emc-context";
 
 export default function OrderDevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderDevice | null>(null);
 
@@ -188,7 +188,7 @@ export default function OrderDevicesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...cleanedData });
     } else {
-      createMutation.mutate({ ...cleanedData, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...cleanedData, ...scopePayload });
     }
   };
 

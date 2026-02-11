@@ -42,7 +42,7 @@ import { format } from "date-fns";
 export default function LoyaltyPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [activeTab, setActiveTab] = useState("programs");
   
   const [programFormOpen, setProgramFormOpen] = useState(false);
@@ -342,7 +342,7 @@ export default function LoyaltyPage() {
 
   const memberMutation = useMutation({
     mutationFn: async (data: InsertLoyaltyMember) => {
-      const enrichedData = { ...data, enterpriseId: selectedEnterpriseId || null };
+      const enrichedData = { ...data, ...scopePayload };
       if (editingMember) {
         const response = await apiRequest("PUT", `/api/loyalty-members/${editingMember.id}`, enrichedData);
         return response.json();
@@ -905,7 +905,7 @@ export default function LoyaltyPage() {
                 const data: any = {
                   name: programFormData.name,
                   propertyId: programFormData.propertyId || null,
-                  enterpriseId: selectedEnterpriseId || null,
+                  ...scopePayload,
                   programType: programFormData.programType,
                   active: programFormData.active,
                 };

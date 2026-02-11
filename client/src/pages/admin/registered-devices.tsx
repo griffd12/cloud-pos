@@ -71,7 +71,7 @@ interface FormData {
 
 export default function RegisteredDevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RegisteredDevice | null>(null);
   const [enrollmentCodeDialog, setEnrollmentCodeDialog] = useState<{ device: RegisteredDevice } | null>(null);
@@ -335,7 +335,7 @@ export default function RegisteredDevicesPage() {
     if (editingItem) {
       updateMutation.mutate({ id: editingItem.id, data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

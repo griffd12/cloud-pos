@@ -60,7 +60,7 @@ const MAX_CHARS_PER_LINE = 48;
 
 export default function DescriptorsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
@@ -185,7 +185,7 @@ export default function DescriptorsPage() {
       const cleanTrailer = trailerLines.filter(l => l.trim()).map(l => l.substring(0, MAX_CHARS_PER_LINE));
       
       return apiRequest("PUT", `/api/descriptors/${activeTab}/${scopeId}`, {
-        enterpriseId: selectedEnterpriseId,
+        ...scopePayload,
         headerLines: cleanHeader,
         trailerLines: cleanTrailer,
         logoEnabled,
@@ -229,7 +229,7 @@ export default function DescriptorsPage() {
           const base64 = (reader.result as string).split(",")[1];
           try {
             const result = await apiRequest("POST", "/api/descriptor-logos", {
-              enterpriseId: selectedEnterpriseId,
+              ...scopePayload,
               filename: file.name,
               mimeType: file.type,
               base64Data: base64,

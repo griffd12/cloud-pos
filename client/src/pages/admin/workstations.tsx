@@ -37,7 +37,7 @@ import {
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Workstation | null>(null);
 
@@ -204,7 +204,7 @@ export default function WorkstationsPage() {
           if (editingItem) {
             updateMutation.mutate({ ...editingItem, ...data } as Workstation);
           } else {
-            createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+            createMutation.mutate({ ...data, ...scopePayload });
           }
         }}
         isLoading={createMutation.isPending || updateMutation.isPending}

@@ -58,7 +58,7 @@ interface MinorEmployee {
 
 export default function MinorLaborPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
@@ -155,7 +155,7 @@ export default function MinorLaborPage() {
       employeeId: selectedEmployee,
       propertyId: selectedProperty,
       ...formData,
-      enterpriseId: selectedEnterpriseId!,
+      ...scopePayload,
     });
   };
 

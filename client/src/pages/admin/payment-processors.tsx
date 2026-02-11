@@ -57,7 +57,7 @@ export default function PaymentProcessorsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PaymentProcessor | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
 
   const { data: processors = [], isLoading } = useQuery<PaymentProcessor[]>({
     queryKey: ["/api/payment-processors", filterKeys],
@@ -204,7 +204,7 @@ export default function PaymentProcessorsPage() {
     if (editingItem) {
       updateMutation.mutate({ id: editingItem.id, data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

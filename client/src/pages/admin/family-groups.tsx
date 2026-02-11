@@ -12,7 +12,7 @@ export default function FamilyGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FamilyGroup | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
 
   const { data: familyGroups = [], isLoading } = useQuery<FamilyGroup[]>({
     queryKey: ["/api/family-groups", filterKeys],
@@ -93,7 +93,7 @@ export default function FamilyGroupsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

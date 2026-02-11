@@ -12,7 +12,7 @@ export default function MajorGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MajorGroup | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
 
   const { data: majorGroups = [], isLoading } = useQuery<MajorGroup[]>({
     queryKey: ["/api/major-groups", filterKeys],
@@ -93,7 +93,7 @@ export default function MajorGroupsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

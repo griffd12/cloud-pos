@@ -38,7 +38,7 @@ import { Switch } from "@/components/ui/switch";
 
 export default function PrintClassesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintClass | null>(null);
 
@@ -195,7 +195,7 @@ export default function PrintClassesPage() {
               await updateMutation.mutateAsync({ ...editingItem, ...data });
               printClassId = editingItem.id;
             } else {
-              const result = await createMutation.mutateAsync({ ...data, enterpriseId: selectedEnterpriseId! });
+              const result = await createMutation.mutateAsync({ ...data, ...scopePayload });
               printClassId = result.id;
             }
 

@@ -21,7 +21,7 @@ const EXPORT_FORMATS = ["csv", "qbo", "iif"];
 
 export default function AccountingExportPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -69,7 +69,7 @@ export default function AccountingExportPage() {
 
   const createMappingMutation = useMutation({
     mutationFn: async (data: Partial<GlMapping>) => {
-      const res = await apiRequest("POST", "/api/gl-mappings", { ...data, enterpriseId: selectedEnterpriseId });
+      const res = await apiRequest("POST", "/api/gl-mappings", { ...data, ...scopePayload });
       return res.json();
     },
     onSuccess: () => {
@@ -84,7 +84,7 @@ export default function AccountingExportPage() {
 
   const updateMappingMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<GlMapping> }) => {
-      const res = await apiRequest("PATCH", `/api/gl-mappings/${id}`, { ...data, enterpriseId: selectedEnterpriseId });
+      const res = await apiRequest("PATCH", `/api/gl-mappings/${id}`, { ...data, ...scopePayload });
       return res.json();
     },
     onSuccess: () => {
@@ -99,7 +99,7 @@ export default function AccountingExportPage() {
 
   const generateExportMutation = useMutation({
     mutationFn: async (data: { propertyId: string; startDate: string; endDate: string; format: string }) => {
-      const res = await apiRequest("POST", "/api/accounting-exports/generate", { ...data, enterpriseId: selectedEnterpriseId });
+      const res = await apiRequest("POST", "/api/accounting-exports/generate", { ...data, ...scopePayload });
       return res.json();
     },
     onSuccess: (data) => {

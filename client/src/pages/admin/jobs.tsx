@@ -17,7 +17,7 @@ import { type JobCode, type Role } from "@shared/schema";
 
 export default function JobsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -202,7 +202,7 @@ export default function JobsPage() {
       jobData.id = editingItem.id;
       updateMutation.mutate(jobData);
     } else {
-      createMutation.mutate({ ...jobData, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...jobData, ...scopePayload });
     }
   };
 

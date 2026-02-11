@@ -82,7 +82,7 @@ const DEFAULT_FORM = {
 
 export default function BreakRulesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   
   useEffect(() => {
@@ -201,7 +201,7 @@ export default function BreakRulesPage() {
     if (editingRule) {
       updateMutation.mutate({ id: editingRule.id, data });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

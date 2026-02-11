@@ -46,7 +46,7 @@ import type { Property, Employee, TipPoolPolicy, TipPoolRun, TipAllocation } fro
 export default function TipPoolingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [selectedProperty, setSelectedProperty] = useState<string>("");
   const [isCreatingPolicy, setIsCreatingPolicy] = useState(false);
   const [isRunningSettlement, setIsRunningSettlement] = useState(false);
@@ -107,7 +107,7 @@ export default function TipPoolingPage() {
 
   const createPolicyMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("POST", "/api/tip-pool-policies", { ...data, enterpriseId: selectedEnterpriseId });
+      return apiRequest("POST", "/api/tip-pool-policies", { ...data, ...scopePayload });
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Tip pool policy created." });
@@ -123,7 +123,7 @@ export default function TipPoolingPage() {
     mutationFn: async (data: { propertyId: string; businessDate: string; policyId: string }) => {
       return apiRequest("POST", "/api/tip-pool-settlement", {
         ...data,
-        enterpriseId: selectedEnterpriseId,
+        ...scopePayload,
         runById: "current-manager", // Would come from auth context
       });
     },

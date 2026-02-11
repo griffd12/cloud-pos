@@ -11,7 +11,7 @@ import { useEmcFilter } from "@/lib/emc-context";
 
 export default function KdsDevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<KdsDevice | null>(null);
@@ -240,7 +240,7 @@ export default function KdsDevicesPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...processedData } as KdsDevice);
     } else {
-      createMutation.mutate({ ...processedData, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...processedData, ...scopePayload });
     }
   };
 

@@ -88,7 +88,7 @@ const PACKAGE_TYPE_LABELS: Record<string, string> = {
 
 export default function CalPackagesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [selectedPackage, setSelectedPackage] = useState<CalPackage | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<CalPackageVersion | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
@@ -154,7 +154,7 @@ export default function CalPackagesPage() {
     mutationFn: async (data: { name: string; packageType: string; description: string }) => {
       const res = await apiRequest("POST", "/api/cal-packages", {
         ...data,
-        enterpriseId: selectedEnterpriseId,
+        ...scopePayload,
       });
       return res.json();
     },

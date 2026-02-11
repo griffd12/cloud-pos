@@ -120,7 +120,7 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function TerminalDevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<TerminalDevice | null>(null);
@@ -365,7 +365,7 @@ export default function TerminalDevicesPage() {
     if (editingDevice) {
       updateMutation.mutate({ ...data, id: editingDevice.id });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   }
 

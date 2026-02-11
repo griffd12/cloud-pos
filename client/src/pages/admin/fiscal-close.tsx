@@ -35,7 +35,7 @@ export default function FiscalClosePage() {
   usePosWebSocket();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const today = new Date().toISOString().split("T")[0];
   const [targetDate, setTargetDate] = useState(today);
@@ -96,7 +96,7 @@ export default function FiscalClosePage() {
       const res = await apiRequest("POST", `/api/properties/${propertyId}/business-date/advance`, {
         targetDate,
         pin,
-        enterpriseId: selectedEnterpriseId,
+        ...scopePayload,
       });
       if (!res.ok) {
         const error = await res.json();

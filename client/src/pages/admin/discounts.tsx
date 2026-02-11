@@ -14,7 +14,7 @@ export default function DiscountsPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Discount | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
 
   const { data: discounts = [], isLoading } = useQuery<Discount[]>({
     queryKey: ["/api/discounts", filterKeys],
@@ -122,7 +122,7 @@ export default function DiscountsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...formattedData });
     } else {
-      createMutation.mutate({ ...formattedData, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...formattedData, ...scopePayload });
     }
   };
 

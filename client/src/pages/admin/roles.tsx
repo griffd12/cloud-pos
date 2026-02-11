@@ -21,7 +21,7 @@ import { type Role, type Privilege } from "@shared/schema";
 export default function RolesPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Role | null>(null);
   
@@ -178,7 +178,7 @@ export default function RolesPage() {
       roleData.id = editingItem.id;
       updateMutation.mutate({ role: roleData, privileges: selectedPrivileges });
     } else {
-      createMutation.mutate({ role: { ...roleData, enterpriseId: selectedEnterpriseId! }, privileges: selectedPrivileges });
+      createMutation.mutate({ role: { ...roleData, ...scopePayload }, privileges: selectedPrivileges });
     }
   };
 

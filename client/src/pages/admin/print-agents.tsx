@@ -58,7 +58,7 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function PrintAgentsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintAgent | null>(null);
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
@@ -248,7 +248,7 @@ export default function PrintAgentsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...data, id: editingItem.id });
     } else {
-      createMutation.mutate({ ...data, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...data, ...scopePayload });
     }
   };
 

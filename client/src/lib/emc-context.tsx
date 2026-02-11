@@ -19,6 +19,8 @@ interface EmcContextType {
   setSelectedEnterpriseId: (id: string | null) => void;
   selectedPropertyId: string | null;
   setSelectedPropertyId: (id: string | null) => void;
+  selectedRvcId: string | null;
+  setSelectedRvcId: (id: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setup: (email: string, password: string, displayName?: string, enterpriseId?: string) => Promise<void>;
@@ -30,6 +32,7 @@ const EMC_SESSION_KEY = "emc_session_token";
 
 const EMC_SELECTED_ENTERPRISE_KEY = "emc_selected_enterprise_id";
 const EMC_SELECTED_PROPERTY_KEY = "emc_selected_property_id";
+const EMC_SELECTED_RVC_KEY = "emc_selected_rvc_id";
 
 export function EmcProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<EmcUser | null>(null);
@@ -37,6 +40,7 @@ export function EmcProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEnterpriseId, setSelectedEnterpriseIdState] = useState<string | null>(null);
   const [selectedPropertyId, setSelectedPropertyIdState] = useState<string | null>(null);
+  const [selectedRvcId, setSelectedRvcIdState] = useState<string | null>(null);
 
   const setSelectedEnterpriseId = useCallback((id: string | null) => {
     setSelectedEnterpriseIdState(id);
@@ -45,9 +49,10 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     } else {
       sessionStorage.removeItem(EMC_SELECTED_ENTERPRISE_KEY);
     }
-    // Clear property selection when enterprise changes
     setSelectedPropertyIdState(null);
     sessionStorage.removeItem(EMC_SELECTED_PROPERTY_KEY);
+    setSelectedRvcIdState(null);
+    sessionStorage.removeItem(EMC_SELECTED_RVC_KEY);
   }, []);
 
   const setSelectedPropertyId = useCallback((id: string | null) => {
@@ -56,6 +61,17 @@ export function EmcProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem(EMC_SELECTED_PROPERTY_KEY, id);
     } else {
       sessionStorage.removeItem(EMC_SELECTED_PROPERTY_KEY);
+    }
+    setSelectedRvcIdState(null);
+    sessionStorage.removeItem(EMC_SELECTED_RVC_KEY);
+  }, []);
+
+  const setSelectedRvcId = useCallback((id: string | null) => {
+    setSelectedRvcIdState(id);
+    if (id) {
+      sessionStorage.setItem(EMC_SELECTED_RVC_KEY, id);
+    } else {
+      sessionStorage.removeItem(EMC_SELECTED_RVC_KEY);
     }
   }, []);
 
@@ -67,6 +83,10 @@ export function EmcProvider({ children }: { children: ReactNode }) {
     const storedPropertyId = sessionStorage.getItem(EMC_SELECTED_PROPERTY_KEY);
     if (storedPropertyId) {
       setSelectedPropertyIdState(storedPropertyId);
+    }
+    const storedRvcId = sessionStorage.getItem(EMC_SELECTED_RVC_KEY);
+    if (storedRvcId) {
+      setSelectedRvcIdState(storedRvcId);
     }
   }, []);
 
@@ -175,6 +195,8 @@ export function EmcProvider({ children }: { children: ReactNode }) {
         setSelectedEnterpriseId,
         selectedPropertyId,
         setSelectedPropertyId,
+        selectedRvcId,
+        setSelectedRvcId,
         login,
         logout,
         setup,
@@ -194,17 +216,23 @@ export function useEmc() {
 }
 
 export function useEmcFilter() {
-  const { selectedEnterpriseId, selectedPropertyId } = useEmc();
+  const { selectedEnterpriseId, selectedPropertyId, selectedRvcId } = useEmc();
 
   const filterParam = (() => {
     const params = new URLSearchParams();
     if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
     if (selectedPropertyId) params.set("propertyId", selectedPropertyId);
+    if (selectedRvcId) params.set("rvcId", selectedRvcId);
     const str = params.toString();
     return str ? `?${str}` : "";
   })();
 
-  const filterKeys = { enterpriseId: selectedEnterpriseId, propertyId: selectedPropertyId };
+  const filterKeys = { enterpriseId: selectedEnterpriseId, propertyId: selectedPropertyId, rvcId: selectedRvcId };
 
-  return { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId };
+  const scopePayload: Record<string, string> = {};
+  if (selectedEnterpriseId) scopePayload.enterpriseId = selectedEnterpriseId;
+  if (selectedPropertyId) scopePayload.propertyId = selectedPropertyId;
+  if (selectedRvcId) scopePayload.rvcId = selectedRvcId;
+
+  return { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload };
 }

@@ -14,7 +14,7 @@ export default function TaxGroupsPage() {
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TaxGroup | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
 
   const { data: taxGroups = [], isLoading } = useQuery<TaxGroup[]>({
     queryKey: ["/api/tax-groups", filterKeys],
@@ -119,7 +119,7 @@ export default function TaxGroupsPage() {
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...dataWithDecimalRate });
     } else {
-      createMutation.mutate({ ...dataWithDecimalRate, enterpriseId: selectedEnterpriseId! });
+      createMutation.mutate({ ...dataWithDecimalRate, ...scopePayload });
     }
   };
 
