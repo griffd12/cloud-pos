@@ -904,6 +904,7 @@ export default function LoyaltyPage() {
                 const data: any = {
                   name: programFormData.name,
                   propertyId: programFormData.propertyId || null,
+                  enterpriseId: selectedEnterpriseId || null,
                   programType: programFormData.programType,
                   active: programFormData.active,
                 };

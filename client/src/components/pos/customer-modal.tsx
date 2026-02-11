@@ -136,7 +136,7 @@ export function CustomerModal({
       if (!res.ok) throw new Error("Failed to fetch loyalty programs");
       return res.json();
     },
-    enabled: open && (showEnrollForm || showEnrollInProgram),
+    enabled: open && showEnrollInProgram,
   });
 
   const attachMutation = useMutation({
@@ -199,18 +199,19 @@ export function CustomerModal({
 
   const enrollMutation = useMutation({
     mutationFn: async () => {
-      const activeProgram = loyaltyPrograms.find((p) => p.active);
-      if (!activeProgram) throw new Error("No active loyalty program");
       const res = await apiRequest("POST", "/api/pos/loyalty/enroll", {
-        programId: activeProgram.id,
         ...enrollForm,
+        enterpriseId: enterpriseId || undefined,
       });
       return res.json();
     },
     onSuccess: (data) => {
+      const desc = data.enrolledPrograms?.length > 0
+        ? `${data.member.firstName} added and enrolled in ${data.enrolledPrograms.join(", ")}`
+        : `${data.member.firstName} added as a member`;
       toast({
-        title: "Enrollment Successful",
-        description: `${data.member.firstName} is now a loyalty member`,
+        title: "Member Added",
+        description: desc,
       });
       setShowEnrollForm(false);
       setEnrollForm({ firstName: "", lastName: "", phone: "", email: "" });
@@ -219,8 +220,8 @@ export function CustomerModal({
     },
     onError: (error: any) => {
       toast({
-        title: "Enrollment Failed",
-        description: error.message || "Could not enroll customer",
+        title: "Failed to Add Member",
+        description: error.message || "Could not add customer",
         variant: "destructive",
       });
     },
@@ -367,7 +368,7 @@ export function CustomerModal({
             {showEnrollForm ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">New Member Enrollment</h3>
+                  <h3 className="font-semibold">Add New Member</h3>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -417,23 +418,10 @@ export function CustomerModal({
                     />
                   </div>
                 </div>
-                {!isLoadingPrograms && loyaltyPrograms.length > 0 && !loyaltyPrograms.some((p) => p.active) && (
-                  <div className="p-3 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md">
-                    No active loyalty program found. Please configure a loyalty program in Admin.
-                  </div>
-                )}
-                {!isLoadingPrograms && loyaltyPrograms.length === 0 && (
-                  <div className="p-3 text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md">
-                    No loyalty program configured. Please set up a loyalty program in Admin.
-                  </div>
-                )}
                 <Button
                   onClick={() => enrollMutation.mutate()}
                   disabled={
                     enrollMutation.isPending ||
-                    isLoadingPrograms ||
-                    loyaltyPrograms.length === 0 ||
-                    !loyaltyPrograms.some((p) => p.active) ||
                     !enrollForm.firstName ||
                     !enrollForm.lastName ||
                     (!enrollForm.phone && !enrollForm.email)
@@ -441,12 +429,12 @@ export function CustomerModal({
                   className="w-full"
                   data-testid="button-submit-enroll"
                 >
-                  {enrollMutation.isPending || isLoadingPrograms ? (
+                  {enrollMutation.isPending ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <UserPlus className="w-4 h-4 mr-2" />
                   )}
-                  {isLoadingPrograms ? "Loading Programs..." : "Enroll Customer"}
+                  Add Member
                 </Button>
               </div>
             ) : (
@@ -488,7 +476,7 @@ export function CustomerModal({
                         className="mt-2 underline"
                         data-testid="link-enroll-new"
                       >
-                        Enroll a new customer
+                        Add a new member
                       </Button>
                     </div>
                   ) : (

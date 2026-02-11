@@ -19722,9 +19722,8 @@ connect();
   // Customer self-enrollment in loyalty program
   app.post("/api/pos/loyalty/enroll", async (req, res) => {
     try {
-      const { programId, firstName, lastName, phone, email } = req.body;
+      const { firstName, lastName, phone, email, enterpriseId, propertyId } = req.body;
 
-      // Check if customer already exists
       const existingByPhone = phone ? await storage.getLoyaltyMemberByIdentifier(phone) : null;
       const existingByEmail = email ? await storage.getLoyaltyMemberByIdentifier(email) : null;
 
@@ -19735,25 +19734,49 @@ connect();
         });
       }
 
-      // Generate member number
       const memberNumber = `LM${Date.now().toString(36).toUpperCase()}`;
 
       const member = await storage.createLoyaltyMember({
-        programId,
         memberNumber,
         firstName,
         lastName,
         phone,
         email,
+        propertyId: propertyId || null,
         status: "active",
-        currentPoints: 0,
-        lifetimePoints: 0,
       });
+
+      const enrolledPrograms: string[] = [];
+      if (enterpriseId) {
+        try {
+          const programs = await storage.getLoyaltyPrograms(enterpriseId);
+          const activePrograms = programs.filter(p => p.active);
+          for (const program of activePrograms) {
+            await storage.createLoyaltyEnrollment({
+              memberId: member.id,
+              programId: program.id,
+              currentPoints: 0,
+              lifetimePoints: 0,
+              totalVisits: 0,
+              totalSpend: "0",
+              status: "active",
+            });
+            enrolledPrograms.push(program.name);
+          }
+        } catch (autoEnrollError) {
+          console.error("Auto-enrollment error:", autoEnrollError);
+        }
+      }
+
+      const memberWithEnrollments = await storage.getLoyaltyMemberWithEnrollments(member.id);
 
       res.status(201).json({
         success: true,
-        member,
-        message: "Successfully enrolled in loyalty program",
+        member: memberWithEnrollments || member,
+        enrolledPrograms,
+        message: enrolledPrograms.length > 0 
+          ? `Member added and enrolled in ${enrolledPrograms.join(", ")}` 
+          : "Member added successfully",
       });
     } catch (error: any) {
       console.error("Enrollment error:", error);
