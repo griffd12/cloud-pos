@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Switch, Route, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -279,7 +279,6 @@ export default function EmcAdminLayout() {
     }
   }, [effectiveEnterpriseId, enterprises, selectedEnterprise?.id]);
 
-  // Sync selectedProperty with context selectedPropertyId
   useEffect(() => {
     if (selectedPropertyId && properties.length > 0) {
       const prop = properties.find(p => p.id === selectedPropertyId);
@@ -287,6 +286,9 @@ export default function EmcAdminLayout() {
         setSelectedProperty(prop);
         setSelectedRvc(null);
       }
+    } else if (!selectedPropertyId && selectedProperty) {
+      setSelectedProperty(null);
+      setSelectedRvc(null);
     }
   }, [selectedPropertyId, properties, selectedProperty?.id]);
 
@@ -301,10 +303,12 @@ export default function EmcAdminLayout() {
     }
   }, [selectedRvcId, rvcs, selectedRvc?.id]);
 
-  // Auto-select property: use user's assigned property for property_admin, or first available property
+  const hasAutoSelectedProperty = useRef(false);
+
   useEffect(() => {
+    if (hasAutoSelectedProperty.current) return;
     if (properties.length > 0 && !selectedPropertyId) {
-      // For property_admin, use their assigned property
+      hasAutoSelectedProperty.current = true;
       if (user?.accessLevel === "property_admin" && user?.propertyId) {
         const userProp = properties.find(p => p.id === user.propertyId);
         if (userProp) {
@@ -313,7 +317,6 @@ export default function EmcAdminLayout() {
           return;
         }
       }
-      // Otherwise, auto-select first available property for the enterprise
       const firstProp = properties[0];
       if (firstProp) {
         setSelectedPropertyId(firstProp.id);
@@ -333,7 +336,7 @@ export default function EmcAdminLayout() {
     setSelectedEnterprise(ent);
     setSelectedProperty(null);
     setSelectedRvc(null);
-    // For super_admin, also update context
+    hasAutoSelectedProperty.current = false;
     if (isSystemAdmin) {
       setSelectedEnterpriseId(id);
     }
