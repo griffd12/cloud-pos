@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getAuthHeaders } from "@/lib/queryClient";
@@ -50,11 +50,19 @@ const DEVICE_TYPE_CONFIG = {
 
 export default function DevicesHubPage() {
   const [, navigate] = useLocation();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterPropertyId, setFilterPropertyId] = useState<string>("");
+  const [filterPropertyId, setFilterPropertyId] = useState<string>(contextPropertyId || "");
   const [filterDeviceType, setFilterDeviceType] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
+
+  useEffect(() => {
+    if (contextPropertyId) {
+      setFilterPropertyId(contextPropertyId);
+    } else {
+      setFilterPropertyId("");
+    }
+  }, [contextPropertyId]);
 
   const buildQueryPath = () => {
     const params = new URLSearchParams();
