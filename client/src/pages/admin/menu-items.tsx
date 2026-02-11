@@ -514,7 +514,7 @@ function MenuItemFormDialog({
   familyGroups,
 }: MenuItemFormDialogProps) {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
   
   const initialSluIds = editingItem 
     ? existingSlus.filter(l => l.menuItemId === editingItem.id).map(l => l.sluId)
