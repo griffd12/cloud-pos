@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { insertKdsDeviceSchema, type KdsDevice, type InsertKdsDevice, type Property } from "@shared/schema";
 import { useEmcFilter } from "@/lib/emc-context";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 export default function KdsDevicesPage() {
   const { toast } = useToast();
@@ -76,6 +77,7 @@ export default function KdsDevicesPage() {
       header: "Active",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const formFields: FormFieldConfig[] = [

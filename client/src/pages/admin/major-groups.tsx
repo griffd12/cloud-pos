@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
+import { getScopeColumn } from "@/components/admin/scope-column";
 import { insertMajorGroupSchema, type MajorGroup, type InsertMajorGroup } from "@shared/schema";
 
 export default function MajorGroupsPage() {
@@ -36,6 +37,7 @@ export default function MajorGroupsPage() {
       header: "Status",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const formFields: FormFieldConfig[] = [

@@ -44,6 +44,7 @@ import {
 import { Monitor, Tv, Key, Copy, RefreshCw, Loader2, CheckCircle, XCircle, Clock, AlertTriangle, Shield } from "lucide-react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 const DEVICE_TYPE_LABELS: Record<string, { label: string; icon: typeof Monitor }> = {
   pos_workstation: { label: "POS Workstation", icon: Monitor },
@@ -196,6 +197,7 @@ export default function RegisteredDevicesPage() {
       render: (value) => value ? format(new Date(value as string), "MMM d, yyyy h:mm a") : "-",
     },
     { key: "serialNumber", header: "Serial Number", render: (value) => value || "-" },
+    getScopeColumn(),
   ];
 
   const form = useForm<FormData>({

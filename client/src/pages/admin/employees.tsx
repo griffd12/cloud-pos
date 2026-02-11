@@ -15,6 +15,7 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { type Employee, type Role, type Property, type EmployeeAssignment, type JobCode, type EmployeeJobCode } from "@shared/schema";
 import { Plus, Trash2 } from "lucide-react";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 interface JobAssignment {
   jobCodeId: string;
@@ -165,6 +166,7 @@ export default function EmployeesPage() {
       header: "Status",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const createMutation = useMutation({

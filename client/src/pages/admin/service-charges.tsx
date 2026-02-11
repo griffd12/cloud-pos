@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
+import { getScopeColumn } from "@/components/admin/scope-column";
 import { insertServiceChargeSchema, type ServiceCharge, type InsertServiceCharge } from "@shared/schema";
 
 export default function ServiceChargesPage() {
@@ -47,6 +48,7 @@ export default function ServiceChargesPage() {
       header: "Status",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const formFields: FormFieldConfig[] = [

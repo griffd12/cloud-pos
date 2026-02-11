@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
+import { getScopeColumn } from "@/components/admin/scope-column";
 import { insertModifierGroupSchema, type ModifierGroup, type InsertModifierGroup, type Modifier, type ModifierGroupModifier } from "@shared/schema";
 import { Link2 } from "lucide-react";
 
@@ -66,6 +67,7 @@ export default function ModifierGroupsPage() {
     { key: "minSelect", header: "Min", sortable: true },
     { key: "maxSelect", header: "Max", sortable: true },
     { key: "displayOrder", header: "Order" },
+    getScopeColumn(),
   ];
 
   const formFields: FormFieldConfig[] = [

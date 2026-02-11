@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 export default function PrintClassesPage() {
   const { toast } = useToast();
@@ -108,6 +109,7 @@ export default function PrintClassesPage() {
       header: "Active",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const createMutation = useMutation({

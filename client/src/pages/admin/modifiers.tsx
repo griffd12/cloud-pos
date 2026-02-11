@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
+import { getScopeColumn } from "@/components/admin/scope-column";
 import { insertModifierSchema, type Modifier, type InsertModifier } from "@shared/schema";
 
 export default function ModifiersPage() {
@@ -45,16 +46,7 @@ export default function ModifiersPage() {
         value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>
       ),
     },
-    {
-      key: "scope",
-      header: "Scope",
-      render: (_, row) => {
-        if (row.rvcId) return <Badge variant="outline">RVC</Badge>;
-        if (row.propertyId) return <Badge variant="outline">Property</Badge>;
-        if (row.enterpriseId) return <Badge variant="outline">Enterprise</Badge>;
-        return <Badge variant="outline">Global</Badge>;
-      },
-    },
+    getScopeColumn(),
   ];
 
   const formFields: FormFieldConfig[] = [

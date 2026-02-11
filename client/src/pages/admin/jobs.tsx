@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type JobCode, type Role } from "@shared/schema";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 export default function JobsPage() {
   const { toast } = useToast();
@@ -129,6 +130,7 @@ export default function JobsPage() {
       header: "Status",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const createMutation = useMutation({

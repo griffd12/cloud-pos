@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
@@ -119,6 +120,7 @@ export default function WorkstationsPage() {
       header: "Active",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const createMutation = useMutation({

@@ -49,6 +49,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 import { z } from "zod";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 const formSchema = insertPrintAgentSchema.extend({
   name: z.string().min(1, "Name is required"),
@@ -135,6 +136,7 @@ export default function PrintAgentsPage() {
       },
     },
     { key: "description", header: "Description" },
+    getScopeColumn(),
   ];
 
   const createMutation = useMutation({

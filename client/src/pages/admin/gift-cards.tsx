@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { insertGiftCardSchema, type GiftCard, type GiftCardTransaction, type InsertGiftCard } from "@shared/schema";
 import { CreditCard, Search, Plus, DollarSign, RefreshCw, History, Ban } from "lucide-react";
 import { format } from "date-fns";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 export default function GiftCardsPage() {
   const { toast } = useToast();
@@ -87,6 +88,7 @@ export default function GiftCardsPage() {
       header: "Created",
       render: (value) => value ? format(new Date(value), "MMM d, yyyy") : "-",
     },
+    getScopeColumn(),
   ];
 
   const formFields: FormFieldConfig[] = [

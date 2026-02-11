@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 const EPSON_MODELS = [
   { value: "TM-T88VII", label: "TM-T88VII - Latest High-Speed" },
@@ -159,6 +160,7 @@ export default function PrintersPage() {
       header: "Active",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const createMutation = useMutation({

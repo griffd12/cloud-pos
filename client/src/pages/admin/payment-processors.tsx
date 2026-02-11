@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, TestTube } from "lucide-react";
+import { getScopeColumn } from "@/components/admin/scope-column";
 
 const GATEWAY_TYPES = [
   { value: "stripe", label: "Stripe", emv: false, description: "Online/card-not-present processing" },
@@ -116,6 +117,7 @@ export default function PaymentProcessorsPage() {
       header: "Status",
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
+    getScopeColumn(),
   ];
 
   const form = useForm<InsertPaymentProcessor>({
