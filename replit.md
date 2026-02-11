@@ -66,3 +66,6 @@ Preferred communication style: Simple, everyday language.
 - Elavon Converge (EMV terminal integration)
 - Elavon Fusebox (EMV terminal with multi-processor support)
 - Heartland / Global Payments (EMV terminal + online via Portico gateway)
+
+### Planned Features (Future)
+- **Simphony-Style Configuration Inheritance/Override**: Items configured at the enterprise level would automatically inherit down to all properties and RVCs. When viewing at a lower level (property or RVC), users would see inherited items and be able to override specific fields (e.g., price) at that level only, without changing the parent configuration. Override resolution engine would merge parent configs with child overrides at query time, following the pattern: Enterprise → Property → RVC, where each level can override but the parent remains unchanged.
