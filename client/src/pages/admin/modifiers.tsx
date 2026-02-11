@@ -49,9 +49,9 @@ export default function ModifiersPage() {
       key: "scope",
       header: "Scope",
       render: (_, row) => {
-        if (row.enterpriseId) return <Badge variant="outline">Enterprise</Badge>;
-        if (row.propertyId) return <Badge variant="outline">Property</Badge>;
         if (row.rvcId) return <Badge variant="outline">RVC</Badge>;
+        if (row.propertyId) return <Badge variant="outline">Property</Badge>;
+        if (row.enterpriseId) return <Badge variant="outline">Enterprise</Badge>;
         return <Badge variant="outline">Global</Badge>;
       },
     },

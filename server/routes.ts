@@ -2327,6 +2327,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
     }
     
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
+    }
+    
     res.json(data);
   });
 
@@ -2398,6 +2402,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -2586,6 +2594,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
     }
     
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
+    }
+    
     res.json(data);
   });
 
@@ -2641,6 +2653,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -2863,6 +2879,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
     }
     
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
+    }
+    
     res.json(data);
   });
 
@@ -2993,6 +3013,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -3526,6 +3550,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
     }
     
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
+    }
+    
     res.json(data);
   });
 
@@ -3653,6 +3681,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
@@ -6631,6 +6663,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (enterpriseId) {
       const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
       data = filterByEnterprise(data, enterpriseId, propertyIds, rvcIds);
+    }
+    
+    if (propertyId) {
+      data = await filterByPropertyScope(data, propertyId, rvcId);
     }
     
     res.json(data);
