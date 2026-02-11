@@ -62,10 +62,10 @@ export default function BreakViolationsPage() {
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedProperty) {
+    if (contextPropertyId) {
       setSelectedProperty(contextPropertyId);
     }
-  }, [contextPropertyId, selectedProperty]);
+  }, [contextPropertyId]);
   const [dateRange, setDateRange] = useState<"this_week" | "last_week" | "custom">("this_week");
   const [startDate, setStartDate] = useState(format(startOfWeek(new Date()), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(endOfWeek(new Date()), "yyyy-MM-dd"));

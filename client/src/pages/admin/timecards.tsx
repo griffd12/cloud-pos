@@ -62,10 +62,10 @@ export default function TimecardsPage() {
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   
   useEffect(() => {
-    if (contextPropertyId && !selectedProperty) {
+    if (contextPropertyId) {
       setSelectedProperty(contextPropertyId);
     }
-  }, [contextPropertyId, selectedProperty]);
+  }, [contextPropertyId]);
   
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [editingTimecard, setEditingTimecard] = useState<Timecard | null>(null);

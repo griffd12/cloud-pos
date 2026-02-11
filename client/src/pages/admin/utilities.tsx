@@ -97,10 +97,10 @@ export default function UtilitiesPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [pin, setPin] = useState("");
   const [confirmText, setConfirmText] = useState("");

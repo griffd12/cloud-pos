@@ -105,10 +105,10 @@ export default function LineUpPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [filterEmployeeId, setFilterEmployeeId] = useState<string>("");
 
   const { data: properties = [] } = useQuery<Property[]>({

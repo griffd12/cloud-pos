@@ -39,10 +39,10 @@ export default function FiscalClosePage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const today = new Date().toISOString().split("T")[0];
   const [targetDate, setTargetDate] = useState(today);
   const [showPinPrompt, setShowPinPrompt] = useState(false);

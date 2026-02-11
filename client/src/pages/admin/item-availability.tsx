@@ -25,10 +25,10 @@ export default function ItemAvailabilityPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showAvailabilityDialog, setShowAvailabilityDialog] = useState(false);
   const [showPrepDialog, setShowPrepDialog] = useState(false);
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);

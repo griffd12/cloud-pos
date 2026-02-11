@@ -26,10 +26,10 @@ export default function CashManagementPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showDrawerDialog, setShowDrawerDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
   const [showSafeCountDialog, setShowSafeCountDialog] = useState(false);

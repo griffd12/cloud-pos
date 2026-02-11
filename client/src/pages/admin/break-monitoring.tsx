@@ -156,10 +156,10 @@ export default function BreakMonitoringPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (contextPropertyId && !selectedProperty) {
+    if (contextPropertyId) {
       setSelectedProperty(contextPropertyId);
     }
-  }, [contextPropertyId, selectedProperty]);
+  }, [contextPropertyId]);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", filterKeys],

@@ -29,10 +29,10 @@ export default function InventoryPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);

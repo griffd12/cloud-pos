@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -46,8 +46,14 @@ import type { Property, Employee, TipPoolPolicy, TipPoolRun, TipAllocation } fro
 export default function TipPoolingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId) {
+      setSelectedProperty(contextPropertyId);
+    }
+  }, [contextPropertyId]);
   const [isCreatingPolicy, setIsCreatingPolicy] = useState(false);
   const [isRunningSettlement, setIsRunningSettlement] = useState(false);
   const [settlementDate, setSettlementDate] = useState(format(new Date(), "yyyy-MM-dd"));

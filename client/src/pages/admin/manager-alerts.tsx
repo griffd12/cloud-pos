@@ -27,10 +27,10 @@ export default function ManagerAlertsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
   const [selectedAlertTypes, setSelectedAlertTypes] = useState<string[]>([]);
 

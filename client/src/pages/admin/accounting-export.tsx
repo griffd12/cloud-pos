@@ -25,10 +25,10 @@ export default function AccountingExportPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [editingMapping, setEditingMapping] = useState<GlMapping | null>(null);

@@ -27,10 +27,10 @@ export default function OnlineOrderingPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
 
   useEffect(() => {
-    if (contextPropertyId && !selectedPropertyId) {
+    if (contextPropertyId) {
       setSelectedPropertyId(contextPropertyId);
     }
-  }, [contextPropertyId, selectedPropertyId]);
+  }, [contextPropertyId]);
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [editingSource, setEditingSource] = useState<OnlineOrderSource | null>(null);
 

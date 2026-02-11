@@ -80,10 +80,10 @@ export default function SchedulingPage() {
   const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   
   useEffect(() => {
-    if (contextPropertyId && !selectedProperty) {
+    if (contextPropertyId) {
       setSelectedProperty(contextPropertyId);
     }
-  }, [contextPropertyId, selectedProperty]);
+  }, [contextPropertyId]);
   
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [isAddingShift, setIsAddingShift] = useState(false);

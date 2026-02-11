@@ -441,11 +441,25 @@ export default function ReportsPage() {
   // Enable real-time updates via WebSocket
   usePosWebSocket();
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId: contextRvcId } = useEmcFilter();
   
   const searchParams = useSearch();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
-  const [selectedRvcId, setSelectedRvcId] = useState<string>("all");
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "all");
+  const [selectedRvcId, setSelectedRvcId] = useState<string>(contextRvcId || "all");
+
+  useEffect(() => {
+    if (contextPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId]);
+
+  useEffect(() => {
+    if (contextRvcId) {
+      setSelectedRvcId(contextRvcId);
+    } else {
+      setSelectedRvcId("all");
+    }
+  }, [contextRvcId]);
   const [dateRange, setDateRange] = useState<string>("today");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [customStartDate, setCustomStartDate] = useState<string>("");
