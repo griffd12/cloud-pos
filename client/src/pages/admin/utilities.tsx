@@ -10,7 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { AlertTriangle, Trash2, Database, ShieldAlert, FileText, Loader2, Building2, Calendar, ArrowRight } from "lucide-react";
+import { AlertTriangle, Trash2, Database, ShieldAlert, FileText, Loader2, Building2, Calendar, ArrowRight, ExternalLink } from "lucide-react";
+import { Link } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -47,20 +48,6 @@ interface SalesDataSummary {
   prepItems: number;
   offlineQueue: number;
   accountingExports: number;
-}
-
-interface BusinessDateInfo {
-  currentBusinessDate: string;
-  nextBusinessDate: string;
-  rolloverTime: string;
-  timezone: string;
-}
-
-interface IncrementResult {
-  success: boolean;
-  previousBusinessDate: string;
-  newBusinessDate: string;
-  message: string;
 }
 
 interface ClearResult {
@@ -120,11 +107,6 @@ export default function UtilitiesPage() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [lastResult, setLastResult] = useState<ClearResult | null>(null);
   
-  // Business Date state
-  const [bdPropertyId, setBdPropertyId] = useState<string>("");
-  const [showBdDialog, setShowBdDialog] = useState(false);
-  const [bdPin, setBdPin] = useState("");
-  const [bdAcknowledged, setBdAcknowledged] = useState(false);
 
   // Fetch all properties for selection
   const { data: properties, isLoading: propertiesLoading } = useQuery<Property[]>({
@@ -149,38 +131,6 @@ export default function UtilitiesPage() {
   });
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
-  const bdProperty = properties?.find(p => p.id === bdPropertyId);
-
-  // Business date query
-  const { data: businessDateInfo, isLoading: bdLoading, refetch: refetchBd } = useQuery<BusinessDateInfo>({
-    queryKey: ["/api/properties", bdPropertyId, "business-date"],
-    enabled: !!bdPropertyId,
-  });
-
-  const incrementBdMutation = useMutation({
-    mutationFn: async (data: { propertyId: string; pin: string }) => {
-      const response = await apiRequest("POST", `/api/properties/${data.propertyId}/business-date/increment`, { pin: data.pin });
-      return response.json() as Promise<IncrementResult>;
-    },
-    onSuccess: (result) => {
-      setShowBdDialog(false);
-      setBdPin("");
-      setBdAcknowledged(false);
-      refetchBd();
-      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
-      toast({
-        title: "Business Date Incremented",
-        description: result.message,
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to Increment",
-        description: error.message || "Failed to increment business date",
-        variant: "destructive",
-      });
-    },
-  });
 
   const clearMutation = useMutation({
     mutationFn: async (data: { pin: string; confirmText: string; propertyId: string }) => {
@@ -545,7 +495,7 @@ export default function UtilitiesPage() {
         </Card>
       )}
 
-      {/* Business Date Management Section */}
+      {/* Business Date Management - redirect to Fiscal Close */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -553,91 +503,22 @@ export default function UtilitiesPage() {
             Business Date Management
           </CardTitle>
           <CardDescription>
-            View and increment the current business date for a property. The business date determines 
-            which operating day transactions are attributed to in reports.
+            Advance the business date for a property. The business date determines which operating day 
+            transactions are attributed to in reports.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="bd-property-select" className="flex items-center gap-2">
-              <Building2 className="w-4 h-4" />
-              Select Property
-            </Label>
-            <Select 
-              value={bdPropertyId} 
-              onValueChange={setBdPropertyId}
-              disabled={propertiesLoading}
-            >
-              <SelectTrigger id="bd-property-select" data-testid="select-bd-property">
-                <SelectValue placeholder="Choose a property..." />
-              </SelectTrigger>
-              <SelectContent>
-                {properties?.map((property) => (
-                  <SelectItem 
-                    key={property.id} 
-                    value={property.id}
-                    data-testid={`select-bd-property-${property.id}`}
-                  >
-                    {property.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {bdPropertyId && (
-            <>
-              <div className="p-4 bg-muted/50 rounded-md">
-                <div className="font-medium text-sm text-muted-foreground mb-2">Selected Property</div>
-                <div className="text-lg font-semibold">{bdProperty?.name}</div>
-              </div>
-
-              {bdLoading ? (
-                <div className="flex items-center justify-center p-6">
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                </div>
-              ) : businessDateInfo ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 border rounded-md">
-                      <div className="text-sm text-muted-foreground mb-1">Current Business Date</div>
-                      <div className="text-2xl font-bold" data-testid="text-current-business-date">
-                        {businessDateInfo.currentBusinessDate}
-                      </div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        Rollover at {businessDateInfo.rolloverTime}
-                      </div>
-                    </div>
-                    <div className="p-4 border rounded-md bg-primary/5">
-                      <div className="text-sm text-muted-foreground mb-1">After Increment</div>
-                      <div className="text-2xl font-bold flex items-center gap-2" data-testid="text-next-business-date">
-                        <ArrowRight className="w-5 h-5 text-primary" />
-                        {businessDateInfo.nextBusinessDate}
-                      </div>
-                    </div>
-                  </div>
-
-                  <Alert>
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Important</AlertTitle>
-                    <AlertDescription>
-                      Incrementing the business date affects how new transactions are attributed in reports. 
-                      This action is typically performed at the end of the business day.
-                    </AlertDescription>
-                  </Alert>
-
-                  <Button
-                    onClick={() => setShowBdDialog(true)}
-                    className="w-full"
-                    data-testid="button-open-bd-dialog"
-                  >
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Increment Business Date
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          )}
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Business date management is handled through Fiscal Close, which allows you to pick any target date 
+            and properly manages fiscal periods during the transition.
+          </p>
+          <Link href="/emc/fiscal-close">
+            <Button className="w-full" data-testid="button-go-fiscal-close">
+              <Calendar className="w-4 h-4 mr-2" />
+              Go to Fiscal Close
+              <ExternalLink className="w-4 h-4 ml-2" />
+            </Button>
+          </Link>
         </CardContent>
       </Card>
 
@@ -737,102 +618,6 @@ export default function UtilitiesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Business Date Increment Dialog */}
-      <Dialog open={showBdDialog} onOpenChange={setShowBdDialog}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Confirm Business Date Change
-            </DialogTitle>
-            <DialogDescription>
-              This will change the business date for <strong>{bdProperty?.name}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 border rounded-md text-center">
-                <div className="text-xs text-muted-foreground mb-1">Current</div>
-                <div className="font-bold">{businessDateInfo?.currentBusinessDate}</div>
-              </div>
-              <div className="p-3 border rounded-md text-center bg-primary/5">
-                <div className="text-xs text-muted-foreground mb-1">New</div>
-                <div className="font-bold flex items-center justify-center gap-1">
-                  <ArrowRight className="w-4 h-4 text-primary" />
-                  {businessDateInfo?.nextBusinessDate}
-                </div>
-              </div>
-            </div>
-
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Warning</AlertTitle>
-              <AlertDescription>
-                After this change, all new transactions will be attributed to the new business date.
-                Make sure end-of-day procedures are complete before incrementing.
-              </AlertDescription>
-            </Alert>
-
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id="bd-acknowledge"
-                checked={bdAcknowledged}
-                onCheckedChange={(checked) => setBdAcknowledged(checked === true)}
-                data-testid="checkbox-bd-acknowledge"
-              />
-              <Label htmlFor="bd-acknowledge" className="text-sm leading-tight">
-                I understand this will change the business date and affect how new transactions are reported.
-              </Label>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="bd-pin">Employee PIN (Admin Role Required)</Label>
-              <Input
-                id="bd-pin"
-                type="password"
-                value={bdPin}
-                onChange={(e) => setBdPin(e.target.value)}
-                placeholder="Enter your PIN"
-                data-testid="input-bd-pin"
-              />
-            </div>
-          </div>
-          </div>
-
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowBdDialog(false);
-                setBdPin("");
-                setBdAcknowledged(false);
-              }}
-              data-testid="button-cancel-bd"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => incrementBdMutation.mutate({ propertyId: bdPropertyId, pin: bdPin })}
-              disabled={!bdAcknowledged || !bdPin || incrementBdMutation.isPending}
-              data-testid="button-confirm-bd"
-            >
-              {incrementBdMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Increment Business Date
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
