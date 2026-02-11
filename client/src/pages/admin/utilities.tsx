@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,8 +106,14 @@ interface ClearResult {
 
 export default function UtilitiesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [pin, setPin] = useState("");
   const [confirmText, setConfirmText] = useState("");

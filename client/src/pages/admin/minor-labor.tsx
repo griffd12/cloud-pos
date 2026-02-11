@@ -58,8 +58,7 @@ interface MinorEmployee {
 
 export default function MinorLaborPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const [formData, setFormData] = useState({
@@ -86,18 +85,30 @@ export default function MinorLaborPage() {
   });
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees?propertyId=" + selectedProperty],
-    enabled: !!selectedProperty,
+    queryKey: ["/api/employees", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch employees");
+      return res.json();
+    },
   });
 
   const { data: minorStatuses = [], isLoading } = useQuery<EmployeeMinorStatus[]>({
-    queryKey: ["/api/employee-minor-status?propertyId=" + selectedProperty],
-    enabled: !!selectedProperty,
+    queryKey: ["/api/employee-minor-status", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/employee-minor-status${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch minor statuses");
+      return res.json();
+    },
   });
 
   const { data: laborRules = [] } = useQuery<MinorLaborRule[]>({
-    queryKey: ["/api/minor-labor-rules?propertyId=" + selectedProperty],
-    enabled: !!selectedProperty,
+    queryKey: ["/api/minor-labor-rules", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/minor-labor-rules${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch labor rules");
+      return res.json();
+    },
   });
 
   const createMutation = useMutation({
@@ -108,7 +119,7 @@ export default function MinorLaborPage() {
       toast({ title: "Success", description: "Minor status created." });
       setShowAddDialog(false);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/employee-minor-status?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employee-minor-status"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -121,7 +132,7 @@ export default function MinorLaborPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Minor status deleted." });
-      queryClient.invalidateQueries({ queryKey: ["/api/employee-minor-status?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employee-minor-status"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -153,7 +164,6 @@ export default function MinorLaborPage() {
 
     createMutation.mutate({
       employeeId: selectedEmployee,
-      propertyId: selectedProperty,
       ...formData,
       ...scopePayload,
     });
@@ -221,43 +231,21 @@ export default function MinorLaborPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-              <SelectTrigger className="w-[300px]" data-testid="select-property">
-                <SelectValue placeholder="Select property..." />
-              </SelectTrigger>
-              <SelectContent>
-                {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {selectedProperty && (
-              <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-minor">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Minor Employee
-              </Button>
-            )}
+          <div className="flex items-center justify-end gap-4">
+            <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-minor">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Minor Employee
+            </Button>
           </div>
 
-          {!selectedProperty && (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <AlertCircle className="w-5 h-5 mr-2" />
-              Select a property to view minor employees
-            </div>
-          )}
-
-          {selectedProperty && isLoading && (
+          {isLoading && (
             <div className="space-y-2">
               <Skeleton className="h-20 w-full" />
               <Skeleton className="h-20 w-full" />
             </div>
           )}
 
-          {selectedProperty && !isLoading && (
+          {!isLoading && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>

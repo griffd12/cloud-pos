@@ -260,14 +260,6 @@ export default function LoyaltyPage() {
 
 
   const memberFormFields: FormFieldConfig[] = [
-    {
-      name: "propertyId",
-      label: "Property",
-      type: "select",
-      options: properties.map(p => ({ value: p.id, label: p.name })),
-      required: true,
-      description: "Property where this member is enrolled",
-    },
     { name: "firstName", label: "First Name", type: "text", required: true },
     { name: "lastName", label: "Last Name", type: "text", required: true },
     { name: "email", label: "Email", type: "text", required: true },
@@ -727,26 +719,6 @@ export default function LoyaltyPage() {
             <DialogDescription>Configure your loyalty program settings</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="prog-property">Property</Label>
-              <Select
-                value={programFormData.propertyId}
-                onValueChange={(value) => setProgramFormData({ ...programFormData, propertyId: value })}
-              >
-                <SelectTrigger data-testid="select-program-property">
-                  <SelectValue placeholder="Select property" />
-                </SelectTrigger>
-                <SelectContent>
-                  {properties.map((property) => (
-                    <SelectItem key={property.id} value={property.id}>
-                      {property.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Property where this program is available</p>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="prog-name">Program Name</Label>
               <Input
@@ -756,7 +728,6 @@ export default function LoyaltyPage() {
                 placeholder="Rewards Program"
                 data-testid="input-program-name"
               />
-            </div>
             </div>
             <div className="space-y-2">
               <Label>Program Type</Label>
@@ -904,7 +875,6 @@ export default function LoyaltyPage() {
               onClick={() => {
                 const data: any = {
                   name: programFormData.name,
-                  propertyId: programFormData.propertyId || null,
                   ...scopePayload,
                   programType: programFormData.programType,
                   active: programFormData.active,
@@ -919,7 +889,7 @@ export default function LoyaltyPage() {
                 }
                 programMutation.mutate(data);
               }}
-              disabled={!programFormData.name || !programFormData.propertyId || programMutation.isPending}
+              disabled={!programFormData.name || programMutation.isPending}
               data-testid="button-save-program"
             >
               {editingProgram ? "Update Program" : "Create Program"}

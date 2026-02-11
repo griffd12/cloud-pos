@@ -111,7 +111,6 @@ const CONNECTION_TYPES: Record<string, string> = {
 };
 
 const formSchema = insertTerminalDeviceSchema.extend({
-  propertyId: z.string().min(1, "Property is required"),
   name: z.string().min(1, "Name is required"),
   model: z.string().min(1, "Model is required"),
 });
@@ -168,7 +167,6 @@ export default function TerminalDevicesPage() {
     defaultValues: {
       name: "",
       model: "generic",
-      propertyId: "",
       workstationId: undefined,
       paymentProcessorId: undefined,
       serialNumber: "",
@@ -183,18 +181,17 @@ export default function TerminalDevicesPage() {
     },
   });
 
-  const selectedPropertyId = form.watch("propertyId");
   const connectionType = form.watch("connectionType");
 
   const filteredWorkstations = useMemo(() => {
-    if (!selectedPropertyId) return [];
-    return workstations.filter((w) => w.propertyId === selectedPropertyId);
-  }, [selectedPropertyId, workstations]);
+    if (!contextPropertyId) return [];
+    return workstations.filter((w) => w.propertyId === contextPropertyId);
+  }, [contextPropertyId, workstations]);
 
   const filteredProcessors = useMemo(() => {
-    if (!selectedPropertyId) return [];
-    return processors.filter((p) => p.propertyId === selectedPropertyId);
-  }, [selectedPropertyId, processors]);
+    if (!contextPropertyId) return [];
+    return processors.filter((p) => p.propertyId === contextPropertyId);
+  }, [contextPropertyId, processors]);
 
   const filteredDevices = useMemo(() => {
     if (!searchQuery) return devices;
@@ -309,11 +306,9 @@ export default function TerminalDevicesPage() {
 
   function openAddDialog() {
     setEditingDevice(null);
-    const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
     form.reset({
       name: "",
       model: "generic",
-      propertyId: defaultPropertyId,
       workstationId: undefined,
       paymentProcessorId: undefined,
       serialNumber: "",
@@ -334,7 +329,6 @@ export default function TerminalDevicesPage() {
     form.reset({
       name: device.name,
       model: device.model,
-      propertyId: device.propertyId,
       workstationId: device.workstationId || undefined,
       paymentProcessorId: device.paymentProcessorId || undefined,
       serialNumber: device.serialNumber || "",
@@ -595,30 +589,6 @@ export default function TerminalDevicesPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="propertyId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Property</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-property">
-                            <SelectValue placeholder="Select property" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {properties.map((property) => (
-                            <SelectItem key={property.id} value={property.id}>
-                              {property.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name="workstationId"

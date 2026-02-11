@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -19,8 +19,14 @@ import type { Property, SalesForecast, LaborForecast } from "@shared/schema";
 export default function ForecastingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [forecastDate, setForecastDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: properties = [] } = useQuery<Property[]>({

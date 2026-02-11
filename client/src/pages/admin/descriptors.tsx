@@ -60,11 +60,19 @@ const MAX_CHARS_PER_LINE = 48;
 
 export default function DescriptorsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, scopePayload } = useEmcFilter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [selectedRvcId, setSelectedRvcId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"enterprise" | "property" | "rvc">("enterprise");
+
+  useEffect(() => {
+    if (selectedPropertyId) {
+      setActiveTab("property");
+    } else {
+      setActiveTab("enterprise");
+      setSelectedRvcId("");
+    }
+  }, [selectedPropertyId]);
   
   const [headerLines, setHeaderLines] = useState<string[]>(Array(MAX_HEADER_LINES).fill(""));
   const [trailerLines, setTrailerLines] = useState<string[]>(Array(MAX_TRAILER_LINES).fill(""));
@@ -387,27 +395,10 @@ export default function DescriptorsPage() {
 
             <div className="space-y-2">
               <Label>Property (Optional Override)</Label>
-              <Select
-                value={selectedPropertyId || "__none__"}
-                onValueChange={(v) => {
-                  const actualValue = v === "__none__" ? "" : v;
-                  setSelectedPropertyId(actualValue);
-                  setSelectedRvcId("");
-                  if (actualValue) setActiveTab("property");
-                  else setActiveTab("enterprise");
-                }}
-                disabled={!selectedEnterpriseId}
-              >
-                <SelectTrigger data-testid="select-property">
-                  <SelectValue placeholder="Select property" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None (Use Enterprise)</SelectItem>
-                  {filteredProperties.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted text-muted-foreground">
+                <Store className="h-4 w-4" />
+                <span data-testid="text-property-name">{filteredProperties.find(p => p.id === selectedPropertyId)?.name || "All Properties (use filter bar)"}</span>
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -69,8 +69,7 @@ const DISTRIBUTION_METHODS: Array<{ value: DistributionMethod; label: string; de
 
 export default function TipRulesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, scopePayload } = useEmcFilter();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const [formData, setFormData] = useState<{
@@ -179,8 +178,7 @@ export default function TipRulesPage() {
     mutationFn: async () => {
       const property = properties.find(p => p.id === selectedPropertyId);
       const payload = {
-        propertyId: selectedPropertyId,
-        enterpriseId: property?.enterpriseId || null,
+        ...scopePayload,
         name: `Tip Rules - ${property?.name || "Property"}`,
         ...formData,
       };
@@ -293,28 +291,7 @@ export default function TipRulesPage() {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-muted-foreground" />
-            <Label>Location</Label>
-            <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-              <SelectTrigger className="w-[280px]" data-testid="select-property">
-                <SelectValue placeholder="Select a location" />
-              </SelectTrigger>
-              <SelectContent>
-                {properties.map(prop => (
-                  <SelectItem key={prop.id} value={prop.id} data-testid={`select-property-${prop.id}`}>
-                    {prop.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {selectedPropertyId && (
+      {selectedPropertyId ? (
         <>
           {ruleLoading ? (
             <Card>
@@ -554,6 +531,16 @@ export default function TipRulesPage() {
             </>
           )}
         </>
+      ) : (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Building2 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Property Selected</h3>
+            <p className="text-muted-foreground">
+              Select a property from the filter bar to configure tip rules.
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

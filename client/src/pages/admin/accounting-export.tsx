@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -21,8 +21,14 @@ const EXPORT_FORMATS = ["csv", "qbo", "iif"];
 
 export default function AccountingExportPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [showMappingDialog, setShowMappingDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [editingMapping, setEditingMapping] = useState<GlMapping | null>(null);

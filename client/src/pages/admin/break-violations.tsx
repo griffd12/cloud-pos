@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -58,8 +58,14 @@ interface ViolationSummary {
 
 export default function BreakViolationsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedProperty) {
+      setSelectedProperty(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedProperty]);
   const [dateRange, setDateRange] = useState<"this_week" | "last_week" | "custom">("this_week");
   const [startDate, setStartDate] = useState(format(startOfWeek(new Date()), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(endOfWeek(new Date()), "yyyy-MM-dd"));

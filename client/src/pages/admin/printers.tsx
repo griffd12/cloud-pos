@@ -342,8 +342,7 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
           active: editingItem.active ?? true,
         });
       } else {
-        // Use EMC context property first, then fall back to first available property
-        const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
+        const defaultPropertyId = properties[0]?.id || "";
         form.reset({
           name: "",
           printerType: "kitchen",
@@ -435,29 +434,6 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="propertyId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Property</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-propertyId">
-                              <SelectValue placeholder="Select property" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {properties.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
                   <FormField
                     control={form.control}
                     name="connectionType"

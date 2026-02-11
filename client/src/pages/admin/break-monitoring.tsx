@@ -151,9 +151,15 @@ function StatusBadge({ status }: { status: BreakStatus["status"] }) {
 }
 
 export default function BreakMonitoringPage() {
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedProperty, setSelectedProperty] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedProperty) {
+      setSelectedProperty(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedProperty]);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", filterKeys],

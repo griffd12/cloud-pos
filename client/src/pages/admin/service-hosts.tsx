@@ -116,7 +116,6 @@ interface DashboardData {
 
 const serviceHostFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  propertyId: z.string().min(1, "Property is required"),
   hostWorkstationId: z.string().min(1, "Host workstation is required"),
   serviceType: z.string().min(1, "Service type is required"),
 });
@@ -130,7 +129,7 @@ interface CreatedServiceHost extends ServiceHost {
 
 export default function ServiceHostsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createdHost, setCreatedHost] = useState<CreatedServiceHost | null>(null);
@@ -186,7 +185,7 @@ export default function ServiceHostsPage() {
     mutationFn: async (data: ServiceHostFormData) => {
       const res = await apiRequest("POST", "/api/service-hosts", {
         name: data.name,
-        propertyId: data.propertyId,
+        ...scopePayload,
         hostWorkstationId: data.hostWorkstationId,
         serviceType: data.serviceType,
       });
@@ -744,10 +743,10 @@ export default function ServiceHostsPage() {
       <CreateServiceHostDialog
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
-        properties={properties}
         workstations={workstations}
         onSubmit={(data) => createServiceHostMutation.mutate(data)}
         isLoading={createServiceHostMutation.isPending}
+        contextPropertyId={contextPropertyId}
       />
 
       <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
@@ -833,27 +832,27 @@ export default function ServiceHostsPage() {
 interface CreateServiceHostDialogProps {
   open: boolean;
   onClose: () => void;
-  properties: Property[];
   workstations: Workstation[];
   onSubmit: (data: ServiceHostFormData) => void;
   isLoading: boolean;
+  contextPropertyId: string | null;
 }
 
-function CreateServiceHostDialog({ open, onClose, properties, workstations, onSubmit, isLoading }: CreateServiceHostDialogProps) {
+function CreateServiceHostDialog({ open, onClose, workstations, onSubmit, isLoading, contextPropertyId }: CreateServiceHostDialogProps) {
   const form = useForm<ServiceHostFormData>({
     resolver: zodResolver(serviceHostFormSchema),
     defaultValues: {
       name: "",
-      propertyId: "",
       hostWorkstationId: "",
       serviceType: "caps",
     },
   });
 
-  const selectedPropertyId = form.watch("propertyId");
   const selectedServiceType = form.watch("serviceType");
   
-  const filteredWorkstations = workstations.filter(ws => ws.propertyId === selectedPropertyId);
+  const filteredWorkstations = contextPropertyId
+    ? workstations.filter(ws => ws.propertyId === contextPropertyId)
+    : workstations;
 
   const handleSubmit = (data: ServiceHostFormData) => {
     onSubmit(data);
@@ -879,7 +878,6 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
               name="name"
@@ -894,36 +892,6 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={form.control}
-              name="propertyId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Property</FormLabel>
-                  <Select onValueChange={(value) => {
-                    field.onChange(value);
-                    form.setValue("hostWorkstationId", "");
-                  }} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-property">
-                        <SelectValue placeholder="Select a property" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {properties.map((property) => (
-                        <SelectItem key={property.id} value={property.id}>
-                          {property.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>The property this service will serve</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            </div>
 
             <FormField
               control={form.control}
@@ -954,8 +922,7 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
               )}
             />
 
-            {selectedPropertyId && (
-              <FormField
+            <FormField
                 control={form.control}
                 name="hostWorkstationId"
                 render={({ field }) => (
@@ -982,7 +949,6 @@ function CreateServiceHostDialog({ open, onClose, properties, workstations, onSu
                   </FormItem>
                 )}
               />
-            )}
 
             </div>
             <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">

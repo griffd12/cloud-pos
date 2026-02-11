@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEmcFilter } from "@/lib/emc-context";
 import { format } from "date-fns";
@@ -23,8 +23,14 @@ const ALERT_SEVERITIES = ["info", "warning", "critical"];
 
 export default function ManagerAlertsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
   const [selectedAlertTypes, setSelectedAlertTypes] = useState<string[]>([]);
 

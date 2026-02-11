@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { type CalPackage, type CalPackageVersion, type CalDeployment, type Enterprise, type Property, type Workstation, CAL_PACKAGE_TYPES, CAL_DEPLOYMENT_ACTIONS, CAL_VERSION_REGEX, CAL_VERSION_FORMAT_MESSAGE } from "@shared/schema";
+import { type CalPackage, type CalPackageVersion, type CalDeployment, type Enterprise, type Workstation, CAL_PACKAGE_TYPES, CAL_DEPLOYMENT_ACTIONS, CAL_VERSION_REGEX, CAL_VERSION_FORMAT_MESSAGE } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -779,27 +779,18 @@ function DeployDialog({
   enterpriseId: string;
 }) {
   const { toast } = useToast();
+  const { scopePayload, selectedPropertyId } = useEmcFilter();
   const [deploymentScope, setDeploymentScope] = useState("property");
   const [action, setAction] = useState("install");
-  const [selectedPropertyId, setSelectedPropertyId] = useState("");
-
-  const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties"],
-  });
 
   const createDeploymentMutation = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {
-        enterpriseId,
+        ...scopePayload,
         packageVersionId: packageVersion.id,
         deploymentScope,
         action,
       };
-      
-      // Include propertyId for property-scoped deployments
-      if (deploymentScope === "property" && selectedPropertyId) {
-        payload.propertyId = selectedPropertyId;
-      }
       
       const res = await apiRequest("POST", "/api/cal-deployments", payload);
       if (!res.ok) {
@@ -857,21 +848,6 @@ function DeployDialog({
               </div>
             </div>
 
-            {deploymentScope === "property" && (
-              <div className="space-y-2">
-                <Label>Target Property</Label>
-                <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-                  <SelectTrigger data-testid="select-property">
-                    <SelectValue placeholder="Select property" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {properties.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
         </div>
         <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
@@ -880,7 +856,7 @@ function DeployDialog({
           </Button>
           <Button 
             onClick={() => createDeploymentMutation.mutate()} 
-            disabled={createDeploymentMutation.isPending || (deploymentScope === "property" && !selectedPropertyId)}
+            disabled={createDeploymentMutation.isPending}
             data-testid="button-deploy-confirm"
           >
             {createDeploymentMutation.isPending ? "Deploying..." : "Deploy"}

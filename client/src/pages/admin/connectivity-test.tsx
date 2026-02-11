@@ -117,7 +117,7 @@ const modeConfig: Record<ConnectionMode, {
 
 export default function ConnectivityTestPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const { mode, status, forceCheck } = useConnectionMode();
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunningTest, setIsRunningTest] = useState(false);
@@ -125,7 +125,13 @@ export default function ConnectivityTestPage() {
     localStorage.getItem('serviceHostUrl') || 'http://service-host.local:3001'
   );
   const [simulateOffline, setSimulateOffline] = useState(false);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", filterKeys],

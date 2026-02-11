@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -23,8 +23,14 @@ const ORDER_SOURCE_TYPES = ["doordash", "ubereats", "grubhub", "direct", "other"
 export default function OnlineOrderingPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [editingSource, setEditingSource] = useState<OnlineOrderSource | null>(null);
 

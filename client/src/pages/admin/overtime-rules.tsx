@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -71,14 +71,6 @@ const DEFAULT_FORM = {
 export default function OvertimeRulesPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
-  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
-  
-  useEffect(() => {
-    if (contextPropertyId && !selectedProperty) {
-      setSelectedProperty(contextPropertyId);
-    }
-  }, [contextPropertyId, selectedProperty]);
-  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<OvertimeRule | null>(null);
   const [ruleForm, setRuleForm] = useState(DEFAULT_FORM);
@@ -93,8 +85,12 @@ export default function OvertimeRulesPage() {
   });
 
   const { data: rules = [], isLoading } = useQuery<OvertimeRule[]>({
-    queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty],
-    enabled: !!selectedProperty,
+    queryKey: ["/api/overtime-rules", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/overtime-rules${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch overtime rules");
+      return res.json();
+    },
   });
 
   const createMutation = useMutation({
@@ -105,7 +101,7 @@ export default function OvertimeRulesPage() {
       toast({ title: "Success", description: "Overtime rule created." });
       setIsDialogOpen(false);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -121,7 +117,7 @@ export default function OvertimeRulesPage() {
       setIsDialogOpen(false);
       setEditingRule(null);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -134,7 +130,7 @@ export default function OvertimeRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Overtime rule deleted." });
-      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -173,14 +169,14 @@ export default function OvertimeRulesPage() {
   const handleSubmit = () => {
     const data = {
       ...ruleForm,
-      propertyId: selectedProperty,
+      ...scopePayload,
       dailyDoubleTimeThreshold: ruleForm.enableDailyDoubleTime ? ruleForm.dailyDoubleTimeThreshold : null,
     };
 
     if (editingRule) {
       updateMutation.mutate({ id: editingRule.id, data });
     } else {
-      createMutation.mutate({ ...data, ...scopePayload });
+      createMutation.mutate(data);
     }
   };
 
@@ -198,38 +194,16 @@ export default function OvertimeRulesPage() {
             Configure labor law overtime calculations per property
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-            <SelectTrigger className="w-[200px]" data-testid="select-property">
-              <SelectValue placeholder="Select property" />
-            </SelectTrigger>
-            <SelectContent>
-              {properties.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            onClick={openCreateDialog}
-            disabled={!selectedProperty}
-            data-testid="button-create-rule"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Rule
-          </Button>
-        </div>
+        <Button
+          onClick={openCreateDialog}
+          data-testid="button-create-rule"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Rule
+        </Button>
       </div>
 
-      {!selectedProperty ? (
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            <Scale className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Select a property to manage overtime rules</p>
-          </CardContent>
-        </Card>
-      ) : isLoading ? (
+      {isLoading ? (
         <Card>
           <CardContent className="p-6 space-y-3">
             <Skeleton className="h-8 w-full" />

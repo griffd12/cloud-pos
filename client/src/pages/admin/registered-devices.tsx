@@ -58,7 +58,6 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 };
 
 interface FormData {
-  propertyId: string;
   deviceType: string;
   workstationId?: string;
   kdsDeviceId?: string;
@@ -203,7 +202,6 @@ export default function RegisteredDevicesPage() {
     defaultValues: {
       name: "",
       deviceType: "pos_workstation",
-      propertyId: "",
       workstationId: undefined,
       kdsDeviceId: undefined,
       serialNumber: "",
@@ -214,15 +212,16 @@ export default function RegisteredDevicesPage() {
   });
 
   const deviceType = form.watch("deviceType");
-  const selectedPropertyId = form.watch("propertyId");
 
   const filteredWorkstations = useMemo(() => {
-    return workstations.filter((w) => w.propertyId === selectedPropertyId);
-  }, [workstations, selectedPropertyId]);
+    if (!contextPropertyId) return [];
+    return workstations.filter((w) => w.propertyId === contextPropertyId);
+  }, [workstations, contextPropertyId]);
 
   const filteredKdsDevices = useMemo(() => {
-    return kdsDevices.filter((k) => k.propertyId === selectedPropertyId);
-  }, [kdsDevices, selectedPropertyId]);
+    if (!contextPropertyId) return [];
+    return kdsDevices.filter((k) => k.propertyId === contextPropertyId);
+  }, [kdsDevices, contextPropertyId]);
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -320,7 +319,6 @@ export default function RegisteredDevicesPage() {
     form.reset({
       name: device.name,
       deviceType: device.deviceType,
-      propertyId: device.propertyId,
       workstationId: device.workstationId || undefined,
       kdsDeviceId: device.kdsDeviceId || undefined,
       serialNumber: device.serialNumber || "",
@@ -416,11 +414,9 @@ export default function RegisteredDevicesPage() {
         <Button
           onClick={() => {
             setEditingItem(null);
-            const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
             form.reset({
               name: "",
               deviceType: "pos_workstation",
-              propertyId: defaultPropertyId,
               workstationId: undefined,
               kdsDeviceId: undefined,
               serialNumber: "",
@@ -485,32 +481,6 @@ export default function RegisteredDevicesPage() {
                       <Input placeholder="e.g., Front Counter PC" {...field} data-testid="input-name" />
                     </FormControl>
                     <FormDescription>A friendly name to identify this device</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="propertyId"
-                rules={{ required: "Property is required" }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Property</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-property">
-                          <SelectValue placeholder="Select property" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {properties.map((property) => (
-                          <SelectItem key={property.id} value={property.id}>
-                            {property.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

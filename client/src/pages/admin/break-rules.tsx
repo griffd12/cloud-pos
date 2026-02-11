@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -83,14 +83,6 @@ const DEFAULT_FORM = {
 export default function BreakRulesPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
-  const [selectedProperty, setSelectedProperty] = useState<string>(contextPropertyId || "");
-  
-  useEffect(() => {
-    if (contextPropertyId && !selectedProperty) {
-      setSelectedProperty(contextPropertyId);
-    }
-  }, [contextPropertyId, selectedProperty]);
-  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<BreakRule | null>(null);
   const [ruleForm, setRuleForm] = useState(DEFAULT_FORM);
@@ -106,8 +98,12 @@ export default function BreakRulesPage() {
   });
 
   const { data: rules = [], isLoading } = useQuery<BreakRule[]>({
-    queryKey: ["/api/break-rules?propertyId=" + selectedProperty],
-    enabled: !!selectedProperty,
+    queryKey: ["/api/break-rules", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/break-rules${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch break rules");
+      return res.json();
+    },
   });
 
   const createMutation = useMutation({
@@ -118,7 +114,7 @@ export default function BreakRulesPage() {
       toast({ title: "Success", description: "Break rule created." });
       setIsDialogOpen(false);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/break-rules?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/break-rules"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -134,7 +130,7 @@ export default function BreakRulesPage() {
       setIsDialogOpen(false);
       setEditingRule(null);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ["/api/break-rules?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/break-rules"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -147,7 +143,7 @@ export default function BreakRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Break rule deleted." });
-      queryClient.invalidateQueries({ queryKey: ["/api/break-rules?propertyId=" + selectedProperty] });
+      queryClient.invalidateQueries({ queryKey: ["/api/break-rules"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -195,13 +191,13 @@ export default function BreakRulesPage() {
   const handleSubmit = () => {
     const data = {
       ...ruleForm,
-      propertyId: selectedProperty,
+      ...scopePayload,
     };
 
     if (editingRule) {
       updateMutation.mutate({ id: editingRule.id, data });
     } else {
-      createMutation.mutate({ ...data, ...scopePayload });
+      createMutation.mutate(data);
     }
   };
 
@@ -229,52 +225,29 @@ export default function BreakRulesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Label>Select Property</Label>
-            <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-              <SelectTrigger className="w-[300px]" data-testid="select-property">
-                <SelectValue placeholder="Choose a property..." />
-              </SelectTrigger>
-              <SelectContent>
-                {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {selectedProperty && (
-              <Button onClick={openCreateDialog} data-testid="button-create-rule">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Break Rule
-              </Button>
-            )}
+          <div className="flex items-center justify-end gap-4">
+            <Button onClick={openCreateDialog} data-testid="button-create-rule">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Break Rule
+            </Button>
           </div>
 
-          {!selectedProperty && (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <AlertCircle className="w-5 h-5 mr-2" />
-              Select a property to view or configure break rules
-            </div>
-          )}
-
-          {selectedProperty && isLoading && (
+          {isLoading && (
             <div className="space-y-2">
               <Skeleton className="h-20 w-full" />
               <Skeleton className="h-20 w-full" />
             </div>
           )}
 
-          {selectedProperty && !isLoading && rules.length === 0 && (
+          {!isLoading && rules.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Shield className="w-12 h-12 mb-4 opacity-50" />
               <p className="text-lg font-medium">No Break Rules Configured</p>
-              <p className="text-sm">Create a break rule to enable California labor compliance for this property.</p>
+              <p className="text-sm">Create a break rule to enable California labor compliance.</p>
             </div>
           )}
 
-          {selectedProperty && !isLoading && rules.length > 0 && (
+          {!isLoading && rules.length > 0 && (
             <div className="space-y-4">
               {rules.map((rule) => (
                 <Card key={rule.id} className={rule.active ? "border-primary" : "opacity-60"}>

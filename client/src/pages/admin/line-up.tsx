@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -99,10 +99,16 @@ interface EmployeeRowData {
 }
 
 export default function LineUpPage() {
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDate, setSelectedDate] = useState(today);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [filterEmployeeId, setFilterEmployeeId] = useState<string>("");
 
   const { data: properties = [] } = useQuery<Property[]>({

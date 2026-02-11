@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -35,8 +35,14 @@ export default function FiscalClosePage() {
   usePosWebSocket();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const today = new Date().toISOString().split("T")[0];
   const [targetDate, setTargetDate] = useState(today);
   const [showPinPrompt, setShowPinPrompt] = useState(false);

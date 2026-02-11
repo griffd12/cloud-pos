@@ -132,7 +132,6 @@ export default function PaymentProcessorsPage() {
   });
 
   const selectedGateway = form.watch("gatewayType");
-  const selectedPropertyId = form.watch("propertyId");
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertPaymentProcessor) => {
@@ -348,31 +347,6 @@ export default function PaymentProcessorsPage() {
 
                   <FormField
                     control={form.control}
-                    name="propertyId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Property</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-property">
-                              <SelectValue placeholder="Select property" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {properties.map((prop) => (
-                              <SelectItem key={prop.id} value={prop.id}>
-                                {prop.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
                     name="environment"
                     render={({ field }) => (
                       <FormItem>
@@ -475,7 +449,7 @@ export default function PaymentProcessorsPage() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending || (!editingItem && !selectedPropertyId)}
+                  disabled={createMutation.isPending || updateMutation.isPending}
                   data-testid="button-submit"
                 >
                   {(createMutation.isPending || updateMutation.isPending) && (

@@ -36,7 +36,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 
 export default function DevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [tab, setTab] = useState("devices");
   const [formOpen, setFormOpen] = useState(false);
   const [tokenFormOpen, setTokenFormOpen] = useState(false);
@@ -53,8 +53,6 @@ export default function DevicesPage() {
     name: "",
     deviceId: "",
     deviceType: "pos_workstation",
-    enterpriseId: "",
-    propertyId: "",
     osType: "",
     hardwareModel: "",
     serialNumber: "",
@@ -64,8 +62,6 @@ export default function DevicesPage() {
 
   const [tokenFormData, setTokenFormData] = useState({
     name: "",
-    enterpriseId: "",
-    propertyId: "",
     deviceType: "",
     maxUses: "",
     expiresInDays: "",
@@ -120,7 +116,7 @@ export default function DevicesPage() {
   });
 
   const createDevice = useMutation({
-    mutationFn: (data: typeof formData) => apiRequest("POST", "/api/devices", data),
+    mutationFn: (data: typeof formData) => apiRequest("POST", "/api/devices", { ...data, ...scopePayload }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/devices", filterKeys] });
       toast({ title: "Device created successfully" });
@@ -156,10 +152,9 @@ export default function DevicesPage() {
     mutationFn: (data: typeof tokenFormData) => {
       const payload: Record<string, unknown> = {
         name: data.name,
-        enterpriseId: data.enterpriseId,
+        ...scopePayload,
         active: true,
       };
-      if (data.propertyId) payload.propertyId = data.propertyId;
       if (data.deviceType) payload.deviceType = data.deviceType;
       if (data.maxUses) payload.maxUses = parseInt(data.maxUses);
       if (data.expiresInDays) {
@@ -243,8 +238,6 @@ export default function DevicesPage() {
       name: "",
       deviceId: "",
       deviceType: "pos_workstation",
-      enterpriseId: "",
-      propertyId: "",
       osType: "",
       hardwareModel: "",
       serialNumber: "",
@@ -256,8 +249,6 @@ export default function DevicesPage() {
   const resetTokenForm = () => {
     setTokenFormData({
       name: "",
-      enterpriseId: "",
-      propertyId: "",
       deviceType: "",
       maxUses: "",
       expiresInDays: "",
@@ -270,8 +261,6 @@ export default function DevicesPage() {
       name: device.name || "",
       deviceId: device.deviceId,
       deviceType: device.deviceType,
-      enterpriseId: device.enterpriseId,
-      propertyId: device.propertyId || "",
       osType: device.osType || "",
       hardwareModel: device.hardwareModel || "",
       serialNumber: device.serialNumber || "",
@@ -287,7 +276,7 @@ export default function DevicesPage() {
   };
 
   const handleSubmit = () => {
-    if (!formData.name || !formData.deviceId || !formData.enterpriseId) {
+    if (!formData.name || !formData.deviceId) {
       toast({ title: "Please fill in required fields", variant: "destructive" });
       return;
     }
@@ -299,7 +288,7 @@ export default function DevicesPage() {
   };
 
   const handleTokenSubmit = () => {
-    if (!tokenFormData.name || !tokenFormData.enterpriseId) {
+    if (!tokenFormData.name) {
       toast({ title: "Please fill in required fields", variant: "destructive" });
       return;
     }
@@ -313,14 +302,6 @@ export default function DevicesPage() {
 
   const getEnterpriseName = (id: string) => enterprises.find((e) => e.id === id)?.name || "Unknown";
   const getPropertyName = (id: string | null | undefined) => (id ? properties.find((p) => p.id === id)?.name || "Unknown" : "-");
-
-  const filteredProperties = formData.enterpriseId
-    ? properties.filter((p) => p.enterpriseId === formData.enterpriseId)
-    : properties;
-
-  const tokenFilteredProperties = tokenFormData.enterpriseId
-    ? properties.filter((p) => p.enterpriseId === tokenFormData.enterpriseId)
-    : properties;
 
   const filterProperties = filterEnterpriseId
     ? properties.filter((p) => p.enterpriseId === filterEnterpriseId)
@@ -647,35 +628,6 @@ export default function DevicesPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Enterprise *</Label>
-                <Select value={formData.enterpriseId} onValueChange={(v) => setFormData({ ...formData, enterpriseId: v, propertyId: "" })}>
-                  <SelectTrigger data-testid="select-device-enterprise">
-                    <SelectValue placeholder="Select enterprise" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {enterprises.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Property (Optional)</Label>
-                <Select value={formData.propertyId || "_none"} onValueChange={(v) => setFormData({ ...formData, propertyId: v === "_none" ? "" : v })} disabled={!formData.enterpriseId}>
-                  <SelectTrigger data-testid="select-device-property">
-                    <SelectValue placeholder="Select property" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">No specific property</SelectItem>
-                    {filteredProperties.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="macAddress">MAC Address</Label>
                 <Input
                   id="macAddress"
@@ -760,35 +712,8 @@ export default function DevicesPage() {
                   data-testid="input-token-name"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Enterprise *</Label>
-                <Select value={tokenFormData.enterpriseId} onValueChange={(v) => setTokenFormData({ ...tokenFormData, enterpriseId: v, propertyId: "" })}>
-                  <SelectTrigger data-testid="select-token-enterprise">
-                    <SelectValue placeholder="Select enterprise" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {enterprises.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Property (Optional)</Label>
-                <Select value={tokenFormData.propertyId || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, propertyId: v === "_any" ? "" : v })} disabled={!tokenFormData.enterpriseId}>
-                  <SelectTrigger data-testid="select-token-property">
-                    <SelectValue placeholder="Any property" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_any">Any property</SelectItem>
-                    {tokenFilteredProperties.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-2">
                 <Label>Device Type (Optional)</Label>
                 <Select value={tokenFormData.deviceType || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v === "_any" ? "" : v })}>

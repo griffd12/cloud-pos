@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -25,8 +25,14 @@ const TRANSACTION_TYPES = ["receive", "sale", "waste", "transfer", "adjustment",
 export default function InventoryPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId } = useEmcFilter();
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
+
+  useEffect(() => {
+    if (contextPropertyId && !selectedPropertyId) {
+      setSelectedPropertyId(contextPropertyId);
+    }
+  }, [contextPropertyId, selectedPropertyId]);
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
