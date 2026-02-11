@@ -200,7 +200,7 @@ function EmcDashboard() {
   );
 }
 
-const ENTERPRISE_LEVEL_ROUTES = ["/emc/enterprises", "/emc/dashboard", "/emc"];
+const ENTERPRISE_LEVEL_ROUTES = ["/emc/enterprises", "/emc/properties", "/emc/rvcs", "/emc/dashboard", "/emc"];
 
 export default function EmcAdminLayout() {
   const [location, navigate] = useLocation();

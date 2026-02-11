@@ -786,7 +786,7 @@ export interface IStorage {
   updateLoyaltyProgram(id: string, data: Partial<InsertLoyaltyProgram>): Promise<LoyaltyProgram | undefined>;
   
   // Loyalty Members (customer profiles)
-  getLoyaltyMembers(search?: string): Promise<LoyaltyMember[]>;
+  getLoyaltyMembers(search?: string, enterpriseId?: string, propertyId?: string): Promise<LoyaltyMember[]>;
   getLoyaltyMember(id: string): Promise<LoyaltyMember | undefined>;
   getLoyaltyMemberWithEnrollments(id: string): Promise<LoyaltyMemberWithEnrollments | undefined>;
   getLoyaltyMemberByIdentifier(identifier: string): Promise<LoyaltyMember | undefined>;
@@ -5220,8 +5220,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getLoyaltyMembers(search?: string): Promise<LoyaltyMember[]> {
+  async getLoyaltyMembers(search?: string, enterpriseId?: string, propertyId?: string): Promise<LoyaltyMember[]> {
     const conditions = [];
+    if (enterpriseId) {
+      conditions.push(eq(loyaltyMembers.enterpriseId, enterpriseId));
+    }
+    if (propertyId) {
+      conditions.push(eq(loyaltyMembers.propertyId, propertyId));
+    }
     if (search) {
       conditions.push(or(
         ilike(loyaltyMembers.firstName, `%${search}%`),

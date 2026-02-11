@@ -18067,8 +18067,8 @@ connect();
 
   app.get("/api/loyalty-members", async (req, res) => {
     try {
-      const { search } = req.query;
-      const members = await storage.getLoyaltyMembers(search as string);
+      const { search, enterpriseId, propertyId } = req.query;
+      const members = await storage.getLoyaltyMembers(search as string, enterpriseId as string, propertyId as string);
       // Augment with enrollments including program data for each member
       const membersWithEnrollments = await Promise.all(
         members.map(async (member) => {
