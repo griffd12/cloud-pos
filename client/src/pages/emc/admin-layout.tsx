@@ -4,12 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { HierarchyTree } from "@/components/admin/hierarchy-tree";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useEmc } from "@/lib/emc-context";
-import { getAuthHeaders } from "@/lib/queryClient";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import type { Enterprise, Property, Rvc } from "@shared/schema";
 import {
@@ -119,7 +116,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   requiresProperty?: boolean;
   enterpriseOnly?: boolean;
-  propertyOnly?: boolean;
+  systemAdminOnly?: boolean;
 }
 
 interface NavGroup {
@@ -131,7 +128,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Hierarchy",
     items: [
-      { title: "Enterprises", url: "/emc/enterprises", icon: Building2, enterpriseOnly: true },
+      { title: "Enterprises", url: "/emc/enterprises", icon: Building2, enterpriseOnly: true, systemAdminOnly: true },
       { title: "Properties", url: "/emc/properties", icon: Store },
       { title: "Revenue Centers", url: "/emc/rvcs", icon: LayoutGrid },
     ],
@@ -231,124 +228,34 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-function EmcDashboard() {
-  const { selectedEnterpriseId } = useEmc();
-  const enterpriseParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-
-  const { data: stats } = useQuery<{
-    enterprises: number;
-    properties: number;
-    rvcs: number;
-    employees: number;
-    menuItems: number;
-    activeChecks: number;
-  }>({
-    queryKey: ["/api/admin/stats", { enterpriseId: selectedEnterpriseId }],
-    queryFn: async () => {
-      const res = await fetch(`/api/admin/stats${enterpriseParam}`, { headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch stats");
-      return res.json();
-    },
-  });
-
-  const cards = [
-    { title: "Enterprises", value: stats?.enterprises || 0, icon: Building2, href: "/emc/enterprises" },
-    { title: "Properties", value: stats?.properties || 0, icon: Store, href: "/emc/properties" },
-    { title: "Revenue Centers", value: stats?.rvcs || 0, icon: LayoutGrid, href: "/emc/rvcs" },
-    { title: "Employees", value: stats?.employees || 0, icon: Users, href: "/emc/employees" },
-    { title: "Menu Items", value: stats?.menuItems || 0, icon: UtensilsCrossed, href: "/emc/menu-items" },
-    { title: "Active Checks", value: stats?.activeChecks || 0, icon: Receipt, href: "/emc/reports?tab=open-checks" },
-  ];
-
+function EmcConfigGrid({ filteredNavGroups }: { filteredNavGroups: NavGroup[] }) {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-emc-title">Enterprise Management Console</h1>
-        <p className="text-muted-foreground">Configure your Cloud POS system</p>
+        <h1 className="text-2xl font-bold" data-testid="text-emc-title">Configuration</h1>
+        <p className="text-sm text-muted-foreground">Select a module to configure</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link key={card.title} href={card.href}>
-              <Card className="hover-elevate cursor-pointer">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2 space-y-0">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {card.title}
-                  </CardTitle>
-                  <Icon className="w-4 h-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold tabular-nums">{card.value}</div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2">
-            <Link href="/emc/menu-items">
-              <Button variant="outline" className="w-full justify-start">
-                <UtensilsCrossed className="w-4 h-4 mr-2" />
-                Manage Menu
-              </Button>
-            </Link>
-            <Link href="/emc/employees">
-              <Button variant="outline" className="w-full justify-start">
-                <Users className="w-4 h-4 mr-2" />
-                Manage Staff
-              </Button>
-            </Link>
-            <Link href="/emc/order-devices">
-              <Button variant="outline" className="w-full justify-start">
-                <Monitor className="w-4 h-4 mr-2" />
-                Configure KDS
-              </Button>
-            </Link>
-            <Link href="/emc/tax-groups">
-              <Button variant="outline" className="w-full justify-start">
-                <Receipt className="w-4 h-4 mr-2" />
-                Tax Settings
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">System Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Database</span>
-              <span className="flex items-center gap-2 text-sm text-green-600">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                Connected
-              </span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredNavGroups.map((group) => (
+          <div key={group.label} data-testid={`config-group-${group.label.toLowerCase().replace(/\s+/g, "-")}`}>
+            <div className="text-xs uppercase tracking-wider font-semibold text-primary mb-2 pb-1 border-b border-primary/30">
+              {group.label}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">WebSocket</span>
-              <span className="flex items-center gap-2 text-sm text-green-600">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                Active
-              </span>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <Link key={item.url} href={item.url}>
+                  <div
+                    className="text-sm py-1 px-1 cursor-pointer hover:text-primary hover:underline rounded-md truncate"
+                    data-testid={`nav-${item.url.replace("/emc/", "")}`}
+                  >
+                    {item.title}
+                  </div>
+                </Link>
+              ))}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">KDS Sync</span>
-              <span className="flex items-center gap-2 text-sm text-green-600">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                Real-time
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -455,6 +362,14 @@ export default function EmcAdminLayout() {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isSystemAdmin) {
+      if (location === "/emc/enterprises") {
+        navigate("/emc/properties");
+      }
+    }
+  }, [isLoading, isAuthenticated, isSystemAdmin, location, navigate]);
+
   const handleSelectEnterprise = (id: string) => {
     if (isSystemAdmin) {
       setSelectedEnterpriseId(id);
@@ -496,12 +411,46 @@ export default function EmcAdminLayout() {
     return navGroups.map(group => ({
       ...group,
       items: group.items.filter(item => {
+        if (item.systemAdminOnly && !isSystemAdmin) return false;
         if (item.enterpriseOnly && hasProperty) return false;
         if (item.requiresProperty && !hasProperty) return false;
         return true;
       }),
     })).filter(group => group.items.length > 0);
-  }, [selectedPropertyId]);
+  }, [selectedPropertyId, isSystemAdmin]);
+
+  const prevPropertyRef = useRef(selectedPropertyId);
+  const prevRvcRef = useRef(selectedRvcId);
+  useEffect(() => {
+    const propertyChanged = prevPropertyRef.current !== selectedPropertyId;
+    const rvcChanged = prevRvcRef.current !== selectedRvcId;
+    prevPropertyRef.current = selectedPropertyId;
+    prevRvcRef.current = selectedRvcId;
+
+    if (!propertyChanged && !rvcChanged) return;
+
+    const hasProperty = !!selectedPropertyId;
+    const currentUrl = location;
+
+    const currentItem = navGroups.flatMap(g => g.items).find(
+      item => currentUrl === item.url || currentUrl.startsWith(item.url + "/")
+    );
+
+    if (currentItem) {
+      if (currentItem.requiresProperty && !hasProperty) {
+        navigate("/emc");
+        return;
+      }
+      if (currentItem.enterpriseOnly && hasProperty) {
+        navigate("/emc");
+        return;
+      }
+      if (currentItem.systemAdminOnly && !isSystemAdmin) {
+        navigate("/emc");
+        return;
+      }
+    }
+  }, [selectedPropertyId, selectedRvcId, location, navigate, isSystemAdmin]);
 
   if (isLoading) {
     return (
@@ -618,48 +567,6 @@ export default function EmcAdminLayout() {
         </header>
 
         <div className="flex flex-1 min-h-0">
-          <nav className="w-52 border-r shrink-0 overflow-y-auto bg-muted/10">
-            <div className="py-1">
-              <Link href="/emc">
-                <div
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover-elevate mx-1 rounded-md",
-                    (location === "/emc" || location === "/emc/dashboard") && "bg-accent text-accent-foreground"
-                  )}
-                  data-testid="nav-dashboard"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  <span>Dashboard</span>
-                </div>
-              </Link>
-            </div>
-            {filteredNavGroups.map((group) => (
-              <div key={group.label} className="py-1">
-                <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  {group.label}
-                </div>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location === item.url || location.startsWith(item.url + "/");
-                  return (
-                    <Link key={item.url} href={item.url}>
-                      <div
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover-elevate mx-1 rounded-md",
-                          isActive && "bg-accent text-accent-foreground"
-                        )}
-                        data-testid={`nav-${item.url.replace("/emc/", "")}`}
-                      >
-                        <Icon className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{item.title}</span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
           <main className="flex-1 overflow-auto min-w-0">
             {isSystemAdmin && !effectiveEnterpriseId ? (
               <div className="flex items-center justify-center h-full">
@@ -677,8 +584,8 @@ export default function EmcAdminLayout() {
               </div>
             ) : (
               <Switch>
-                <Route path="/emc" component={EmcDashboard} />
-                <Route path="/emc/dashboard" component={EmcDashboard} />
+                <Route path="/emc">{() => <EmcConfigGrid filteredNavGroups={filteredNavGroups} />}</Route>
+                <Route path="/emc/dashboard">{() => <EmcConfigGrid filteredNavGroups={filteredNavGroups} />}</Route>
                 <Route path="/emc/enterprises" component={EnterprisesPage} />
                 <Route path="/emc/properties" component={PropertiesPage} />
                 <Route path="/emc/rvcs" component={RvcsPage} />
