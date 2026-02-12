@@ -376,6 +376,7 @@ export default function EmcAdminLayout() {
     }
     setSelectedPropertyId(null);
     setSelectedRvcId(null);
+    navigate("/emc");
   };
 
   const handleSelectProperty = (id: string | null) => {
@@ -387,6 +388,7 @@ export default function EmcAdminLayout() {
     }
     setSelectedPropertyId(id);
     setSelectedRvcId(null);
+    navigate("/emc");
   };
 
   const handleSelectRvc = (id: string | null) => {
@@ -397,6 +399,7 @@ export default function EmcAdminLayout() {
       }
     }
     setSelectedRvcId(id);
+    navigate("/emc");
   };
 
   const handleLogout = () => {
@@ -548,10 +551,19 @@ export default function EmcAdminLayout() {
                 )}
               </div>
             )}
-            {currentPageTitle && (
+            {currentPageTitle && currentPageTitle !== "Dashboard" && (
               <>
                 <Separator orientation="vertical" className="h-5" />
-                <span className="text-sm text-muted-foreground">{currentPageTitle}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/emc")}
+                  className="gap-1.5 text-muted-foreground"
+                  data-testid="button-back-to-grid"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="text-sm">{currentPageTitle}</span>
+                </Button>
               </>
             )}
           </div>
