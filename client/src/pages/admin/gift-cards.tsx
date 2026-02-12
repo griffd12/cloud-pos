@@ -16,12 +16,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { insertGiftCardSchema, type GiftCard, type GiftCardTransaction, type InsertGiftCard } from "@shared/schema";
 import { CreditCard, Search, Plus, DollarSign, RefreshCw, History, Ban } from "lucide-react";
 import { format } from "date-fns";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 
 export default function GiftCardsPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftCard | null>(null);
   const [lookupDialogOpen, setLookupDialogOpen] = useState(false);
@@ -89,6 +91,8 @@ export default function GiftCardsPage() {
       render: (value) => value ? format(new Date(value), "MMM d, yyyy") : "-",
     },
     getScopeColumn(),
+    getZoneColumn<GiftCard>(scopeLookup),
+    getInheritanceColumn<GiftCard>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [

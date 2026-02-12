@@ -34,7 +34,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 
 const EPSON_MODELS = [
   { value: "TM-T88VII", label: "TM-T88VII - Latest High-Speed" },
@@ -91,7 +92,8 @@ const CHARACTER_WIDTHS = [
 
 export default function PrintersPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Printer | null>(null);
 
@@ -161,6 +163,8 @@ export default function PrintersPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<Printer>(scopeLookup),
+    getInheritanceColumn<Printer>(contextPropertyId, selectedRvcId),
   ];
 
   const createMutation = useMutation({

@@ -7,15 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertTaxGroupSchema, type TaxGroup, type InsertTaxGroup } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function TaxGroupsPage() {
   const { toast } = useToast();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TaxGroup | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
 
   const { data: taxGroups = [], isLoading } = useQuery<TaxGroup[]>({
     queryKey: ["/api/tax-groups", filterKeys],
@@ -25,6 +28,9 @@ export default function TaxGroupsPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<TaxGroup>("tax_group", ["/api/tax-groups"]);
+  const displayedTaxGroups = filterOverriddenInherited(taxGroups);
 
   const columns: Column<TaxGroup>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -49,6 +55,8 @@ export default function TaxGroupsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<TaxGroup>(scopeLookup),
+    getInheritanceColumn<TaxGroup>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -128,7 +136,7 @@ export default function TaxGroupsPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={taxGroups}
+        data={displayedTaxGroups}
         columns={columns}
         title="Tax Groups"
         onAdd={() => {
@@ -140,6 +148,7 @@ export default function TaxGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search tax groups..."
         emptyMessage="No tax groups configured"

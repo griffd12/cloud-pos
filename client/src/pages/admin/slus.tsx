@@ -7,12 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertSluSchema, type Slu, type InsertSlu } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function SlusPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Slu | null>(null);
@@ -25,6 +28,9 @@ export default function SlusPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Slu>("slu", ["/api/slus"]);
+  const displayedSlus = filterOverriddenInherited(slus);
 
   const columns: Column<Slu>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -46,6 +52,8 @@ export default function SlusPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<Slu>(scopeLookup),
+    getInheritanceColumn<Slu>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -111,7 +119,7 @@ export default function SlusPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={slus}
+        data={displayedSlus}
         columns={columns}
         title="Screen Lookup Units (Categories)"
         onAdd={() => {
@@ -123,6 +131,7 @@ export default function SlusPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search SLUs..."
         emptyMessage="No SLUs configured"

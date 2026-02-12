@@ -6,14 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertServiceChargeSchema, type ServiceCharge, type InsertServiceCharge } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function ServiceChargesPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ServiceCharge | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
 
   const { data: serviceCharges = [], isLoading } = useQuery<ServiceCharge[]>({
     queryKey: ["/api/service-charges", filterKeys],
@@ -23,6 +26,9 @@ export default function ServiceChargesPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<ServiceCharge>("service_charge", ["/api/service-charges"]);
+  const displayedServiceCharges = filterOverriddenInherited(serviceCharges);
 
   const columns: Column<ServiceCharge>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -49,6 +55,8 @@ export default function ServiceChargesPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<ServiceCharge>(scopeLookup),
+    getInheritanceColumn<ServiceCharge>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -129,7 +137,7 @@ export default function ServiceChargesPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={serviceCharges}
+        data={displayedServiceCharges}
         columns={columns}
         title="Service Charges"
         onAdd={() => {
@@ -141,6 +149,7 @@ export default function ServiceChargesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search service charges..."
         emptyMessage="No service charges configured"

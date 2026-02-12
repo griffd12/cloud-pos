@@ -44,7 +44,8 @@ import {
 import { Monitor, Tv, Key, Copy, RefreshCw, Loader2, CheckCircle, XCircle, Clock, AlertTriangle, Shield } from "lucide-react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 
 const DEVICE_TYPE_LABELS: Record<string, { label: string; icon: typeof Monitor }> = {
   pos_workstation: { label: "POS Workstation", icon: Monitor },
@@ -71,7 +72,8 @@ interface FormData {
 
 export default function RegisteredDevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RegisteredDevice | null>(null);
   const [enrollmentCodeDialog, setEnrollmentCodeDialog] = useState<{ device: RegisteredDevice } | null>(null);
@@ -198,6 +200,8 @@ export default function RegisteredDevicesPage() {
     },
     { key: "serialNumber", header: "Serial Number", render: (value) => value || "-" },
     getScopeColumn(),
+    getZoneColumn<RegisteredDevice>(scopeLookup),
+    getInheritanceColumn<RegisteredDevice>(contextPropertyId, selectedRvcId),
   ];
 
   const form = useForm<FormData>({

@@ -41,6 +41,7 @@ export interface CustomAction<T> {
   icon: LucideIcon;
   onClick: (item: T) => void;
   variant?: "default" | "destructive";
+  hidden?: (item: T) => boolean;
 }
 
 interface DataTableProps<T extends { id: string }> {
@@ -235,6 +236,7 @@ export function DataTable<T extends { id: string }>({
                               </DropdownMenuItem>
                             )}
                             {customActions.map((action, idx) => {
+                              if (action.hidden && action.hidden(item)) return null;
                               const ActionIcon = action.icon;
                               return (
                                 <DropdownMenuItem

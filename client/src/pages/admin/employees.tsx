@@ -15,7 +15,9 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { type Employee, type Role, type Property, type EmployeeAssignment, type JobCode, type EmployeeJobCode } from "@shared/schema";
 import { Plus, Trash2 } from "lucide-react";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 interface JobAssignment {
   jobCodeId: string;
@@ -26,7 +28,8 @@ interface JobAssignment {
 
 export default function EmployeesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -57,6 +60,9 @@ export default function EmployeesPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Employee>("employee", ["/api/employees"]);
+  const displayedEmployees = filterOverriddenInherited(employees);
 
   const { data: roles = [] } = useQuery<Role[]>({
     queryKey: ["/api/roles", filterKeys],
@@ -168,6 +174,8 @@ export default function EmployeesPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<Employee>(scopeLookup),
+    getInheritanceColumn<Employee>(selectedPropertyId, selectedRvcId),
   ];
 
   const createMutation = useMutation({
@@ -356,7 +364,7 @@ export default function EmployeesPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={employees}
+        data={displayedEmployees}
         columns={columns}
         title="Employees"
         onAdd={() => {
@@ -369,6 +377,7 @@ export default function EmployeesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search employees..."
         emptyMessage="No employees configured"

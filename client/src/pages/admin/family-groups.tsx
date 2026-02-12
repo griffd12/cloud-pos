@@ -6,14 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertFamilyGroupSchema, type FamilyGroup, type InsertFamilyGroup } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function FamilyGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<FamilyGroup | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
 
   const { data: familyGroups = [], isLoading } = useQuery<FamilyGroup[]>({
     queryKey: ["/api/family-groups", filterKeys],
@@ -23,6 +26,9 @@ export default function FamilyGroupsPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<FamilyGroup>("family_group", ["/api/family-groups"]);
+  const displayedFamilyGroups = filterOverriddenInherited(familyGroups);
 
   const columns: Column<FamilyGroup>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -38,6 +44,8 @@ export default function FamilyGroupsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<FamilyGroup>(scopeLookup),
+    getInheritanceColumn<FamilyGroup>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -102,7 +110,7 @@ export default function FamilyGroupsPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={familyGroups}
+        data={displayedFamilyGroups}
         columns={columns}
         title="Family Groups"
         onAdd={() => {
@@ -114,6 +122,7 @@ export default function FamilyGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search family groups..."
         emptyMessage="No family groups configured"

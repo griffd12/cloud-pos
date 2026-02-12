@@ -49,7 +49,8 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 import { z } from "zod";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 
 const formSchema = insertPrintAgentSchema.extend({
   name: z.string().min(1, "Name is required"),
@@ -59,7 +60,8 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function PrintAgentsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintAgent | null>(null);
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
@@ -137,6 +139,8 @@ export default function PrintAgentsPage() {
     },
     { key: "description", header: "Description" },
     getScopeColumn(),
+    getZoneColumn<PrintAgent>(scopeLookup),
+    getInheritanceColumn<PrintAgent>(contextPropertyId, selectedRvcId),
   ];
 
   const createMutation = useMutation({

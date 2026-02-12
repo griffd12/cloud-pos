@@ -6,14 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertMajorGroupSchema, type MajorGroup, type InsertMajorGroup } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function MajorGroupsPage() {
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MajorGroup | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
 
   const { data: majorGroups = [], isLoading } = useQuery<MajorGroup[]>({
     queryKey: ["/api/major-groups", filterKeys],
@@ -23,6 +26,9 @@ export default function MajorGroupsPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<MajorGroup>("major_group", ["/api/major-groups"]);
+  const displayedMajorGroups = filterOverriddenInherited(majorGroups);
 
   const columns: Column<MajorGroup>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -38,6 +44,8 @@ export default function MajorGroupsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<MajorGroup>(scopeLookup),
+    getInheritanceColumn<MajorGroup>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -102,7 +110,7 @@ export default function MajorGroupsPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={majorGroups}
+        data={displayedMajorGroups}
         columns={columns}
         title="Major Groups"
         onAdd={() => {
@@ -114,6 +122,7 @@ export default function MajorGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search major groups..."
         emptyMessage="No major groups configured"

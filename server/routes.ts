@@ -10,7 +10,7 @@ import archiver from "archiver";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, sql, inArray } from "drizzle-orm";
-import { emcUsers, enterprises, properties, employeeAssignments } from "@shared/schema";
+import { emcUsers, enterprises, properties, employeeAssignments, configOverrides } from "@shared/schema";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { resolveBusinessDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
@@ -22435,6 +22435,125 @@ connect();
     } catch (error) {
       console.error("Error downloading CAL package:", error);
       res.status(500).json({ error: "Failed to download CAL package" });
+    }
+  });
+
+  const OVERRIDABLE_ENTITIES: Record<string, {
+    get: (id: string) => Promise<any>;
+    create: (data: any) => Promise<any>;
+    delete: (id: string) => Promise<boolean>;
+  }> = {
+    menu_item: { get: (id) => storage.getMenuItem(id), create: (d) => storage.createMenuItem(d), delete: (id) => storage.deleteMenuItem(id) },
+    modifier: { get: (id) => storage.getModifier(id), create: (d) => storage.createModifier(d), delete: (id) => storage.deleteModifier(id) },
+    modifier_group: { get: (id) => storage.getModifierGroup(id), create: (d) => storage.createModifierGroup(d), delete: (id) => storage.deleteModifierGroup(id) },
+    employee: { get: (id) => storage.getEmployee(id), create: (d) => storage.createEmployee(d), delete: (id) => storage.deleteEmployee(id) },
+    role: { get: (id) => storage.getRole(id), create: (d) => storage.createRole(d), delete: (id) => storage.deleteRole(id) },
+    tax_group: { get: (id) => storage.getTaxGroup(id), create: (d) => storage.createTaxGroup(d), delete: (id) => storage.deleteTaxGroup(id) },
+    tender: { get: (id) => storage.getTender(id), create: (d) => storage.createTender(d), delete: (id) => storage.deleteTender(id) },
+    discount: { get: (id) => storage.getDiscount(id), create: (d) => storage.createDiscount(d), delete: (id) => storage.deleteDiscount(id) },
+    service_charge: { get: (id) => storage.getServiceCharge(id), create: (d) => storage.createServiceCharge(d), delete: (id) => storage.deleteServiceCharge(id) },
+    slu: { get: (id) => storage.getSlu(id), create: (d) => storage.createSlu(d), delete: (id) => storage.deleteSlu(id) },
+    major_group: { get: (id) => storage.getMajorGroup(id), create: (d) => storage.createMajorGroup(d), delete: (id) => storage.deleteMajorGroup(id) },
+    family_group: { get: (id) => storage.getFamilyGroup(id), create: (d) => storage.createFamilyGroup(d), delete: (id) => storage.deleteFamilyGroup(id) },
+    print_class: { get: (id) => storage.getPrintClass(id), create: (d) => storage.createPrintClass(d), delete: (id) => storage.deletePrintClass(id) },
+    order_device: { get: (id) => storage.getOrderDevice(id), create: (d) => storage.createOrderDevice(d), delete: (id) => storage.deleteOrderDevice(id) },
+    job: { get: (id) => storage.getJobCode(id), create: (d) => storage.createJobCode(d), delete: (id) => storage.deleteJobCode(id) },
+  };
+
+  app.post("/api/config/override", async (req, res) => {
+    try {
+      const { entityType, sourceItemId, overrideLevel, overrideScopeId } = req.body;
+
+      if (!entityType || !sourceItemId || !overrideLevel || !overrideScopeId) {
+        return res.status(400).json({ message: "Missing required fields: entityType, sourceItemId, overrideLevel, overrideScopeId" });
+      }
+
+      const handler = OVERRIDABLE_ENTITIES[entityType];
+      if (!handler) {
+        return res.status(400).json({ message: `Unsupported entity type: ${entityType}` });
+      }
+
+      const sourceItem = await handler.get(sourceItemId);
+      if (!sourceItem) {
+        return res.status(404).json({ message: "Source item not found" });
+      }
+
+      const { id, createdAt, updatedAt, ...copyFields } = sourceItem;
+
+      if (overrideLevel === "property") {
+        copyFields.propertyId = overrideScopeId;
+        copyFields.rvcId = null;
+      } else if (overrideLevel === "rvc") {
+        const rvc = await storage.getRvc(overrideScopeId);
+        if (rvc) {
+          copyFields.propertyId = rvc.propertyId;
+        }
+        copyFields.rvcId = overrideScopeId;
+      }
+
+      const newItem = await handler.create(copyFields);
+
+      await db.insert(configOverrides).values({
+        entityType,
+        sourceItemId,
+        overrideItemId: newItem.id,
+        overrideLevel,
+        overrideScopeId,
+        enterpriseId: sourceItem.enterpriseId || null,
+      });
+
+      res.status(201).json(newItem);
+    } catch (error: any) {
+      console.error("Error creating override:", error);
+      res.status(500).json({ message: error.message || "Failed to create override" });
+    }
+  });
+
+  app.delete("/api/config/override/:overrideItemId", async (req, res) => {
+    try {
+      const { overrideItemId } = req.params;
+
+      const [overrideRecord] = await db.select().from(configOverrides).where(eq(configOverrides.overrideItemId, overrideItemId));
+
+      if (!overrideRecord) {
+        return res.status(404).json({ message: "Override record not found" });
+      }
+
+      const handler = OVERRIDABLE_ENTITIES[overrideRecord.entityType];
+      if (handler) {
+        await handler.delete(overrideItemId);
+      }
+
+      await db.delete(configOverrides).where(eq(configOverrides.overrideItemId, overrideItemId));
+
+      res.json({ message: "Override removed, inherited item restored" });
+    } catch (error: any) {
+      console.error("Error removing override:", error);
+      res.status(500).json({ message: error.message || "Failed to remove override" });
+    }
+  });
+
+  app.get("/api/config/overrides", async (req, res) => {
+    try {
+      const { entityType, overrideScopeId, enterpriseId } = req.query as Record<string, string | undefined>;
+
+      let query = db.select().from(configOverrides);
+
+      if (entityType) {
+        query = query.where(eq(configOverrides.entityType, entityType as string));
+      }
+      if (overrideScopeId) {
+        query = query.where(eq(configOverrides.overrideScopeId, overrideScopeId as string));
+      }
+      if (enterpriseId) {
+        query = query.where(eq(configOverrides.enterpriseId, enterpriseId as string));
+      }
+
+      const results = await query;
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error fetching overrides:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch overrides" });
     }
   });
 

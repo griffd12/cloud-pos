@@ -10,13 +10,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertModifierGroupSchema, type ModifierGroup, type InsertModifierGroup, type Modifier, type ModifierGroupModifier } from "@shared/schema";
 import { Link2 } from "lucide-react";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function ModifierGroupsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ModifierGroup | null>(null);
   const [linkingGroup, setLinkingGroup] = useState<ModifierGroup | null>(null);
@@ -30,6 +33,9 @@ export default function ModifierGroupsPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<ModifierGroup>("modifier_group", ["/api/modifier-groups"]);
+  const displayedModifierGroups = filterOverriddenInherited(modifierGroups);
 
   const { data: allModifiers = [] } = useQuery<Modifier[]>({
     queryKey: ["/api/modifiers", filterKeys],
@@ -68,6 +74,8 @@ export default function ModifierGroupsPage() {
     { key: "maxSelect", header: "Max", sortable: true },
     { key: "displayOrder", header: "Order" },
     getScopeColumn(),
+    getZoneColumn<ModifierGroup>(scopeLookup),
+    getInheritanceColumn<ModifierGroup>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -172,7 +180,7 @@ export default function ModifierGroupsPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={modifierGroups}
+        data={displayedModifierGroups}
         columns={columns}
         title="Modifier Groups"
         onAdd={() => {
@@ -190,6 +198,7 @@ export default function ModifierGroupsPage() {
             icon: Link2,
             onClick: handleOpenLinkDialog,
           },
+          ...getOverrideActions(),
         ]}
         isLoading={isLoading}
         searchPlaceholder="Search modifier groups..."

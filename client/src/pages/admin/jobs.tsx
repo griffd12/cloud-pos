@@ -14,11 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type JobCode, type Role } from "@shared/schema";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function JobsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -44,6 +47,9 @@ export default function JobsPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<JobCode>("job", ["/api/jobs"]);
+  const displayedJobs = filterOverriddenInherited(jobs);
 
   const { data: roles = [] } = useQuery<Role[]>({
     queryKey: ["/api/roles", filterKeys],
@@ -131,6 +137,8 @@ export default function JobsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<JobCode>(scopeLookup),
+    getInheritanceColumn<JobCode>(selectedPropertyId, selectedRvcId),
   ];
 
   const createMutation = useMutation({
@@ -213,7 +221,7 @@ export default function JobsPage() {
       <DataTable
         title="Jobs"
         columns={columns}
-        data={jobs}
+        data={displayedJobs}
         isLoading={isLoading}
         onAdd={() => {
           setEditingItem(null);
@@ -225,6 +233,7 @@ export default function JobsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         searchPlaceholder="Search jobs..."
       />
 

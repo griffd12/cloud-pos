@@ -3,7 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { useEmcFilter } from "@/lib/emc-context";
 import { getAuthHeaders } from "@/lib/queryClient";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,11 +19,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type Role, type Privilege } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function RolesPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Role | null>(null);
   
@@ -39,6 +42,9 @@ export default function RolesPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Role>("role", ["/api/roles"]);
+  const displayedRoles = filterOverriddenInherited(roles);
 
   const { data: privileges = [] } = useQuery<Privilege[]>({
     queryKey: ["/api/privileges", filterKeys],
@@ -81,6 +87,8 @@ export default function RolesPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<Role>(scopeLookup),
+    getInheritanceColumn<Role>(selectedPropertyId, selectedRvcId),
   ];
 
   const createMutation = useMutation({
@@ -245,7 +253,7 @@ export default function RolesPage() {
           </div>
           
           <DataTable
-            data={roles}
+            data={displayedRoles}
             columns={columns}
             title="Roles"
             onAdd={() => {
@@ -258,6 +266,7 @@ export default function RolesPage() {
               setFormOpen(true);
             }}
             onDelete={(item) => deleteMutation.mutate(item.id)}
+            customActions={getOverrideActions()}
             isLoading={isLoading}
             searchPlaceholder="Search roles..."
             emptyMessage="No roles configured"

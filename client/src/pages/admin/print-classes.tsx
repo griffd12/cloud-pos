@@ -35,11 +35,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function PrintClassesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintClass | null>(null);
 
@@ -51,6 +54,9 @@ export default function PrintClassesPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<PrintClass>("print_class", ["/api/print-classes"]);
+  const displayedPrintClasses = filterOverriddenInherited(printClasses);
 
   const { data: orderDevices = [] } = useQuery<OrderDevice[]>({
     queryKey: ["/api/order-devices", filterKeys],
@@ -110,6 +116,8 @@ export default function PrintClassesPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<PrintClass>(scopeLookup),
+    getInheritanceColumn<PrintClass>(selectedPropertyId, selectedRvcId),
   ];
 
   const createMutation = useMutation({
@@ -161,7 +169,7 @@ export default function PrintClassesPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={printClasses}
+        data={displayedPrintClasses}
         columns={columns}
         title="Print Classes"
         onAdd={() => {
@@ -173,6 +181,7 @@ export default function PrintClassesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search print classes..."
         emptyMessage="No print classes configured"

@@ -7,11 +7,14 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { insertOrderDeviceSchema, type OrderDevice, type InsertOrderDevice, type Property, type KdsDevice } from "@shared/schema";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function OrderDevicesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderDevice | null>(null);
 
@@ -23,6 +26,9 @@ export default function OrderDevicesPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<OrderDevice>("order_device", ["/api/order-devices"]);
+  const displayedOrderDevices = filterOverriddenInherited(orderDevices);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", filterKeys],
@@ -83,6 +89,8 @@ export default function OrderDevicesPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<OrderDevice>(scopeLookup),
+    getInheritanceColumn<OrderDevice>(contextPropertyId, selectedRvcId),
   ];
 
   const kdsOptions = useMemo(() => {
@@ -205,7 +213,7 @@ export default function OrderDevicesPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={orderDevices}
+        data={displayedOrderDevices}
         columns={columns}
         title="Order Devices"
         onAdd={() => {
@@ -217,6 +225,7 @@ export default function OrderDevicesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search order devices..."
         emptyMessage="No order devices configured"

@@ -36,7 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, TestTube } from "lucide-react";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 
 const GATEWAY_TYPES = [
   { value: "stripe", label: "Stripe", emv: false, description: "Online/card-not-present processing" },
@@ -58,7 +59,8 @@ export default function PaymentProcessorsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PaymentProcessor | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
 
   const { data: processors = [], isLoading } = useQuery<PaymentProcessor[]>({
     queryKey: ["/api/payment-processors", filterKeys],
@@ -118,6 +120,8 @@ export default function PaymentProcessorsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<PaymentProcessor>(scopeLookup),
+    getInheritanceColumn<PaymentProcessor>(contextPropertyId, selectedRvcId),
   ];
 
   const form = useForm<InsertPaymentProcessor>({

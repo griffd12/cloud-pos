@@ -3574,3 +3574,18 @@ export type CalDeployment = typeof calDeployments.$inferSelect;
 export type InsertCalDeployment = z.infer<typeof insertCalDeploymentSchema>;
 export type CalDeploymentTarget = typeof calDeploymentTargets.$inferSelect;
 export type InsertCalDeploymentTarget = z.infer<typeof insertCalDeploymentTargetSchema>;
+
+export const configOverrides = pgTable("config_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  sourceItemId: text("source_item_id").notNull(),
+  overrideItemId: text("override_item_id").notNull(),
+  overrideLevel: text("override_level").notNull(),
+  overrideScopeId: text("override_scope_id").notNull(),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertConfigOverrideSchema = createInsertSchema(configOverrides).omit({ id: true, createdAt: true });
+export type ConfigOverride = typeof configOverrides.$inferSelect;
+export type InsertConfigOverride = z.infer<typeof insertConfigOverrideSchema>;

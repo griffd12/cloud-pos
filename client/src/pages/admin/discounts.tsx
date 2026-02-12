@@ -7,15 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertDiscountSchema, type Discount, type InsertDiscount } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function DiscountsPage() {
   const { toast } = useToast();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Discount | null>(null);
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
 
   const { data: discounts = [], isLoading } = useQuery<Discount[]>({
     queryKey: ["/api/discounts", filterKeys],
@@ -25,6 +28,9 @@ export default function DiscountsPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Discount>("discount", ["/api/discounts"]);
+  const displayedDiscounts = filterOverriddenInherited(discounts);
 
   const columns: Column<Discount>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -51,6 +57,8 @@ export default function DiscountsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<Discount>(scopeLookup),
+    getInheritanceColumn<Discount>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -131,7 +139,7 @@ export default function DiscountsPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={discounts}
+        data={displayedDiscounts}
         columns={columns}
         title="Discounts"
         onAdd={() => {
@@ -143,6 +151,7 @@ export default function DiscountsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search discounts..."
         emptyMessage="No discounts configured"

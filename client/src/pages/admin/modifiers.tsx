@@ -7,12 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertModifierSchema, type Modifier, type InsertModifier } from "@shared/schema";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function ModifiersPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Modifier | null>(null);
@@ -25,6 +28,9 @@ export default function ModifiersPage() {
       return res.json();
     },
   });
+
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Modifier>("modifier", ["/api/modifiers"]);
+  const displayedModifiers = filterOverriddenInherited(modifiers);
 
   const columns: Column<Modifier>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -47,6 +53,8 @@ export default function ModifiersPage() {
       ),
     },
     getScopeColumn(),
+    getZoneColumn<Modifier>(scopeLookup),
+    getInheritanceColumn<Modifier>(selectedPropertyId, selectedRvcId),
   ];
 
   const formFields: FormFieldConfig[] = [
@@ -110,7 +118,7 @@ export default function ModifiersPage() {
   return (
     <div className="p-6">
       <DataTable
-        data={modifiers}
+        data={displayedModifiers}
         columns={columns}
         title="Modifiers"
         onAdd={() => {
@@ -122,6 +130,7 @@ export default function ModifiersPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search modifiers..."
         emptyMessage="No modifiers configured. Create modifiers here, then link them to Modifier Groups."

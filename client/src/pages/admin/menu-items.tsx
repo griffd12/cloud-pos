@@ -35,15 +35,18 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertMenuItemSchema, type MenuItem, type InsertMenuItem, type TaxGroup, type PrintClass, type Slu, type MenuItemSlu, type ModifierGroup, type MenuItemModifierGroup, type MajorGroup, type FamilyGroup, type IngredientPrefix, type MenuItemRecipeIngredient, type Modifier } from "@shared/schema";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, Upload, Unlink, Plus, X } from "lucide-react";
+import { useConfigOverride } from "@/hooks/use-config-override";
 
 export default function MenuItemsPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   
   // Enable real-time updates via WebSocket
   usePosWebSocket();
@@ -133,14 +136,17 @@ export default function MenuItemsPage() {
     enabled: !!selectedEnterpriseId,
   });
 
+  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<MenuItem>("menu_item", ["/api/menu-items"]);
+  const displayedMenuItems = filterOverriddenInherited(menuItems);
+
   const filteredMenuItems = categoryFilter === "all"
-    ? menuItems
+    ? displayedMenuItems
     : categoryFilter === "unlinked"
-    ? menuItems.filter(item => {
+    ? displayedMenuItems.filter(item => {
         const linkedSluIds = allMenuItemSlus.filter(l => l.menuItemId === item.id);
         return linkedSluIds.length === 0;
       })
-    : menuItems.filter(item => {
+    : displayedMenuItems.filter(item => {
         const linkedSluIds = allMenuItemSlus.filter(l => l.menuItemId === item.id).map(l => l.sluId);
         return linkedSluIds.includes(categoryFilter);
       });
@@ -208,6 +214,8 @@ export default function MenuItemsPage() {
       render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
+    getZoneColumn<MenuItem>(scopeLookup),
+    getInheritanceColumn<MenuItem>(contextPropertyId, selectedRvcId),
   ];
 
   const deleteMutation = useMutation({
@@ -464,6 +472,7 @@ export default function MenuItemsPage() {
             icon: Unlink,
             onClick: (item) => unlinkMutation.mutate(item.id),
           },
+          ...getOverrideActions(),
         ] as CustomAction<MenuItem>[]}
         isLoading={isLoading}
         searchPlaceholder="Search menu items..."

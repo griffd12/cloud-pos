@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
 import { EntityForm, FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
-import { getScopeColumn } from "@/components/admin/scope-column";
+import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
+import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -43,7 +44,8 @@ import { format } from "date-fns";
 export default function LoyaltyPage() {
   const { toast } = useToast();
   usePosWebSocket();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
+  const scopeLookup = useScopeLookup();
   const [activeTab, setActiveTab] = useState("programs");
   
   const [programFormOpen, setProgramFormOpen] = useState(false);
@@ -177,6 +179,8 @@ export default function LoyaltyPage() {
       render: (value) => value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>,
     },
     getScopeColumn(),
+    getZoneColumn<LoyaltyProgram>(scopeLookup),
+    getInheritanceColumn<LoyaltyProgram>(selectedPropertyId, selectedRvcId),
   ];
 
   const memberColumns: Column<MemberWithEnrollments>[] = [
