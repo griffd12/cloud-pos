@@ -576,6 +576,25 @@ export default function PosPage() {
 
   const addItemMutation = useMutation({
     mutationFn: async (data: { menuItem: MenuItem; modifiers: SelectedModifier[] }) => {
+      const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const optimisticItem = {
+        id: optimisticId,
+        checkId: currentCheck?.id,
+        menuItemId: data.menuItem.id,
+        menuItemName: data.menuItem.name,
+        unitPrice: data.menuItem.price,
+        modifiers: data.modifiers,
+        quantity: 1,
+        itemStatus: "active",
+        sent: false,
+        voided: false,
+      } as any;
+      setCheckItems((prev) => [...prev, optimisticItem]);
+      setShowModifierModal(false);
+      setPendingItem(null);
+      setItemModifierGroups([]);
+      decrementQuantity(data.menuItem.id);
+
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/items", {
         menuItemId: data.menuItem.id,
         menuItemName: data.menuItem.name,
@@ -583,19 +602,18 @@ export default function PosPage() {
         modifiers: data.modifiers,
         quantity: 1,
       });
-      return response.json();
+      const newItem = await response.json();
+      return { newItem, optimisticId };
     },
-    onSuccess: (newItem: CheckItem, variables) => {
-      setCheckItems((prev) => [...prev, newItem]);
-      setShowModifierModal(false);
-      setPendingItem(null);
-      setItemModifierGroups([]);
+    onSuccess: ({ newItem, optimisticId }) => {
+      setCheckItems((prev) => prev.map(ci => ci.id === optimisticId ? newItem : ci));
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-      // Decrement availability when item is successfully added (for modifier flow)
-      decrementQuantity(variables.menuItem.id);
     },
-    onError: () => {
+    onError: (_error, variables) => {
+      setCheckItems((prev) => prev.filter(ci => !String(ci.id).startsWith("optimistic-")));
+      queryClient.invalidateQueries({ queryKey: ["/api/item-availability"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       toast({ title: "Failed to add item", variant: "destructive" });
     },
   });
@@ -1290,21 +1308,39 @@ export default function PosPage() {
         setShowModifierModal(true);
         // Note: For non-dynamic mode, decrement happens in handleConfirmModifiers when item is actually added
       } else {
-        // No required modifiers, add item directly
-        const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
+        const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const optimisticItem = {
+          id: optimisticId,
+          checkId: checkToUse.id,
           menuItemId: item.id,
           menuItemName: item.name,
           unitPrice: item.price,
           modifiers: [],
           quantity: 1,
-        });
-        const newItem = await response.json();
-        setCheckItems((prev) => [...prev, newItem]);
-        queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
-        queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-        
-        // Decrement availability when item is added
+          itemStatus: "active",
+          sent: false,
+          voided: false,
+        } as any;
+        setCheckItems((prev) => [...prev, optimisticItem]);
         decrementQuantity(item.id);
+
+        try {
+          const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
+            menuItemId: item.id,
+            menuItemName: item.name,
+            unitPrice: item.price,
+            modifiers: [],
+            quantity: 1,
+          });
+          const newItem = await response.json();
+          setCheckItems((prev) => prev.map(ci => ci.id === optimisticId ? newItem : ci));
+          queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
+          queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+        } catch {
+          setCheckItems((prev) => prev.filter(ci => ci.id !== optimisticId));
+          queryClient.invalidateQueries({ queryKey: ["/api/item-availability"] });
+          toast({ title: "Failed to add item", variant: "destructive" });
+        }
       }
     } catch {
       toast({ title: "Failed to add item", variant: "destructive" });

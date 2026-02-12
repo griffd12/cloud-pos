@@ -625,30 +625,37 @@ async function sendItemsToKds(
 // IMPORTANT: Uses STORED tax amounts from ring-in time, NOT current menu item settings
 // This ensures tax is immutable and not retroactively recalculated if menu item tax settings change
 async function recalculateCheckTotals(checkId: string): Promise<void> {
-  const check = await storage.getCheck(checkId);
+  const [check, items, checkDiscountRecords] = await Promise.all([
+    storage.getCheck(checkId),
+    storage.getCheckItems(checkId),
+    storage.getCheckDiscounts(checkId),
+  ]);
   if (!check) return;
 
-  const items = await storage.getCheckItems(checkId);
   const activeItems = items.filter((i) => !i.voided);
   
-  let grossSubtotal = 0; // Before discounts
-  let itemDiscountTotal = 0; // Item-level discounts
+  const hasLegacyItems = activeItems.some(i => !i.taxableAmount);
+  let menuItemsCache: any[] | null = null;
+  let taxGroupsCache: any[] | null = null;
+  if (hasLegacyItems) {
+    [menuItemsCache, taxGroupsCache] = await Promise.all([
+      storage.getMenuItems(),
+      storage.getTaxGroups(),
+    ]);
+  }
+
+  let grossSubtotal = 0;
+  let itemDiscountTotal = 0;
   let addOnTax = 0;
 
   for (const item of activeItems) {
-    // Get item discount if any
     const itemDiscount = parseFloat(item.discountAmount || "0");
     itemDiscountTotal += itemDiscount;
     
-    // Use stored taxableAmount if available (new items have this)
-    // Fall back to calculation for legacy items (before tax snapshot was implemented)
     if (item.taxableAmount) {
-      // New items with tax snapshot - use stored values
-      // Taxable amount is the base before discount
       const taxableBase = parseFloat(item.taxableAmount);
       grossSubtotal += taxableBase;
       
-      // Recalculate tax based on discounted amount if discount applied
       if (itemDiscount > 0 && item.taxRateAtSale) {
         const taxRate = parseFloat(item.taxRateAtSale);
         const discountedBase = taxableBase - itemDiscount;
@@ -657,8 +664,6 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
         addOnTax += parseFloat(item.taxAmount || "0");
       }
     } else {
-      // Legacy fallback: calculate from current settings (old items before this fix)
-      // This maintains backwards compatibility for existing checks
       const unitPrice = parseFloat(item.unitPrice || "0");
       const modifierTotal = (item.modifiers || []).reduce(
         (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
@@ -667,34 +672,24 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
       const itemTotal = (unitPrice + modifierTotal) * (item.quantity || 1);
       grossSubtotal += itemTotal;
       
-      // For legacy items, we must look up current tax settings (unavoidable)
-      const menuItems = await storage.getMenuItems();
-      const taxGroups = await storage.getTaxGroups();
-      const menuItem = menuItems.find((mi) => mi.id === item.menuItemId);
-      const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
+      const menuItem = menuItemsCache!.find((mi: any) => mi.id === item.menuItemId);
+      const taxGroup = taxGroupsCache!.find((tg: any) => tg.id === menuItem?.taxGroupId);
       const taxRate = parseFloat(taxGroup?.rate || "0");
       const taxMode = taxGroup?.taxMode || "add_on";
       
       if (taxMode === "add_on") {
-        // Apply discount before calculating tax
         const discountedBase = itemTotal - itemDiscount;
         addOnTax += discountedBase * taxRate;
       }
     }
   }
 
-  // Get check-level discounts from checkDiscounts table
-  const checkDiscountRecords = await storage.getCheckDiscounts(checkId);
   const checkLevelDiscountTotal = checkDiscountRecords.reduce(
-    (sum, d) => sum + parseFloat(d.amount || "0"), 0
+    (sum: number, d: any) => sum + parseFloat(d.amount || "0"), 0
   );
 
-  // Calculate totals
-  // Net subtotal = gross - item discounts - check discounts (applied pre-tax for check discounts)
   const netSubtotal = grossSubtotal - itemDiscountTotal - checkLevelDiscountTotal;
   
-  // If check-level discounts exist, we need to recalculate tax on the reduced amount
-  // For simplicity, we apply check discounts proportionally and adjust tax
   if (checkLevelDiscountTotal > 0 && grossSubtotal > 0) {
     const discountRatio = checkLevelDiscountTotal / grossSubtotal;
     addOnTax = addOnTax * (1 - discountRatio);
@@ -702,8 +697,6 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
   
   const totalDiscounts = itemDiscountTotal + checkLevelDiscountTotal;
 
-  // Round to 2 decimal places for financial accuracy
-  // Subtotal = gross item totals BEFORE discounts (what the user expects to see)
   const subtotal = Math.round(grossSubtotal * 100) / 100;
   const tax = Math.round(addOnTax * 100) / 100;
   const total = Math.round((netSubtotal + addOnTax) * 100) / 100;
@@ -4184,11 +4177,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkId = req.params.id;
       const { menuItemId, menuItemName, unitPrice, modifiers, quantity, itemStatus } = req.body;
 
-      // Get property for business date calculation
-      const check = await storage.getCheck(checkId);
+      const [check, menuItem, taxGroups] = await Promise.all([
+        storage.getCheck(checkId),
+        storage.getMenuItem(menuItemId),
+        storage.getTaxGroups(),
+      ]);
+
       let businessDate: string | undefined;
+      let rvc: any = null;
       if (check) {
-        const rvc = await storage.getRvc(check.rvcId);
+        rvc = await storage.getRvc(check.rvcId);
         if (rvc) {
           const property = await storage.getProperty(rvc.propertyId);
           if (property) {
@@ -4197,14 +4195,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      // Capture tax settings at ring-in time (IMMUTABLE - prevents retroactive tax changes)
       const itemQuantity = quantity || 1;
-      const taxSnapshot = await calculateTaxSnapshot(
-        menuItemId,
-        parseFloat(unitPrice || "0"),
-        modifiers || [],
-        itemQuantity
+      const taxGroup = taxGroups.find((tg) => tg.id === menuItem?.taxGroupId);
+      const taxGroupIdAtSale = taxGroup?.id || null;
+      const taxModeAtSale = taxGroup?.taxMode || "add_on";
+      const taxRateAtSale = parseFloat(taxGroup?.rate || "0");
+      const modifierTotal = (modifiers || []).reduce(
+        (mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"),
+        0
       );
+      const taxableAmount = (parseFloat(unitPrice || "0") + modifierTotal) * itemQuantity;
+      const taxAmount = taxModeAtSale === "add_on" ? taxableAmount * taxRateAtSale : 0;
+      const taxSnapshot = {
+        taxGroupIdAtSale,
+        taxModeAtSale,
+        taxRateAtSale: taxRateAtSale.toFixed(6),
+        taxAmount: taxAmount.toFixed(2),
+        taxableAmount: taxableAmount.toFixed(2),
+      };
       
       const item = await storage.createCheckItem({
         checkId,
@@ -4213,43 +4221,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         unitPrice,
         modifiers: modifiers || [],
         quantity: itemQuantity,
-        itemStatus: itemStatus || "active", // 'pending' for items awaiting modifiers
+        itemStatus: itemStatus || "active",
         sent: false,
         voided: false,
         businessDate,
-        // Tax snapshot - locked at ring-in time
         ...taxSnapshot,
       });
 
-      // Check for dynamic order mode - add to preview ticket if RVC has dynamicOrderMode enabled
-      // Items stay unsent until explicit Send action or payment
-      let finalItem = item;
-      if (check && menuItemId) {
-        const rvc = await storage.getRvc(check.rvcId);
-        if (rvc && rvc.dynamicOrderMode) {
-          // RVC has dynamic order mode enabled - add item to preview ticket for real-time KDS display
-          try {
-            await addItemToPreviewTicket(checkId, item, rvc);
-          } catch (e) {
-            console.error("Dynamic order preview error:", e);
+      res.status(201).json(item);
+
+      try {
+        if (check && menuItemId) {
+          const bgTasks: Promise<any>[] = [];
+          if (rvc && rvc.dynamicOrderMode) {
+            bgTasks.push(
+              addItemToPreviewTicket(checkId, item, rvc).catch(e =>
+                console.error("Dynamic order preview error:", e)
+              )
+            );
           }
+          bgTasks.push(
+            recallBumpedTicketsOnModification(checkId).catch(e =>
+              console.error("Recall bumped tickets error:", e)
+            )
+          );
+          bgTasks.push(
+            recalculateCheckTotals(checkId).catch(e =>
+              console.error("Recalculate totals error:", e)
+            )
+          );
+          await Promise.all(bgTasks);
+        } else {
+          await recalculateCheckTotals(checkId).catch(e =>
+            console.error("Recalculate totals error:", e)
+          );
         }
-        
-        // DOM: Re-display bumped orders when modified
-        // If any tickets for this check are bumped, recall them to show the new item
-        await recallBumpedTicketsOnModification(checkId);
+        broadcastCheckItemUpdate(checkId, item.id);
+      } catch (bgError) {
+        console.error("Background task error after item add:", bgError);
       }
-
-      // Recalculate and persist check totals
-      await recalculateCheckTotals(checkId);
-
-      // Broadcast real-time update for new item
-      broadcastCheckItemUpdate(checkId, finalItem.id);
-
-      res.status(201).json(finalItem);
     } catch (error) {
       console.error("Add item error:", error);
-      res.status(400).json({ message: "Failed to add item" });
+      if (!res.headersSent) {
+        res.status(400).json({ message: "Failed to add item" });
+      }
     }
   });
 
