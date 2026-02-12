@@ -1767,11 +1767,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/properties", async (req, res) => {
     const enterpriseId = await getEnforcedEnterpriseId(req);
-    let data = await storage.getProperties(enterpriseId);
-    const propertyId = req.query.propertyId as string | undefined;
-    if (propertyId) {
-      data = data.filter(p => p.id === propertyId);
-    }
+    const data = await storage.getProperties(enterpriseId);
     res.json(data);
   });
 

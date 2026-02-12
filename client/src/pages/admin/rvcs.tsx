@@ -56,10 +56,11 @@ export default function RvcsPage() {
     },
   });
 
+  const enterpriseOnlyParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", filterKeys],
+    queryKey: ["/api/properties", selectedEnterpriseId],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${enterpriseOnlyParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },

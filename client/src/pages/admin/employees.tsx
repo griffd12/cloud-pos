@@ -67,10 +67,11 @@ export default function EmployeesPage() {
     },
   });
 
+  const enterpriseOnlyParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const { data: properties = [] } = useQuery<Property[]>({
-    queryKey: ["/api/properties", filterKeys],
+    queryKey: ["/api/properties", selectedEnterpriseId],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${enterpriseOnlyParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -283,23 +284,24 @@ export default function EmployeesPage() {
       employeeData.pinHash = pinHash;
     }
 
+    const isEnterpriseLevel = !selectedPropertyId;
+
     if (editingItem) {
       employeeData.id = editingItem.id;
-      // Set propertyId to first selected property (or keep existing/null for enterprise-level)
-      if (selectedPropertyIds.length > 0) {
-        (employeeData as any).propertyId = selectedPropertyIds[0];
-      }
-      updateMutation.mutate({ employee: employeeData, propertyIds: selectedPropertyIds, jobAssignments, emcEmail: emcEmail || undefined, emcPassword: emcPassword || undefined, emcAccessLevel, removeEmcAccess: !emcEmail && hasEmcAccess });
-    } else {
-      // For new employees, use: first selected property > EMC context property > first available property
-      const primaryPropertyId = selectedPropertyIds.length > 0 
-        ? selectedPropertyIds[0] 
-        : (selectedPropertyId || (properties.length > 0 ? properties[0].id : undefined));
-      
-      // Auto-populate property assignments if none selected but we have a context property
-      const propertyIdsToAssign = selectedPropertyIds.length > 0 
+      const editPropertyIds = isEnterpriseLevel 
         ? selectedPropertyIds 
-        : (primaryPropertyId ? [primaryPropertyId] : []);
+        : selectedPropertyIds;
+      if (editPropertyIds.length > 0) {
+        (employeeData as any).propertyId = editPropertyIds[0];
+      }
+      updateMutation.mutate({ employee: employeeData, propertyIds: editPropertyIds, jobAssignments, emcEmail: emcEmail || undefined, emcPassword: emcPassword || undefined, emcAccessLevel, removeEmcAccess: !emcEmail && hasEmcAccess });
+    } else {
+      const newPropertyIds = isEnterpriseLevel 
+        ? properties.map(p => p.id) 
+        : selectedPropertyIds;
+      const primaryPropertyId = newPropertyIds.length > 0 
+        ? newPropertyIds[0] 
+        : undefined;
       
       createMutation.mutate({ 
         employee: { 
@@ -307,7 +309,7 @@ export default function EmployeesPage() {
           ...scopePayload,
           propertyId: primaryPropertyId,
         } as Employee, 
-        propertyIds: propertyIdsToAssign, 
+        propertyIds: newPropertyIds, 
         jobAssignments,
         emcEmail: emcEmail || undefined,
         emcPassword: emcPassword || undefined,
@@ -564,27 +566,40 @@ export default function EmployeesPage() {
 
                 <div className="space-y-2">
                   <Label>Assigned Properties</Label>
-                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
-                    {properties.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No properties available</p>
-                    ) : (
-                      properties.map((property) => (
-                        <div key={property.id} className="flex items-center space-x-2">
-                          <Checkbox 
-                            id={`property-${property.id}`}
-                            data-testid={`checkbox-property-${property.id}`}
-                            checked={selectedPropertyIds.includes(property.id)}
-                            onCheckedChange={() => toggleProperty(property.id)}
-                          />
-                          <Label htmlFor={`property-${property.id}`} className="text-sm font-normal cursor-pointer">
-                            {property.name}
-                          </Label>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  {!selectedPropertyId && !editingItem ? (
+                    <div className="border rounded-md p-3 space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Enterprise-level configuration: employee will be assigned to all properties.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        To assign to specific properties only, select a property in the filter bar above.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
+                      {properties.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No properties available</p>
+                      ) : (
+                        properties.map((property) => (
+                          <div key={property.id} className="flex items-center space-x-2">
+                            <Checkbox 
+                              id={`property-${property.id}`}
+                              data-testid={`checkbox-property-${property.id}`}
+                              checked={selectedPropertyIds.includes(property.id)}
+                              onCheckedChange={() => toggleProperty(property.id)}
+                            />
+                            <Label htmlFor={`property-${property.id}`} className="text-sm font-normal cursor-pointer">
+                              {property.name}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Select one or more properties this employee can access
+                    {!selectedPropertyId && !editingItem
+                      ? "Employee configured at enterprise level applies to all properties" 
+                      : "Select one or more properties this employee can access"}
                   </p>
                 </div>
               </div>

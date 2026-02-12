@@ -10,15 +10,16 @@ import { insertPropertySchema, type Property, type InsertProperty, type Enterpri
 
 export default function PropertiesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { selectedEnterpriseId, scopePayload } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Property | null>(null);
 
+  const enterpriseOnlyParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
   const { data: properties = [], isLoading } = useQuery<Property[]>({
-    queryKey: ["/api/properties", filterKeys],
+    queryKey: ["/api/properties", selectedEnterpriseId],
     queryFn: async () => {
-      const res = await fetch(`/api/properties${filterParam}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/properties${enterpriseOnlyParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
@@ -141,7 +142,7 @@ export default function PropertiesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       setFormOpen(false);
       toast({ title: "Property created" });
     },
@@ -156,7 +157,7 @@ export default function PropertiesPage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       setFormOpen(false);
       setEditingItem(null);
       toast({ title: "Property updated" });
@@ -171,7 +172,7 @@ export default function PropertiesPage() {
       await apiRequest("DELETE", "/api/properties/" + id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/properties", filterKeys] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({ title: "Property deleted" });
     },
     onError: () => {
