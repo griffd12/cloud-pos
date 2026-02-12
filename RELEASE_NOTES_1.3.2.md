@@ -1,39 +1,62 @@
 # Cloud POS v1.3.2 Release Notes
 
-## Performance Improvements
+**Release Date:** February 12, 2026
 
-### POS Item Ring-In Speed (Critical Fix)
-- **Fixed**: Reduced ~3 second delay when adding menu items to a check in production
-- **Root cause**: The add-item API endpoint was making 10+ sequential database queries (check, RVC, property, menu item, tax groups, create item, RVC again, KDS tickets, recalculate totals with nested lookups)
-- **Server-side optimizations**:
-  - Parallelized initial data fetches (check + menu item + tax groups fetched simultaneously instead of sequentially)
-  - Eliminated duplicate RVC lookup (was fetched twice per item add)
-  - Inlined tax snapshot calculation to reuse already-fetched data instead of making separate queries
-  - Moved non-critical background operations (KDS preview, bumped ticket recall, total recalculation, WebSocket broadcast) to run after the response is sent to the client
-  - Background operations now run in parallel instead of sequentially
-- **Check totals recalculation optimized**:
-  - Parallelized fetching of check, items, and discounts (3 queries run simultaneously instead of sequentially)
-  - Legacy item tax lookups (menu items + tax groups) are now fetched once and cached for the entire recalculation instead of being re-fetched inside a loop for every legacy item
-- **Client-side optimistic updates**:
-  - Items now appear instantly in the check detail when tapped, before the server confirms
-  - If the server call fails, the optimistic item is removed and an error is shown
-  - Modifier modal closes immediately after confirmation with optimistic item display
-- **Net result**: Item ring-in should now feel near-instant instead of the previous ~3 second delay
+---
 
-## EMC Navigation Improvements
+## Highlights
+
+- Near-instant item ring-in on the POS (previously ~3 seconds)
+- Improved EMC navigation with back button and grid return on tree clicks
+- Enhanced error resilience for background operations
+
+---
+
+## Performance
+
+### POS Item Ring-In Speed
+The most impactful change in this release. Adding menu items to a check is now near-instant, down from a noticeable ~3 second delay in production environments.
+
+**What changed:**
+- Server-side database queries are now parallelized instead of running one after another
+- Duplicate data lookups eliminated
+- Tax calculations reuse already-loaded data instead of re-fetching
+- Non-critical operations (KDS updates, total recalculation) now run in the background after the POS screen has already updated
+- Check totals recalculation optimized to avoid redundant lookups per item
+
+**What you'll notice:**
+- Items appear on the check immediately when tapped
+- Modifier selection modal closes instantly after confirmation
+- If the server encounters an issue, the item is automatically removed and an error is displayed
+
+---
+
+## EMC Improvements
 
 ### Configuration Grid Navigation
-- **Added**: Back button in the header bar when viewing any configuration page (Tax Groups, Employees, etc.) -- click to return to the main configuration grid
-- **Fixed**: Clicking a node in the hierarchy tree (Enterprise, Property, or RVC) now returns to the main configuration grid while keeping your selected scope
-- Previously, users were stuck on a configuration page with no way to navigate back to the grid
+- **Back button** added to the header bar when viewing any configuration page -- one click returns you to the main configuration grid
+- **Tree node clicks** (Enterprise, Property, or RVC) now return to the configuration grid while preserving your scope selection
+- Previously there was no way to navigate back to the grid from a configuration page
 
-### Level-Locked Navigation Enhancements
-- **Added**: System admin check to scope-change redirect logic -- non-admin users are properly redirected when navigating to admin-only pages
-- Cleaned up unused interface properties in navigation system
+### Access Control
+- Non-admin users are now properly redirected away from admin-only pages when scope changes
+
+---
+
+## Reliability
+
+- Background operations (KDS preview, bumped ticket recall, total recalculation) now include error handling and logging -- a failure in one background task no longer affects others
+- Failed item additions properly restore availability counts and clean up the UI
+
+---
 
 ## Upgrade Notes
 
-- **Cloud/Web POS stations**: Republishing the server applies all performance fixes immediately
-- **Windows Electron stations**: Auto-update will deliver v1.3.2 with all improvements -- the performance fix is server-side, so Electron stations benefit as soon as the server is updated
+| Station Type | Action Required |
+|---|---|
+| **Cloud / Web POS** | Republish the server -- all fixes apply immediately |
+| **Windows Electron** | Auto-update delivers v1.3.2 automatically. Performance fix is server-side, so stations benefit as soon as the server is updated |
+
 - No database migrations required
 - No configuration changes needed
+- Fully backward compatible with v1.3.1
