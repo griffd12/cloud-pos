@@ -49,6 +49,7 @@ Preferred communication style: Simple, everyday language.
 - **Setup Wizard URL Validation**: Ensures robust server URL validation and error handling.
 - **Electron Startup Loading Screen**: Displays an inline HTML loading page and error pages for connection failures.
 - **React ErrorBoundary**: Catches rendering errors, shows a user-friendly fallback, and logs errors to the unified system log.
+- **Stress Test Infrastructure**: API-driven performance testing via `/api/stress-test/start|stop|status|cleanup`. Creates real POS transactions (check create → add items → send → tender) with `testMode=true` flag. Test checks are automatically excluded from all sales reports, fiscal totals, and open checks queries via `getChecks()` filter. Configurable patterns (single/double/triple item), target tx/min, and duration. Cleanup purges all test data (checks, items, payments, rounds, KDS tickets). Implemented in `server/stressTest.ts`.
 
 ## External Dependencies
 

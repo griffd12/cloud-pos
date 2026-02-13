@@ -364,7 +364,7 @@ export interface IStorage {
   deleteServiceCharge(id: string): Promise<boolean>;
 
   // Checks
-  getChecks(rvcId?: string, status?: string): Promise<Check[]>;
+  getChecks(rvcId?: string, status?: string, includeTestMode?: boolean): Promise<Check[]>;
   getChecksByPropertyAndDateRange(propertyId: string, startDate: string, endDate: string): Promise<Check[]>;
   getCheck(id: string): Promise<Check | undefined>;
   getOpenChecks(rvcId: string): Promise<Check[]>;
@@ -1902,16 +1902,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Checks
-  async getChecks(rvcId?: string, status?: string): Promise<Check[]> {
-    let query = db.select().from(checks);
+  async getChecks(rvcId?: string, status?: string, includeTestMode?: boolean): Promise<Check[]> {
+    const noTest = or(eq(checks.testMode, false), isNull(checks.testMode));
+    const testFilter = includeTestMode ? undefined : noTest;
     if (rvcId && status) {
-      return db.select().from(checks).where(and(eq(checks.rvcId, rvcId), eq(checks.status, status)));
+      return db.select().from(checks).where(and(eq(checks.rvcId, rvcId), eq(checks.status, status), testFilter));
     }
     if (rvcId) {
-      return db.select().from(checks).where(eq(checks.rvcId, rvcId));
+      return db.select().from(checks).where(and(eq(checks.rvcId, rvcId), testFilter));
     }
     if (status) {
-      return db.select().from(checks).where(eq(checks.status, status));
+      return db.select().from(checks).where(and(eq(checks.status, status), testFilter));
+    }
+    if (testFilter) {
+      return db.select().from(checks).where(testFilter).orderBy(desc(checks.openedAt));
     }
     return db.select().from(checks).orderBy(desc(checks.openedAt));
   }
@@ -1923,12 +1927,13 @@ export class DatabaseStorage implements IStorage {
     
     if (rvcIds.length === 0) return [];
     
-    // Query checks for those RVCs within the date range
+    // Query checks for those RVCs within the date range (exclude test mode)
     return db.select().from(checks)
       .where(and(
         inArray(checks.rvcId, rvcIds),
         gte(checks.businessDate, startDate),
-        lte(checks.businessDate, endDate)
+        lte(checks.businessDate, endDate),
+        or(eq(checks.testMode, false), isNull(checks.testMode))
       ))
       .orderBy(checks.businessDate);
   }
@@ -5027,9 +5032,9 @@ export class DatabaseStorage implements IStorage {
       return { grossSales: "0", netSales: "0", taxCollected: "0", discountsTotal: "0", checkCount: 0, cashExpected: "0", cardTotal: "0", tipsTotal: "0", serviceChargesTotal: "0", refundsTotal: "0", guestCount: 0 };
     }
 
-    // Get all checks for this business date and property's RVCs
+    // Get all checks for this business date and property's RVCs (exclude test mode)
     const dayChecks = await db.select().from(checks)
-      .where(and(inArray(checks.rvcId, rvcIds), eq(checks.businessDate, businessDate)));
+      .where(and(inArray(checks.rvcId, rvcIds), eq(checks.businessDate, businessDate), or(eq(checks.testMode, false), isNull(checks.testMode))));
 
     let grossSales = 0, netSales = 0, taxCollected = 0, discountsTotal = 0, cashExpected = 0, cardTotal = 0, tipsTotal = 0, serviceChargesTotal = 0, refundsTotal = 0, guestCount = 0;
 

@@ -869,6 +869,7 @@ export const checks = pgTable("checks", {
   businessDate: text("business_date"), // YYYY-MM-DD format, the business date when check was CLOSED (updated on close)
   loyaltyPointsEarned: integer("loyalty_points_earned"), // Points earned on this check
   loyaltyPointsRedeemed: integer("loyalty_points_redeemed"), // Points redeemed on this check
+  testMode: boolean("test_mode").default(false),
 });
 
 // Rounds (each send creates a round)

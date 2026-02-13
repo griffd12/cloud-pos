@@ -12,6 +12,7 @@ import { db } from "./db";
 import { eq, sql, inArray } from "drizzle-orm";
 import { emcUsers, enterprises, properties, employeeAssignments, configOverrides } from "@shared/schema";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
+import { registerStressTestRoutes } from "./stressTest";
 import { resolveBusinessDate, calculateBusinessDateFromTime, getLocalDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
@@ -4282,7 +4283,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/checks", async (req, res) => {
     try {
-      const { rvcId, employeeId, orderType } = req.body;
+      const { rvcId, employeeId, orderType, testMode } = req.body;
       const checkNumber = await storage.getNextCheckNumber(rvcId);
       
       // Get property for business date calculation
@@ -4301,8 +4302,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         employeeId,
         orderType: orderType || "dine_in",
         status: "open",
-        originBusinessDate: businessDate, // When check was STARTED (never changes)
-        businessDate, // Current business date (updates when closed)
+        originBusinessDate: businessDate,
+        businessDate,
+        testMode: testMode || false,
       });
       
       // Broadcast real-time update for new check
@@ -22727,6 +22729,8 @@ connect();
       res.status(500).json({ message: error.message || "Failed to fetch overrides" });
     }
   });
+
+  registerStressTestRoutes(app, storage);
 
   return httpServer;
 }
