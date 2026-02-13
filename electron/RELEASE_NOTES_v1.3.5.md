@@ -25,22 +25,26 @@
 - This icon navigated to the "Connect to Server" page, which should not be accessible during normal KDS operation
 - The fullscreen toggle and theme toggle remain available in the KDS header
 
-## Previous Changes (v1.3.4)
+## Server & Database Changes (v1.3.4)
 
-### Display Font Scaling
-- Per-workstation and per-KDS-device font size control (Small 85%, Medium 100%, Large 120%, Extra Large 140%)
-- Font scale stored in both `workstations` and `kds_devices` tables
-- Configurable via EMC for both Workstations and KDS Devices
-- Uses CSS zoom with viewport compensation for proportional scaling of all UI elements
-- Solves readability issues on smaller touchscreens viewed from 1-2 feet away
+These changes were released in v1.3.4 as server-side and database updates. They do not affect the Electron installer — no new build was required.
 
-### Stress Test Infrastructure
-- Persistent stress test results saved to database with full metrics
-- EMC Stress Test Report page showing historical test runs with performance thresholds
-- System tender auto-provisioned for stress testing (hidden from EMC, skips receipts)
+### Display Font Scaling (Database + Web UI)
+- Added `font_scale` column to the `workstations` table and the `kds_devices` table
+- Per-workstation and per-KDS-device font size control with four options: Small (85%), Medium (100%), Large (120%), Extra Large (140%)
+- Configurable via the EMC under Workstation and KDS Device settings
+- Applied on POS and KDS screens using CSS zoom with viewport compensation for proportional scaling of all UI elements
+- Solves readability issues on smaller touchscreens typically viewed from 1–2 feet away
+- `useFontScale` hook reads the configured value and applies it to the page
+
+### Stress Test Enhancements (Database + Web UI)
+- Stress test results are now persisted to the database with full metrics (transaction count, success/fail, avg/min/max response times, throughput)
+- New EMC Stress Test Report page showing historical test runs with color-coded performance thresholds
+- A system tender is auto-provisioned for stress testing — hidden from the EMC tender list and configured to skip receipt printing
+- Test checks remain automatically excluded from all sales reports, fiscal totals, and open checks queries
 
 ## Upgrade Notes
 - Terminals running v1.3.3 or v1.3.4 will auto-update to v1.3.5
-- Database migration adds `font_scale` column to `kds_devices` table (auto-applied on startup)
+- Database migrations for v1.3.4 (`font_scale` columns on `workstations` and `kds_devices`) are auto-applied on server startup
 - All changes are backward-compatible with existing enterprise configurations
 - Auto-startup registration occurs automatically after the next Setup Wizard completion
