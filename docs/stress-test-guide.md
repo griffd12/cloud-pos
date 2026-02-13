@@ -2,7 +2,7 @@
 
 ## Overview
 
-The stress test infrastructure simulates real POS transactions to measure system performance under load. It creates actual checks through the full transaction lifecycle (open check, add items, send to kitchen, tender payment) while keeping all test data completely isolated from real sales reports and fiscal totals.
+The stress test simulates real POS transactions to measure system performance under load. It creates actual checks through the full transaction lifecycle (open check, add items, send to kitchen, tender payment) while keeping all test data completely isolated from real sales reports and fiscal totals.
 
 All test transactions are flagged with `testMode=true` and are automatically excluded from:
 - Sales Summary reports
@@ -11,15 +11,138 @@ All test transactions are flagged with `testMode=true` and are automatically exc
 - Menu Item Sales reports
 - Category Sales reports
 
-## Prerequisites
+There are **two ways** to run a stress test:
 
-Before running a stress test, you need three pieces of information from your system:
+| Method | Best For |
+|--------|----------|
+| **Visual POS Stress Test** (recommended) | Easy, on-screen testing with live metrics — no technical knowledge needed |
+| **API Stress Test** | Automated/scripted testing via command line |
+
+---
+
+## Visual POS Stress Test (Recommended)
+
+The visual stress test runs directly from the POS screen. You can watch transactions happen in real time — checks open, items appear, orders send, payments process, and checks close — all while a live stats overlay shows your performance metrics.
+
+### How to Access
+
+1. Sign into the POS with your employee PIN
+2. Tap **Functions** (bottom toolbar)
+3. Tap **Stress Test**
+
+The stress test configuration panel will appear.
+
+### Configuration Options
+
+| Setting | What It Does | Default |
+|---------|-------------|---------|
+| **Duration** | How long the test runs (in minutes) | 2 minutes |
+| **Speed** | Target number of transactions per minute | 10 tx/min |
+| **Item Pattern** | How many menu items per check: Single (1), Double (2), or Triple (3) | Single |
+| **Tender** | Which payment type to use for closing checks | Cash (auto-selected) |
+
+**Recommended starting settings:**
+- Duration: 1-2 minutes
+- Speed: 5-10 tx/min
+- Pattern: Single
+- Tender: Cash
+
+This gives you a quick baseline before ramping up.
+
+### Starting the Test
+
+1. Adjust the settings to your preference
+2. Tap **Start Stress Test**
+
+The configuration panel closes and the test begins immediately.
+
+### What You'll See During the Test
+
+**On the POS screen:**
+- Checks open and close automatically
+- Menu items appear on the check panel
+- The screen **flashes with colors** to show each phase:
+  - **Blue flash** = Creating a new check
+  - **Green flash** = Adding menu items
+  - **Orange flash** = Sending the order
+  - **Purple flash** = Processing payment
+
+**On the stats overlay (top of screen):**
+A dark banner shows live metrics updating in real time:
+
+| Metric | What It Means |
+|--------|--------------|
+| **Total Tx** | Total transactions attempted so far |
+| **Success** | Transactions completed successfully |
+| **Failed** | Transactions that encountered errors |
+| **Avg ms** | Average time per transaction (milliseconds) |
+| **Min ms** | Fastest transaction |
+| **Max ms** | Slowest transaction |
+| **Tx/min** | Current throughput rate |
+
+A progress bar shows how much time remains.
+
+The current activity is shown below the header (e.g., "Adding: Cheeseburger", "Processing payment...").
+
+### Stopping the Test
+
+- Tap the red **Stop** button on the overlay to end the test early
+- The test also stops automatically when the configured duration expires
+
+When the test stops:
+1. Any in-progress transaction finishes
+2. All test data is **automatically cleaned up** (deleted from the database)
+3. Final results are displayed
+
+### Reading the Results
+
+After the test completes, you'll see a results summary with:
+
+- **Total transactions** and success/failure counts
+- **Average, minimum, and maximum** transaction times
+- **Transactions per minute** achieved
+- **Elapsed time** for the full test
+- A note confirming test data was auto-cleaned
+
+**Performance guidelines:**
+
+| Avg Transaction Time | Rating |
+|---------------------|--------|
+| Under 100ms | Excellent |
+| 100-200ms | Good |
+| 200-500ms | Acceptable under load |
+| Over 500ms | Investigate bottlenecks |
+
+### After the Test
+
+- Tap **Run Again** to start a new test with the same or different settings
+- Tap the **X** button to close the overlay and return to normal POS operation
+
+The POS is fully usable again immediately after closing the stress test.
+
+### Important Notes
+
+- **Test data is automatically cleaned up** — you don't need to do anything manually. All test checks, items, payments, and KDS tickets are deleted when the test ends.
+- **No impact on reports** — even during the test, test transactions won't appear in your sales reports or fiscal totals.
+- **No impact on existing data** — the stress test only creates new test transactions. It never touches your real checks, orders, or configuration.
+- **One test at a time** — you can only run one stress test at a time.
+- **Avoid peak hours** — while test data is excluded from reports, the transactions still use server resources. Run stress tests during off-peak times on production systems.
+
+---
+
+## API Stress Test (Advanced)
+
+For automated or scripted testing, you can control the stress test via API endpoints. This is useful for CI/CD pipelines, scheduled performance checks, or when you want to run tests without the POS UI.
+
+### Prerequisites
+
+You need three IDs from your system:
 
 | Parameter | Description | Where to Find |
 |-----------|-------------|---------------|
-| **rvcId** | The Revenue Center to run transactions against | EMC > Properties > Revenue Centers |
-| **employeeId** | The employee who will "ring" the test transactions | EMC > Employees |
-| **tenderId** | The tender type used to pay (usually Cash) | EMC > Tenders |
+| **rvcId** | The Revenue Center to test against | EMC > Properties > Revenue Centers |
+| **employeeId** | The employee who "rings" the transactions | EMC > Employees |
+| **tenderId** | The tender type for payment (usually Cash) | EMC > Tenders |
 
 You can look these up via the API:
 ```bash
@@ -33,33 +156,24 @@ curl http://localhost:5000/api/employees
 curl http://localhost:5000/api/tenders
 ```
 
-## API Endpoints
+### API Endpoints
 
-### 1. Start a Stress Test
+#### 1. Start a Stress Test
 
 **POST** `/api/stress-test/start`
-
-Starts a new stress test. Only one test can run at a time.
-
-**Request Body:**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `rvcId` | string | *(required)* | Revenue Center ID |
 | `employeeId` | string | *(required)* | Employee ID for the transactions |
-| `tenderId` | string | *(required)* | Tender ID for payments (e.g., Cash) |
-| `durationMinutes` | number | `5` | How long to run the test |
+| `tenderId` | string | *(required)* | Tender ID for payments |
+| `durationMinutes` | number | `5` | How long to run |
 | `targetTxPerMinute` | number | `10` | Target transactions per minute |
 | `patterns` | string[] | `["single","double","triple"]` | Item count patterns per transaction |
 
-**Patterns explained:**
-- `"single"` = 1 random menu item per check
-- `"double"` = 2 random menu items per check
-- `"triple"` = 3 random menu items per check
+**Patterns:** `"single"` = 1 item, `"double"` = 2 items, `"triple"` = 3 items per check.
 
-The system randomly picks from the provided patterns for each transaction.
-
-**Example - Quick 1-minute test:**
+**Example — Quick 1-minute test:**
 ```bash
 curl -X POST http://localhost:5000/api/stress-test/start \
   -H "Content-Type: application/json" \
@@ -73,167 +187,44 @@ curl -X POST http://localhost:5000/api/stress-test/start \
   }'
 ```
 
-**Example - 15-minute load test with mixed orders:**
-```bash
-curl -X POST http://localhost:5000/api/stress-test/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rvcId": "YOUR_RVC_ID",
-    "employeeId": "YOUR_EMPLOYEE_ID",
-    "tenderId": "YOUR_TENDER_ID",
-    "durationMinutes": 15,
-    "targetTxPerMinute": 30,
-    "patterns": ["single", "double", "triple"]
-  }'
-```
-
-**Response:**
-```json
-{
-  "message": "Stress test started",
-  "config": {
-    "rvcId": "...",
-    "durationMinutes": 15,
-    "targetTxPerMinute": 30,
-    "patterns": ["single", "double", "triple"]
-  }
-}
-```
-
----
-
-### 2. Check Status / View Metrics
+#### 2. Check Status
 
 **GET** `/api/stress-test/status`
 
-Returns real-time metrics for the current or most recent test.
-
 ```bash
 curl http://localhost:5000/api/stress-test/status
 ```
 
-**Response:**
-```json
-{
-  "status": "running",
-  "startedAt": "2026-02-13T07:46:07.377Z",
-  "elapsedSeconds": 120,
-  "totalTransactions": 38,
-  "successfulTransactions": 37,
-  "failedTransactions": 1,
-  "avgTransactionMs": 116,
-  "minTransactionMs": 73,
-  "maxTransactionMs": 221,
-  "transactionsPerMinute": 18.5,
-  "intervals": [
-    { "minuteMark": 1, "txCount": 18, "txPerMinute": 18.0, "avgMs": 110 }
-  ],
-  "errors": ["Payment failed: 500"]
-}
-```
+Returns real-time metrics including transaction counts, timing, throughput, and errors.
 
-**Metrics explained:**
-
-| Field | Description |
-|-------|-------------|
-| `status` | `running`, `completed`, `stopped`, or `error` |
-| `elapsedSeconds` | Time since test started |
-| `totalTransactions` | Total attempted transactions |
-| `successfulTransactions` | Transactions completed successfully |
-| `failedTransactions` | Transactions that encountered errors |
-| `avgTransactionMs` | Average time per successful transaction (milliseconds) |
-| `minTransactionMs` | Fastest transaction |
-| `maxTransactionMs` | Slowest transaction |
-| `transactionsPerMinute` | Overall throughput rate |
-| `intervals` | Performance snapshots at 1, 5, 10, and 15 minute marks |
-| `errors` | Last 10 error messages (if any) |
-
----
-
-### 3. Stop a Running Test
+#### 3. Stop a Running Test
 
 **POST** `/api/stress-test/stop`
 
-Stops the currently running test immediately and returns final metrics.
-
 ```bash
 curl -X POST http://localhost:5000/api/stress-test/stop
 ```
 
-**Response:**
-```json
-{
-  "message": "Stress test stopped",
-  "metrics": { ... }
-}
-```
-
----
-
-### 4. Clean Up Test Data
+#### 4. Clean Up Test Data
 
 **POST** `/api/stress-test/cleanup`
 
-Deletes ALL test transaction data from the database. This removes:
-- Test checks (where `test_mode = true`)
-- Check items belonging to test checks
-- Rounds belonging to test checks
-- Payments belonging to test checks
-- KDS tickets and ticket items belonging to test checks
+Deletes all test transaction data (checks, items, rounds, payments, KDS tickets).
 
 ```bash
 curl -X POST http://localhost:5000/api/stress-test/cleanup
 ```
 
-**Response:**
-```json
-{
-  "message": "Test data cleaned up",
-  "deletedChecks": 150,
-  "deletedItems": 312,
-  "deletedPayments": 150,
-  "deletedKdsTickets": 150
-}
+**Important:** Unlike the visual stress test, the API method does **not** auto-clean. Always run cleanup after you're done.
+
+### API Workflow
+
 ```
-
-**Important:** Always run cleanup after you're done analyzing results. While test data won't appear in reports, cleaning it up keeps the database lean.
-
----
-
-## Typical Workflow
-
-### Step 1: Start the test
-```bash
-curl -X POST http://localhost:5000/api/stress-test/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rvcId": "cb11526a-3828-4eae-aadc-09d62e4e9c45",
-    "employeeId": "9da5a5fa-1d49-43c6-98ba-3985ce556967",
-    "tenderId": "910dee0c-f5a6-4a80-acbd-5254dab1207e",
-    "durationMinutes": 5,
-    "targetTxPerMinute": 20,
-    "patterns": ["single", "double", "triple"]
-  }'
-```
-
-### Step 2: Monitor progress (poll periodically)
-```bash
-curl http://localhost:5000/api/stress-test/status
-```
-
-### Step 3: Stop early if needed
-```bash
-curl -X POST http://localhost:5000/api/stress-test/stop
-```
-
-### Step 4: Review final metrics
-```bash
-curl http://localhost:5000/api/stress-test/status
-```
-
-### Step 5: Clean up test data
-```bash
-curl -X POST http://localhost:5000/api/stress-test/cleanup
+1. Start:   POST /api/stress-test/start   (with config)
+2. Monitor: GET  /api/stress-test/status   (poll periodically)
+3. Stop:    POST /api/stress-test/stop     (if stopping early)
+4. Review:  GET  /api/stress-test/status   (final metrics)
+5. Cleanup: POST /api/stress-test/cleanup  (remove test data)
 ```
 
 ---
@@ -242,53 +233,24 @@ curl -X POST http://localhost:5000/api/stress-test/cleanup
 
 Each simulated transaction follows the full POS lifecycle:
 
-1. **Create Check** - Opens a new check in the specified RVC with `testMode=true`
-2. **Add Items** - Adds 1-3 random menu items (based on pattern) from the active menu
-3. **Send to Kitchen** - Sends the order, which creates rounds and KDS tickets
-4. **Retrieve Check Total** - Fetches the updated check with calculated totals
-5. **Apply Payment** - Pays the full amount using the specified tender
-6. **Auto-Close** - The check closes automatically when fully paid
+1. **Create Check** — Opens a new check in the specified RVC with `testMode=true`
+2. **Add Items** — Adds 1-3 random menu items (based on pattern) from the active menu
+3. **Send to Kitchen** — Sends the order, creating rounds and KDS tickets
+4. **Retrieve Check Total** — Fetches the updated check with calculated totals
+5. **Apply Payment** — Pays the full amount using the specified tender
+6. **Auto-Close** — The check closes automatically when fully paid
 
-This exercises the same code paths as real POS operations, making the results representative of actual system performance.
-
----
-
-## Understanding the Results
-
-### Transaction Time (avgTransactionMs)
-- **< 100ms** - Excellent performance
-- **100-200ms** - Good performance
-- **200-500ms** - Acceptable, may indicate load
-- **> 500ms** - Investigate potential bottlenecks
-
-### Throughput (transactionsPerMinute)
-Compare against your `targetTxPerMinute`. If actual throughput is significantly lower than the target, the system may be reaching capacity.
-
-### Interval Metrics
-The `intervals` array shows performance at the 1, 5, 10, and 15 minute marks. Look for:
-- **Degradation over time** - avgMs increasing at later intervals suggests resource exhaustion
-- **Consistent performance** - Similar avgMs across intervals indicates stable operation
-
-### Error Rate
-Any `failedTransactions > 0` should be investigated. Check the `errors` array for specific failure messages.
+This exercises the same code paths as real POS operations, making results representative of actual system performance.
 
 ---
 
 ## Tips and Best Practices
 
-1. **Start small** - Begin with a 1-minute test at 5-10 tx/min to verify everything works before running longer tests.
-
-2. **Increase gradually** - Ramp up `targetTxPerMinute` in increments (10, 20, 30, 50) to find where performance degrades.
-
-3. **Use realistic patterns** - If your typical order has 2-3 items, use `["double", "triple"]` patterns.
-
-4. **Monitor the server** - Watch CPU, memory, and database connections during the test for bottleneck identification.
-
-5. **Clean up between tests** - Always run cleanup before starting a new test to avoid accumulating old test data.
-
-6. **Don't run in production during peak hours** - While test data is excluded from reports, the transactions still consume server resources.
-
-7. **One test at a time** - The system only supports one concurrent stress test. Starting a new test while one is running will return an error.
+1. **Start small** — Begin with 1-2 minutes at 5-10 tx/min to verify everything works.
+2. **Increase gradually** — Ramp up speed in increments (10, 20, 30, 50 tx/min) to find where performance degrades.
+3. **Use realistic patterns** — If your typical order has 2-3 items, use Double or Triple patterns.
+4. **Run during off-peak hours** — The test uses real server resources even though data is excluded from reports.
+5. **Compare results** — Run the same test configuration at different times to track performance changes over time.
 
 ---
 
@@ -296,8 +258,7 @@ Any `failedTransactions > 0` should be investigated. Check the `errors` array fo
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| "A stress test is already running" | Previous test still active | Stop it with `/api/stress-test/stop` |
+| "A stress test is already running" | Previous test still active | Stop it first, then start a new one |
 | "No active menu items with prices found" | No menu items configured | Add menu items in EMC before testing |
-| High failure rate | Server overloaded or misconfigured IDs | Reduce `targetTxPerMinute` and verify IDs |
-| Cleanup fails | Foreign key constraints | Retry - the cleanup handles proper deletion order |
-| Test data in reports | Should not happen | Verify `test_mode` column exists on checks table |
+| High failure rate | Server overloaded or misconfigured | Reduce speed and try again |
+| Test data appearing in reports | Should not happen | Contact support — verify `test_mode` column on checks table |
