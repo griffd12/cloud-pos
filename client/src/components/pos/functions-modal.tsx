@@ -13,7 +13,8 @@ import {
   Lock,
   Activity,
   FileEdit,
-  BarChart3
+  BarChart3,
+  Zap
 } from "lucide-react";
 import { SystemStatusModal } from "./system-status-modal";
 
@@ -34,6 +35,7 @@ interface FunctionsModalProps {
   onPriceOverride: () => void;
   onAssignTable: () => void;
   onOpenReports?: () => void;
+  onStressTest?: () => void;
   privileges: {
     canTransfer: boolean;
     canSplit: boolean;
@@ -98,6 +100,7 @@ export function FunctionsModal({
   onPriceOverride,
   onAssignTable,
   onOpenReports,
+  onStressTest,
   privileges,
   propertyId,
   workstation,
@@ -208,6 +211,13 @@ export function FunctionsModal({
                 label="System Status"
                 description="View connectivity status"
                 onClick={() => setShowSystemStatus(true)}
+              />
+              <FunctionButton
+                icon={<Zap className="w-5 h-5" />}
+                label="Stress Test"
+                description="Automated POS load test"
+                onClick={() => onStressTest?.()}
+                variant="secondary"
               />
             </div>
           </div>

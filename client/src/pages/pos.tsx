@@ -38,6 +38,7 @@ import { ItemOptionsPopup } from "@/components/pos/item-options-popup";
 import { ConversationalOrderPanel } from "@/components/pos/conversational-order-panel";
 import { HorizontalCOMPanel } from "@/components/pos/horizontal-com-panel";
 import { SetAvailabilityDialog } from "@/components/pos/set-availability-dialog";
+import { StressTestOverlay } from "@/components/pos/stress-test-overlay";
 import { SoldOutConfirmDialog } from "@/components/pos/sold-out-confirm-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
@@ -234,6 +235,7 @@ export default function PosPage() {
   const [isCapturingTip, setIsCapturingTip] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountItem, setDiscountItem] = useState<CheckItem | null>(null);
+  const [showStressTest, setShowStressTest] = useState(false);
   
   // Item availability state for custom layout long-press
   const [longPressItem, setLongPressItem] = useState<MenuItem | null>(null);
@@ -2268,6 +2270,10 @@ export default function PosPage() {
           setShowFunctionsModal(false);
           setShowReportsModal(true);
         }}
+        onStressTest={() => {
+          setShowFunctionsModal(false);
+          setShowStressTest(true);
+        }}
         onPriceOverride={() => {
           setShowFunctionsModal(false);
           if (selectedItemId) {
@@ -2639,6 +2645,20 @@ export default function PosPage() {
           }
         }}
       />
+
+      {currentRvc && currentEmployee && (
+        <StressTestOverlay
+          open={showStressTest}
+          onClose={() => setShowStressTest(false)}
+          rvcId={currentRvc.id}
+          employeeId={currentEmployee.id}
+          tenders={tenders}
+          menuItems={allMenuItems}
+          setCurrentCheck={setCurrentCheck}
+          setCheckItems={setCheckItems}
+          onLogout={logout}
+        />
+      )}
     </div>
     </DeviceEnrollmentGuard>
   );

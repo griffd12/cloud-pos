@@ -50,6 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **Electron Startup Loading Screen**: Displays an inline HTML loading page and error pages for connection failures.
 - **React ErrorBoundary**: Catches rendering errors, shows a user-friendly fallback, and logs errors to the unified system log.
 - **Stress Test Infrastructure**: API-driven performance testing via `/api/stress-test/start|stop|status|cleanup`. Creates real POS transactions (check create → add items → send → tender) with `testMode=true` flag. Test checks are automatically excluded from all sales reports, fiscal totals, and open checks queries via `getChecks()` filter. Configurable patterns (single/double/triple item), target tx/min, and duration. Cleanup purges all test data (checks, items, payments, rounds, KDS tickets). Implemented in `server/stressTest.ts`.
+- **Visual POS Stress Test**: Accessible from POS Functions > Stress Test button. Drives the actual POS UI in real-time — you see checks open, items appear on the check panel, orders send, payments process, and checks close automatically. Features a dark overlay with live metrics (tx count, success/fail, avg/min/max ms, tx/min, progress bar). Configurable duration, speed, item patterns, and tender. Screen flashes with color-coded phases (blue=create, green=items, orange=send, purple=pay). Auto-cleans test data on completion/stop. Component: `client/src/components/pos/stress-test-overlay.tsx`.
 
 ## External Dependencies
 
