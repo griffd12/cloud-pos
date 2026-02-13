@@ -43,8 +43,7 @@ export default function FiscalClosePage() {
       setSelectedPropertyId(contextPropertyId);
     }
   }, [contextPropertyId]);
-  const today = new Date().toISOString().split("T")[0];
-  const [targetDate, setTargetDate] = useState(today);
+  const [targetDate, setTargetDate] = useState("");
   const [showPinPrompt, setShowPinPrompt] = useState(false);
   const [pin, setPin] = useState("");
 
@@ -56,6 +55,22 @@ export default function FiscalClosePage() {
       return res.json();
     },
   });
+
+  const { data: businessDateInfo } = useQuery<{ currentBusinessDate: string; localDate: string; timezone: string }>({
+    queryKey: ["/api/properties", selectedPropertyId, "business-date"],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties/${selectedPropertyId}/business-date`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch business date");
+      return res.json();
+    },
+    enabled: !!selectedPropertyId,
+  });
+
+  useEffect(() => {
+    if (businessDateInfo?.currentBusinessDate) {
+      setTargetDate(businessDateInfo.currentBusinessDate);
+    }
+  }, [businessDateInfo?.currentBusinessDate, selectedPropertyId]);
 
   const { data: currentPeriod, isLoading: currentLoading } = useQuery<FiscalPeriod>({
     queryKey: ["/api/fiscal-periods/current", selectedPropertyId, filterKeys],

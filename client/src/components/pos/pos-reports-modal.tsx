@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,10 +24,17 @@ import {
   Calendar,
 } from "lucide-react";
 
-// Date range preset helpers
-function getDatePreset(preset: string): { fromDate: string; toDate: string } {
-  const today = new Date();
-  const toDate = today.toISOString().split("T")[0];
+function formatLocalDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getDatePresetFromBase(preset: string, baseDate: string): { fromDate: string; toDate: string } {
+  const [y, m, d] = baseDate.split('-').map(Number);
+  const today = new Date(y, m - 1, d);
+  const toDate = baseDate;
   let fromDate = toDate;
 
   switch (preset) {
@@ -36,13 +44,13 @@ function getDatePreset(preset: string): { fromDate: string; toDate: string } {
     case "yesterday": {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      fromDate = yesterday.toISOString().split("T")[0];
+      fromDate = formatLocalDate(yesterday);
       break;
     }
     case "this-week": {
       const startOfWeek = new Date(today);
       startOfWeek.setDate(today.getDate() - today.getDay());
-      fromDate = startOfWeek.toISOString().split("T")[0];
+      fromDate = formatLocalDate(startOfWeek);
       break;
     }
     case "last-week": {
@@ -50,24 +58,24 @@ function getDatePreset(preset: string): { fromDate: string; toDate: string } {
       endOfLastWeek.setDate(today.getDate() - today.getDay() - 1);
       const startOfLastWeek = new Date(endOfLastWeek);
       startOfLastWeek.setDate(endOfLastWeek.getDate() - 6);
-      fromDate = startOfLastWeek.toISOString().split("T")[0];
-      return { fromDate, toDate: endOfLastWeek.toISOString().split("T")[0] };
+      fromDate = formatLocalDate(startOfLastWeek);
+      return { fromDate, toDate: formatLocalDate(endOfLastWeek) };
     }
     case "this-month": {
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      fromDate = startOfMonth.toISOString().split("T")[0];
+      fromDate = formatLocalDate(startOfMonth);
       break;
     }
     case "last-month": {
       const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-      fromDate = startOfLastMonth.toISOString().split("T")[0];
-      return { fromDate, toDate: endOfLastMonth.toISOString().split("T")[0] };
+      fromDate = formatLocalDate(startOfLastMonth);
+      return { fromDate, toDate: formatLocalDate(endOfLastMonth) };
     }
     case "this-quarter": {
       const quarter = Math.floor(today.getMonth() / 3);
       const startOfQuarter = new Date(today.getFullYear(), quarter * 3, 1);
-      fromDate = startOfQuarter.toISOString().split("T")[0];
+      fromDate = formatLocalDate(startOfQuarter);
       break;
     }
     case "last-quarter": {
@@ -76,19 +84,19 @@ function getDatePreset(preset: string): { fromDate: string; toDate: string } {
       const lastQuarterYear = currentQuarter === 0 ? today.getFullYear() - 1 : today.getFullYear();
       const startOfLastQuarter = new Date(lastQuarterYear, lastQuarter * 3, 1);
       const endOfLastQuarter = new Date(lastQuarterYear, lastQuarter * 3 + 3, 0);
-      fromDate = startOfLastQuarter.toISOString().split("T")[0];
-      return { fromDate, toDate: endOfLastQuarter.toISOString().split("T")[0] };
+      fromDate = formatLocalDate(startOfLastQuarter);
+      return { fromDate, toDate: formatLocalDate(endOfLastQuarter) };
     }
     case "this-year": {
       const startOfYear = new Date(today.getFullYear(), 0, 1);
-      fromDate = startOfYear.toISOString().split("T")[0];
+      fromDate = formatLocalDate(startOfYear);
       break;
     }
     case "last-year": {
       const startOfLastYear = new Date(today.getFullYear() - 1, 0, 1);
       const endOfLastYear = new Date(today.getFullYear() - 1, 11, 31);
-      fromDate = startOfLastYear.toISOString().split("T")[0];
-      return { fromDate, toDate: endOfLastYear.toISOString().split("T")[0] };
+      fromDate = formatLocalDate(startOfLastYear);
+      return { fromDate, toDate: formatLocalDate(endOfLastYear) };
     }
     default:
       break;
@@ -194,18 +202,38 @@ export function POSReportsModal({
   rvcName,
   propertyId,
 }: POSReportsModalProps) {
-  const today = new Date().toISOString().split("T")[0];
+  const fallbackToday = new Date().toISOString().split("T")[0];
   const [datePreset, setDatePreset] = useState("today");
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
+  const [fromDate, setFromDate] = useState(fallbackToday);
+  const [toDate, setToDate] = useState(fallbackToday);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("rvc-balance");
 
-  // Handle preset changes
+  const { data: businessDateInfo } = useQuery<{ currentBusinessDate: string; localDate: string; timezone: string }>({
+    queryKey: ["/api/properties", propertyId, "business-date"],
+    queryFn: async () => {
+      if (!propertyId) return { currentBusinessDate: fallbackToday, localDate: fallbackToday, timezone: "America/New_York" };
+      const res = await fetch(`/api/properties/${propertyId}/business-date`, { headers: getAuthHeaders() });
+      if (!res.ok) return { currentBusinessDate: fallbackToday, localDate: fallbackToday, timezone: "America/New_York" };
+      return res.json();
+    },
+    enabled: open && !!propertyId,
+  });
+
+  const serverToday = businessDateInfo?.currentBusinessDate || fallbackToday;
+
+  useEffect(() => {
+    if (businessDateInfo?.currentBusinessDate && datePreset === "today") {
+      setFromDate(businessDateInfo.currentBusinessDate);
+      setToDate(businessDateInfo.currentBusinessDate);
+    }
+  }, [businessDateInfo?.currentBusinessDate]);
+
   const handlePresetChange = (preset: string) => {
     setDatePreset(preset);
     if (preset !== "custom") {
-      const { fromDate: from, toDate: to } = getDatePreset(preset);
+      const baseDate = serverToday;
+      const { fromDate: from, toDate: to } = getDatePresetFromBase(preset, baseDate);
       setFromDate(from);
       setToDate(to);
     }

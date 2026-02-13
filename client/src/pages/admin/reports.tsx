@@ -559,17 +559,17 @@ export default function ReportsPage() {
   }, [rvcs, selectedPropertyId]);
 
   const dateParams = useMemo(() => {
-    const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
+    const formatDateLocal = (d: Date) => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
     
-    // Helper to format date as YYYY-MM-DD for businessDate
-    const formatBusinessDate = (d: Date) => d.toISOString().split('T')[0];
-    
-    // Use the current business date from the property (not calendar date)
-    const currentBusinessDate = businessDateInfo?.currentBusinessDate || formatBusinessDate(todayStart);
+    const currentBusinessDate = businessDateInfo?.currentBusinessDate || formatDateLocal(new Date());
+    const [y, m, d] = currentBusinessDate.split('-').map(Number);
+    const todayStart = new Date(y, m - 1, d, 0, 0, 0, 0);
+    const todayEnd = new Date(y, m - 1, d, 23, 59, 59, 999);
     
     switch (dateRange) {
       case "yesterday": {
@@ -579,7 +579,7 @@ export default function ReportsPage() {
         bizDate.setHours(0, 0, 0, 0);
         const end = new Date(bizDate);
         end.setHours(23, 59, 59, 999);
-        return { startDate: bizDate.toISOString(), endDate: end.toISOString(), businessDate: formatBusinessDate(bizDate) };
+        return { startDate: bizDate.toISOString(), endDate: end.toISOString(), businessDate: formatDateLocal(bizDate) };
       }
       case "week": {
         const start = new Date(todayStart);
@@ -592,15 +592,15 @@ export default function ReportsPage() {
         return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
       }
       case "ytd": {
-        const start = new Date(now.getFullYear(), 0, 1);
+        const start = new Date(todayStart.getFullYear(), 0, 1);
         start.setHours(0, 0, 0, 0);
         return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
       }
       case "last_quarter": {
-        const currentMonth = now.getMonth();
+        const currentMonth = todayStart.getMonth();
         const currentQuarter = Math.floor(currentMonth / 3);
         const lastQuarterStart = currentQuarter === 0 ? 9 : (currentQuarter - 1) * 3;
-        const lastQuarterYear = currentQuarter === 0 ? now.getFullYear() - 1 : now.getFullYear();
+        const lastQuarterYear = currentQuarter === 0 ? todayStart.getFullYear() - 1 : todayStart.getFullYear();
         const start = new Date(lastQuarterYear, lastQuarterStart, 1);
         start.setHours(0, 0, 0, 0);
         const end = new Date(lastQuarterYear, lastQuarterStart + 3, 0);
@@ -608,7 +608,7 @@ export default function ReportsPage() {
         return { startDate: start.toISOString(), endDate: end.toISOString() };
       }
       case "this_month": {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const start = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
         start.setHours(0, 0, 0, 0);
         return { startDate: start.toISOString(), endDate: todayEnd.toISOString() };
       }
@@ -618,9 +618,8 @@ export default function ReportsPage() {
           start.setHours(0, 0, 0, 0);
           const end = new Date(customEndDate);
           end.setHours(23, 59, 59, 999);
-          // If same day, include businessDate
           if (customStartDate === customEndDate) {
-            return { startDate: start.toISOString(), endDate: end.toISOString(), businessDate: formatBusinessDate(start) };
+            return { startDate: start.toISOString(), endDate: end.toISOString(), businessDate: formatDateLocal(start) };
           }
           return { startDate: start.toISOString(), endDate: end.toISOString() };
         }

@@ -12,7 +12,7 @@ import { db } from "./db";
 import { eq, sql, inArray } from "drizzle-orm";
 import { emcUsers, enterprises, properties, employeeAssignments, configOverrides } from "@shared/schema";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
-import { resolveBusinessDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
+import { resolveBusinessDate, calculateBusinessDateFromTime, getLocalDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
   insertEmployeeSchema, insertMajorGroupSchema, insertFamilyGroupSchema,
@@ -6504,14 +6504,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Property not found" });
       }
       
-      const currentBusinessDate = resolveBusinessDate(new Date(), property);
+      const now = new Date();
+      const timezone = property.timezone || "America/New_York";
+      const currentBusinessDate = calculateBusinessDateFromTime(now, property);
       const nextBusinessDate = incrementDate(currentBusinessDate);
+      const localDate = getLocalDate(now, timezone);
+      
+      if (property.businessDateMode !== "manual" && property.currentBusinessDate !== currentBusinessDate) {
+        await storage.updateProperty(req.params.id, {
+          currentBusinessDate,
+        });
+      }
       
       res.json({
         currentBusinessDate,
         nextBusinessDate,
+        localDate,
         rolloverTime: property.businessDateRolloverTime || "04:00",
-        timezone: property.timezone || "America/New_York",
+        timezone,
       });
     } catch (error: any) {
       console.error("Get business date error:", error);
@@ -17761,16 +17771,17 @@ connect();
         return res.json(unclosedPeriod);
       }
       
-      // No unclosed periods - calculate new business date based on clock
-      const businessDate = resolveBusinessDate(new Date(), property);
+      const businessDate = calculateBusinessDateFromTime(new Date(), property);
       let period = await storage.getFiscalPeriodByDate(req.params.propertyId, businessDate);
       
-      // Create if doesn't exist
       if (!period) {
         period = await storage.createFiscalPeriod({
           propertyId: req.params.propertyId,
           businessDate,
           status: "open",
+        });
+        await storage.updateProperty(req.params.propertyId, {
+          currentBusinessDate: businessDate,
         });
       }
       res.json(period);

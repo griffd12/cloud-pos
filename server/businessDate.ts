@@ -47,13 +47,71 @@ export const DEFAULT_BUSINESS_DATE_SETTINGS = {
 };
 
 /**
+ * Calculates the business date from a timestamp using timezone and rollover rules.
+ * This always computes from the clock - it never reads stored state.
+ */
+export function calculateBusinessDateFromTime(
+  timestamp: Date | string,
+  property: Pick<Property, 'businessDateRolloverTime' | 'timezone'> | null | undefined
+): string {
+  const timezone = property?.timezone || 'America/New_York';
+  const rolloverTime = property?.businessDateRolloverTime || '04:00';
+  const [rolloverHour, rolloverMinute] = rolloverTime.split(':').map(Number);
+
+  const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+  const zonedTime = toZonedTime(date, timezone);
+  const localYear = zonedTime.getFullYear();
+  const localMonth = zonedTime.getMonth();
+  const localDay = zonedTime.getDate();
+  const localHour = zonedTime.getHours();
+  const localMinute = zonedTime.getMinutes();
+
+  const currentMinutes = localHour * 60 + localMinute;
+  const rolloverMinutes = rolloverHour * 60 + rolloverMinute;
+  const isPMRollover = rolloverHour >= 12;
+
+  let businessDate = new Date(localYear, localMonth, localDay);
+
+  if (isPMRollover) {
+    if (currentMinutes >= rolloverMinutes) {
+      businessDate.setDate(businessDate.getDate() + 1);
+    }
+  } else {
+    if (currentMinutes < rolloverMinutes) {
+      businessDate.setDate(businessDate.getDate() - 1);
+    }
+  }
+
+  const yyyy = businessDate.getFullYear();
+  const mm = String(businessDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(businessDate.getDate()).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Gets the current local calendar date in the property's timezone.
+ * This is NOT the business date - just what date the clock shows in that timezone.
+ */
+export function getLocalDate(
+  timestamp: Date,
+  timezone: string
+): string {
+  const zonedTime = toZonedTime(timestamp, timezone);
+  const yyyy = zonedTime.getFullYear();
+  const mm = String(zonedTime.getMonth() + 1).padStart(2, '0');
+  const dd = String(zonedTime.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
  * Gets the current business date for a property.
  * 
- * SIMPLE RULE: The property has a current business date. Everything posts to it.
- * When the business date rolls over (manually or automatically), it advances.
+ * For MANUAL mode: uses currentBusinessDate if set (operator controls when to advance).
+ * For AUTO mode: always calculates from the clock using timezone/rollover rules.
+ *   This ensures stale stored values never cause wrong dates.
  * 
- * If currentBusinessDate is set, use it directly.
- * If not set (legacy), calculate from timestamp using rollover rules.
+ * If currentBusinessDate is not set, always calculates from the clock.
  */
 export function resolveBusinessDate(
   timestamp: Date | string,
@@ -61,49 +119,11 @@ export function resolveBusinessDate(
 ): string {
   const settings = property ?? DEFAULT_BUSINESS_DATE_SETTINGS;
   
-  // SIMPLE: If property has a current business date set, USE IT
-  // This is the intended behavior - everything posts to the current business date
-  if (isValidBusinessDateFormat(settings.currentBusinessDate)) {
+  if (settings.businessDateMode === 'manual' && isValidBusinessDateFormat(settings.currentBusinessDate)) {
     return settings.currentBusinessDate!;
   }
 
-  // FALLBACK: Calculate from timestamp if currentBusinessDate not set
-  // This is only for initial setup or if property lacks a business date
-  const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-  const timezone = settings.timezone || 'America/New_York';
-  const rolloverTime = settings.businessDateRolloverTime || '04:00';
-  const [rolloverHour, rolloverMinute] = rolloverTime.split(':').map(Number);
-  
-  const zonedTime = toZonedTime(date, timezone);
-  const localYear = zonedTime.getFullYear();
-  const localMonth = zonedTime.getMonth();
-  const localDay = zonedTime.getDate();
-  const localHour = zonedTime.getHours();
-  const localMinute = zonedTime.getMinutes();
-  
-  const currentMinutes = localHour * 60 + localMinute;
-  const rolloverMinutes = rolloverHour * 60 + rolloverMinute;
-  const isPMRollover = rolloverHour >= 12;
-  
-  let businessDate = new Date(localYear, localMonth, localDay);
-  
-  if (isPMRollover) {
-    // PM rollover: at/after rollover, advance to next business date
-    if (currentMinutes >= rolloverMinutes) {
-      businessDate.setDate(businessDate.getDate() + 1);
-    }
-  } else {
-    // AM rollover: before rollover, use previous business date
-    if (currentMinutes < rolloverMinutes) {
-      businessDate.setDate(businessDate.getDate() - 1);
-    }
-  }
-  
-  const yyyy = businessDate.getFullYear();
-  const mm = String(businessDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(businessDate.getDate()).padStart(2, '0');
-  
-  return `${yyyy}-${mm}-${dd}`;
+  return calculateBusinessDateFromTime(timestamp, settings);
 }
 
 /**
