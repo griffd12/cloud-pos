@@ -35,14 +35,7 @@ export default function FiscalClosePage() {
   usePosWebSocket();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload, selectedPropertyId: contextPropertyId } = useEmcFilter();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(contextPropertyId || "");
-
-  useEffect(() => {
-    if (contextPropertyId) {
-      setSelectedPropertyId(contextPropertyId);
-    }
-  }, [contextPropertyId]);
+  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload, selectedPropertyId } = useEmcFilter();
   const [targetDate, setTargetDate] = useState("");
   const [showPinPrompt, setShowPinPrompt] = useState(false);
   const [pin, setPin] = useState("");
@@ -189,24 +182,6 @@ export default function FiscalClosePage() {
           <p className="text-muted-foreground">View current business day and fiscal period history</p>
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Select Property</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-            <SelectTrigger className="w-64" data-testid="select-property">
-              <SelectValue placeholder="Select a property..." />
-            </SelectTrigger>
-            <SelectContent>
-              {properties.map(prop => (
-                <SelectItem key={prop.id} value={prop.id}>{prop.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
 
       {selectedPropertyId && (
         <Tabs defaultValue="current" className="space-y-4">

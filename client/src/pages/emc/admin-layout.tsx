@@ -115,6 +115,7 @@ interface NavItem {
   url: string;
   icon: React.ComponentType<{ className?: string }>;
   requiresProperty?: boolean;
+  propertyOnly?: boolean;
   enterpriseOnly?: boolean;
   systemAdminOnly?: boolean;
 }
@@ -210,7 +211,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { title: "Fiscal Close", url: "/emc/fiscal-close", icon: Calendar, requiresProperty: true },
+      { title: "Fiscal Close", url: "/emc/fiscal-close", icon: Calendar, requiresProperty: true, propertyOnly: true },
       { title: "Cash Management", url: "/emc/cash-management", icon: Banknote, requiresProperty: true },
       { title: "Online Ordering", url: "/emc/online-ordering", icon: ShoppingBag },
       { title: "Inventory", url: "/emc/inventory", icon: Package },
@@ -417,10 +418,11 @@ export default function EmcAdminLayout() {
         if (item.systemAdminOnly && !isSystemAdmin) return false;
         if (item.enterpriseOnly && hasProperty) return false;
         if (item.requiresProperty && !hasProperty) return false;
+        if (item.propertyOnly && selectedRvcId) return false;
         return true;
       }),
     })).filter(group => group.items.length > 0);
-  }, [selectedPropertyId, isSystemAdmin]);
+  }, [selectedPropertyId, selectedRvcId, isSystemAdmin]);
 
   const prevPropertyRef = useRef(selectedPropertyId);
   const prevRvcRef = useRef(selectedRvcId);
@@ -441,6 +443,10 @@ export default function EmcAdminLayout() {
 
     if (currentItem) {
       if (currentItem.requiresProperty && !hasProperty) {
+        navigate("/emc");
+        return;
+      }
+      if (currentItem.propertyOnly && selectedRvcId) {
         navigate("/emc");
         return;
       }
