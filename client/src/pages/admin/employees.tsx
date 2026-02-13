@@ -61,7 +61,7 @@ export default function EmployeesPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Employee>("employee", ["/api/employees"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Employee>("employee", ["/api/employees"]);
   const displayedEmployees = filterOverriddenInherited(employees);
 
   const { data: roles = [] } = useQuery<Role[]>({
@@ -255,14 +255,14 @@ export default function EmployeesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/employees/" + id);
+      await apiRequest("DELETE", "/api/employees/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees", filterKeys] });
       toast({ title: "Employee deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete employee", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete employee", variant: "destructive" });
     },
   });
 
@@ -377,6 +377,7 @@ export default function EmployeesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search employees..."

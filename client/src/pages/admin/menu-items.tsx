@@ -136,7 +136,7 @@ export default function MenuItemsPage() {
     enabled: !!selectedEnterpriseId,
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<MenuItem>("menu_item", ["/api/menu-items"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<MenuItem>("menu_item", ["/api/menu-items"]);
   const displayedMenuItems = filterOverriddenInherited(menuItems);
 
   const filteredMenuItems = categoryFilter === "all"
@@ -220,7 +220,7 @@ export default function MenuItemsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest("DELETE", "/api/menu-items/" + id);
+      const response = await apiRequest("DELETE", "/api/menu-items/" + id + getScopeQueryParams());
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message);
@@ -465,6 +465,7 @@ export default function MenuItemsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         onDuplicate={(item) => createDuplicate.mutate(item)}
         customActions={[
           {

@@ -516,6 +516,50 @@ async function filterByPropertyScope<T extends { enterpriseId?: string | null; p
   return filtered;
 }
 
+function getItemScopeLevel(item: { enterpriseId?: string | null; propertyId?: string | null; rvcId?: string | null }): "enterprise" | "property" | "rvc" {
+  if (item.rvcId) return "rvc";
+  if (item.propertyId) return "property";
+  return "enterprise";
+}
+
+async function checkDeleteScope(
+  itemId: string,
+  getItem: (id: string) => Promise<any>,
+  req: Request,
+  res: Response
+): Promise<boolean> {
+  const item = await getItem(itemId);
+  if (!item) {
+    res.status(404).json({ message: "Item not found" });
+    return false;
+  }
+  
+  const requestScope = {
+    propertyId: req.query.scopePropertyId as string | undefined,
+    rvcId: req.query.scopeRvcId as string | undefined,
+  };
+  
+  if (!requestScope.propertyId && !requestScope.rvcId) {
+    return true;
+  }
+  
+  const itemLevel = getItemScopeLevel(item);
+  
+  if (requestScope.rvcId) {
+    if (itemLevel === "enterprise" || itemLevel === "property") {
+      res.status(403).json({ message: "Cannot delete inherited item. This item is defined at the " + itemLevel + " level. Use Override to customize it at your level, or contact an administrator." });
+      return false;
+    }
+  } else if (requestScope.propertyId) {
+    if (itemLevel === "enterprise") {
+      res.status(403).json({ message: "Cannot delete inherited item. This item is defined at the enterprise level. Use Override to customize it at your level, or contact an administrator." });
+      return false;
+    }
+  }
+  
+  return true;
+}
+
 // Shared helper to send unsent items to KDS with proper round and ticket creation
 async function sendItemsToKds(
   checkId: string,
@@ -1916,6 +1960,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/roles/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getRole.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteRole(req.params.id);
     res.status(204).send();
   });
@@ -2000,6 +2046,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/employees/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getEmployee.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteEmployee(req.params.id);
     broadcastConfigUpdate("employees", "delete", req.params.id);
     res.status(204).send();
@@ -2235,6 +2283,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/major-groups/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getMajorGroup.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteMajorGroup(req.params.id);
     res.status(204).send();
   });
@@ -2290,6 +2340,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/family-groups/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getFamilyGroup.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteFamilyGroup(req.params.id);
     res.status(204).send();
   });
@@ -2365,6 +2417,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/slus/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getSlu.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteSlu(req.params.id);
     broadcastConfigUpdate("slus", "delete", req.params.id);
     res.status(204).send();
@@ -2426,6 +2480,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/menu-items/:id", async (req, res) => {
     try {
+      const canDelete = await checkDeleteScope(req.params.id, storage.getMenuItem.bind(storage), req, res);
+      if (!canDelete) return;
       await storage.deleteMenuItem(req.params.id);
       res.status(204).send();
     } catch (error: any) {
@@ -2614,6 +2670,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/modifiers/:id", async (req, res) => {
     try {
+      const canDelete = await checkDeleteScope(req.params.id, storage.getModifier.bind(storage), req, res);
+      if (!canDelete) return;
       await storage.deleteModifier(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -2674,6 +2732,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/modifier-groups/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getModifierGroup.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteModifierGroup(req.params.id);
     res.status(204).send();
   });
@@ -3029,6 +3089,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/tax-groups/:id", async (req, res) => {
     try {
+      const canDelete = await checkDeleteScope(req.params.id, storage.getTaxGroup.bind(storage), req, res);
+      if (!canDelete) return;
       await storage.deleteTaxGroup(req.params.id);
       res.status(204).send();
     } catch (error: any) {
@@ -3090,6 +3152,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/print-classes/:id", async (req, res) => {
     try {
+      const canDelete = await checkDeleteScope(req.params.id, storage.getPrintClass.bind(storage), req, res);
+      if (!canDelete) return;
       await storage.deletePrintClass(req.params.id);
       res.status(204).send();
     } catch (error: any) {
@@ -3137,6 +3201,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/order-devices/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getOrderDevice.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteOrderDevice(req.params.id);
     res.status(204).send();
   });
@@ -3588,6 +3654,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/tenders/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getTender.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteTender(req.params.id);
     broadcastConfigUpdate("tenders", "delete", req.params.id);
     res.status(204).send();
@@ -3698,6 +3766,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/discounts/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getDiscount.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteDiscount(req.params.id);
     broadcastConfigUpdate("discounts", "delete", req.params.id);
     res.status(204).send();
@@ -3993,6 +4063,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/service-charges/:id", async (req, res) => {
+    const canDelete = await checkDeleteScope(req.params.id, storage.getServiceCharge.bind(storage), req, res);
+    if (!canDelete) return;
     await storage.deleteServiceCharge(req.params.id);
     broadcastConfigUpdate("service_charges", "delete", req.params.id);
     res.status(204).send();
@@ -10786,6 +10858,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Delete job code
   app.delete("/api/job-codes/:id", async (req, res) => {
     try {
+      const canDelete = await checkDeleteScope(req.params.id, storage.getJobCode.bind(storage), req, res);
+      if (!canDelete) return;
       const deleted = await storage.deleteJobCode(req.params.id);
       if (!deleted) {
         return res.status(404).json({ message: "Job code not found" });

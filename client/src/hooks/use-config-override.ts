@@ -142,12 +142,26 @@ export function useConfigOverride<T extends ScopeableItem>(
     });
   }
 
+  function canDeleteItem(item: T): boolean {
+    return !isInherited(item);
+  }
+
+  function getScopeQueryParams(): string {
+    const params = new URLSearchParams();
+    if (selectedPropertyId) params.set("scopePropertyId", selectedPropertyId);
+    if (selectedRvcId) params.set("scopeRvcId", selectedRvcId);
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  }
+
   return {
     isInherited,
     isOverride,
     isOverridden,
     getOverrideActions,
     filterOverriddenInherited,
+    canDeleteItem,
+    getScopeQueryParams,
     currentLevel,
     isPending: createOverrideMutation.isPending || deleteOverrideMutation.isPending,
   };

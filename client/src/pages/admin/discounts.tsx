@@ -29,7 +29,7 @@ export default function DiscountsPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Discount>("discount", ["/api/discounts"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Discount>("discount", ["/api/discounts"]);
   const displayedDiscounts = filterOverriddenInherited(discounts);
 
   const columns: Column<Discount>[] = [
@@ -112,14 +112,14 @@ export default function DiscountsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/discounts/" + id);
+      await apiRequest("DELETE", "/api/discounts/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/discounts", filterKeys] });
       toast({ title: "Discount deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete discount", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete discount", variant: "destructive" });
     },
   });
 
@@ -151,6 +151,7 @@ export default function DiscountsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search discounts..."

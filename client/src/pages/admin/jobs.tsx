@@ -48,7 +48,7 @@ export default function JobsPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<JobCode>("job", ["/api/jobs"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<JobCode>("job", ["/api/jobs"]);
   const displayedJobs = filterOverriddenInherited(jobs);
 
   const { data: roles = [] } = useQuery<Role[]>({
@@ -177,14 +177,14 @@ export default function JobsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/job-codes/" + id);
+      await apiRequest("DELETE", "/api/job-codes/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/job-codes", filterKeys] });
       toast({ title: "Job deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete job", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete job", variant: "destructive" });
     },
   });
 
@@ -233,6 +233,7 @@ export default function JobsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         searchPlaceholder="Search jobs..."
       />

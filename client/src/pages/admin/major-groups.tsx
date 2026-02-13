@@ -27,7 +27,7 @@ export default function MajorGroupsPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<MajorGroup>("major_group", ["/api/major-groups"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<MajorGroup>("major_group", ["/api/major-groups"]);
   const displayedMajorGroups = filterOverriddenInherited(majorGroups);
 
   const columns: Column<MajorGroup>[] = [
@@ -88,14 +88,14 @@ export default function MajorGroupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/major-groups/" + id);
+      await apiRequest("DELETE", "/api/major-groups/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/major-groups", filterKeys] });
       toast({ title: "Major group deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete major group", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete major group", variant: "destructive" });
     },
   });
 
@@ -122,6 +122,7 @@ export default function MajorGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search major groups..."

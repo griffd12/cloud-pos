@@ -43,7 +43,7 @@ export default function RolesPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Role>("role", ["/api/roles"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Role>("role", ["/api/roles"]);
   const displayedRoles = filterOverriddenInherited(roles);
 
   const { data: privileges = [] } = useQuery<Privilege[]>({
@@ -130,14 +130,14 @@ export default function RolesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/roles/" + id);
+      await apiRequest("DELETE", "/api/roles/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/roles", filterKeys] });
       toast({ title: "Role deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete role", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete role", variant: "destructive" });
     },
   });
 
@@ -266,6 +266,7 @@ export default function RolesPage() {
               setFormOpen(true);
             }}
             onDelete={(item) => deleteMutation.mutate(item.id)}
+            canDelete={canDeleteItem}
             customActions={getOverrideActions()}
             isLoading={isLoading}
             searchPlaceholder="Search roles..."

@@ -34,7 +34,7 @@ export default function ModifierGroupsPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<ModifierGroup>("modifier_group", ["/api/modifier-groups"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<ModifierGroup>("modifier_group", ["/api/modifier-groups"]);
   const displayedModifierGroups = filterOverriddenInherited(modifierGroups);
 
   const { data: allModifiers = [] } = useQuery<Modifier[]>({
@@ -119,14 +119,14 @@ export default function ModifierGroupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/modifier-groups/" + id);
+      await apiRequest("DELETE", "/api/modifier-groups/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/modifier-groups", filterKeys] });
       toast({ title: "Modifier group deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete modifier group", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete modifier group", variant: "destructive" });
     },
   });
 
@@ -192,6 +192,7 @@ export default function ModifierGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={[
           {
             label: "Manage Modifiers",

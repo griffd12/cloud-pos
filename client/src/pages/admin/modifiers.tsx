@@ -29,7 +29,7 @@ export default function ModifiersPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Modifier>("modifier", ["/api/modifiers"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Modifier>("modifier", ["/api/modifiers"]);
   const displayedModifiers = filterOverriddenInherited(modifiers);
 
   const columns: Column<Modifier>[] = [
@@ -96,14 +96,14 @@ export default function ModifiersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/modifiers/" + id);
+      await apiRequest("DELETE", "/api/modifiers/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/modifiers", filterKeys] });
       toast({ title: "Modifier deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete modifier", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete modifier", variant: "destructive" });
     },
   });
 
@@ -130,6 +130,7 @@ export default function ModifiersPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search modifiers..."

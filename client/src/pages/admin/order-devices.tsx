@@ -27,7 +27,7 @@ export default function OrderDevicesPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<OrderDevice>("order_device", ["/api/order-devices"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<OrderDevice>("order_device", ["/api/order-devices"]);
   const displayedOrderDevices = filterOverriddenInherited(orderDevices);
 
   const { data: properties = [] } = useQuery<Property[]>({
@@ -174,14 +174,14 @@ export default function OrderDevicesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/order-devices/" + id);
+      await apiRequest("DELETE", "/api/order-devices/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/order-devices", filterKeys] });
       toast({ title: "Order device deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete order device", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete order device", variant: "destructive" });
     },
   });
 
@@ -225,6 +225,7 @@ export default function OrderDevicesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search order devices..."

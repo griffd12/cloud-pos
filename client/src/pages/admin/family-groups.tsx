@@ -27,7 +27,7 @@ export default function FamilyGroupsPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<FamilyGroup>("family_group", ["/api/family-groups"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<FamilyGroup>("family_group", ["/api/family-groups"]);
   const displayedFamilyGroups = filterOverriddenInherited(familyGroups);
 
   const columns: Column<FamilyGroup>[] = [
@@ -88,14 +88,14 @@ export default function FamilyGroupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/family-groups/" + id);
+      await apiRequest("DELETE", "/api/family-groups/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/family-groups", filterKeys] });
       toast({ title: "Family group deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete family group", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete family group", variant: "destructive" });
     },
   });
 
@@ -122,6 +122,7 @@ export default function FamilyGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search family groups..."

@@ -55,7 +55,7 @@ export default function PrintClassesPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<PrintClass>("print_class", ["/api/print-classes"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<PrintClass>("print_class", ["/api/print-classes"]);
   const displayedPrintClasses = filterOverriddenInherited(printClasses);
 
   const { data: orderDevices = [] } = useQuery<OrderDevice[]>({
@@ -150,7 +150,7 @@ export default function PrintClassesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/print-classes/" + id);
+      await apiRequest("DELETE", "/api/print-classes/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/print-classes", filterKeys] });
@@ -181,6 +181,7 @@ export default function PrintClassesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search print classes..."

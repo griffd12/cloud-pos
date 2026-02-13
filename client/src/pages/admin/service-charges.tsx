@@ -27,7 +27,7 @@ export default function ServiceChargesPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<ServiceCharge>("service_charge", ["/api/service-charges"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<ServiceCharge>("service_charge", ["/api/service-charges"]);
   const displayedServiceCharges = filterOverriddenInherited(serviceCharges);
 
   const columns: Column<ServiceCharge>[] = [
@@ -110,14 +110,14 @@ export default function ServiceChargesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/service-charges/" + id);
+      await apiRequest("DELETE", "/api/service-charges/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-charges", filterKeys] });
       toast({ title: "Service charge deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete service charge", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete service charge", variant: "destructive" });
     },
   });
 
@@ -149,6 +149,7 @@ export default function ServiceChargesPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search service charges..."

@@ -29,7 +29,7 @@ export default function TendersPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Tender>("tender", ["/api/tenders"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Tender>("tender", ["/api/tenders"]);
   const displayedTenders = filterOverriddenInherited(tenders);
 
   const columns: Column<Tender>[] = [
@@ -101,14 +101,14 @@ export default function TendersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/tenders/" + id);
+      await apiRequest("DELETE", "/api/tenders/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tenders", filterKeys] });
       toast({ title: "Tender deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete tender", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete tender", variant: "destructive" });
     },
   });
 
@@ -135,6 +135,7 @@ export default function TendersPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search tenders..."

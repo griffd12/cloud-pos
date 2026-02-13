@@ -29,7 +29,7 @@ export default function SlusPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<Slu>("slu", ["/api/slus"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Slu>("slu", ["/api/slus"]);
   const displayedSlus = filterOverriddenInherited(slus);
 
   const columns: Column<Slu>[] = [
@@ -97,14 +97,14 @@ export default function SlusPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/slus/" + id);
+      await apiRequest("DELETE", "/api/slus/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/slus", filterKeys] });
       toast({ title: "SLU deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete SLU", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete SLU", variant: "destructive" });
     },
   });
 
@@ -131,6 +131,7 @@ export default function SlusPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search SLUs..."

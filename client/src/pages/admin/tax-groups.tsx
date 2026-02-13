@@ -29,7 +29,7 @@ export default function TaxGroupsPage() {
     },
   });
 
-  const { getOverrideActions, filterOverriddenInherited } = useConfigOverride<TaxGroup>("tax_group", ["/api/tax-groups"]);
+  const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<TaxGroup>("tax_group", ["/api/tax-groups"]);
   const displayedTaxGroups = filterOverriddenInherited(taxGroups);
 
   const columns: Column<TaxGroup>[] = [
@@ -109,14 +109,14 @@ export default function TaxGroupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/tax-groups/" + id);
+      await apiRequest("DELETE", "/api/tax-groups/" + id + getScopeQueryParams());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tax-groups", filterKeys] });
       toast({ title: "Tax group deleted" });
     },
-    onError: () => {
-      toast({ title: "Failed to delete tax group", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to delete tax group", variant: "destructive" });
     },
   });
 
@@ -148,6 +148,7 @@ export default function TaxGroupsPage() {
           setFormOpen(true);
         }}
         onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
         customActions={getOverrideActions()}
         isLoading={isLoading}
         searchPlaceholder="Search tax groups..."

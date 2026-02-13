@@ -50,6 +50,7 @@ interface DataTableProps<T extends { id: string }> {
   onAdd?: () => void;
   onEdit?: (item: T) => void;
   onDelete?: (item: T) => void;
+  canDelete?: (item: T) => boolean;
   onDuplicate?: (item: T) => void;
   customActions?: CustomAction<T>[];
   actionButtons?: (item: T) => React.ReactNode;
@@ -68,6 +69,7 @@ export function DataTable<T extends { id: string }>({
   onAdd,
   onEdit,
   onDelete,
+  canDelete,
   onDuplicate,
   customActions = [],
   actionButtons,
@@ -249,7 +251,7 @@ export function DataTable<T extends { id: string }>({
                                 </DropdownMenuItem>
                               );
                             })}
-                            {onDelete && (
+                            {onDelete && (!canDelete || canDelete(item)) && (
                               <DropdownMenuItem
                                 onClick={() => onDelete(item)}
                                 className="text-destructive"
