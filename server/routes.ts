@@ -6739,20 +6739,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         currentBusinessDate: targetDate,
       });
       
-      // Close any existing open fiscal period for the previous date
-      const fiscalPeriods = await storage.getFiscalPeriods();
-      const openPeriod = fiscalPeriods.find(
-        fp => fp.propertyId === propertyId && fp.businessDate === previousBusinessDate && fp.status === "open"
+      // Close ALL open/reopened fiscal periods for this property that are older than the target date
+      const fiscalPeriods = await storage.getFiscalPeriods(propertyId);
+      const openPeriods = fiscalPeriods.filter(
+        fp => (fp.status === "open" || fp.status === "reopened") && fp.businessDate < targetDate
       );
-      if (openPeriod) {
-        await storage.updateFiscalPeriod(openPeriod.id, {
+      for (const period of openPeriods) {
+        await storage.updateFiscalPeriod(period.id, {
           status: "closed",
           closedAt: new Date().toISOString(),
           closedByEmployeeId: employee.id,
         });
       }
       
-      // Create a new fiscal period for the new date if it doesn't exist
+      // Create a new fiscal period for the target date only if one doesn't already exist
       const existingNewPeriod = fiscalPeriods.find(
         fp => fp.propertyId === propertyId && fp.businessDate === targetDate
       );

@@ -10,20 +10,24 @@ import { insertPropertySchema, type Property, type InsertProperty, type Enterpri
 
 export default function PropertiesPage() {
   const { toast } = useToast();
-  const { selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { selectedEnterpriseId, selectedPropertyId: emcPropertyId, scopePayload, filterParam } = useEmcFilter();
   usePosWebSocket();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Property | null>(null);
 
-  const enterpriseOnlyParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
-  const { data: properties = [], isLoading } = useQuery<Property[]>({
+  const { data: allProperties = [], isLoading } = useQuery<Property[]>({
     queryKey: ["/api/properties", selectedEnterpriseId],
     queryFn: async () => {
+      const enterpriseOnlyParam = selectedEnterpriseId ? `?enterpriseId=${selectedEnterpriseId}` : "";
       const res = await fetch(`/api/properties${enterpriseOnlyParam}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch properties");
       return res.json();
     },
   });
+
+  const properties = emcPropertyId
+    ? allProperties.filter(p => p.id === emcPropertyId)
+    : allProperties;
 
   const { data: enterprises = [] } = useQuery<Enterprise[]>({
     queryKey: ["/api/enterprises"],
