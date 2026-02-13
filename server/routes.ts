@@ -2818,25 +2818,96 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!enterpriseId && (rvcId || propertyId)) {
         enterpriseId = await getEnterpriseIdFromContext({ rvcId, propertyId }) || undefined;
       }
-      const allLinkages = await storage.getMenuItemModifierGroups();
-      let allGroups = await storage.getModifierGroups();
-      if (enterpriseId) {
-        const { propertyIds, rvcIds } = await getEnterpriseFilterSets(enterpriseId);
-        allGroups = filterByEnterprise(allGroups, enterpriseId, propertyIds, rvcIds);
-      }
-      if (propertyId) {
-        allGroups = await filterByPropertyScope(allGroups, propertyId, rvcId);
-      }
-      const groupsById = new Map(allGroups.map(g => [g.id, g]));
-      const result: Record<string, typeof allGroups> = {};
-      for (const link of allLinkages) {
-        const group = groupsById.get(link.modifierGroupId);
-        if (!group) continue;
-        if (!result[link.menuItemId]) result[link.menuItemId] = [];
-        if (!result[link.menuItemId].some(g => g.id === group.id)) {
-          result[link.menuItemId].push(group);
+
+      const rows = await db.execute(sql`
+        SELECT
+          mimg.menu_item_id,
+          mg.id AS group_id,
+          mg.name AS group_name,
+          mg.required AS group_required,
+          mg.min_select,
+          mg.max_select,
+          mg.display_order AS group_display_order,
+          mg.enterprise_id AS group_enterprise_id,
+          mg.property_id AS group_property_id,
+          mg.rvc_id AS group_rvc_id,
+          m.id AS mod_id,
+          m.name AS mod_name,
+          m.price_delta AS mod_price_delta,
+          m.active AS mod_active,
+          mgm.is_default AS mod_is_default,
+          mgm.display_order AS mod_display_order
+        FROM menu_item_modifier_groups mimg
+        JOIN modifier_groups mg ON mg.id = mimg.modifier_group_id AND mg.active = true
+        LEFT JOIN modifier_group_modifiers mgm ON mgm.modifier_group_id = mg.id
+        LEFT JOIN modifiers m ON m.id = mgm.modifier_id AND m.active = true
+        ORDER BY mimg.menu_item_id, mg.display_order, mgm.display_order
+      `);
+
+      const result: Record<string, any[]> = {};
+      const groupCache = new Map<string, Map<string, any>>();
+
+      for (const row of rows.rows) {
+        const menuItemId = row.menu_item_id as string;
+        const groupId = row.group_id as string;
+
+        if (!groupCache.has(menuItemId)) {
+          groupCache.set(menuItemId, new Map());
+        }
+        const itemGroups = groupCache.get(menuItemId)!;
+
+        if (!itemGroups.has(groupId)) {
+          const group = {
+            id: groupId,
+            name: row.group_name,
+            required: row.group_required,
+            minSelect: row.min_select,
+            maxSelect: row.max_select,
+            displayOrder: row.group_display_order,
+            enterpriseId: row.group_enterprise_id,
+            propertyId: row.group_property_id,
+            rvcId: row.group_rvc_id,
+            active: true,
+            modifiers: [] as any[],
+          };
+          itemGroups.set(groupId, group);
+        }
+
+        if (row.mod_id && row.mod_active) {
+          const group = itemGroups.get(groupId)!;
+          if (!group.modifiers.some((m: any) => m.id === row.mod_id)) {
+            group.modifiers.push({
+              id: row.mod_id,
+              name: row.mod_name,
+              priceDelta: row.mod_price_delta,
+              active: true,
+              isDefault: row.mod_is_default ?? false,
+              displayOrder: row.mod_display_order ?? 0,
+            });
+          }
         }
       }
+
+      let enterpriseFilterSets: { propertyIds: string[]; rvcIds: string[] } | null = null;
+      if (enterpriseId) {
+        enterpriseFilterSets = await getEnterpriseFilterSets(enterpriseId);
+      }
+
+      for (const [menuItemId, groupMap] of groupCache) {
+        let groups = Array.from(groupMap.values());
+
+        if (enterpriseId && enterpriseFilterSets) {
+          groups = filterByEnterprise(groups, enterpriseId, enterpriseFilterSets.propertyIds, enterpriseFilterSets.rvcIds);
+        }
+        if (propertyId) {
+          groups = await filterByPropertyScope(groups, propertyId, rvcId);
+        }
+
+        if (groups.length > 0) {
+          result[menuItemId] = groups;
+        }
+      }
+
       res.json(result);
     } catch (error) {
       console.error("Error building modifier map:", error);

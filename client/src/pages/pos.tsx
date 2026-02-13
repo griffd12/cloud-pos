@@ -1285,28 +1285,28 @@ export default function PosPage() {
       const hasRequiredModifiers = groups.some(g => g.modifiers.length > 0 && (g.required || (g.minSelect && g.minSelect > 0)));
       
       if (hasRequiredModifiers) {
-        // In dynamic order mode, create a pending item immediately so it shows on KDS
+        setItemModifierGroups(groups);
+        setPendingItem(item);
+        setShowModifierModal(true);
+        
         if (currentRvc?.dynamicOrderMode) {
-          const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
+          apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
             menuItemId: item.id,
             menuItemName: item.name,
             unitPrice: item.price,
             modifiers: [],
             quantity: 1,
-            itemStatus: "pending", // Mark as pending until modifiers are selected
+            itemStatus: "pending",
+          }).then(async (response) => {
+            const pendingCheckItem = await response.json();
+            setCheckItems((prev) => [...prev, pendingCheckItem]);
+            setEditingItem(pendingCheckItem);
+            queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
+            decrementQuantity(item.id);
+          }).catch(() => {
+            toast({ title: "Warning", description: "KDS pending item could not be created", variant: "destructive" });
           });
-          const pendingCheckItem = await response.json();
-          setCheckItems((prev) => [...prev, pendingCheckItem]);
-          setEditingItem(pendingCheckItem); // Set as editing so we update it rather than create new
-          queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
-          // Decrement availability for dynamic order mode (item already created)
-          decrementQuantity(item.id);
         }
-        
-        setItemModifierGroups(groups);
-        setPendingItem(item);
-        setShowModifierModal(true);
-        // Note: For non-dynamic mode, decrement happens in handleConfirmModifiers when item is actually added
       } else {
         const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         const optimisticItem = {
