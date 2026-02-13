@@ -57,7 +57,7 @@ interface CustomerModalProps {
   enterpriseId?: string;
   propertyId?: string;
   onCustomerAttached?: (customer: LoyaltyMember) => void;
-  onReorderRequested?: (items: CheckItem[]) => void;
+  onReorderRequested?: (items: CheckItem[], customer: LoyaltyMember | null) => void;
 }
 
 export function CustomerModal({
@@ -949,7 +949,7 @@ export function CustomerModal({
                           const activeItems = selectedHistoryCheck.items.filter(
                             item => item.itemStatus === "active" && !item.voided
                           );
-                          onReorderRequested(activeItems);
+                          onReorderRequested(activeItems, selectedCustomer);
                           toast({
                             title: "Repeat Order",
                             description: `Adding ${activeItems.length} item(s) from previous order`,

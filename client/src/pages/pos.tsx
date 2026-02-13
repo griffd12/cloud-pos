@@ -2423,9 +2423,8 @@ export default function PosPage() {
           }
           queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
         }}
-        onReorderRequested={async (items) => {
+        onReorderRequested={async (items, customer) => {
           try {
-            // Create a new check if there isn't one open
             let checkToUse = currentCheck;
             if (!checkToUse) {
               const newCheckRes = await apiRequest("POST", "/api/checks", {
@@ -2439,7 +2438,18 @@ export default function PosPage() {
               setCheckItems([]);
             }
             
-            // Add each item from the previous order
+            if (customer && !checkToUse?.customerId) {
+              try {
+                await apiRequest("POST", `/api/pos/checks/${checkToUse?.id}/customer`, {
+                  customerId: customer.id,
+                });
+                if (checkToUse) {
+                  checkToUse = { ...checkToUse, customerId: customer.id };
+                }
+              } catch (e) {
+              }
+            }
+            
             for (const item of items) {
               await apiRequest("POST", `/api/checks/${checkToUse?.id}/items`, {
                 menuItemId: item.menuItemId,
@@ -2450,7 +2460,6 @@ export default function PosPage() {
               });
             }
             
-            // Refresh the check data
             const refreshRes = await fetchWithTimeout(`/api/checks/${checkToUse?.id}`, { credentials: "include", headers: getAuthHeaders() });
             if (refreshRes.ok) {
               const data = await refreshRes.json();
@@ -2459,9 +2468,10 @@ export default function PosPage() {
             }
             
             queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", customer?.id] });
             toast({
               title: "Repeat Order Complete",
-              description: `${items.length} item(s) added to check`,
+              description: `${items.length} item(s) added to check${customer ? ` for ${customer.firstName} ${customer.lastName}` : ""}`,
             });
           } catch (error) {
             toast({
