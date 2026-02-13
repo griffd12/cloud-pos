@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial, real, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -558,8 +558,9 @@ export const tenders = pgTable("tenders", {
   name: text("name").notNull(),
   code: text("code").notNull(),
   type: text("type").notNull(), // 'cash', 'credit', 'gift', 'other'
-  paymentProcessorId: varchar("payment_processor_id").references(() => paymentProcessors.id), // Link to processor for card tenders
+  paymentProcessorId: varchar("payment_processor_id").references(() => paymentProcessors.id),
   active: boolean("active").default(true),
+  isSystem: boolean("is_system").default(false),
 });
 
 // Payment Transactions - tracks all gateway communications (NO card data stored)
@@ -3575,6 +3576,33 @@ export type CalDeployment = typeof calDeployments.$inferSelect;
 export type InsertCalDeployment = z.infer<typeof insertCalDeploymentSchema>;
 export type CalDeploymentTarget = typeof calDeploymentTargets.$inferSelect;
 export type InsertCalDeploymentTarget = z.infer<typeof insertCalDeploymentTargetSchema>;
+
+export const stressTestResults = pgTable("stress_test_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  rvcId: varchar("rvc_id").references(() => rvcs.id),
+  employeeId: varchar("employee_id"),
+  status: text("status").notNull(), // 'completed', 'stopped', 'error'
+  durationMinutes: integer("duration_minutes").notNull(),
+  targetTxPerMinute: integer("target_tx_per_minute").notNull(),
+  patterns: text("patterns").array(),
+  totalTransactions: integer("total_transactions").default(0),
+  successfulTransactions: integer("successful_transactions").default(0),
+  failedTransactions: integer("failed_transactions").default(0),
+  avgTransactionMs: integer("avg_transaction_ms"),
+  minTransactionMs: integer("min_transaction_ms"),
+  maxTransactionMs: integer("max_transaction_ms"),
+  actualTxPerMinute: numeric("actual_tx_per_minute"),
+  elapsedSeconds: integer("elapsed_seconds"),
+  errors: text("errors").array(),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertStressTestResultSchema = createInsertSchema(stressTestResults).omit({ id: true });
+export type StressTestResult = typeof stressTestResults.$inferSelect;
+export type InsertStressTestResult = z.infer<typeof insertStressTestResultSchema>;
 
 export const configOverrides = pgTable("config_overrides", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

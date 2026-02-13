@@ -344,6 +344,7 @@ export interface IStorage {
 
   // Tenders
   getTenders(rvcId?: string): Promise<Tender[]>;
+  getAllTendersIncludingSystem(): Promise<Tender[]>;
   getTender(id: string): Promise<Tender | undefined>;
   createTender(data: InsertTender): Promise<Tender>;
   updateTender(id: string, data: Partial<InsertTender>): Promise<Tender | undefined>;
@@ -1828,6 +1829,10 @@ export class DatabaseStorage implements IStorage {
 
   // Tenders
   async getTenders(rvcId?: string): Promise<Tender[]> {
+    return db.select().from(tenders).where(and(eq(tenders.active, true), or(eq(tenders.isSystem, false), isNull(tenders.isSystem))));
+  }
+
+  async getAllTendersIncludingSystem(): Promise<Tender[]> {
     return db.select().from(tenders).where(eq(tenders.active, true));
   }
 
@@ -3586,7 +3591,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getClosedChecks(rvcId: string, options?: { businessDate?: string; checkNumber?: number; limit?: number }): Promise<Check[]> {
-    const conditions = [eq(checks.rvcId, rvcId), eq(checks.status, "closed")];
+    const conditions = [
+      eq(checks.rvcId, rvcId),
+      eq(checks.status, "closed"),
+      or(eq(checks.testMode, false), isNull(checks.testMode)),
+    ];
     
     if (options?.businessDate) {
       conditions.push(eq(checks.businessDate, options.businessDate));

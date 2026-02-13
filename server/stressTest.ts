@@ -1,7 +1,23 @@
 import type { IStorage } from "./storage";
 import { db } from "./db";
-import { checks, checkItems, checkPayments, kdsTickets, kdsTicketItems, rounds } from "@shared/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { checks, checkItems, checkPayments, kdsTickets, kdsTicketItems, rounds, stressTestResults } from "@shared/schema";
+import { eq, inArray, sql, desc } from "drizzle-orm";
+
+export async function ensureStressTestTender(storage: IStorage): Promise<string> {
+  const allTenders = await storage.getAllTendersIncludingSystem();
+  const existing = allTenders.find(t => t.code === "STRESS" && t.isSystem);
+  if (existing) return existing.id;
+
+  const created = await storage.createTender({
+    name: "Stress Test",
+    code: "STRESS",
+    type: "other",
+    active: true,
+    isSystem: true,
+  });
+  console.log("Auto-provisioned system tender: Stress Test");
+  return created.id;
+}
 
 interface StressTestConfig {
   rvcId: string;
@@ -254,6 +270,8 @@ async function startTest(baseUrl: string, config: StressTestConfig, storage: ISt
 
     if (activeTest) {
       activeTest.running = false;
+      const metrics = computeMetrics();
+      await saveTestResults(config, metrics);
     }
   })();
 }
@@ -303,7 +321,91 @@ async function cleanupTestData(): Promise<{ deletedChecks: number; deletedItems:
   return result;
 }
 
+async function saveTestResults(config: StressTestConfig, metrics: StressTestMetrics) {
+  try {
+    await db.insert(stressTestResults).values({
+      rvcId: config.rvcId,
+      employeeId: config.employeeId,
+      status: metrics.status,
+      durationMinutes: config.durationMinutes,
+      targetTxPerMinute: config.targetTxPerMinute,
+      patterns: config.patterns,
+      totalTransactions: metrics.totalTransactions,
+      successfulTransactions: metrics.successfulTransactions,
+      failedTransactions: metrics.failedTransactions,
+      avgTransactionMs: metrics.avgTransactionMs,
+      minTransactionMs: metrics.minTransactionMs,
+      maxTransactionMs: metrics.maxTransactionMs,
+      actualTxPerMinute: String(metrics.transactionsPerMinute),
+      elapsedSeconds: metrics.elapsedSeconds,
+      errors: metrics.errors.length > 0 ? metrics.errors : null,
+      startedAt: new Date(metrics.startedAt),
+      completedAt: new Date(),
+    });
+  } catch (e) {
+    console.error("Failed to save stress test results:", e);
+  }
+}
+
 export function registerStressTestRoutes(app: any, storage: IStorage) {
+  app.get("/api/stress-test/tender", async (_req: any, res: any) => {
+    try {
+      const tenderId = await ensureStressTestTender(storage);
+      res.json({ tenderId });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to get stress test tender: " + error.message });
+    }
+  });
+
+  app.get("/api/stress-test/results", async (req: any, res: any) => {
+    try {
+      const { rvcId, propertyId, limit: limitParam } = req.query;
+      const resultLimit = parseInt(limitParam as string) || 50;
+      let results;
+      if (rvcId) {
+        results = await db.select().from(stressTestResults)
+          .where(eq(stressTestResults.rvcId, rvcId as string))
+          .orderBy(desc(stressTestResults.startedAt))
+          .limit(resultLimit);
+      } else {
+        results = await db.select().from(stressTestResults)
+          .orderBy(desc(stressTestResults.startedAt))
+          .limit(resultLimit);
+      }
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to get stress test results: " + error.message });
+    }
+  });
+
+  app.post("/api/stress-test/results", async (req: any, res: any) => {
+    try {
+      const data = req.body;
+      await db.insert(stressTestResults).values({
+        rvcId: data.rvcId,
+        employeeId: data.employeeId,
+        status: data.status,
+        durationMinutes: data.durationMinutes,
+        targetTxPerMinute: data.targetTxPerMinute,
+        patterns: data.patterns,
+        totalTransactions: data.totalTransactions,
+        successfulTransactions: data.successfulTransactions,
+        failedTransactions: data.failedTransactions,
+        avgTransactionMs: data.avgTransactionMs,
+        minTransactionMs: data.minTransactionMs,
+        maxTransactionMs: data.maxTransactionMs,
+        actualTxPerMinute: data.actualTxPerMinute ? String(data.actualTxPerMinute) : null,
+        elapsedSeconds: data.elapsedSeconds,
+        errors: data.errors?.length > 0 ? data.errors : null,
+        startedAt: data.startedAt ? new Date(data.startedAt) : new Date(),
+        completedAt: new Date(),
+      });
+      res.json({ message: "Results saved" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Failed to save results: " + error.message });
+    }
+  });
+
   app.post("/api/stress-test/start", async (req: any, res: any) => {
     try {
       const {

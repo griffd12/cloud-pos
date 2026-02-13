@@ -5097,18 +5097,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         broadcastCheckUpdate(checkId, "closed", check?.rvcId);
         broadcastPaymentUpdate(checkId);
         
-        // Auto-print receipt on check close
+        // Auto-print receipt on check close (skip for stress test checks)
         let autoPrintStatus: { success: boolean; message?: string } = { success: false };
-        try {
-          const printResult = await printCheckReceipt(checkId, check?.rvcId);
-          if (printResult) {
-            autoPrintStatus = { success: true };
-          } else {
-            autoPrintStatus = { success: false, message: "No receipt printer configured" };
+        if (!check?.testMode) {
+          try {
+            const printResult = await printCheckReceipt(checkId, check?.rvcId);
+            if (printResult) {
+              autoPrintStatus = { success: true };
+            } else {
+              autoPrintStatus = { success: false, message: "No receipt printer configured" };
+            }
+          } catch (printError: any) {
+            console.error("Auto-print receipt error:", printError);
+            autoPrintStatus = { success: false, message: printError.message || "Print failed" };
           }
-        } catch (printError: any) {
-          console.error("Auto-print receipt error:", printError);
-          autoPrintStatus = { success: false, message: printError.message || "Print failed" };
         }
         
         return res.json({ ...updatedCheck, paidAmount, autoPrintStatus });
@@ -8912,7 +8914,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const employees = await storage.getEmployees();
       const allPayments = await storage.getAllPayments();
       
-      let closedChecks = allChecks.filter(c => c.status === "closed");
+      let closedChecks = allChecks.filter(c => c.status === "closed" && !c.testMode);
       
       // Filter by property/RVC
       if (propertyId && propertyId !== "all") {
@@ -17762,17 +17764,19 @@ connect();
         broadcastCheckUpdate(checkId, "closed", check.rvcId);
         broadcastPaymentUpdate(checkId);
         
-        // Auto-print receipt on check close
-        try {
-          const printResult = await printCheckReceipt(checkId, check.rvcId);
-          if (printResult) {
-            autoPrintStatus = { success: true };
-          } else {
-            autoPrintStatus = { success: false, message: "No receipt printer configured" };
+        // Auto-print receipt on check close (skip for stress test checks)
+        if (!check.testMode) {
+          try {
+            const printResult = await printCheckReceipt(checkId, check.rvcId);
+            if (printResult) {
+              autoPrintStatus = { success: true };
+            } else {
+              autoPrintStatus = { success: false, message: "No receipt printer configured" };
+            }
+          } catch (printError: any) {
+            console.error("Auto-print receipt error:", printError);
+            autoPrintStatus = { success: false, message: printError.message || "Print failed" };
           }
-        } catch (printError: any) {
-          console.error("Auto-print receipt error:", printError);
-          autoPrintStatus = { success: false, message: printError.message || "Print failed" };
         }
       }
 

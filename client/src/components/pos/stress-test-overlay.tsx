@@ -67,15 +67,40 @@ export function StressTestOverlay({
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   const testCheckIdsRef = useRef<string[]>([]);
   const testLoopDoneRef = useRef<Promise<void> | null>(null);
+  const successCountRef = useRef(0);
+  const failCountRef = useRef(0);
+  const totalMsRef = useRef(0);
+  const minMsRef = useRef(Infinity);
+  const maxMsRef = useRef(0);
+  const startTimeRef = useRef(0);
+  const lastErrorsRef = useRef<string[]>([]);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [showConfig, setShowConfig] = useState(true);
 
+  const [stressTenderLoading, setStressTenderLoading] = useState(true);
+
   useEffect(() => {
-    if (tenders.length > 0 && !selectedTenderId) {
-      const cashTender = tenders.find(t => t.name.toLowerCase().includes("cash"));
-      setSelectedTenderId(cashTender?.id || tenders[0].id);
+    async function fetchStressTender() {
+      try {
+        const res = await fetchWithTimeout("/api/stress-test/tender", { credentials: "include", headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setSelectedTenderId(data.tenderId);
+        } else {
+          const cashTender = tenders.find(t => t.name.toLowerCase().includes("cash"));
+          setSelectedTenderId(cashTender?.id || tenders[0]?.id || "");
+        }
+      } catch {
+        const cashTender = tenders.find(t => t.name.toLowerCase().includes("cash"));
+        setSelectedTenderId(cashTender?.id || tenders[0]?.id || "");
+      } finally {
+        setStressTenderLoading(false);
+      }
     }
-  }, [tenders, selectedTenderId]);
+    if (open && !selectedTenderId) {
+      fetchStressTender();
+    }
+  }, [open, selectedTenderId, tenders]);
 
   useEffect(() => {
     if (isRunning && startTime > 0) {
@@ -211,6 +236,40 @@ export function StressTestOverlay({
     }
   }, [rvcId, employeeId, selectedTenderId, getActiveMenuItems, getItemCount, setCurrentCheck, setCheckItems, triggerFlash]);
 
+  const saveResults = useCallback(async (status: string) => {
+    try {
+      const sc = successCountRef.current;
+      const fc = failCountRef.current;
+      const totalMsVal = totalMsRef.current;
+      const avgMs = sc > 0 ? Math.round(totalMsVal / sc) : 0;
+      const elapsedSec = startTimeRef.current > 0 ? Math.round((Date.now() - startTimeRef.current) / 1000) : 0;
+      const txPerMin = elapsedSec > 0 ? Math.round((sc / elapsedSec) * 60 * 10) / 10 : 0;
+      const patternArray = pattern === "mixed" ? ["single", "double", "triple"] : [pattern];
+      
+      await apiRequest("POST", "/api/stress-test/results", {
+        rvcId,
+        employeeId,
+        status,
+        durationMinutes,
+        targetTxPerMinute: targetSpeed,
+        patterns: patternArray,
+        totalTransactions: sc + fc,
+        successfulTransactions: sc,
+        failedTransactions: fc,
+        avgTransactionMs: avgMs,
+        minTransactionMs: minMsRef.current === Infinity ? 0 : minMsRef.current,
+        maxTransactionMs: maxMsRef.current,
+        actualTxPerMinute: txPerMin,
+        elapsedSeconds: elapsedSec,
+        errors: lastErrorsRef.current,
+        startedAt: startTimeRef.current > 0 ? new Date(startTimeRef.current).toISOString() : new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("Failed to save stress test results:", e);
+    }
+  }, [rvcId, employeeId, durationMinutes, targetSpeed, pattern]);
+
   const doCleanup = useCallback(async () => {
     setIsCleaningUp(true);
     setCurrentItemName("Cleaning up test data...");
@@ -235,6 +294,12 @@ export function StressTestOverlay({
     setShowConfig(false);
     runningRef.current = true;
     testCheckIdsRef.current = [];
+    successCountRef.current = 0;
+    failCountRef.current = 0;
+    totalMsRef.current = 0;
+    minMsRef.current = Infinity;
+    maxMsRef.current = 0;
+    lastErrorsRef.current = [];
 
     setTxCount(0);
     setSuccessCount(0);
@@ -247,6 +312,7 @@ export function StressTestOverlay({
 
     const now = Date.now();
     setStartTime(now);
+    startTimeRef.current = now;
     setElapsed(0);
 
     const endTime = now + durationMinutes * 60 * 1000;
@@ -261,13 +327,19 @@ export function StressTestOverlay({
 
         setTxCount(prev => prev + 1);
         if (result.success) {
+          successCountRef.current++;
+          totalMsRef.current += result.durationMs;
+          minMsRef.current = Math.min(minMsRef.current, result.durationMs);
+          maxMsRef.current = Math.max(maxMsRef.current, result.durationMs);
           setSuccessCount(prev => prev + 1);
           setTotalMs(prev => prev + result.durationMs);
           setMinMs(prev => Math.min(prev, result.durationMs));
           setMaxMs(prev => Math.max(prev, result.durationMs));
         } else {
+          failCountRef.current++;
           setFailCount(prev => prev + 1);
           if (result.error) {
+            lastErrorsRef.current = [...lastErrorsRef.current.slice(-4), result.error];
             setLastErrors(prev => [...prev.slice(-4), result.error!]);
           }
         }
@@ -297,8 +369,9 @@ export function StressTestOverlay({
     queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
     queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
 
+    await saveResults("completed");
     await doCleanup();
-  }, [isRunning, durationMinutes, targetSpeed, runSingleTransaction, setCurrentCheck, setCheckItems, doCleanup]);
+  }, [isRunning, durationMinutes, targetSpeed, runSingleTransaction, setCurrentCheck, setCheckItems, doCleanup, saveResults]);
 
   const stopTest = useCallback(async () => {
     runningRef.current = false;
@@ -312,8 +385,9 @@ export function StressTestOverlay({
     setCurrentCheck(null);
     setCheckItems([]);
 
+    await saveResults("stopped");
     await doCleanup();
-  }, [setCurrentCheck, setCheckItems, doCleanup]);
+  }, [setCurrentCheck, setCheckItems, doCleanup, saveResults]);
 
   const handleCleanup = useCallback(async () => {
     setIsCleaningUp(true);
@@ -610,16 +684,9 @@ export function StressTestOverlay({
 
               <div>
                 <label className="text-xs text-white/60 block mb-1.5">Payment Tender</label>
-                <Select value={selectedTenderId} onValueChange={setSelectedTenderId}>
-                  <SelectTrigger className="bg-white/10 border-white/20 text-white" data-testid="select-tender">
-                    <SelectValue placeholder="Select tender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tenders.map(t => (
-                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="bg-white/10 border border-white/20 rounded-md px-3 py-2 text-sm text-white/80">
+                  {stressTenderLoading ? "Loading..." : "Stress Test (System)"}
+                </div>
               </div>
             </div>
 
@@ -632,7 +699,7 @@ export function StressTestOverlay({
               </div>
               <Button
                 onClick={startTest}
-                disabled={!selectedTenderId || getActiveMenuItems().length === 0}
+                disabled={!selectedTenderId || stressTenderLoading || getActiveMenuItems().length === 0}
                 className="bg-green-600 hover:bg-green-700 text-white gap-2 px-6"
                 data-testid="button-start-stress-test"
               >

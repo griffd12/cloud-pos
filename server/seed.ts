@@ -328,6 +328,17 @@ async function seed() {
   }
   console.log("Created tenders: Cash, Credit Card, Debit Card, Gift Card");
 
+  // Stress Test system tender (hidden from EMC)
+  await db.insert(tenders).values({
+    id: randomUUID(),
+    name: "Stress Test",
+    code: "STRESS",
+    type: "other",
+    active: true,
+    isSystem: true,
+  });
+  console.log("Created system tender: Stress Test");
+
   // Discounts
   const discountData = [
     { name: "10% Off", code: "10OFF", type: "percent", value: "10.00" },

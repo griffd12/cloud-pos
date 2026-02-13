@@ -39,13 +39,12 @@ The stress test configuration panel will appear.
 | **Duration** | How long the test runs (in minutes) | 2 minutes |
 | **Speed** | Target number of transactions per minute | 10 tx/min |
 | **Item Pattern** | How many menu items per check: Single (1), Double (2), or Triple (3) | Single |
-| **Tender** | Which payment type to use for closing checks | Cash (auto-selected) |
+**Note:** The stress test automatically uses a built-in system tender called "Stress Test". This tender is hidden from the regular EMC tender list and is configured to skip receipt printing while still allowing KDS flow. You do not need to select a tender — it is handled automatically.
 
 **Recommended starting settings:**
 - Duration: 1-2 minutes
 - Speed: 5-10 tx/min
 - Pattern: Single
-- Tender: Cash
 
 This gives you a quick baseline before ramping up.
 
@@ -120,13 +119,55 @@ After the test completes, you'll see a results summary with:
 
 The POS is fully usable again immediately after closing the stress test.
 
+### Results Persistence
+
+Test results are automatically saved to the database when a test completes or is manually stopped. You can review past test runs from the EMC (see below).
+
 ### Important Notes
 
 - **Test data is automatically cleaned up** — you don't need to do anything manually. All test checks, items, payments, and KDS tickets are deleted when the test ends.
+- **Results are saved** — even though test transaction data is cleaned up, the test run metrics (timing, throughput, success/failure counts) are permanently saved for review.
 - **No impact on reports** — even during the test, test transactions won't appear in your sales reports or fiscal totals.
 - **No impact on existing data** — the stress test only creates new test transactions. It never touches your real checks, orders, or configuration.
 - **One test at a time** — you can only run one stress test at a time.
 - **Avoid peak hours** — while test data is excluded from reports, the transactions still use server resources. Run stress tests during off-peak times on production systems.
+- **System tender** — The "Stress Test" tender is auto-provisioned on server startup and hidden from EMC configuration. It skips receipt printing but allows KDS ticket creation for realistic flow.
+
+---
+
+## EMC Stress Test Report
+
+The Enterprise Management Console (EMC) includes a **Stress Test Report** page where you can review all past test runs.
+
+### How to Access
+
+1. Open the EMC
+2. Select a **Property** (and optionally an **RVC**) from the hierarchy tree
+3. Navigate to **System** > **Stress Test Report**
+
+### What It Shows
+
+A table of all past test runs for the selected scope, with these columns:
+
+| Column | Description |
+|--------|-------------|
+| **Date/Time** | When the test was run |
+| **Status** | Whether it completed, was stopped, or had an error |
+| **Duration** | Configured test duration in minutes |
+| **Target Speed** | Configured transactions per minute |
+| **Actual Speed** | Measured transactions per minute achieved |
+| **Total Tx** | Total transactions attempted |
+| **Success** | Successfully completed transactions |
+| **Failed** | Transactions that encountered errors |
+| **Avg/Min/Max ms** | Transaction timing statistics |
+
+Click on a row to expand error details if any errors occurred during that run.
+
+The report also includes a reference card explaining the performance thresholds:
+- **Under 100ms** = Excellent
+- **100-200ms** = Good
+- **200-500ms** = Acceptable under load
+- **Over 500ms** = Needs investigation
 
 ---
 

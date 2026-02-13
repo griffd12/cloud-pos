@@ -54,6 +54,7 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
+  Activity,
 } from "lucide-react";
 
 import EnterprisesPage from "../admin/enterprises";
@@ -108,6 +109,7 @@ import BreakRulesPage from "../admin/break-rules";
 import BreakMonitoringPage from "../admin/break-monitoring";
 import BreakViolationsPage from "../admin/break-violations";
 import MinorLaborPage from "../admin/minor-labor";
+import StressTestReportPage from "./stress-test-report";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -224,6 +226,7 @@ const navGroups: NavGroup[] = [
     label: "System",
     items: [
       { title: "Utilities", url: "/emc/utilities", icon: Wrench },
+      { title: "Stress Test Report", url: "/emc/stress-test-report", icon: Activity, requiresProperty: true },
       { title: "Onboarding Checklist", url: "/emc/onboarding", icon: ClipboardCheck },
     ],
   },
@@ -656,6 +659,7 @@ export default function EmcAdminLayout() {
                 <Route path="/emc/accounting-export" component={AccountingExportPage} />
                 <Route path="/emc/print-agents" component={PrintAgentsPage} />
                 <Route path="/emc/descriptors" component={DescriptorsPage} />
+                <Route path="/emc/stress-test-report" component={StressTestReportPage} />
               </Switch>
             )}
           </main>
