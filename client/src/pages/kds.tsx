@@ -14,6 +14,7 @@ import { useConfigSync } from "@/hooks/use-config-sync";
 import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ArrowLeft, Settings, Wifi, WifiOff, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
+import { useFontScale } from "@/hooks/use-font-scale";
 import { Link, Redirect, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
@@ -184,6 +185,9 @@ export default function KdsPage() {
   const selectedDevice = selectedStation !== "all" 
     ? kdsDevices.find((d) => d.stationType === selectedStation)
     : kdsDevices[0];
+
+  const activeKdsDevice = isDedicatedKds ? configuredKdsDevice : selectedDevice;
+  const fontScale = useFontScale((activeKdsDevice as any)?.fontScale);
 
   const handleChangeDevice = () => {
     clearDeviceConfig();
@@ -390,7 +394,7 @@ export default function KdsPage() {
 
   return (
     <DeviceEnrollmentGuard requiredDeviceType="kds_display">
-    <div className="h-screen flex flex-col">
+    <div className={`flex flex-col ${fontScale.factor !== 1.0 ? '' : 'h-screen'}`} style={fontScale.factor !== 1.0 ? fontScale.style : undefined}>
       <ConnectionModeBanner />
       <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">

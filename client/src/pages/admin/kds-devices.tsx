@@ -184,6 +184,19 @@ export default function KdsDevicesPage() {
       ],
       defaultValue: "red",
     },
+    {
+      name: "fontScale",
+      label: "Display Font Size",
+      type: "select",
+      options: [
+        { value: "85", label: "Small (85%)" },
+        { value: "100", label: "Medium (100%)" },
+        { value: "120", label: "Large (120%)" },
+        { value: "140", label: "Extra Large (140%)" },
+      ],
+      defaultValue: "100",
+      description: "Scale all text on this KDS display for readability",
+    },
     { name: "wsChannel", label: "WebSocket Channel", type: "text", placeholder: "e.g., kds-hot-1" },
     { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
@@ -191,7 +204,8 @@ export default function KdsDevicesPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertKdsDevice) => {
-      const response = await apiRequest("POST", "/api/kds-devices", data);
+      const payload = { ...data, fontScale: data.fontScale ? Number(data.fontScale) : 100 };
+      const response = await apiRequest("POST", "/api/kds-devices", payload);
       return response.json();
     },
     onSuccess: () => {
@@ -206,7 +220,8 @@ export default function KdsDevicesPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: KdsDevice) => {
-      const response = await apiRequest("PUT", "/api/kds-devices/" + data.id, data);
+      const payload = { ...data, fontScale: data.fontScale ? Number(data.fontScale) : 100 };
+      const response = await apiRequest("PUT", "/api/kds-devices/" + data.id, payload);
       return response.json();
     },
     onSuccess: () => {

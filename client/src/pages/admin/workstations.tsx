@@ -283,6 +283,7 @@ function WorkstationFormDialog({
       hostname: "",
       autoLogoutMinutes: null,
       active: true,
+      fontScale: 100,
     },
   });
 
@@ -331,6 +332,7 @@ function WorkstationFormDialog({
           hostname: editingItem.hostname || "",
           autoLogoutMinutes: editingItem.autoLogoutMinutes ?? null,
           active: editingItem.active ?? true,
+          fontScale: editingItem.fontScale ?? 100,
         });
       } else {
         // Use EMC context property first, then fall back to first available property
@@ -358,6 +360,7 @@ function WorkstationFormDialog({
           hostname: "",
           autoLogoutMinutes: null,
           active: true,
+          fontScale: 100,
         });
       }
     }
@@ -676,6 +679,36 @@ function WorkstationFormDialog({
                         </FormControl>
                         <FormDescription className="text-xs">
                           Automatically sign out employee after this many minutes of inactivity. Unsent items will be cancelled. Set to 0 or leave empty to disable.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="fontScale"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Display Font Size</FormLabel>
+                        <Select
+                          onValueChange={(val) => field.onChange(parseInt(val, 10))}
+                          value={String(field.value ?? 100)}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-fontScale">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="85">Small (85%)</SelectItem>
+                            <SelectItem value="100">Medium (100%) - Default</SelectItem>
+                            <SelectItem value="120">Large (120%)</SelectItem>
+                            <SelectItem value="140">Extra Large (140%)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">
+                          Controls the text size on POS screens, check details, popups, and KDS tickets for this workstation. Use Large or Extra Large for smaller touchscreens.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

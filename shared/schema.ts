@@ -257,6 +257,7 @@ export const workstations = pgTable("workstations", {
   installedServices: text("installed_services").array(), // Services successfully installed
   deviceToken: text("device_token"), // Hashed token for device authentication
   registeredDeviceId: varchar("registered_device_id"), // Hardware ID of registered device
+  fontScale: integer("font_scale").default(100), // Display font scale percentage: 85=Small, 100=Medium, 120=Large, 140=Extra Large
 });
 
 // Printers (Physical print devices)
@@ -319,6 +320,8 @@ export const kdsDevices = pgTable("kds_devices", {
   colorAlert3Enabled: boolean("color_alert_3_enabled").default(true),
   colorAlert3Seconds: integer("color_alert_3_seconds").default(300), // After 5 minutes
   colorAlert3Color: text("color_alert_3_color").default("red"),
+  // Display
+  fontScale: integer("font_scale").default(100),
   // Network
   wsChannel: text("ws_channel"),
   ipAddress: text("ip_address"),
