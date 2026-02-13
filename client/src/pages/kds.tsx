@@ -12,7 +12,8 @@ import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
 import { useDeviceReload } from "@/hooks/use-device-reload";
 import { useConfigSync } from "@/hooks/use-config-sync";
 import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
-import { ArrowLeft, Settings, Wifi, WifiOff, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, Wifi, WifiOff, Maximize, Minimize, UtensilsCrossed } from "lucide-react";
+import type { Property, Enterprise } from "@shared/schema";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { useFontScale } from "@/hooks/use-font-scale";
 import { Link, Redirect, useLocation } from "wouter";
@@ -67,6 +68,12 @@ export default function KdsPage() {
   const [initialized, setInitialized] = useState(false);
   const [testTicketMessage, setTestTicketMessage] = useState<string | null>(null);
   const { isFullscreen, isSupported: fullscreenSupported, toggleFullscreen } = useFullscreen();
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Real-time sync for menu updates, employee changes, etc.
   usePosWebSocket();
@@ -108,6 +115,16 @@ export default function KdsPage() {
   const propertyId = isDedicatedKds 
     ? configuredKdsDevice?.propertyId 
     : currentRvc?.propertyId;
+
+  const { data: kdsProperty } = useQuery<Property>({
+    queryKey: ["/api/properties", propertyId],
+    enabled: !!propertyId,
+  });
+
+  const { data: kdsEnterprise } = useQuery<Enterprise>({
+    queryKey: ["/api/enterprises", kdsProperty?.enterpriseId],
+    enabled: !!kdsProperty?.enterpriseId,
+  });
 
   // Subscribe to KDS test ticket events (filtered by property)
   useEffect(() => {
@@ -188,11 +205,6 @@ export default function KdsPage() {
 
   const activeKdsDevice = isDedicatedKds ? configuredKdsDevice : selectedDevice;
   const fontScale = useFontScale((activeKdsDevice as any)?.fontScale);
-
-  const handleChangeDevice = () => {
-    clearDeviceConfig();
-    navigate("/device-type");
-  };
 
   const deviceSettings = selectedDevice ? {
     newOrderSound: selectedDevice.newOrderSound,
@@ -396,8 +408,8 @@ export default function KdsPage() {
     <DeviceEnrollmentGuard requiredDeviceType="kds_display">
     <div className={`flex flex-col ${fontScale.factor !== 1.0 ? '' : 'h-screen'}`} style={fontScale.factor !== 1.0 ? fontScale.style : undefined}>
       <ConnectionModeBanner />
-      <header className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <header className="flex-shrink-0 bg-card border-b px-3 py-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
           {!isDedicatedKds && (
             <Link href="/pos">
               <Button variant="ghost" size="icon" data-testid="button-back">
@@ -405,9 +417,25 @@ export default function KdsPage() {
               </Button>
             </Link>
           )}
-          <h1 className="text-xl font-semibold">
-            {isDedicatedKds && deviceName ? deviceName : "Kitchen Display"}
-          </h1>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
+              <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-base font-semibold leading-tight" data-testid="text-kds-title">
+                {kdsEnterprise?.name && (
+                  <span className="font-semibold">{kdsEnterprise.name} - </span>
+                )}
+                {isDedicatedKds && deviceName ? deviceName : "Kitchen Display"}
+                {currentRvc?.name && (
+                  <span className="text-muted-foreground font-normal"> - {currentRvc.name}</span>
+                )}
+              </span>
+              <span className="text-sm text-muted-foreground leading-tight" data-testid="text-kds-datetime">
+                {currentTime.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} {currentTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <Badge 
               variant={apiConnected === true ? "default" : apiConnected === false ? "destructive" : "secondary"}
@@ -440,15 +468,6 @@ export default function KdsPage() {
               {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </Button>
           )}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleChangeDevice}
-            title="Change Device Configuration"
-            data-testid="button-change-device"
-          >
-            <Settings className="w-4 h-4" />
-          </Button>
           <ThemeToggle />
         </div>
       </header>

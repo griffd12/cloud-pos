@@ -13,6 +13,7 @@ const { initAutoUpdater, getUpdateState } = require('./auto-updater.cjs');
 let mainWindow = null;
 let appMode = 'pos';
 let isKiosk = false;
+let autoStartupEnabled = false;
 let offlineDb = null;
 let enhancedOfflineDb = null;
 let offlineInterceptor = null;
@@ -55,6 +56,39 @@ function saveConfig(config) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
   } catch (e) {
     appLogger.error('Config', 'Failed to save config', e.message);
+  }
+}
+
+function configureAutoStartup(deviceMode) {
+  try {
+    if (process.platform === 'win32') {
+      const exePath = process.execPath;
+      const appName = deviceMode === 'kds' ? 'Cloud KDS' : 'Cloud POS';
+      app.setLoginItemSettings({
+        openAtLogin: true,
+        path: exePath,
+        name: appName,
+        args: deviceMode === 'kds' ? ['--mode=kds'] : ['--mode=pos'],
+      });
+      autoStartupEnabled = true;
+      appLogger.info('AutoStartup', `Registered "${appName}" for auto-startup on boot`, { exePath, mode: deviceMode });
+    } else {
+      appLogger.info('AutoStartup', 'Auto-startup on boot is only supported on Windows via Electron; Android uses Capacitor plugin');
+    }
+  } catch (e) {
+    appLogger.error('AutoStartup', 'Failed to configure auto-startup', e.message);
+  }
+}
+
+function removeAutoStartup() {
+  try {
+    if (process.platform === 'win32') {
+      app.setLoginItemSettings({ openAtLogin: false });
+      autoStartupEnabled = false;
+      appLogger.info('AutoStartup', 'Removed auto-startup registration');
+    }
+  } catch (e) {
+    appLogger.error('AutoStartup', 'Failed to remove auto-startup', e.message);
   }
 }
 
@@ -1290,6 +1324,7 @@ function setupIpcHandlers() {
       saveConfig(config);
       appLogger.info('Wizard', 'Setup wizard completed', { enterprise: wizardConfig.enterpriseName, property: wizardConfig.propertyName, mode: wizardConfig.mode, device: wizardConfig.deviceName });
       appMode = wizardConfig.mode;
+      configureAutoStartup(wizardConfig.mode);
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
@@ -1298,6 +1333,21 @@ function setupIpcHandlers() {
 
   ipcMain.handle('wizard-get-existing-config', async () => {
     return loadConfig();
+  });
+
+  ipcMain.handle('get-auto-startup-status', () => {
+    if (process.platform !== 'win32') return { supported: false, enabled: false };
+    const settings = app.getLoginItemSettings();
+    return { supported: true, enabled: settings.openAtLogin };
+  });
+
+  ipcMain.handle('set-auto-startup', (event, enabled) => {
+    if (enabled) {
+      configureAutoStartup(appMode);
+    } else {
+      removeAutoStartup();
+    }
+    return { success: true, enabled };
   });
 
   ipcMain.on('wizard-launch-app', async () => {

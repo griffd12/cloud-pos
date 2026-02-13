@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setServerUrl: (url) => ipcRenderer.invoke('set-server-url', url),
 
   setAutoLaunch: (enable) => ipcRenderer.invoke('set-auto-launch', enable),
+  getAutoStartupStatus: () => ipcRenderer.invoke('get-auto-startup-status'),
+  setAutoStartup: (enabled) => ipcRenderer.invoke('set-auto-startup', enabled),
 
   // === Print Agent API ===
   printAgent: {
