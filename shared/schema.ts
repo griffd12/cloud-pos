@@ -874,6 +874,10 @@ export const checks = pgTable("checks", {
   loyaltyPointsEarned: integer("loyalty_points_earned"), // Points earned on this check
   loyaltyPointsRedeemed: integer("loyalty_points_redeemed"), // Points redeemed on this check
   testMode: boolean("test_mode").default(false),
+  fulfillmentStatus: text("fulfillment_status"), // null for dine_in, 'received'|'in_progress'|'ready'|'picked_up'|'completed' for pickup/delivery
+  onlineOrderId: varchar("online_order_id"), // Links to online_orders table for delivery platform orders
+  customerName: text("customer_name"), // Customer name for pickup/delivery orders
+  platformSource: text("platform_source"), // 'ubereats', 'grubhub', 'doordash', null for non-platform orders
 });
 
 // Rounds (each send creates a round)

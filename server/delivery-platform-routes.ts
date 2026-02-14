@@ -63,6 +63,10 @@ async function autoInjectOrder(
       taxTotal: "0",
       total: "0",
       notes: `Online order from ${source.platform}: ${order.externalOrderId}`,
+      fulfillmentStatus: "received",
+      onlineOrderId: order.id,
+      customerName: order.customerName || null,
+      platformSource: source.platform || null,
     });
 
     const orderItems = Array.isArray(order.items) ? order.items : (typeof order.items === "string" ? JSON.parse(order.items) : []);

@@ -9,8 +9,11 @@ import path from "path";
 import archiver from "archiver";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, sql, inArray } from "drizzle-orm";
-import { emcUsers, enterprises, properties, employeeAssignments, configOverrides } from "@shared/schema";
+import { eq, ne, sql, inArray, and, desc } from "drizzle-orm";
+import { emcUsers, enterprises, properties, employeeAssignments, configOverrides, checks, onlineOrders, onlineOrderSources } from "@shared/schema";
+import { uberEatsIntegration } from "./integrations/uber-eats";
+import { grubhubIntegration } from "./integrations/grubhub";
+import { doorDashIntegration } from "./integrations/doordash";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { registerStressTestRoutes } from "./stressTest";
 import { registerOnboardingRoutes } from "./onboarding-import";
@@ -4197,6 +4200,144 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Get open checks error:", error);
       res.status(400).json({ message: "Failed to get open checks" });
+    }
+  });
+
+  app.get("/api/checks/orders", async (req, res) => {
+    try {
+      const rvcId = req.query.rvcId as string;
+      const orderType = req.query.orderType as string | undefined;
+      const statusFilter = req.query.statusFilter as string | undefined; // 'active' or 'completed'
+      if (!rvcId) {
+        return res.status(400).json({ message: "rvcId is required" });
+      }
+
+      const conditions: any[] = [eq(checks.rvcId, rvcId), ne(checks.testMode, true)];
+
+      if (orderType && orderType !== "all") {
+        conditions.push(eq(checks.orderType, orderType));
+      }
+
+      if (statusFilter === "completed") {
+        conditions.push(eq(checks.status, "closed"));
+      } else {
+        conditions.push(inArray(checks.status, ["open", "voided"]));
+      }
+
+      const allChecks = await db
+        .select()
+        .from(checks)
+        .where(and(...conditions))
+        .orderBy(statusFilter === "completed" ? desc(checks.closedAt) : desc(checks.openedAt))
+        .limit(statusFilter === "completed" ? 50 : 500);
+
+      const enrichedChecks = await Promise.all(
+        allChecks.map(async (check) => {
+          const items = await storage.getCheckItems(check.id);
+          const activeItems = items.filter((i: any) => !i.voided);
+          const rounds = await storage.getRounds(check.id);
+          const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+          let employeeName: string | null = null;
+          if (check.employeeId) {
+            const employee = await storage.getEmployee(check.employeeId);
+            if (employee) {
+              employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+            }
+          }
+          return {
+            ...check,
+            employeeName,
+            itemCount: activeItems.length,
+            unsentCount: activeItems.filter((i: any) => !i.sent).length,
+            roundCount: rounds.length,
+            lastRoundAt: lastRound?.sentAt || null,
+          };
+        })
+      );
+
+      res.json(enrichedChecks);
+    } catch (error) {
+      console.error("Get checks/orders error:", error);
+      res.status(400).json({ message: "Failed to get orders" });
+    }
+  });
+
+  app.patch("/api/checks/:id/fulfillment", async (req, res) => {
+    try {
+      const { fulfillmentStatus } = req.body;
+      const validStatuses = ["received", "in_progress", "ready", "picked_up", "completed"];
+      if (!validStatuses.includes(fulfillmentStatus)) {
+        return res.status(400).json({ message: "Invalid fulfillment status" });
+      }
+
+      const [updated] = await db
+        .update(checks)
+        .set({ fulfillmentStatus })
+        .where(eq(checks.id, req.params.id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ message: "Check not found" });
+      }
+
+      if (updated.onlineOrderId) {
+        try {
+          const [onlineOrder] = await db
+            .select()
+            .from(onlineOrders)
+            .where(eq(onlineOrders.id, updated.onlineOrderId))
+            .limit(1);
+
+          if (fulfillmentStatus === "ready") {
+            await db
+              .update(onlineOrders)
+              .set({ status: "ready", readyAt: new Date() })
+              .where(eq(onlineOrders.id, updated.onlineOrderId));
+          } else if (fulfillmentStatus === "picked_up" || fulfillmentStatus === "completed") {
+            await db
+              .update(onlineOrders)
+              .set({ status: "completed", pickedUpAt: new Date() })
+              .where(eq(onlineOrders.id, updated.onlineOrderId));
+          } else if (fulfillmentStatus === "in_progress") {
+            await db
+              .update(onlineOrders)
+              .set({ status: "preparing" })
+              .where(eq(onlineOrders.id, updated.onlineOrderId));
+          }
+
+          if (onlineOrder?.sourceId && (fulfillmentStatus === "ready")) {
+            try {
+              const [source] = await db
+                .select()
+                .from(onlineOrderSources)
+                .where(eq(onlineOrderSources.id, onlineOrder.sourceId))
+                .limit(1);
+
+              if (source) {
+                let integration: any = null;
+                switch (source.platform) {
+                  case "ubereats": case "uber_eats": integration = uberEatsIntegration; break;
+                  case "grubhub": integration = grubhubIntegration; break;
+                  case "doordash": integration = doorDashIntegration; break;
+                }
+                if (integration) {
+                  await integration.markReady(source, onlineOrder.externalOrderId);
+                  console.log(`[fulfillment] Notified ${source.platform} that order ${onlineOrder.externalOrderId} is ready`);
+                }
+              }
+            } catch (platformErr) {
+              console.error("[fulfillment] Failed to notify delivery platform:", platformErr);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to sync online order status:", err);
+        }
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update fulfillment status error:", error);
+      res.status(500).json({ message: "Failed to update fulfillment status" });
     }
   });
 
