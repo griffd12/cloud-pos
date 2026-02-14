@@ -50,7 +50,7 @@ import { useDeviceContext } from "@/lib/device-context";
 import type { Slu, MenuItem, Check, CheckItem, CheckPayment, ModifierGroup, Modifier, Tender, OrderType, TaxGroup, PosLayout, PosLayoutCell, Discount } from "@shared/schema";
 import { LogOut, User, Receipt, Clock, Settings, Search, Square, UtensilsCrossed, Plus, List, Grid3X3, CreditCard, Star, Wifi, WifiOff, X, Printer, Maximize, Minimize } from "lucide-react";
 import { useFullscreen } from "@/hooks/use-fullscreen";
-import { useFontScale } from "@/hooks/use-font-scale";
+import { useDocumentFontScale } from "@/hooks/use-font-scale";
 import { Link, Redirect, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -146,7 +146,7 @@ export default function PosPage() {
     staleTime: 60000,
   });
 
-  const fontScale = useFontScale(wsContext?.workstation?.fontScale);
+  const fontScale = useDocumentFontScale(wsContext?.workstation?.fontScale);
 
   // Auto-logout after inactivity - cancel unsent items and sign out
   useInactivityLogout({
@@ -1543,7 +1543,7 @@ export default function PosPage() {
 
   return (
     <DeviceEnrollmentGuard requiredDeviceType="pos_workstation">
-    <div className={`flex flex-col bg-background ${fontScale.factor !== 1.0 ? '' : 'h-screen'}`} style={fontScale.factor !== 1.0 ? fontScale.style : undefined}>
+    <div className="flex flex-col bg-background h-screen">
       {/* CAL Update Overlay - blocks POS during system updates */}
       <CalUpdateOverlay 
         updateStatus={calUpdateStatus} 

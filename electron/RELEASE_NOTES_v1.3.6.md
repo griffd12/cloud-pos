@@ -9,6 +9,11 @@
 - A persistent `autoStartupMigrated` flag in the local config prevents the migration from running on every launch
 - All migration activity is logged to the unified system log for troubleshooting
 
+## Enhanced Font Scaling Coverage
+- **Font scale now applies at the document level** instead of a container div, so all portaled overlays (modifier popups, pizza builder, function screen, gift cards, loyalty panels, open checks dialogs) automatically inherit the workstation's configured font size
+- Applies to both POS and KDS pages via a new `useDocumentFontScale` hook that sets CSS zoom on `document.documentElement`
+- Cleanup is automatic — navigating away from POS/KDS restores normal zoom
+
 ## Bug Fixes
 
 ### Fixed: "Configuration Error" Flash on POS Login
