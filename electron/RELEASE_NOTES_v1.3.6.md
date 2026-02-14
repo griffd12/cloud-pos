@@ -9,10 +9,14 @@
 - A persistent `autoStartupMigrated` flag in the local config prevents the migration from running on every launch
 - All migration activity is logged to the unified system log for troubleshooting
 
-## Enhanced Font Scaling Coverage
-- **Font scale now applies at the document level** instead of a container div, so all portaled overlays (modifier popups, pizza builder, function screen, gift cards, loyalty panels, open checks dialogs) automatically inherit the workstation's configured font size
-- Applies to both POS and KDS pages via a new `useDocumentFontScale` hook that sets CSS zoom on `document.documentElement`
-- Cleanup is automatic — navigating away from POS/KDS restores normal zoom
+## Enhanced Font Scaling & POS Layout
+- **Font scaling redesigned**: Replaced CSS zoom with **root font-size scaling** — text scales via rem units while layout dimensions (buttons, grids, spacing) stay fixed, preventing overflow and scrolling at all scale levels (Small 85%, Medium 100%, Large 120%, Extra Large 140%)
+- **POS page locked to 100vh** — no scrolling at any font scale level; the entire POS interface always fits on screen
+- **Page Up / Page Down pagination** added to the standard SLU menu item grid — when items exceed the available space, pagination buttons appear at the bottom instead of scrolling
+- **Custom grid layouts auto-size**: Grid buttons now use CSS grid `1fr` row heights so they dynamically stretch to fill all available vertical space, ensuring all configured keys are always visible without scrolling
+- All portaled overlays (modifier popups, pizza builder, function screen, gift cards, loyalty panels, open checks dialogs) automatically inherit the workstation's configured font size via rem-based Tailwind classes
+- Applies to both POS and KDS pages via `useDocumentFontScale` hook that sets root font-size on `document.documentElement`
+- Cleanup is automatic — navigating away from POS/KDS restores normal font size
 
 ## Bug Fixes
 
