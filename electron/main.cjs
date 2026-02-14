@@ -373,7 +373,10 @@ function createWindow() {
   };
 
   mainWindow = new BrowserWindow(windowConfig);
-  appLogger.info('Window', needsSetup ? 'Opening setup wizard' : `Launching ${appMode.toUpperCase()} mode`, { kiosk: isKiosk });
+  if (!needsSetup && !isKiosk) {
+    mainWindow.maximize();
+  }
+  appLogger.info('Window', needsSetup ? 'Opening setup wizard' : `Launching ${appMode.toUpperCase()} mode`, { kiosk: isKiosk, maximized: !needsSetup && !isKiosk });
 
   if (needsSetup) {
     mainWindow.loadFile(path.join(__dirname, 'setup-wizard.html'));
@@ -1419,11 +1422,14 @@ function setupIpcHandlers() {
 
     const newWindow = new BrowserWindow(windowConfig);
     mainWindow = newWindow;
+    if (!isKiosk) {
+      mainWindow.maximize();
+    }
 
     const serverUrl = config.serverUrl || getServerUrl();
     const startPath = appMode === 'kds' ? '/kds' : '/';
     const targetUrl = `${serverUrl}${startPath}`;
-    appLogger.info('Wizard', `Post-wizard loading URL: ${targetUrl}`);
+    appLogger.info('Wizard', `Post-wizard loading URL: ${targetUrl}`, { maximized: !isKiosk });
 
     const loadingHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cloud POS</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1729;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
