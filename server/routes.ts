@@ -13,6 +13,7 @@ import { eq, sql, inArray } from "drizzle-orm";
 import { emcUsers, enterprises, properties, employeeAssignments, configOverrides } from "@shared/schema";
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { registerStressTestRoutes } from "./stressTest";
+import { registerOnboardingRoutes } from "./onboarding-import";
 import { resolveBusinessDate, calculateBusinessDateFromTime, getLocalDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
@@ -22735,6 +22736,7 @@ connect();
   });
 
   registerStressTestRoutes(app, storage);
+  registerOnboardingRoutes(app);
 
   return httpServer;
 }

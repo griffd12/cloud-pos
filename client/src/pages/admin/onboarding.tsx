@@ -1,12 +1,16 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { getAuthHeaders } from "@/lib/queryClient";
 import {
   CheckCircle2,
   Circle,
@@ -26,6 +30,12 @@ import {
   Download,
   FileText,
   Rocket,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
+  Loader2,
+  ChevronRight,
+  Table2,
 } from "lucide-react";
 
 interface ChecklistItem {
@@ -444,27 +454,43 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <CardTitle className="text-base">Overall Progress</CardTitle>
-              <CardDescription>
-                {completedItems} of {totalItems} tasks completed
-              </CardDescription>
-            </div>
-            <Badge variant={progressPercent === 100 ? "default" : "secondary"}>
-              {progressPercent}%
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Progress value={progressPercent} className="h-3" />
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="checklist" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="checklist" data-testid="tab-checklist">
+            <FileText className="w-4 h-4 mr-2" />
+            Installation Checklist
+          </TabsTrigger>
+          <TabsTrigger value="import" data-testid="tab-import">
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Data Import
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="space-y-6">
-        {categories.map((category) => {
+        <TabsContent value="import" className="space-y-6 mt-6">
+          <DataImportSection />
+        </TabsContent>
+
+        <TabsContent value="checklist" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="text-base">Overall Progress</CardTitle>
+                  <CardDescription>
+                    {completedItems} of {totalItems} tasks completed
+                  </CardDescription>
+                </div>
+                <Badge variant={progressPercent === 100 ? "default" : "secondary"}>
+                  {progressPercent}%
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Progress value={progressPercent} className="h-3" />
+            </CardContent>
+          </Card>
+
+          {categories.map((category) => {
           const categoryItems = checklistItems.filter((item) => item.category === category);
           const categoryCompleted = categoryItems.filter((item) => isItemChecked(item)).length;
           const CategoryIcon = getCategoryIcon(category);
@@ -535,7 +561,261 @@ export default function OnboardingPage() {
             </Card>
           );
         })}
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
+  );
+}
+
+interface PhaseInfo {
+  phase: number;
+  sheetName: string;
+  columns: { header: string; required: boolean; description: string | null; lookupSheet: string | null }[];
+}
+
+interface ImportResult {
+  phase: number;
+  inserted: number;
+  errors: string[];
+  total: number;
+  success: boolean;
+}
+
+const PHASE_COLORS: Record<number, string> = {
+  1: "bg-blue-500", 2: "bg-blue-500", 3: "bg-blue-500",
+  4: "bg-green-500", 5: "bg-green-500", 6: "bg-green-500", 7: "bg-green-500",
+  8: "bg-emerald-500", 9: "bg-emerald-500",
+  10: "bg-amber-500", 11: "bg-amber-500", 12: "bg-amber-500", 13: "bg-amber-500",
+  14: "bg-orange-500", 15: "bg-orange-500", 16: "bg-orange-500",
+  17: "bg-orange-500", 18: "bg-orange-500",
+  19: "bg-red-500",
+  20: "bg-indigo-500",
+};
+
+const PHASE_GROUPS = [
+  { label: "Organization", phases: [1, 2, 3], icon: Building2 },
+  { label: "Financial", phases: [4, 5, 6, 7], icon: CreditCard },
+  { label: "Labor", phases: [8, 9], icon: Users },
+  { label: "Devices", phases: [10, 11, 12, 13], icon: Printer },
+  { label: "Menu Structure", phases: [14, 15, 16], icon: LayoutGrid },
+  { label: "Modifiers", phases: [17, 18], icon: Table2 },
+  { label: "Menu Items", phases: [19], icon: UtensilsCrossed },
+  { label: "Employees", phases: [20], icon: Users },
+];
+
+function DataImportSection() {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [importingPhase, setImportingPhase] = useState<number | null>(null);
+  const [importResults, setImportResults] = useState<Record<number, ImportResult>>({});
+
+  const { data: phases = [] } = useQuery<PhaseInfo[]>({
+    queryKey: ["/api/onboarding/phases"],
+  });
+
+  const downloadTemplate = async () => {
+    setDownloading(true);
+    try {
+      const response = await fetch("/api/onboarding/templates", { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error("Failed to download template");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "OnPoint_POS_Onboarding_Templates.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Template Downloaded", description: "Open in Excel, fill in your data, then upload each tab back here." });
+    } catch (err) {
+      toast({ title: "Download Failed", description: "Could not download the template file.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleFileUpload = async (phase: number, file: File) => {
+    setImportingPhase(phase);
+    try {
+      const buffer = await file.arrayBuffer();
+      const response = await fetch(`/api/onboarding/import/${phase}`, {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/octet-stream",
+        },
+        body: buffer,
+      });
+      const result: ImportResult = await response.json();
+      setImportResults((prev) => ({ ...prev, [phase]: result }));
+      if (result.success) {
+        toast({ title: "Import Successful", description: `Imported ${result.inserted} records for ${phases.find((p) => p.phase === phase)?.sheetName || `Phase ${phase}`}` });
+      } else {
+        toast({
+          title: `Imported ${result.inserted} of ${result.total}`,
+          description: result.errors.length > 0 ? result.errors[0] : "Some rows had errors",
+          variant: result.inserted > 0 ? "default" : "destructive",
+        });
+      }
+    } catch (err) {
+      toast({ title: "Import Failed", description: "Could not process the uploaded file.", variant: "destructive" });
+    } finally {
+      setImportingPhase(null);
+    }
+  };
+
+  const triggerUpload = (phase: number) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx,.csv";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) handleFileUpload(phase, file);
+    };
+    input.click();
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FileSpreadsheet className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Data Import Templates</CardTitle>
+                <CardDescription>
+                  Download the Excel workbook, fill in your data, and upload each tab to build your database
+                </CardDescription>
+              </div>
+            </div>
+            <Button onClick={downloadTemplate} disabled={downloading} data-testid="button-download-template">
+              {downloading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              Download Excel Template
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+            <p className="text-sm font-medium">How it works:</p>
+            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+              <li>Download the Excel template — it has 20 tabs in dependency order</li>
+              <li>Fill in your data starting from Tab 1 (Enterprise) through Tab 20 (Employees)</li>
+              <li>Lookup fields have dropdown menus that pull from earlier tabs</li>
+              <li>Upload each completed tab below in order — the system validates and imports</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
+
+      {PHASE_GROUPS.map((group) => {
+        const GroupIcon = group.icon;
+        const groupPhases = phases.filter((p) => group.phases.includes(p.phase));
+        const allCompleted = group.phases.every((ph) => importResults[ph]?.success);
+
+        return (
+          <Card key={group.label}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <GroupIcon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">{group.label}</CardTitle>
+                    <CardDescription>
+                      {group.phases.length === 1 ? "1 tab" : `${group.phases.length} tabs`} to import
+                    </CardDescription>
+                  </div>
+                </div>
+                {allCompleted && (
+                  <Badge variant="default" className="bg-green-600">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Imported
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Separator className="mb-4" />
+              <div className="space-y-3">
+                {groupPhases.map((phaseInfo) => {
+                  const result = importResults[phaseInfo.phase];
+                  const isImporting = importingPhase === phaseInfo.phase;
+                  const lookupCols = phaseInfo.columns.filter((c) => c.lookupSheet);
+
+                  return (
+                    <div
+                      key={phaseInfo.phase}
+                      className="flex items-center gap-3 p-3 rounded-lg border bg-card hover-elevate"
+                    >
+                      <div className={`w-8 h-8 rounded-full ${PHASE_COLORS[phaseInfo.phase] || "bg-gray-500"} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                        {phaseInfo.phase}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{phaseInfo.sheetName}</span>
+                          {result?.success && (
+                            <Badge variant="outline" className="text-green-600 border-green-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              {result.inserted} imported
+                            </Badge>
+                          )}
+                          {result && !result.success && result.inserted > 0 && (
+                            <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              {result.inserted}/{result.total}
+                            </Badge>
+                          )}
+                          {result && !result.success && result.inserted === 0 && (
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              Failed
+                            </Badge>
+                          )}
+                        </div>
+                        {lookupCols.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Links to: {lookupCols.map((c) => c.lookupSheet).filter((v, i, a) => a.indexOf(v) === i).join(", ")}
+                          </p>
+                        )}
+                        {result?.errors && result.errors.length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {result.errors.slice(0, 3).map((err, i) => (
+                              <p key={i} className="text-xs text-destructive">{err}</p>
+                            ))}
+                            {result.errors.length > 3 && (
+                              <p className="text-xs text-muted-foreground">...and {result.errors.length - 3} more errors</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => triggerUpload(phaseInfo.phase)}
+                        disabled={isImporting}
+                        data-testid={`button-upload-phase-${phaseInfo.phase}`}
+                      >
+                        {isImporting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-1" />
+                            Upload
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </>
   );
 }
