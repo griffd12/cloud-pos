@@ -9,6 +9,15 @@
 - A persistent `autoStartupMigrated` flag in the local config prevents the migration from running on every launch
 - All migration activity is logged to the unified system log for troubleshooting
 
+## Bug Fixes
+
+### Fixed: "Configuration Error" Flash on POS Login
+- Fixed a brief "This workstation does not have an RVC assigned" error message that flashed on screen for a split second when signing into a workstation
+- The error appeared even when the workstation had a valid RVC assigned in the EMC
+- **Root cause**: A timing race condition in the login screen — the workstation data loaded correctly but the RVC selection state hadn't updated yet, causing the error to display for one render frame before disappearing
+- The fix checks the workstation's RVC assignment directly from the loaded data, preventing the false error from ever appearing
+- Affects all workstations across all properties and enterprises
+
 ## Server & Database Changes
 
 ### Customer Onboarding Data Import
