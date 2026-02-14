@@ -23,7 +23,7 @@ import {
   offlineOrderQueue, fiscalPeriods, cashDrawers, drawerAssignments, cashTransactions, safeCounts,
   giftCards, giftCardTransactions, glMappings, accountingExports,
   loyaltyPrograms, loyaltyMembers, loyaltyTransactions, loyaltyRewards, loyaltyRedemptions,
-  onlineOrderSources, onlineOrders, inventoryItems, inventoryStock, inventoryTransactions, recipes,
+  onlineOrderSources, onlineOrders, deliveryPlatformItemMappings, inventoryItems, inventoryStock, inventoryTransactions, recipes,
   salesForecasts, laborForecasts, managerAlerts, alertSubscriptions, itemAvailability, prepItems,
   type Enterprise, type InsertEnterprise,
   type Property, type InsertProperty,
@@ -132,6 +132,7 @@ import {
   type LoyaltyRedemption, type InsertLoyaltyRedemption,
   type OnlineOrderSource, type InsertOnlineOrderSource,
   type OnlineOrder, type InsertOnlineOrder,
+  type DeliveryPlatformItemMapping, type InsertDeliveryPlatformItemMapping,
   type InventoryItem, type InsertInventoryItem,
   type InventoryStock, type InsertInventoryStock,
   type InventoryTransaction, type InsertInventoryTransaction,
@@ -5502,6 +5503,44 @@ export class DatabaseStorage implements IStorage {
   async updateOnlineOrder(id: string, data: Partial<InsertOnlineOrder>): Promise<OnlineOrder | undefined> {
     const [result] = await db.update(onlineOrders).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(onlineOrders.id, id)).returning();
     return result;
+  }
+
+  async getOnlineOrderSource(id: string): Promise<OnlineOrderSource | undefined> {
+    const [result] = await db.select().from(onlineOrderSources).where(eq(onlineOrderSources.id, id));
+    return result;
+  }
+
+  async updateOnlineOrderSource(id: string, data: Partial<InsertOnlineOrderSource>): Promise<OnlineOrderSource | undefined> {
+    const [result] = await db.update(onlineOrderSources).set({ ...sanitizeDates(data), updatedAt: new Date() }).where(eq(onlineOrderSources.id, id)).returning();
+    return result;
+  }
+
+  async deleteOnlineOrderSource(id: string): Promise<boolean> {
+    const result = await db.delete(onlineOrderSources).where(eq(onlineOrderSources.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async getOnlineOrderSourcesByPlatform(platform: string): Promise<OnlineOrderSource[]> {
+    return db.select().from(onlineOrderSources).where(and(eq(onlineOrderSources.platform, platform), eq(onlineOrderSources.active, true)));
+  }
+
+  async getOnlineOrderByExternalId(externalOrderId: string, sourceId: string): Promise<OnlineOrder | undefined> {
+    const [result] = await db.select().from(onlineOrders).where(and(eq(onlineOrders.externalOrderId, externalOrderId), eq(onlineOrders.sourceId, sourceId)));
+    return result;
+  }
+
+  async getDeliveryPlatformItemMappings(sourceId: string): Promise<DeliveryPlatformItemMapping[]> {
+    return db.select().from(deliveryPlatformItemMappings).where(eq(deliveryPlatformItemMappings.sourceId, sourceId));
+  }
+
+  async createDeliveryPlatformItemMapping(data: InsertDeliveryPlatformItemMapping): Promise<DeliveryPlatformItemMapping> {
+    const [result] = await db.insert(deliveryPlatformItemMappings).values(sanitizeDates(data)).returning();
+    return result;
+  }
+
+  async deleteDeliveryPlatformItemMapping(id: string): Promise<boolean> {
+    const result = await db.delete(deliveryPlatformItemMappings).where(eq(deliveryPlatformItemMappings.id, id));
+    return (result.rowCount || 0) > 0;
   }
 
   // ============================================================================

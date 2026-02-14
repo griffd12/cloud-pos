@@ -2864,18 +2864,60 @@ export type OrderSource = typeof ORDER_SOURCES[number];
 export const ONLINE_ORDER_STATUSES = ["received", "confirmed", "preparing", "ready", "picked_up", "delivered", "cancelled", "refunded"] as const;
 export type OnlineOrderStatus = typeof ONLINE_ORDER_STATUSES[number];
 
+export const DELIVERY_PLATFORMS = ["ubereats", "grubhub", "doordash", "direct", "other"] as const;
+export type DeliveryPlatform = typeof DELIVERY_PLATFORMS[number];
+
+export const MENU_SYNC_STATUSES = ["not_synced", "syncing", "synced", "error"] as const;
+export type MenuSyncStatus = typeof MENU_SYNC_STATUSES[number];
+
 export const onlineOrderSources = pgTable("online_order_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
-  sourceName: text("source_name").notNull(), // doordash, ubereats, website, etc.
-  sourceType: text("source_type").notNull(), // marketplace, direct, phone
-  apiKeyPrefix: text("api_key_prefix"), // For API credentials (actual stored in secrets)
+  sourceName: text("source_name").notNull(),
+  sourceType: text("source_type").notNull(),
+  platform: text("platform").notNull().default("other"),
+  clientId: text("client_id"),
+  clientSecret: text("client_secret"),
+  merchantStoreId: text("merchant_store_id"),
+  webhookSecret: text("webhook_secret"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  apiKeyPrefix: text("api_key_prefix"),
   webhookUrl: text("webhook_url"),
   autoAccept: boolean("auto_accept").default(false),
+  autoInject: boolean("auto_inject").default(false),
   autoConfirmMinutes: integer("auto_confirm_minutes").default(5),
+  defaultPrepMinutes: integer("default_prep_minutes").default(15),
   defaultRvcId: varchar("default_rvc_id").references(() => rvcs.id),
-  menuMappings: jsonb("menu_mappings"), // Maps external item IDs to local menu item IDs
+  defaultOrderType: text("default_order_type").default("delivery"),
+  menuMappings: jsonb("menu_mappings"),
+  menuSyncStatus: text("menu_sync_status").default("not_synced"),
+  lastMenuSyncAt: timestamp("last_menu_sync_at"),
+  menuSyncError: text("menu_sync_error"),
   commissionPercent: decimal("commission_percent", { precision: 5, scale: 2 }),
+  connectionStatus: text("connection_status").default("disconnected"),
+  lastConnectionTest: timestamp("last_connection_test"),
+  soundEnabled: boolean("sound_enabled").default(true),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const deliveryPlatformItemMappings = pgTable("delivery_platform_item_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").notNull().references(() => onlineOrderSources.id),
+  externalItemId: text("external_item_id").notNull(),
+  externalItemName: text("external_item_name"),
+  localMenuItemId: varchar("local_menu_item_id").references(() => menuItems.id),
+  localMenuItemName: text("local_menu_item_name"),
+  externalModifierGroupId: text("external_modifier_group_id"),
+  localModifierGroupId: varchar("local_modifier_group_id"),
+  externalModifierId: text("external_modifier_id"),
+  localModifierId: varchar("local_modifier_id"),
+  mappingType: text("mapping_type").notNull().default("menu_item"),
+  priceOverride: decimal("price_override", { precision: 10, scale: 2 }),
   active: boolean("active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -2922,13 +2964,16 @@ export const onlineOrders = pgTable("online_orders", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertOnlineOrderSourceSchema = createInsertSchema(onlineOrderSources).omit({ id: true, createdAt: true });
+export const insertOnlineOrderSourceSchema = createInsertSchema(onlineOrderSources).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertOnlineOrderSchema = createInsertSchema(onlineOrders).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDeliveryPlatformItemMappingSchema = createInsertSchema(deliveryPlatformItemMappings).omit({ id: true, createdAt: true });
 
 export type OnlineOrderSource = typeof onlineOrderSources.$inferSelect;
 export type InsertOnlineOrderSource = z.infer<typeof insertOnlineOrderSourceSchema>;
 export type OnlineOrder = typeof onlineOrders.$inferSelect;
 export type InsertOnlineOrder = z.infer<typeof insertOnlineOrderSchema>;
+export type DeliveryPlatformItemMapping = typeof deliveryPlatformItemMappings.$inferSelect;
+export type InsertDeliveryPlatformItemMapping = z.infer<typeof insertDeliveryPlatformItemMappingSchema>;
 
 // ============================================================================
 // PHASE 3: INVENTORY MANAGEMENT

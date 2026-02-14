@@ -14,6 +14,7 @@ import { emcUsers, enterprises, properties, employeeAssignments, configOverrides
 import { resolveKdsTargetsForMenuItem, getActiveKdsDevices, getKdsStationTypes, getOrderDeviceSendMode } from "./kds-routing";
 import { registerStressTestRoutes } from "./stressTest";
 import { registerOnboardingRoutes } from "./onboarding-import";
+import { registerDeliveryPlatformRoutes } from "./delivery-platform-routes";
 import { resolveBusinessDate, calculateBusinessDateFromTime, getLocalDate, isValidBusinessDateFormat, incrementDate } from "./businessDate";
 import {
   insertEnterpriseSchema, insertPropertySchema, insertRvcSchema, insertRoleSchema,
@@ -18852,6 +18853,36 @@ connect();
     }
   });
 
+  app.put("/api/online-order-sources/:id", async (req, res) => {
+    try {
+      const source = await storage.updateOnlineOrderSource(req.params.id, req.body);
+      if (!source) return res.status(404).json({ message: "Source not found" });
+      res.json(source);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update online order source" });
+    }
+  });
+
+  app.patch("/api/online-order-sources/:id", async (req, res) => {
+    try {
+      const source = await storage.updateOnlineOrderSource(req.params.id, req.body);
+      if (!source) return res.status(404).json({ message: "Source not found" });
+      res.json(source);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update online order source" });
+    }
+  });
+
+  app.delete("/api/online-order-sources/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteOnlineOrderSource(req.params.id);
+      if (!deleted) return res.status(404).json({ message: "Source not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete online order source" });
+    }
+  });
+
   app.get("/api/online-orders", async (req, res) => {
     try {
       const { propertyId, status, startDate, endDate } = req.query;
@@ -22737,6 +22768,7 @@ connect();
 
   registerStressTestRoutes(app, storage);
   registerOnboardingRoutes(app);
+  registerDeliveryPlatformRoutes(app, storage, broadcastPosEvent, calculateTaxSnapshot, recalculateCheckTotals);
 
   return httpServer;
 }
