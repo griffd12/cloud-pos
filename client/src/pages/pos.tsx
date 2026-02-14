@@ -11,7 +11,6 @@ import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
 import { ConnectionModeBanner } from "@/components/connection-mode-banner";
 import { CalUpdateOverlay } from "@/components/cal-update-overlay";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { SluGrid } from "@/components/pos/slu-grid";
 import { MenuItemGrid } from "@/components/pos/menu-item-grid";
@@ -1644,14 +1643,13 @@ export default function PosPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {activeLayout?.mode === "custom_grid" && layoutCells.length > 0 ? (
             <>
-              <ScrollArea className="flex-1">
-                <div
-                  className="grid gap-2 p-4"
-                  style={{
-                    gridTemplateColumns: `repeat(${activeLayout.gridCols || 6}, minmax(80px, 1fr))`,
-                    gridTemplateRows: `repeat(${activeLayout.gridRows || 4}, 80px)`,
-                  }}
-                >
+              <div
+                className="flex-1 grid gap-2 p-4 overflow-hidden"
+                style={{
+                  gridTemplateColumns: `repeat(${activeLayout.gridCols || 6}, minmax(0, 1fr))`,
+                  gridTemplateRows: `repeat(${activeLayout.gridRows || 4}, 1fr)`,
+                }}
+              >
                   {layoutCells.map((cell) => {
                     const menuItem = allMenuItems.find(m => m.id === cell.menuItemId);
                     if (!menuItem) return null;
@@ -1719,7 +1717,7 @@ export default function PosPage() {
                         }}
                       >
                         <Button
-                          className={`h-full w-full flex flex-col items-center justify-center font-medium ${fontSizeClasses[layoutFontSize]} ${is86ed ? "opacity-60" : ""}`}
+                          className={`h-full w-full flex flex-col items-center justify-center font-medium overflow-hidden ${fontSizeClasses[layoutFontSize]} ${is86ed ? "opacity-60" : ""}`}
                           style={{
                             backgroundColor: cell.backgroundColor || "#3B82F6",
                             color: cell.textColor || "#FFFFFF",
@@ -1757,7 +1755,6 @@ export default function PosPage() {
                     );
                   })}
                 </div>
-              </ScrollArea>
 
               <div className="flex-shrink-0 border-t bg-card p-2">
                 <div className="flex gap-2 flex-wrap">
@@ -1894,13 +1891,11 @@ export default function PosPage() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 bg-background">
-                <MenuItemGrid
-                  items={[...menuItems].sort((a, b) => a.name.localeCompare(b.name))}
-                  onSelectItem={handleSelectItem}
-                  isLoading={itemsLoading && !!selectedSlu}
-                />
-              </ScrollArea>
+              <MenuItemGrid
+                items={[...menuItems].sort((a, b) => a.name.localeCompare(b.name))}
+                onSelectItem={handleSelectItem}
+                isLoading={itemsLoading && !!selectedSlu}
+              />
 
               {currentRvc?.conversationalOrderingEnabled && conversationalOrderItem && (
                 <HorizontalCOMPanel

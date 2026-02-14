@@ -16,7 +16,7 @@ export function useFontScale(fontScale?: number | null) {
       factor,
       label: entry.label,
       percent: scale,
-      style: factor !== 1.0 ? { zoom: factor, height: `${100 / factor}vh`, width: `${100 / factor}vw` } as React.CSSProperties : {} as React.CSSProperties,
+      style: {} as React.CSSProperties,
     };
   }, [fontScale]);
 }
@@ -26,15 +26,12 @@ export function useDocumentFontScale(fontScale?: number | null) {
 
   useEffect(() => {
     const el = document.documentElement;
+    const baseFontSize = 16;
     if (scale.factor !== 1.0) {
-      el.style.zoom = String(scale.factor);
-      el.style.height = `${100 / scale.factor}vh`;
-      el.style.width = `${100 / scale.factor}vw`;
+      el.style.fontSize = `${baseFontSize * scale.factor}px`;
     }
     return () => {
-      el.style.zoom = "";
-      el.style.height = "";
-      el.style.width = "";
+      el.style.fontSize = "";
     };
   }, [scale.factor]);
 
