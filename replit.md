@@ -55,6 +55,7 @@ Preferred communication style: Simple, everyday language.
 - **Auto-Startup on Boot (Windows)**: Setup Wizard registers the correct application (POS or KDS) for auto-launch on Windows boot using Electron's `setLoginItemSettings`. IPC handlers for querying/toggling status (`get-auto-startup-status`, `set-auto-startup`).
 - **KDS Header Bar Enhancement**: KDS header displays enterprise name, device name, current date/time, and RVC name — matching the POS header layout. Uses property/enterprise queries for context.
 - **KDS Settings Icon Removed**: Gear/Settings icon removed from KDS to prevent access to device configuration during normal operation.
+- **Customer Onboarding Data Import**: Excel-based bulk data import system with 20 tabs covering all database entities in dependency order (Enterprise → Properties → RVCs → Tax Groups → Tenders → Discounts → Service Charges → Roles → Job Codes → Printers → KDS Devices → Order Devices → Print Classes → Major Groups → Family Groups → SLUs → Modifier Groups → Modifiers → Menu Items → Employees). Template includes cross-sheet data validation dropdowns for lookup fields. Import API supports CSV, JSON, and XLSX uploads with foreign key resolution. UI in EMC Onboarding page with tabbed interface. Implemented in `server/onboarding-import.ts`.
 
 ## External Dependencies
 
