@@ -239,23 +239,28 @@ export function POSReportsModal({
     }
   };
 
+  const isSingleDay = fromDate === toDate;
+  const dateQueryParams = isSingleDay
+    ? `businessDate=${fromDate}`
+    : `startDate=${fromDate}&endDate=${toDate}`;
+
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: [`/api/employees?rvcId=${rvcId}`],
     enabled: open,
   });
 
   const { data: salesSummary } = useQuery<SalesSummary>({
-    queryKey: [`/api/reports/sales-summary?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
+    queryKey: [`/api/reports/sales-summary?rvcId=${rvcId}&${dateQueryParams}`],
     enabled: open && !!rvcId,
   });
 
   const { data: tenderBreakdown } = useQuery<TenderBreakdown[]>({
-    queryKey: [`/api/reports/tender-mix?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
+    queryKey: [`/api/reports/tender-mix?rvcId=${rvcId}&${dateQueryParams}`],
     enabled: open && !!rvcId && activeTab === "tender",
   });
 
   const { data: employeeBalances } = useQuery<{ employees: EmployeeBalance[] }>({
-    queryKey: [`/api/reports/employee-balance?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
+    queryKey: [`/api/reports/employee-balance?rvcId=${rvcId}&${dateQueryParams}`],
     enabled: open && !!rvcId && (activeTab === "employee-balance" || activeTab === "system-balance"),
   });
 
@@ -265,12 +270,12 @@ export function POSReportsModal({
   });
 
   const { data: closedChecksData } = useQuery<{ checks: ClosedCheck[] }>({
-    queryKey: [`/api/reports/closed-checks?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
+    queryKey: [`/api/reports/closed-checks?rvcId=${rvcId}&${dateQueryParams}`],
     enabled: open && !!rvcId && activeTab === "closed-checks",
   });
 
   const { data: menuItemSales } = useQuery<{ items: MenuItemSale[] }>({
-    queryKey: [`/api/reports/menu-item-sales?rvcId=${rvcId}&startDate=${fromDate}&endDate=${toDate}`],
+    queryKey: [`/api/reports/menu-item-sales?rvcId=${rvcId}&${dateQueryParams}`],
     enabled: open && !!rvcId && activeTab === "menu-items",
   });
 
