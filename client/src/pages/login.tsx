@@ -750,7 +750,7 @@ export default function LoginPage() {
             )}
 
             {/* Show error if no RVC is configured for this workstation */}
-            {!selectedRvcId && !rvcsLoading && workstationId && (
+            {!selectedRvcId && !rvcsLoading && workstationId && !wsContext?.workstation?.rvcId && (
               <Card className="border-destructive">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-medium flex items-center gap-2 text-destructive">
