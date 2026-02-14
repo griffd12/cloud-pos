@@ -92,6 +92,36 @@ function removeAutoStartup() {
   }
 }
 
+function migrateAutoStartup(config) {
+  try {
+    if (process.platform !== 'win32') return;
+    if (!config.setupComplete) return;
+    if (config.autoStartupMigrated) return;
+
+    const settingsBefore = app.getLoginItemSettings();
+    if (settingsBefore.openAtLogin) {
+      appLogger.info('AutoStartup', 'Auto-startup already registered, marking migration complete');
+      config.autoStartupMigrated = true;
+      saveConfig(config);
+      return;
+    }
+
+    const deviceMode = config.mode || 'pos';
+    configureAutoStartup(deviceMode);
+
+    const settingsAfter = app.getLoginItemSettings();
+    if (settingsAfter.openAtLogin) {
+      config.autoStartupMigrated = true;
+      saveConfig(config);
+      appLogger.info('AutoStartup', `Upgrade migration: enabled auto-startup for existing "${deviceMode}" workstation`, { device: config.deviceName || 'unknown' });
+    } else {
+      appLogger.warn('AutoStartup', 'Upgrade migration: auto-startup registration could not be confirmed, will retry on next launch');
+    }
+  } catch (e) {
+    appLogger.error('AutoStartup', 'Auto-startup upgrade migration failed — will retry on next launch', e.message);
+  }
+}
+
 const DEFAULT_SERVER_URL = 'https://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev';
 
 function getServerUrl() {
@@ -1325,6 +1355,11 @@ function setupIpcHandlers() {
       appLogger.info('Wizard', 'Setup wizard completed', { enterprise: wizardConfig.enterpriseName, property: wizardConfig.propertyName, mode: wizardConfig.mode, device: wizardConfig.deviceName });
       appMode = wizardConfig.mode;
       configureAutoStartup(wizardConfig.mode);
+      const startupSettings = app.getLoginItemSettings();
+      if (startupSettings.openAtLogin) {
+        config.autoStartupMigrated = true;
+        saveConfig(config);
+      }
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
@@ -1951,6 +1986,7 @@ app.whenReady().then(async () => {
 
   if (config.setupComplete) {
     appLogger.info('App', 'Setup previously completed, initializing all services');
+    migrateAutoStartup(config);
     await initAllServices();
   } else {
     appLogger.info('App', 'Setup not yet completed, launching Setup Wizard only (no services initialized)');
