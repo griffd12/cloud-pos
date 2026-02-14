@@ -1,0 +1,46 @@
+Access Token
+To access Uber endpoints, an application requires access to the associated scope.
+Scopes are categorized based on OAuth Grant into two types:
+Authorization Code - To access a single user data or complete tasks on their behalf
+Client Credential - Authorize the application itself to perform certain tasks in the API
+Once scopes are granted, use the below Integration Steps based on OAuth Grant Type and Authenttication Type to generate an Access Token
+The generated Access Token then can be used to make calls to Uber endpoints
+
+OAuth Grant Type
+Authorization Code
+Select the OAuth Grant Type to generate an Access Token
+Authentication Type
+Authentication using Client Secret
+Choose the type of authentication to generate an Access Token
+Your application currently does not have access to Authorization Code scopes
+Please contact your Uber business development representative or Uber point of contact to request access.
+OAuth Playground
+Integration Steps
+Integration Steps
+Step 1: Select the scopes from the above list. Your selection will be saved for later
+
+Step 2: First, the user has to grant your app permission to access their data or do actions on their behalf. Uber provides an authentication page where users can secure sign in with their Uber username and password to grant permissions to your app. This authorization page is accessible through the below authorization URL.
+
+https://auth.uber.com/oauth/v2/authorize?client_id=i_xxLsZWytwvGbSjoaKsndl4ErgeiWyZ&redirect_uri=<REDIRECT_URI>&scope=<SPACE_DELIMITED_LIST_OF_SCOPES>&response_type=code
+Step 3: Once the Uber user authenticates and authorizes your app, Uber will issue an HTTP 302 redirect to the redirect_uri passed in previous step (or the first redirect URI in the dashboard if none was explicitly provided in previous step). On that redirect, you will have a single-use authorization code which will expire in 10 minutes. The AUTHORIZATION_CODE query param is the authorization code needed for next step.
+
+GET <REDIRECT_URI>/?code=<AUTHORIZATION_CODE>
+Step 4: Use the endpoint below to exchange the authorization code for an access_token which will allow you to make a request on behalf of the user. The access_token is good for a limited period of time described by the expires_in field (in seconds) in response.
+
+Request
+curl -F 'client_secret=H5H9WDdYTYjT-jcafR80nKN9jbD7Djo6d3LGeU0k'\
+      -F 'client_id=i_xxLsZWytwvGbSjoaKsndl4ErgeiWyZ'\
+      -F 'grant_type=authorization_code'\
+      -F 'redirect_uri=<REDIRECT_URI>\
+      -F 'code=<AUTHORIZATION_CODE>'\
+      "https://auth.uber.com/oauth/v2/token"
+Response
+{
+ "access_token": "<ACCESS_TOKEN>",
+ "token_type": "Bearer",
+ "expires_in": "<EXPIRY_IN_EPOCH>",
+ "refresh_token": "xxx",
+ "scope": "<SPACE_DELIMITED_LIST_OF_SCOPES>"
+}
+Step 5: You can pass the <ACCESS_TOKEN> returned in the previous step as a bearer token in Authorization header, or pass it as a query parameter in the URL. See example below of OAuth sent in the header.
+
