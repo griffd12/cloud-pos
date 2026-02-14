@@ -202,43 +202,57 @@ export function POSReportsModal({
   rvcName,
   propertyId,
 }: POSReportsModalProps) {
-  const fallbackToday = new Date().toISOString().split("T")[0];
   const [datePreset, setDatePreset] = useState("today");
-  const [fromDate, setFromDate] = useState(fallbackToday);
-  const [toDate, setToDate] = useState(fallbackToday);
+  const [fromDate, setFromDate] = useState<string | null>(null);
+  const [toDate, setToDate] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("rvc-balance");
 
   const { data: businessDateInfo } = useQuery<{ currentBusinessDate: string; localDate: string; timezone: string }>({
     queryKey: ["/api/properties", propertyId, "business-date"],
     queryFn: async () => {
-      if (!propertyId) return { currentBusinessDate: fallbackToday, localDate: fallbackToday, timezone: "America/New_York" };
+      if (!propertyId) throw new Error("No property ID");
       const res = await fetch(`/api/properties/${propertyId}/business-date`, { headers: getAuthHeaders() });
-      if (!res.ok) return { currentBusinessDate: fallbackToday, localDate: fallbackToday, timezone: "America/New_York" };
+      if (!res.ok) throw new Error("Failed to fetch business date");
       return res.json();
     },
     enabled: open && !!propertyId,
   });
 
-  const serverToday = businessDateInfo?.currentBusinessDate || fallbackToday;
+  const serverToday = businessDateInfo?.currentBusinessDate || null;
 
   useEffect(() => {
-    if (businessDateInfo?.currentBusinessDate && datePreset === "today") {
-      setFromDate(businessDateInfo.currentBusinessDate);
-      setToDate(businessDateInfo.currentBusinessDate);
+    if (serverToday && fromDate === null) {
+      setFromDate(serverToday);
+      setToDate(serverToday);
     }
-  }, [businessDateInfo?.currentBusinessDate]);
+  }, [serverToday, fromDate]);
+
+  useEffect(() => {
+    if (serverToday && datePreset === "today") {
+      setFromDate(serverToday);
+      setToDate(serverToday);
+    }
+  }, [serverToday]);
+
+  useEffect(() => {
+    if (!open) {
+      setFromDate(null);
+      setToDate(null);
+      setDatePreset("today");
+    }
+  }, [open]);
 
   const handlePresetChange = (preset: string) => {
     setDatePreset(preset);
-    if (preset !== "custom") {
-      const baseDate = serverToday;
-      const { fromDate: from, toDate: to } = getDatePresetFromBase(preset, baseDate);
+    if (preset !== "custom" && serverToday) {
+      const { fromDate: from, toDate: to } = getDatePresetFromBase(preset, serverToday);
       setFromDate(from);
       setToDate(to);
     }
   };
 
+  const businessDateReady = fromDate !== null && toDate !== null;
   const isSingleDay = fromDate === toDate;
   const dateQueryParams = isSingleDay
     ? `businessDate=${fromDate}`
@@ -251,17 +265,17 @@ export function POSReportsModal({
 
   const { data: salesSummary } = useQuery<SalesSummary>({
     queryKey: [`/api/reports/sales-summary?rvcId=${rvcId}&${dateQueryParams}`],
-    enabled: open && !!rvcId,
+    enabled: open && !!rvcId && businessDateReady,
   });
 
   const { data: tenderBreakdown } = useQuery<TenderBreakdown[]>({
     queryKey: [`/api/reports/tender-mix?rvcId=${rvcId}&${dateQueryParams}`],
-    enabled: open && !!rvcId && activeTab === "tender",
+    enabled: open && !!rvcId && businessDateReady && activeTab === "tender",
   });
 
   const { data: employeeBalances } = useQuery<{ employees: EmployeeBalance[] }>({
     queryKey: [`/api/reports/employee-balance?rvcId=${rvcId}&${dateQueryParams}`],
-    enabled: open && !!rvcId && (activeTab === "employee-balance" || activeTab === "system-balance"),
+    enabled: open && !!rvcId && businessDateReady && (activeTab === "employee-balance" || activeTab === "system-balance"),
   });
 
   const { data: openChecksData } = useQuery<{ checks: OpenCheck[] }>({
@@ -271,12 +285,12 @@ export function POSReportsModal({
 
   const { data: closedChecksData } = useQuery<{ checks: ClosedCheck[] }>({
     queryKey: [`/api/reports/closed-checks?rvcId=${rvcId}&${dateQueryParams}`],
-    enabled: open && !!rvcId && activeTab === "closed-checks",
+    enabled: open && !!rvcId && businessDateReady && activeTab === "closed-checks",
   });
 
   const { data: menuItemSales } = useQuery<{ items: MenuItemSale[] }>({
     queryKey: [`/api/reports/menu-item-sales?rvcId=${rvcId}&${dateQueryParams}`],
-    enabled: open && !!rvcId && activeTab === "menu-items",
+    enabled: open && !!rvcId && businessDateReady && activeTab === "menu-items",
   });
 
   const formatPrice = (price: number) => `$${price.toFixed(2)}`;
@@ -358,7 +372,7 @@ export function POSReportsModal({
             <Input
               id="from-date"
               type="date"
-              value={fromDate}
+              value={fromDate || ""}
               onChange={(e) => {
                 setFromDate(e.target.value);
                 setDatePreset("custom");
@@ -372,7 +386,7 @@ export function POSReportsModal({
             <Input
               id="to-date"
               type="date"
-              value={toDate}
+              value={toDate || ""}
               onChange={(e) => {
                 setToDate(e.target.value);
                 setDatePreset("custom");
