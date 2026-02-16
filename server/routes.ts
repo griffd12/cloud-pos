@@ -7972,16 +7972,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checkPaymentMap.set(p.checkId, current + parseFloat(p.amount || "0"));
       }
       
-      // Cap each check's payments at the check total
+      // Build per-check refund totals for payment capping
+      const allRefundItemRecords = await storage.getAllRefundItems();
+      const ssCheckRefundMap = new Map<string, number>();
+      for (const refund of allRefunds) {
+        const rItems = allRefundItemRecords.filter(ri => ri.refundId === refund.id);
+        let rTotal = 0;
+        for (const ri of rItems) {
+          const uPrice = parseFloat(ri.unitPrice || "0");
+          let modUp = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modUp = (ri.modifiers as any[]).reduce((s: number, m: any) => s + parseFloat(m.priceDelta || "0"), 0);
+          }
+          rTotal += (uPrice + modUp) * (ri.quantity || 1) + parseFloat(ri.taxAmount || "0");
+        }
+        const ex = ssCheckRefundMap.get(refund.originalCheckId) || 0;
+        ssCheckRefundMap.set(refund.originalCheckId, ex + rTotal);
+      }
+      
+      // Cap each check's payments at the NET check total (after refunds)
       let totalPayments = 0;
       checkPaymentMap.forEach((tenderedTotal, checkId) => {
         const check = allChecks.find(c => c.id === checkId);
         if (check) {
-          const checkTotal = parseFloat(check.total || "0");
-          // Actual applied payment is the lesser of tendered and check total
-          totalPayments += Math.min(tenderedTotal, checkTotal);
+          const rawTotal = parseFloat(check.total || "0");
+          const refundAmt = ssCheckRefundMap.get(checkId) || 0;
+          const netTotal = Math.max(0, rawTotal - refundAmt);
+          totalPayments += Math.min(tenderedTotal, netTotal);
         } else {
-          // If check not found (shouldn't happen), use tendered amount
           totalPayments += tenderedTotal;
         }
       });
@@ -8006,7 +8024,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const totalRefunds = refundsInPeriod.reduce((sum, r) => sum + parseFloat(r.total || "0"), 0);
       const refundCount = refundsInPeriod.length;
       
-      const allRefundItemRecords = await storage.getAllRefundItems();
       const refundIdSet = new Set(refundsInPeriod.map(r => r.id));
       const refundItemsInPeriod = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
       
@@ -8371,6 +8388,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allChecks = await storage.getChecks();
       const allRvcs = await storage.getRvcs();
       const allPayments = await storage.getAllPayments();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
       
       // Get valid RVC IDs for filtering
       let validRvcIds: string[] | null = null;
@@ -8381,20 +8400,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         validRvcIds = [rvcId as string];
       }
       
+      // Build per-check refund totals map
+      const checkRefundMap = new Map<string, number>();
+      for (const refund of allRefunds) {
+        const refundItems = allRefundItemRecords.filter(ri => ri.refundId === refund.id);
+        let refundTotal = 0;
+        for (const ri of refundItems) {
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const qty = ri.quantity || 1;
+          refundTotal += (unitPrice + modifierUpcharge) * qty + parseFloat(ri.taxAmount || "0");
+        }
+        const existing = checkRefundMap.get(refund.originalCheckId) || 0;
+        checkRefundMap.set(refund.originalCheckId, existing + refundTotal);
+      }
+      
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter payments by businessDate or paidAt timestamp
-      // Only include completed payments - voided payments should not count
       const paymentsInPeriod = allPayments.filter(p => {
-        // Only include completed payments (exclude voided)
         if (p.paymentStatus !== "completed") return false;
-        // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        // Filter by business date or timestamp
         if (useBusinessDate) {
           return p.businessDate === businessDate;
         } else {
@@ -8406,7 +8439,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const tenderTotals: Record<string, { name: string; count: number; amount: number }> = {};
       
-      // Group payments by check to properly cap at check total
+      // Group payments by check to properly cap at NET check total (after refunds)
       const paymentsByCheck = new Map<string, typeof paymentsInPeriod>();
       for (const payment of paymentsInPeriod) {
         const existing = paymentsByCheck.get(payment.checkId) || [];
@@ -8414,14 +8447,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         paymentsByCheck.set(payment.checkId, existing);
       }
       
-      // Process each check's payments, capping total at check amount
       paymentsByCheck.forEach((checkPayments, checkId) => {
         const check = allChecks.find(c => c.id === checkId);
-        const checkTotal = check ? parseFloat(check.total || "0") : Infinity;
+        const rawCheckTotal = check ? parseFloat(check.total || "0") : Infinity;
+        const refundAmount = checkRefundMap.get(checkId) || 0;
+        const netCheckTotal = Math.max(0, rawCheckTotal - refundAmount);
         const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
         
-        // Calculate ratio to cap if over-tendered
-        const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
+        const ratio = totalTendered > netCheckTotal ? (netCheckTotal > 0 ? netCheckTotal / totalTendered : 0) : 1;
         
         for (const payment of checkPayments) {
           const id = payment.tenderId;
@@ -8429,7 +8462,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             tenderTotals[id] = { name: payment.tenderName, count: 0, amount: 0 };
           }
           tenderTotals[id].count += 1;
-          // Apply ratio to cap payment amount proportionally
           tenderTotals[id].amount += parseFloat(payment.amount) * ratio;
         }
       });
@@ -8836,6 +8868,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       const allTenders = await storage.getTenders();
       const employees = await storage.getEmployees();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
       
       // Get valid RVC IDs for filtering
       let validRvcIds: string[] | null = null;
@@ -8846,20 +8880,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         validRvcIds = [rvcId as string];
       }
       
+      // Build per-check refund totals map
+      const checkRefundMap = new Map<string, number>();
+      for (const refund of allRefunds) {
+        const refundItems = allRefundItemRecords.filter(ri => ri.refundId === refund.id);
+        let refundTotal = 0;
+        for (const ri of refundItems) {
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const qty = ri.quantity || 1;
+          refundTotal += (unitPrice + modifierUpcharge) * qty + parseFloat(ri.taxAmount || "0");
+        }
+        const existing = checkRefundMap.get(refund.originalCheckId) || 0;
+        checkRefundMap.set(refund.originalCheckId, existing + refundTotal);
+      }
+      
       // Build check to RVC mapping
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
       
       // Filter payments by businessDate or paidAt timestamp
-      // Only include completed payments - voided payments should not count
       let payments = allPayments.filter(p => {
-        // Only include completed payments (exclude voided)
         if (p.paymentStatus !== "completed") return false;
-        // Apply RVC filter via check
         if (validRvcIds) {
           const checkRvc = checkIdToRvc.get(p.checkId);
           if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
         }
-        // Filter by business date or timestamp
         if (useBusinessDate) {
           return p.businessDate === businessDate;
         } else {
@@ -8874,7 +8922,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         payments = payments.filter(p => p.tenderId === tenderId);
       }
       
-      // Group payments by check to calculate applied amounts (capped at check total)
+      // Group payments by check to calculate applied amounts (capped at NET check total after refunds)
       const paymentsByCheck = new Map<string, typeof payments>();
       for (const payment of payments) {
         const existing = paymentsByCheck.get(payment.checkId) || [];
@@ -8882,13 +8930,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         paymentsByCheck.set(payment.checkId, existing);
       }
       
-      // Calculate applied amount ratios for each check
+      // Calculate applied amount ratios for each check using NET total
       const paymentAppliedRatios = new Map<string, number>();
       paymentsByCheck.forEach((checkPayments, checkId) => {
         const check = allChecks.find(c => c.id === checkId);
-        const checkTotal = check ? parseFloat(check.total || "0") : Infinity;
+        const rawCheckTotal = check ? parseFloat(check.total || "0") : Infinity;
+        const refundAmount = checkRefundMap.get(checkId) || 0;
+        const netCheckTotal = Math.max(0, rawCheckTotal - refundAmount);
         const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
-        const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
+        const ratio = totalTendered > netCheckTotal ? (netCheckTotal > 0 ? netCheckTotal / totalTendered : 0) : 1;
         checkPayments.forEach(p => paymentAppliedRatios.set(p.id, ratio));
       });
       
@@ -9444,6 +9494,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allRvcs = await storage.getRvcs();
       const employees = await storage.getEmployees();
       const allPayments = await storage.getAllPayments();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
       
       let closedChecks = allChecks.filter(c => c.status === "closed" && !c.testMode);
       
@@ -9466,15 +9518,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return closedAt >= start && closedAt <= end;
       });
       
+      // Build per-check refund totals map (subtotal, tax, total refunded)
+      const checkRefundMap = new Map<string, { subtotal: number; tax: number; total: number }>();
+      for (const refund of allRefunds) {
+        const refundItems = allRefundItemRecords.filter(ri => ri.refundId === refund.id);
+        let refundSubtotal = 0;
+        let refundTax = 0;
+        for (const ri of refundItems) {
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const qty = ri.quantity || 1;
+          refundSubtotal += (unitPrice + modifierUpcharge) * qty;
+          refundTax += parseFloat(ri.taxAmount || "0");
+        }
+        const existing = checkRefundMap.get(refund.originalCheckId) || { subtotal: 0, tax: 0, total: 0 };
+        existing.subtotal += refundSubtotal;
+        existing.tax += refundTax;
+        existing.total += refundSubtotal + refundTax;
+        checkRefundMap.set(refund.originalCheckId, existing);
+      }
+      
       const result = closedChecks.map(check => {
         const emp = employees.find(e => e.id === check.employeeId);
         const rvc = allRvcs.find(r => r.id === check.rvcId);
-        // Only include completed payments - voided payments should not count
         const checkPayments = allPayments.filter(p => p.checkId === check.id && p.paymentStatus === "completed");
-        const checkTotal = parseFloat(check.total || "0");
+        const rawCheckTotal = parseFloat(check.total || "0");
+        const rawSubtotal = parseFloat(check.subtotal || "0");
+        const rawTax = parseFloat(check.taxTotal || "0");
+        
+        const refundData = checkRefundMap.get(check.id);
+        const netSubtotal = Math.max(0, rawSubtotal - (refundData?.subtotal || 0));
+        const netTax = Math.max(0, rawTax - (refundData?.tax || 0));
+        const netTotal = Math.max(0, rawCheckTotal - (refundData?.total || 0));
+        
         const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
-        // Cap totalPaid at check total - for cash over-tender, we show what was applied to the check, not what customer handed over
-        const totalPaid = Math.min(totalTendered, checkTotal);
+        const totalPaid = Math.min(totalTendered, netTotal);
         
         const durationMinutes = check.openedAt && check.closedAt
           ? Math.floor((new Date(check.closedAt).getTime() - new Date(check.openedAt).getTime()) / 60000)
@@ -9487,10 +9568,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           rvcName: rvc?.name || "Unknown",
           tableNumber: check.tableNumber,
           guestCount: check.guestCount,
-          subtotal: parseFloat(check.subtotal || "0"),
-          tax: parseFloat(check.taxTotal || "0"),
-          total: checkTotal,
-          totalPaid,
+          subtotal: Math.round(netSubtotal * 100) / 100,
+          tax: Math.round(netTax * 100) / 100,
+          total: Math.round(netTotal * 100) / 100,
+          totalPaid: Math.round(totalPaid * 100) / 100,
+          refundAmount: refundData ? Math.round(refundData.total * 100) / 100 : 0,
           durationMinutes,
           openedAt: check.openedAt,
           closedAt: check.closedAt,
@@ -9502,8 +9584,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checks: result,
         summary: {
           count: result.length,
-          totalSales: result.reduce((sum, c) => sum + c.total, 0),
-          avgCheck: result.length > 0 ? result.reduce((sum, c) => sum + c.total, 0) / result.length : 0,
+          totalSales: Math.round(result.reduce((sum, c) => sum + c.total, 0) * 100) / 100,
+          totalRefunds: Math.round(result.reduce((sum, c) => sum + c.refundAmount, 0) * 100) / 100,
+          avgCheck: result.length > 0 ? Math.round(result.reduce((sum, c) => sum + c.total, 0) / result.length * 100) / 100 : 0,
           avgDuration: result.length > 0 ? result.reduce((sum, c) => sum + c.durationMinutes, 0) / result.length : 0,
         },
       });
@@ -9529,6 +9612,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allCheckItems = await storage.getAllCheckItems();
       const tenders = await storage.getTenders();
       const menuItems = await storage.getMenuItems();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
       
       // Get valid RVC IDs
       let validRvcIds: string[] | null = null;
@@ -9537,6 +9622,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (rvcId && rvcId !== "all") {
         validRvcIds = [rvcId as string];
+      }
+      
+      // Build per-check refund totals map
+      const checkRefundMap = new Map<string, { subtotal: number; tax: number; total: number }>();
+      for (const refund of allRefunds) {
+        const refundItems = allRefundItemRecords.filter(ri => ri.refundId === refund.id);
+        let refundSubtotal = 0;
+        let refundTax = 0;
+        for (const ri of refundItems) {
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const qty = ri.quantity || 1;
+          refundSubtotal += (unitPrice + modifierUpcharge) * qty;
+          refundTax += parseFloat(ri.taxAmount || "0");
+        }
+        const existing = checkRefundMap.get(refund.originalCheckId) || { subtotal: 0, tax: 0, total: 0 };
+        existing.subtotal += refundSubtotal;
+        existing.tax += refundTax;
+        existing.total += refundSubtotal + refundTax;
+        checkRefundMap.set(refund.originalCheckId, existing);
       }
       
       // Filter checks by property/RVC - include ALL checks (open and closed) for business date
@@ -9577,6 +9685,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalCollected: number;
         tips: number;
         outstandingBalance: number;
+        refundTotal: number;
       }> = {};
       
       for (const check of filteredChecks) {
@@ -9603,6 +9712,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             totalCollected: 0,
             tips: 0,
             outstandingBalance: 0,
+            refundTotal: 0,
           };
         }
         
@@ -9613,13 +9723,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           employeeData[empId].openCheckCount++;
         }
         
+        // Get refund data for this check
+        const refundData = checkRefundMap.get(check.id);
+        const checkRefundSubtotal = refundData?.subtotal || 0;
+        const checkRefundTax = refundData?.tax || 0;
+        const checkRefundTotal = refundData?.total || 0;
+        employeeData[empId].refundTotal += checkRefundTotal;
+        
         // Get items for this check that match the businessDate filter
         // This ensures we count items by their actual business date
         // Exclude non-revenue items (gift card sales/reloads are liabilities, not sales)
         const checkItems = allCheckItems.filter(ci => {
           if (ci.checkId !== check.id) return false;
           if (ci.voided) return false;
-          if (ci.isNonRevenue) return false; // Exclude gift card sales/reloads
+          if (ci.isNonRevenue) return false;
           if (useBusinessDate) {
             return ci.businessDate === businessDate;
           }
@@ -9632,7 +9749,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         for (const item of checkItems) {
           const qty = item.quantity || 1;
           const price = parseFloat(item.unitPrice || "0");
-          // Calculate modifier total from modifiers array
           const modPrice = (item.modifiers || []).reduce((sum, mod) => 
             sum + parseFloat(mod.priceDelta || "0"), 0);
           itemGrossSales += price * qty;
@@ -9641,27 +9757,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         
         const totalItemSales = itemGrossSales + modifierTotal;
-        employeeData[empId].grossSales += totalItemSales;
+        employeeData[empId].grossSales += Math.max(0, totalItemSales - checkRefundSubtotal);
         
         // Discounts from check (if available)
         const discountAmount = parseFloat(check.discountTotal || "0");
         employeeData[empId].discounts += discountAmount;
         
-        // Calculate tax proportionally if check is closed, otherwise estimate
+        // Calculate tax and total with refund deduction
         if (check.status === "closed") {
-          employeeData[empId].tax += parseFloat(check.taxTotal || "0");
-          const checkTotal = parseFloat(check.total || "0");
-          employeeData[empId].total += checkTotal;
+          const rawTax = parseFloat(check.taxTotal || "0");
+          const rawTotal = parseFloat(check.total || "0");
+          const netTax = Math.max(0, rawTax - checkRefundTax);
+          const netTotal = Math.max(0, rawTotal - checkRefundTotal);
           
-          // Get payments for closed checks - cap at check total for over-tender
-          // Only include completed payments - voided payments should not count
+          employeeData[empId].tax += netTax;
+          employeeData[empId].total += netTotal;
+          
+          // Get payments for closed checks - cap at NET check total for over-tender
           const checkPayments = allPayments.filter(p => p.checkId === check.id && p.paymentStatus === "completed");
           const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
-          const ratio = totalTendered > checkTotal ? checkTotal / totalTendered : 1;
+          const ratio = totalTendered > netTotal ? (netTotal > 0 ? netTotal / totalTendered : 0) : 1;
           
           for (const payment of checkPayments) {
             const tenderedAmount = parseFloat(payment.amount || "0");
-            const appliedAmount = tenderedAmount * ratio; // Cap at check total proportionally
+            const appliedAmount = tenderedAmount * ratio;
             employeeData[empId].totalCollected += appliedAmount;
             
             const tender = tenders.find(t => t.id === payment.tenderId);
@@ -9674,8 +9793,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
           }
         } else {
-          // For open checks, calculate estimated tax and total
-          // Use check's current values which are updated as items are added
           const openTax = parseFloat(check.taxTotal || "0");
           const openTotal = parseFloat(check.total || "0");
           employeeData[empId].tax += openTax;
@@ -9704,6 +9821,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalCollected: emp.totalCollected,
         tips: emp.tips,
         outstandingBalance: emp.outstandingBalance,
+        refundTotal: emp.refundTotal,
       })).sort((a, b) => b.grossSales - a.grossSales);
       
       res.json({
