@@ -6331,20 +6331,106 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Distribute refund amount across original payment methods proportionally
       const refundPaymentsData: any[] = [];
+      const gatewayResults: { tenderName: string; success: boolean; error?: string }[] = [];
       const totalPaid = checkDetails.payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
       
       for (const payment of checkDetails.payments) {
         const paymentAmount = parseFloat(payment.amount || "0");
         const proportionalRefund = totalPaid > 0 ? (paymentAmount / totalPaid) * refundTotal : 0;
 
-        if (proportionalRefund > 0) {
-          refundPaymentsData.push({
-            originalPaymentId: payment.id,
-            tenderId: payment.tenderId,
-            tenderName: payment.tenderName,
-            amount: proportionalRefund.toFixed(2),
-          });
+        if (proportionalRefund <= 0) continue;
+
+        const tender = await storage.getTender(payment.tenderId);
+        const isCardTender = tender && tender.type === "credit";
+        const processorId = tender?.paymentProcessorId || null;
+        const hasGatewayTransaction = payment.paymentTransactionId;
+
+        let gatewayRefundId: string | null = null;
+        let gatewayStatus: string = "not_applicable";
+        let gatewayMessage: string | null = null;
+        let refundMethod: string = "manual";
+
+        if (isCardTender && hasGatewayTransaction) {
+          // Card payment with gateway transaction — process refund through payment processor
+          try {
+            const paymentTx = await storage.getPaymentTransaction(payment.paymentTransactionId!);
+            if (paymentTx && paymentTx.gatewayTransactionId) {
+              // Use processor from the transaction first, fall back to tender's processor
+              const effectiveProcessorId = paymentTx.paymentProcessorId || processorId;
+              const adapter = effectiveProcessorId ? await getPaymentAdapter(effectiveProcessorId) : null;
+              if (adapter) {
+                const refundAmountCents = Math.round(proportionalRefund * 100);
+                if (refundAmountCents > 0) {
+                  const gatewayResponse = await adapter.refund({
+                    transactionId: paymentTx.gatewayTransactionId,
+                    amount: refundAmountCents,
+                    reason: reason || "Refund processed from POS",
+                  });
+
+                  gatewayRefundId = gatewayResponse.transactionId || null;
+                  gatewayStatus = gatewayResponse.success ? "success" : "failed";
+                  gatewayMessage = gatewayResponse.success
+                    ? `Refund processed: ${gatewayResponse.responseMessage || "OK"}`
+                    : `Refund failed: ${gatewayResponse.errorMessage || gatewayResponse.responseMessage || "Unknown error"}`;
+                  refundMethod = "gateway";
+
+                  gatewayResults.push({
+                    tenderName: payment.tenderName,
+                    success: gatewayResponse.success,
+                    error: gatewayResponse.success ? undefined : (gatewayResponse.errorMessage || gatewayResponse.responseMessage),
+                  });
+                } else {
+                  gatewayStatus = "skipped";
+                  gatewayMessage = "Refund amount rounds to zero cents";
+                  refundMethod = "manual";
+                }
+              } else {
+                gatewayStatus = "no_adapter";
+                gatewayMessage = "Payment processor adapter not available";
+                refundMethod = "manual";
+                gatewayResults.push({ tenderName: payment.tenderName, success: false, error: "Payment processor not configured" });
+              }
+            } else {
+              gatewayStatus = "no_transaction";
+              gatewayMessage = "No gateway transaction ID found for original payment";
+              refundMethod = "manual";
+              gatewayResults.push({ tenderName: payment.tenderName, success: false, error: "No gateway transaction found" });
+            }
+          } catch (gatewayError: any) {
+            gatewayStatus = "error";
+            gatewayMessage = `Gateway error: ${gatewayError.message || "Unknown error"}`;
+            refundMethod = "manual";
+            gatewayResults.push({ tenderName: payment.tenderName, success: false, error: gatewayError.message });
+          }
+        } else if (isCardTender && !hasGatewayTransaction) {
+          // Card tender but no gateway transaction — likely cash tendered as credit or manual entry
+          gatewayStatus = "no_transaction";
+          gatewayMessage = "No payment transaction linked — manual refund required";
+          refundMethod = "manual";
+        } else {
+          // Cash, gift, or other non-card tender — no gateway call needed
+          gatewayStatus = "not_applicable";
+          gatewayMessage = `${tender?.type || "other"} tender - manual refund`;
+          refundMethod = "manual";
         }
+
+        refundPaymentsData.push({
+          originalPaymentId: payment.id,
+          tenderId: payment.tenderId,
+          tenderName: payment.tenderName,
+          amount: proportionalRefund.toFixed(2),
+          gatewayRefundId,
+          gatewayStatus,
+          gatewayMessage,
+          refundMethod,
+        });
+      }
+
+      // Check if any gateway refunds failed
+      const failedGatewayRefunds = gatewayResults.filter(r => !r.success);
+      if (failedGatewayRefunds.length > 0 && gatewayResults.some(r => r.success === false && refundPaymentsData.some(p => p.refundMethod === "gateway"))) {
+        // Some gateway refunds failed — still create the refund record but warn the user
+        console.warn("Some gateway refunds failed:", failedGatewayRefunds);
       }
 
       // Get next refund number
@@ -6371,6 +6457,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
 
       // Create audit log
+      const gatewayInfo = gatewayResults.length > 0
+        ? { gatewayResults: gatewayResults.map(r => ({ tender: r.tenderName, success: r.success, error: r.error })) }
+        : {};
+
       await storage.createAuditLog({
         rvcId,
         employeeId: processedByEmployeeId,
@@ -6382,10 +6472,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           refundType,
           total: refundTotal,
           managerApprovalId,
+          ...gatewayInfo,
         },
       });
 
-      res.json(refund);
+      // Return refund with gateway status info
+      const hasGatewayFailures = failedGatewayRefunds.length > 0;
+      res.json({
+        ...refund,
+        gatewayResults: gatewayResults.length > 0 ? gatewayResults : undefined,
+        warning: hasGatewayFailures
+          ? `Refund recorded but ${failedGatewayRefunds.length} card refund(s) could not be processed automatically. Manual refund may be needed for: ${failedGatewayRefunds.map(f => f.tenderName).join(", ")}`
+          : undefined,
+      });
     } catch (error) {
       console.error("Create refund error:", error);
       res.status(500).json({ message: "Failed to create refund" });

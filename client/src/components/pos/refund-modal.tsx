@@ -84,8 +84,17 @@ export function RefundModal({
       const response = await apiRequest("POST", "/api/refunds", data);
       return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Refund processed successfully" });
+    onSuccess: (data: any) => {
+      if (data.warning) {
+        toast({
+          title: "Refund recorded with warnings",
+          description: data.warning,
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else {
+        toast({ title: "Refund processed successfully" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", rvcId, "refunds"] });
       onComplete();
       onOpenChange(false);

@@ -1148,7 +1148,7 @@ export default function PosPage() {
   };
 
   const handleLookupClick = () => {
-    if (!hasPrivilege("process_refunds")) {
+    if (!hasPrivilege("refund") && !hasPrivilege("process_refunds") && !hasPrivilege("admin_access")) {
       toast({ title: "You do not have permission to process refunds", variant: "destructive" });
       return;
     }
@@ -1170,7 +1170,7 @@ export default function PosPage() {
         credentials: "include",
         body: JSON.stringify({
           pin: managerPin,
-          requiredPrivilege: "approve_refunds",
+          requiredPrivilege: "approve_refund",
         }),
       });
       if (!res.ok) {

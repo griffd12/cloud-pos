@@ -1009,6 +1009,10 @@ export const refundPayments = pgTable("refund_payments", {
   tenderId: varchar("tender_id").notNull().references(() => tenders.id),
   tenderName: text("tender_name").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  gatewayRefundId: text("gateway_refund_id"),
+  gatewayStatus: text("gateway_status"),
+  gatewayMessage: text("gateway_message"),
+  refundMethod: text("refund_method").default("manual"),
 });
 
 export const refundsRelations = relations(refunds, ({ one, many }) => ({
