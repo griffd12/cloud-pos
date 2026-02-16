@@ -8947,7 +8947,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const tender = allTenders.find(t => t.id === p.tenderId);
         const rvc = check ? allRvcs.find(r => r.id === check.rvcId) : null;
         const emp = check ? employees.find(e => e.id === check.employeeId) : null;
-        const ratio = paymentAppliedRatios.get(p.id) || 1;
+        const ratio = paymentAppliedRatios.get(p.id) ?? 1;
         
         return {
           id: p.id,
@@ -8967,7 +8967,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const p of payments) {
         const tender = allTenders.find(t => t.id === p.tenderId);
         const name = tender?.name || "Unknown";
-        const ratio = paymentAppliedRatios.get(p.id) || 1;
+        const ratio = paymentAppliedRatios.get(p.id) ?? 1;
         if (!summary[name]) {
           summary[name] = { count: 0, amount: 0, tips: 0 };
         }

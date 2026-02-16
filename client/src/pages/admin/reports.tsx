@@ -1044,7 +1044,7 @@ export default function ReportsPage() {
                     {salesSummary?.checksClosed || 0} checks
                   </p>
                   <p className="text-sm text-muted-foreground" data-testid="text-closed-total">
-                    {formatCurrency(salesSummary?.closedTotal || 0)}
+                    {formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)))}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1069,7 +1069,7 @@ export default function ReportsPage() {
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Gross Sales</p>
                   <p className="font-medium text-lg" data-testid="text-gross-sales">
-                    {formatCurrency(salesSummary?.grossSales || 0)}
+                    {formatCurrency(salesSummary?.grossSalesAfterRefunds ?? salesSummary?.grossSales ?? 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1081,7 +1081,7 @@ export default function ReportsPage() {
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Net Sales</p>
                   <p className="font-medium text-lg" data-testid="text-breakdown-net-sales">
-                    {formatCurrency(salesSummary?.netSales || 0)}
+                    {formatCurrency(salesSummary?.netSalesAfterRefunds ?? salesSummary?.netSales ?? 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1093,13 +1093,13 @@ export default function ReportsPage() {
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Tax</p>
                   <p className="font-medium text-lg" data-testid="text-tax-total">
-                    {formatCurrency(salesSummary?.taxTotal || 0)}
+                    {formatCurrency(salesSummary?.taxAfterRefunds ?? salesSummary?.taxTotal ?? 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Total with Tax</p>
                   <p className="font-semibold text-lg" data-testid="text-total-with-tax">
-                    {formatCurrency(salesSummary?.totalWithTax || 0)}
+                    {formatCurrency((salesSummary?.netSalesAfterRefunds ?? salesSummary?.netSales ?? 0) + (salesSummary?.taxAfterRefunds ?? salesSummary?.taxTotal ?? 0) + (salesSummary?.serviceChargeTotal ?? 0))}
                   </p>
                 </div>
               </div>
@@ -1117,16 +1117,16 @@ export default function ReportsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Subtotal</span>
-                      <span data-testid="text-closed-subtotal">{formatCurrency(salesSummary?.closedSubtotal || 0)}</span>
+                      <span data-testid="text-closed-subtotal">{formatCurrency(Math.max(0, (salesSummary?.closedSubtotal || 0) - (salesSummary?.refundedSales || 0)))}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tax</span>
-                      <span data-testid="text-closed-tax">{formatCurrency(salesSummary?.closedTax || 0)}</span>
+                      <span data-testid="text-closed-tax">{formatCurrency(Math.max(0, (salesSummary?.closedTax || 0) - (salesSummary?.refundedTax || 0)))}</span>
                     </div>
                     <Separator />
                     <div className="flex justify-between font-medium">
                       <span>Total</span>
-                      <span data-testid="text-closed-total-recon">{formatCurrency(salesSummary?.closedTotal || 0)}</span>
+                      <span data-testid="text-closed-total-recon">{formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)))}</span>
                     </div>
                   </div>
                 </div>
@@ -1171,7 +1171,7 @@ export default function ReportsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Expected</span>
-                      <span data-testid="text-expected-payments">{formatCurrency(salesSummary?.closedTotal || 0)}</span>
+                      <span data-testid="text-expected-payments">{formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)))}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Received</span>
@@ -1181,10 +1181,10 @@ export default function ReportsPage() {
                     <div className="flex justify-between font-medium">
                       <span>Difference</span>
                       <span 
-                        className={((salesSummary?.closedTotal || 0) - (salesSummary?.totalPayments || 0)) !== 0 ? "text-destructive" : ""}
+                        className={(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)) - (salesSummary?.totalPayments || 0)) !== 0 ? "text-destructive" : ""}
                         data-testid="text-variance"
                       >
-                        {formatCurrency((salesSummary?.closedTotal || 0) - (salesSummary?.totalPayments || 0))}
+                        {formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)) - (salesSummary?.totalPayments || 0))}
                       </span>
                     </div>
                   </div>
