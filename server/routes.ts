@@ -8190,6 +8190,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         categoryTotals[categoryId].sales += netExtended;
       }
       
+      // Subtract refunds from category sales
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
+
+      const refundsInScope = allRefunds.filter(r => {
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= start && refundDate <= end;
+        }
+      });
+
+      const refundIdSet = new Set(refundsInScope.map(r => r.id));
+      const refundItemsInScope = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+
+      for (const ri of refundItemsInScope) {
+        const originalItem = allCheckItems.find(ci => ci.id === ri.originalCheckItemId);
+        if (!originalItem || !originalItem.menuItemId) continue;
+        const sluLink = menuItemSluLinks.find((l: any) => l.menuItemId === originalItem.menuItemId);
+        const slu = sluLink ? allSlus.find(s => s.id === sluLink.sluId) : null;
+        const categoryId = slu?.id || "uncategorized";
+        if (categoryTotals[categoryId]) {
+          const refundQty = ri.quantity || 1;
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const itemNetAmount = (unitPrice + modifierUpcharge) * refundQty;
+          categoryTotals[categoryId].quantity = Math.max(0, categoryTotals[categoryId].quantity - refundQty);
+          categoryTotals[categoryId].sales = Math.max(0, categoryTotals[categoryId].sales - itemNetAmount);
+        }
+      }
+
       const result = Object.entries(categoryTotals)
         .map(([id, data]) => ({ id, ...data, sales: Math.round(data.sales * 100) / 100 }))
         .sort((a, b) => b.sales - a.sales);
@@ -8275,6 +8312,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         itemTotals[id].sales += netExtended;
       }
       
+      // Subtract refunds from item totals
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
+
+      const refundsInScope = allRefunds.filter(r => {
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= start && refundDate <= end;
+        }
+      });
+
+      const refundIdSet = new Set(refundsInScope.map(r => r.id));
+      const refundItemsInScope = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+
+      for (const ri of refundItemsInScope) {
+        const originalItem = allCheckItems.find(ci => ci.id === ri.originalCheckItemId);
+        if (!originalItem || !originalItem.menuItemId) continue;
+        const menuItemId = originalItem.menuItemId;
+        if (itemTotals[menuItemId]) {
+          const refundQty = ri.quantity || 1;
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const itemNetAmount = (unitPrice + modifierUpcharge) * refundQty;
+          itemTotals[menuItemId].quantity = Math.max(0, itemTotals[menuItemId].quantity - refundQty);
+          itemTotals[menuItemId].sales = Math.max(0, itemTotals[menuItemId].sales - itemNetAmount);
+        }
+      }
+
       const result = Object.entries(itemTotals)
         .map(([id, data]) => ({ id, ...data, sales: Math.round(data.sales * 100) / 100 }))
         .sort((a, b) => b.quantity - a.quantity)
@@ -8696,6 +8768,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           : 0;
       }
       
+      // Subtract refunds from employee sales
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
+
+      const refundsInScope = allRefunds.filter(r => {
+        if (!checkIdsInScope.has(r.checkId)) return false;
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= start && refundDate <= end;
+        }
+      });
+
+      const refundIdSet = new Set(refundsInScope.map(r => r.id));
+      const refundItemsInScope = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+
+      for (const ri of refundItemsInScope) {
+        const refund = refundsInScope.find(r => r.id === ri.refundId);
+        if (!refund) continue;
+        const check = checkMap.get(refund.checkId);
+        if (!check) continue;
+        const empId = check.employeeId;
+        if (salesByEmployee[empId]) {
+          const refundQty = ri.quantity || 1;
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const itemNetAmount = (unitPrice + modifierUpcharge) * refundQty;
+          salesByEmployee[empId].grossSales = Math.max(0, salesByEmployee[empId].grossSales - itemNetAmount);
+          salesByEmployee[empId].netSales = Math.max(0, salesByEmployee[empId].netSales - itemNetAmount);
+          salesByEmployee[empId].itemCount = Math.max(0, salesByEmployee[empId].itemCount - refundQty);
+        }
+      }
+
+      for (const empId of Object.keys(salesByEmployee)) {
+        salesByEmployee[empId].avgCheck = salesByEmployee[empId].checkCount > 0
+          ? salesByEmployee[empId].netSales / salesByEmployee[empId].checkCount
+          : 0;
+      }
+
       const result = Object.entries(salesByEmployee)
         .map(([id, data]) => ({ employeeId: id, ...data }))
         .sort((a, b) => b.netSales - a.netSales);
@@ -9265,6 +9381,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         checksPerHour[hour].add(item.checkId);
       }
       
+      // Subtract refunds from hourly sales
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
+
+      const refundsInScope = allRefunds.filter(r => {
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= startOfDay && refundDate <= endOfDay;
+        }
+      });
+
+      const refundIdSet = new Set(refundsInScope.map(r => r.id));
+      const refundItemsInScope = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+
+      for (const ri of refundItemsInScope) {
+        const refund = refundsInScope.find(r => r.id === ri.refundId);
+        if (!refund || !refund.processedAt) continue;
+        const refundDate = new Date(refund.processedAt);
+        const localDateStr = refundDate.toLocaleString("en-US", { timeZone: timezone });
+        const localDate = new Date(localDateStr);
+        let hour = localDate.getHours();
+        if (isNaN(hour) || hour < 0 || hour > 23) hour = 0;
+
+        const refundQty = ri.quantity || 1;
+        const unitPrice = parseFloat(ri.unitPrice || "0");
+        let modifierUpcharge = 0;
+        if (ri.modifiers && Array.isArray(ri.modifiers)) {
+          modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+        }
+        const itemNetAmount = (unitPrice + modifierUpcharge) * refundQty;
+        hourlyData[hour].sales = Math.max(0, hourlyData[hour].sales - itemNetAmount);
+      }
+
       // Set checkCount to unique checks with items in that hour
       for (let h = 0; h < 24; h++) {
         hourlyData[h].checkCount = checksPerHour[h].size;
@@ -9693,6 +9846,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allChecks = await storage.getChecks();
       const allCheckItems = await storage.getAllCheckItems();
       const allRvcs = await storage.getRvcs();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
       
       // Get valid RVC IDs
       let validRvcIds: string[] | null = null;
@@ -9710,6 +9865,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       const checkIdsInScope = new Set(checksInScope.map(c => c.id));
       const checkMap = new Map(checksInScope.map(c => [c.id, c]));
+
+      // Filter refunds by RVC scope
+      const refundsInRvcScope = allRefunds.filter(r => {
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        return true;
+      });
       
       // Helper to format date as YYYY-MM-DD in local timezone (not UTC)
       const formatBusinessDate = (date: Date) => {
@@ -9734,7 +9895,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
         
         // Calculate gross sales from items
-        const grossSales = itemsInRange.reduce((sum, item) => {
+        let grossSales = itemsInRange.reduce((sum, item) => {
           return sum + (parseFloat(item.unitPrice) * (item.quantity || 1));
         }, 0);
         
@@ -9762,6 +9923,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           totalDiscounts += parseFloat(check.discountTotal || "0") * proportion;
           totalTax += parseFloat(check.taxTotal || "0") * proportion;
         }
+
+        // Subtract refunds for the same businessDate range
+        const refundsInRange = refundsInRvcScope.filter(r => {
+          if (!r.businessDate) return false;
+          return r.businessDate >= startStr && r.businessDate <= endStr;
+        });
+        const refundIdSet = new Set(refundsInRange.map(r => r.id));
+        const refundItemsInRange = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+
+        let refundSalesTotal = 0;
+        let refundTaxTotal = 0;
+        for (const ri of refundItemsInRange) {
+          const refundQty = ri.quantity || 1;
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          refundSalesTotal += (unitPrice + modifierUpcharge) * refundQty;
+          refundTaxTotal += parseFloat(ri.taxAmount || "0");
+        }
+
+        grossSales = Math.max(0, grossSales - refundSalesTotal);
+        totalTax = Math.max(0, totalTax - refundTaxTotal);
         
         // Net sales = gross - discounts
         const netSales = grossSales - totalDiscounts;
@@ -12550,6 +12735,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           salesByDate[bd] = 0;
         }
         salesByDate[bd] += parseFloat(check.subtotal || "0");
+      }
+      
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
+      const allRvcs = await storage.getRvcs();
+      const propertyRvcIds = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
+      
+      const refundsInRange = allRefunds.filter(r => {
+        if (!propertyRvcIds.includes(r.rvcId)) return false;
+        if (!r.businessDate) return false;
+        return r.businessDate >= (startDate as string) && r.businessDate <= (endDate as string);
+      });
+      
+      const refundIdSet = new Set(refundsInRange.map(r => r.id));
+      const refundItemsInRange = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+      
+      const refundsByDate: Record<string, number> = {};
+      for (const r of refundsInRange) {
+        const bd = r.businessDate;
+        if (!bd) continue;
+        if (!refundsByDate[bd]) refundsByDate[bd] = 0;
+      }
+      for (const ri of refundItemsInRange) {
+        const refund = refundsInRange.find(r => r.id === ri.refundId);
+        if (!refund?.businessDate) continue;
+        const unitPrice = parseFloat(ri.unitPrice || "0");
+        let modifierUpcharge = 0;
+        if (ri.modifiers && Array.isArray(ri.modifiers)) {
+          modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+        }
+        const qty = ri.quantity || 1;
+        refundsByDate[refund.businessDate] = (refundsByDate[refund.businessDate] || 0) + (unitPrice + modifierUpcharge) * qty;
+      }
+      
+      for (const bd of Object.keys(salesByDate)) {
+        if (refundsByDate[bd]) {
+          salesByDate[bd] = Math.max(0, salesByDate[bd] - refundsByDate[bd]);
+        }
       }
       
       // Build summary - include both finalized AND live data
