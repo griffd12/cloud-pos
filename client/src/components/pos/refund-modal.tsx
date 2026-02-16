@@ -239,7 +239,7 @@ export function RefundModal({
                         >
                           <Checkbox
                             checked={isItemSelected(item.id)}
-                            onCheckedChange={() => {}}
+                            onCheckedChange={() => toggleItemSelection(item.id, item.quantity || 1)}
                             onClick={(e) => e.stopPropagation()}
                           />
                           <div className="flex-1">
