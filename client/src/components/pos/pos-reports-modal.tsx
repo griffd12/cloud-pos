@@ -137,7 +137,11 @@ interface SalesSummary {
   grossSales: number;
   netSales: number;
   netSalesAfterRefunds: number;
+  grossSalesAfterRefunds: number;
   taxTotal: number;
+  taxAfterRefunds: number;
+  refundedTax: number;
+  refundedSales: number;
   totalWithTax: number;
   totalPayments: number;
   totalTips: number;
@@ -456,7 +460,7 @@ export function POSReportsModal({
                       </div>
                       {salesSummary.totalRefunds > 0 && (
                         <div className="text-xs text-muted-foreground mt-1">
-                          {formatPrice(salesSummary.netSales)} - {formatPrice(salesSummary.totalRefunds)} refunds
+                          {formatPrice(salesSummary.netSales)} - {formatPrice(salesSummary.refundedSales)} refunds
                         </div>
                       )}
                     </CardContent>
@@ -466,7 +470,16 @@ export function POSReportsModal({
                       <CardTitle className="text-sm text-muted-foreground">Tax Collected</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{formatPrice(salesSummary.taxTotal)}</div>
+                      <div className="text-2xl font-bold">
+                        {salesSummary.refundedTax > 0
+                          ? formatPrice(salesSummary.taxAfterRefunds)
+                          : formatPrice(salesSummary.taxTotal)}
+                      </div>
+                      {salesSummary.refundedTax > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {formatPrice(salesSummary.taxTotal)} - {formatPrice(salesSummary.refundedTax)} refunded
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                   <Card>

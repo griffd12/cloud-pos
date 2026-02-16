@@ -6311,7 +6311,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const refundItemsData: any[] = [];
 
       if (refundType === "full") {
-        // Refund all items
         for (const item of checkDetails.items.filter(i => !i.voided)) {
           const modifierTotal = (item.modifiers || []).reduce(
             (sum: number, m: any) => sum + parseFloat(m.priceDelta || "0"), 0
@@ -6319,19 +6318,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const itemTotal = (parseFloat(item.unitPrice) + modifierTotal) * (item.quantity || 1);
           refundSubtotal += itemTotal;
 
+          const itemTax = parseFloat(item.taxAmount || "0");
+          refundTaxTotal += itemTax;
+
           refundItemsData.push({
             originalCheckItemId: item.id,
             menuItemName: item.menuItemName,
             quantity: item.quantity || 1,
             unitPrice: item.unitPrice,
             modifiers: item.modifiers,
-            taxAmount: "0", // Will calculate below
+            taxAmount: itemTax.toFixed(2),
             refundAmount: itemTotal.toFixed(2),
           });
         }
-        refundTaxTotal = parseFloat(originalCheck.taxTotal || "0");
       } else {
-        // Partial refund - use provided items
         for (const itemData of items || []) {
           const originalItem = checkDetails.items.find(i => i.id === itemData.originalCheckItemId);
           if (!originalItem) continue;
@@ -6339,24 +6339,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const modifierTotal = (originalItem.modifiers || []).reduce(
             (sum: number, m: any) => sum + parseFloat(m.priceDelta || "0"), 0
           );
-          const itemTotal = (parseFloat(originalItem.unitPrice) + modifierTotal) * (itemData.quantity || 1);
+          const refundQty = itemData.quantity || 1;
+          const originalQty = originalItem.quantity || 1;
+          const itemTotal = (parseFloat(originalItem.unitPrice) + modifierTotal) * refundQty;
           refundSubtotal += itemTotal;
+
+          const originalItemTax = parseFloat(originalItem.taxAmount || "0");
+          const perUnitTax = originalQty > 0 ? originalItemTax / originalQty : 0;
+          const itemTax = perUnitTax * refundQty;
+          refundTaxTotal += itemTax;
 
           refundItemsData.push({
             originalCheckItemId: originalItem.id,
             menuItemName: originalItem.menuItemName,
-            quantity: itemData.quantity || 1,
+            quantity: refundQty,
             unitPrice: originalItem.unitPrice,
             modifiers: originalItem.modifiers,
-            taxAmount: "0",
+            taxAmount: itemTax.toFixed(2),
             refundAmount: itemTotal.toFixed(2),
           });
-        }
-        // Calculate proportional tax for partial refund
-        const originalSubtotal = parseFloat(originalCheck.subtotal || "0");
-        const originalTax = parseFloat(originalCheck.taxTotal || "0");
-        if (originalSubtotal > 0) {
-          refundTaxTotal = (refundSubtotal / originalSubtotal) * originalTax;
         }
       }
 
@@ -8005,6 +8006,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const totalRefunds = refundsInPeriod.reduce((sum, r) => sum + parseFloat(r.total || "0"), 0);
       const refundCount = refundsInPeriod.length;
       
+      const allRefundItemRecords = await storage.getAllRefundItems();
+      const refundIdSet = new Set(refundsInPeriod.map(r => r.id));
+      const refundItemsInPeriod = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+      
+      let refundedSalesCents = 0;
+      let refundedTaxCents = 0;
+      for (const ri of refundItemsInPeriod) {
+        const unitPrice = parseFloat(ri.unitPrice || "0");
+        let modifierUpcharge = 0;
+        if (ri.modifiers && Array.isArray(ri.modifiers)) {
+          modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+        }
+        const qty = ri.quantity || 1;
+        refundedSalesCents += Math.round((unitPrice + modifierUpcharge) * qty * 100);
+        refundedTaxCents += Math.round(parseFloat(ri.taxAmount || "0") * 100);
+      }
+      const refundedSales = refundedSalesCents / 100;
+      const refundedTax = refundedTaxCents / 100;
+      
       // Calculate totals for check movement (carried over and started use check.total)
       const carriedOverTotal = checksCarriedOver.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
       const startedTotal = checksStarted.reduce((sum, c) => sum + parseFloat(c.total || "0"), 0);
@@ -8022,13 +8042,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const openTax = openTaxCents / 100;
       const openTotal = openTotalCents / 100;
       
-      const netSalesAfterRefunds = Math.round((netSales - totalRefunds) * 100) / 100;
+      const netSalesAfterRefunds = Math.max(0, Math.round((netSales - refundedSales) * 100) / 100);
+      const taxAfterRefunds = Math.max(0, Math.round((taxTotal - refundedTax) * 100) / 100);
+      const grossSalesAfterRefunds = Math.max(0, Math.round((grossSales - refundedSales) * 100) / 100);
 
       res.json({
         grossSales,
         netSales,
         netSalesAfterRefunds,
+        grossSalesAfterRefunds,
         taxTotal,
+        taxAfterRefunds,
+        refundedTax: Math.round(refundedTax * 100) / 100,
+        refundedSales: Math.round(refundedSales * 100) / 100,
         totalWithTax,
         
         itemSales: Math.round(itemSales * 100) / 100,
