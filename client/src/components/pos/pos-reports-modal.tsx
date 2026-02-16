@@ -136,10 +136,13 @@ interface POSReportsModalProps {
 interface SalesSummary {
   grossSales: number;
   netSales: number;
+  netSalesAfterRefunds: number;
   taxTotal: number;
   totalWithTax: number;
   totalPayments: number;
   totalTips: number;
+  totalRefunds: number;
+  refundCount: number;
   discountTotal: number;
   checksStarted: number;
   checksClosed: number;
@@ -446,7 +449,16 @@ export function POSReportsModal({
                       <CardTitle className="text-sm text-muted-foreground">Net Sales</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{formatPrice(salesSummary.netSales)}</div>
+                      <div className="text-2xl font-bold">
+                        {salesSummary.totalRefunds > 0
+                          ? formatPrice(salesSummary.netSalesAfterRefunds)
+                          : formatPrice(salesSummary.netSales)}
+                      </div>
+                      {salesSummary.totalRefunds > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {formatPrice(salesSummary.netSales)} - {formatPrice(salesSummary.totalRefunds)} refunds
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                   <Card>
@@ -511,6 +523,21 @@ export function POSReportsModal({
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold text-red-600">{formatPrice(salesSummary.discountTotal)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm text-muted-foreground">Refunds</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-destructive" data-testid="text-refund-total">
+                        {salesSummary.refundCount > 0 ? `-${formatPrice(salesSummary.totalRefunds)}` : formatPrice(0)}
+                      </div>
+                      {salesSummary.refundCount > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1" data-testid="text-refund-count">
+                          {salesSummary.refundCount} refund{salesSummary.refundCount !== 1 ? 's' : ''}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

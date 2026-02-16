@@ -575,6 +575,7 @@ export interface IStorage {
   getRefund(id: string): Promise<Refund | undefined>;
   getRefundWithDetails(id: string): Promise<{ refund: Refund; items: RefundItem[]; payments: RefundPayment[] } | undefined>;
   createRefund(data: InsertRefund, items: Omit<InsertRefundItem, 'refundId'>[], payments: Omit<InsertRefundPayment, 'refundId'>[]): Promise<Refund>;
+  getAllRefundItems(): Promise<RefundItem[]>;
   getNextRefundNumber(rvcId: string): Promise<number>;
   getClosedChecks(rvcId: string, options?: { businessDate?: string; checkNumber?: number; limit?: number }): Promise<Check[]>;
   getCheckWithPaymentsAndItems(checkId: string): Promise<{ check: Check; items: CheckItem[]; payments: CheckPayment[] } | undefined>;
@@ -3582,6 +3583,10 @@ export class DatabaseStorage implements IStorage {
     }
 
     return refund;
+  }
+
+  async getAllRefundItems(): Promise<RefundItem[]> {
+    return db.select().from(refundItems);
   }
 
   async getNextRefundNumber(rvcId: string): Promise<number> {

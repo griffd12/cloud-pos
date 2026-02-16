@@ -8022,15 +8022,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const openTax = openTaxCents / 100;
       const openTotal = openTotalCents / 100;
       
+      const netSalesAfterRefunds = Math.round((netSales - totalRefunds) * 100) / 100;
+
       res.json({
-        // Sales (based on check business date - includes both open and closed)
-        grossSales,          // All check subtotals (closed + open) - before discounts
-        netSales,            // Gross Sales - Discounts (actual taxable revenue)
-        taxTotal,            // All check taxes (closed + open)
-        totalWithTax,        // All check totals (closed + open)
+        grossSales,
+        netSales,
+        netSalesAfterRefunds,
+        taxTotal,
+        totalWithTax,
         
-        // Item-level breakdown (for detailed reporting)
-        // Note: itemSales excludes non-revenue items (gift card sales/reloads)
         itemSales: Math.round(itemSales * 100) / 100,
         baseItemSales: Math.round(baseItemSales * 100) / 100,
         modifierTotal: Math.round(modifierTotal * 100) / 100,
@@ -8038,23 +8038,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         otherCharges: 0,
         discountTotal: Math.round(discountTotal * 100) / 100,
         
-        // Non-revenue transactions (gift card sales/reloads are liabilities, not income)
         nonRevenueTotal: Math.round(nonRevenueTotal * 100) / 100,
         nonRevenueItemCount: nonRevenueItems.length,
         
-        // Closed check breakdown (for reconciliation: Payments should equal closedTotal)
-        closedSubtotal,      // Sum of closed check subtotals
-        closedTax,           // Sum of closed check taxes
-        closedTotal,         // Sum of closed check totals (subtotal + tax)
+        closedSubtotal,
+        closedTax,
+        closedTotal,
         
-        // Open check breakdown (outstanding = openTotal)
-        openSubtotal,        // Sum of open check subtotals
-        openTax,             // Sum of open check taxes  
-        openTotal,           // Sum of open check totals (subtotal + tax) - THIS IS OUTSTANDING
+        openSubtotal,
+        openTax,
+        openTotal,
         
-        // Payments (based on payment date - should equal closedTotal when reconciled)
         totalPayments: Math.round(totalPayments * 100) / 100,
-        // Refunds tracked separately for reporting (subtracted from payments if present)
         totalRefunds: Math.round(totalRefunds * 100) / 100,
         refundCount,
         totalTips: Math.round(totalTips * 100) / 100,
@@ -8907,7 +8902,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         itemSales[ci.menuItemId].netSales += netPrice;
       }
       
-      // Calculate averages (using net sales for accurate avg price after discounts)
+      // Subtract refunds from item sales
+      const allRefunds = await storage.getRefunds();
+      const allRefundItemRecords = await storage.getAllRefundItems();
+
+      const refundsInScope = allRefunds.filter(r => {
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= start && refundDate <= end;
+        }
+      });
+
+      const refundIdSet = new Set(refundsInScope.map(r => r.id));
+      const refundItemsInScope = allRefundItemRecords.filter(ri => refundIdSet.has(ri.refundId));
+
+      for (const ri of refundItemsInScope) {
+        const originalItem = allCheckItems.find(ci => ci.id === ri.originalCheckItemId);
+        if (!originalItem || !originalItem.menuItemId) continue;
+        const menuItemId = originalItem.menuItemId;
+        if (itemSales[menuItemId]) {
+          const refundQty = ri.quantity || 1;
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const itemNetAmount = (unitPrice + modifierUpcharge) * refundQty;
+          itemSales[menuItemId].quantity = Math.max(0, itemSales[menuItemId].quantity - refundQty);
+          itemSales[menuItemId].grossSales = Math.max(0, itemSales[menuItemId].grossSales - itemNetAmount);
+          itemSales[menuItemId].netSales = Math.max(0, itemSales[menuItemId].netSales - itemNetAmount);
+        }
+      }
+
       Object.values(itemSales).forEach(item => {
         item.avgPrice = item.quantity > 0 ? item.netSales / item.quantity : 0;
       });
@@ -9051,6 +9081,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       
+      // Subtract refunds from category sales
+      const catAllRefunds = await storage.getRefunds();
+      const catAllRefundItemRecords = await storage.getAllRefundItems();
+
+      const catRefundsInScope = catAllRefunds.filter(r => {
+        if (validRvcIds && !validRvcIds.includes(r.rvcId)) return false;
+        if (useBusinessDate) {
+          return r.businessDate === businessDate;
+        } else {
+          if (!r.processedAt) return false;
+          const refundDate = new Date(r.processedAt);
+          return refundDate >= start && refundDate <= end;
+        }
+      });
+
+      const catRefundIdSet = new Set(catRefundsInScope.map(r => r.id));
+      const catRefundItemsInScope = catAllRefundItemRecords.filter(ri => catRefundIdSet.has(ri.refundId));
+
+      for (const ri of catRefundItemsInScope) {
+        const originalItem = allCheckItems.find(ci => ci.id === ri.originalCheckItemId);
+        if (!originalItem || !originalItem.menuItemId) continue;
+        const menuItem = menuItems.find(m => m.id === originalItem.menuItemId);
+        if (!menuItem) continue;
+
+        const menuItemSlu = menuItemSlus.find(mis => mis.menuItemId === originalItem.menuItemId);
+        const slu = menuItemSlu ? slus.find(s => s.id === menuItemSlu.sluId) : null;
+        const sluId = slu?.id || "uncategorized";
+
+        if (categoryData[sluId]) {
+          const refundQty = ri.quantity || 1;
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modifierUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modifierUpcharge = (ri.modifiers as any[]).reduce((mSum: number, mod: any) => mSum + parseFloat(mod.priceDelta || "0"), 0);
+          }
+          const itemNetAmount = (unitPrice + modifierUpcharge) * refundQty;
+          categoryData[sluId].totalQuantity = Math.max(0, categoryData[sluId].totalQuantity - refundQty);
+          categoryData[sluId].totalSales = Math.max(0, categoryData[sluId].totalSales - itemNetAmount);
+
+          const existingItem = categoryData[sluId].items.find(i => i.id === originalItem.menuItemId);
+          if (existingItem) {
+            existingItem.quantity = Math.max(0, existingItem.quantity - refundQty);
+            existingItem.sales = Math.max(0, existingItem.sales - itemNetAmount);
+          }
+        }
+      }
+
       // Sort items within each category
       Object.values(categoryData).forEach(cat => {
         cat.items.sort((a, b) => b.sales - a.sales);

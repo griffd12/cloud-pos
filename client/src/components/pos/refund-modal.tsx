@@ -229,13 +229,18 @@ export function RefundModal({
                       return (
                         <div
                           key={item.id}
-                          className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
+                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                            isItemSelected(item.id)
+                              ? "bg-primary/10 border border-primary/30"
+                              : "hover:bg-muted/50 border border-transparent"
+                          }`}
                           onClick={() => toggleItemSelection(item.id, item.quantity || 1)}
                           data-testid={`refund-item-${item.id}`}
                         >
                           <Checkbox
                             checked={isItemSelected(item.id)}
-                            onCheckedChange={() => toggleItemSelection(item.id, item.quantity || 1)}
+                            onCheckedChange={() => {}}
+                            onClick={(e) => e.stopPropagation()}
                           />
                           <div className="flex-1">
                             <div className="font-medium">{item.menuItemName}</div>
