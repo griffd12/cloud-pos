@@ -1525,6 +1525,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/auth/manager-approval", async (req, res) => {
+    try {
+      const { pin, requiredPrivilege } = req.body;
+      if (!pin) {
+        return res.status(400).json({ message: "Manager PIN required" });
+      }
+
+      const manager = await storage.getEmployeeByPin(pin);
+      if (!manager || !manager.active) {
+        return res.status(401).json({ message: "Invalid manager PIN" });
+      }
+
+      if (!manager.roleId) {
+        return res.status(403).json({ message: "Employee has no assigned role" });
+      }
+
+      const privileges = await storage.getRolePrivileges(manager.roleId);
+
+      if (requiredPrivilege && !privileges.includes(requiredPrivilege) && !privileges.includes("admin_access")) {
+        return res.status(403).json({ message: `Employee does not have the required privilege: ${requiredPrivilege}` });
+      }
+
+      res.json({
+        approved: true,
+        approvedById: manager.id,
+        approvedByName: `${manager.firstName} ${manager.lastName}`,
+      });
+    } catch (error) {
+      console.error("Manager approval error:", error);
+      res.status(500).json({ message: "Failed to verify manager credentials" });
+    }
+  });
+
   app.get("/api/auth/offline-employees", async (req, res) => {
     try {
       const enterpriseId = await getEnforcedEnterpriseId(req);
