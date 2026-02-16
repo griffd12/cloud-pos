@@ -18325,8 +18325,41 @@ connect();
         }
       }
 
-      // Create check payment record (Stripe payment processed directly, no processor record needed)
-      // tipAmount comes from EMV terminal tipping or payment overage
+      // Create a payment_transactions record to link the Stripe paymentIntentId
+      // This is required so refunds can find the gateway transaction and issue Stripe refunds
+      let paymentTxId: string | null = null;
+      try {
+        const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
+        const propertyId = rvc?.propertyId;
+        const processor = propertyId ? await storage.getActivePaymentProcessor(propertyId) : null;
+
+        if (processor) {
+          const amountCents = Math.round(parseFloat(amount.toString()) * 100);
+          const tipCents = tipAmount ? Math.round(parseFloat(tipAmount.toString()) * 100) : 0;
+          const paymentTx = await storage.createPaymentTransaction({
+            paymentProcessorId: processor.id,
+            gatewayTransactionId: paymentIntentId,
+            authCode: null,
+            referenceNumber: paymentIntentId,
+            cardBrand: cardBrand || null,
+            cardLast4: cardLast4 || null,
+            entryMode: "manual",
+            authAmount: amountCents,
+            captureAmount: amountCents,
+            tipAmount: tipCents,
+            status: "captured",
+            transactionType: "sale",
+            responseCode: "succeeded",
+            responseMessage: "Stripe payment captured",
+            businessDate,
+            employeeId: employeeId || null,
+          });
+          paymentTxId = paymentTx.id;
+        }
+      } catch (txError: any) {
+        console.error("Failed to create payment transaction record for Stripe:", txError.message);
+      }
+
       const checkPayment = await storage.createPayment({
         checkId,
         tenderId,
@@ -18336,7 +18369,16 @@ connect();
         employeeId,
         businessDate,
         paymentStatus: "completed",
+        paymentTransactionId: paymentTxId,
       });
+
+      if (paymentTxId) {
+        try {
+          await storage.updatePaymentTransaction(paymentTxId, { checkPaymentId: checkPayment.id });
+        } catch (linkError: any) {
+          console.error("Failed to link payment transaction to check payment:", linkError.message);
+        }
+      }
 
       // Calculate total paid and check if check should be closed
       const allPayments = await storage.getPayments(checkId);

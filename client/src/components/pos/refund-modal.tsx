@@ -93,7 +93,11 @@ export function RefundModal({
           duration: 10000,
         });
       } else {
-        toast({ title: "Refund processed successfully" });
+        const gatewaySuccess = data.gatewayResults?.some((r: any) => r.success);
+        const description = gatewaySuccess
+          ? `$${parseFloat(data.total || "0").toFixed(2)} refunded to customer's card`
+          : `Refund #${data.refundNumber} for $${parseFloat(data.total || "0").toFixed(2)} recorded`;
+        toast({ title: "Refund processed successfully", description });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", rvcId, "refunds"] });
       onComplete();
