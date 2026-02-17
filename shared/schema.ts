@@ -845,7 +845,41 @@ export const serviceCharges = pgTable("service_charges", {
   autoApply: boolean("auto_apply").default(false),
   orderTypes: text("order_types").array(),
   active: boolean("active").default(true),
+  isTaxable: boolean("is_taxable").notNull().default(false),
+  taxGroupId: varchar("tax_group_id").references(() => taxGroups.id),
+  revenueCategory: text("revenue_category").notNull().default("revenue"), // 'revenue' | 'non_revenue'
+  postToTipPool: boolean("post_to_tip_pool").notNull().default(false),
+  tipEligible: boolean("tip_eligible").notNull().default(false),
 });
+
+export const checkServiceCharges = pgTable("check_service_charges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull(),
+  propertyId: varchar("property_id").notNull(),
+  rvcId: varchar("rvc_id").notNull(),
+  checkId: varchar("check_id").notNull().references(() => checks.id),
+  serviceChargeId: varchar("service_charge_id").notNull().references(() => serviceCharges.id),
+  nameAtSale: text("name_at_sale").notNull(),
+  codeAtSale: text("code_at_sale"),
+  isTaxableAtSale: boolean("is_taxable_at_sale").notNull().default(false),
+  taxRateAtSale: decimal("tax_rate_at_sale", { precision: 8, scale: 5 }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  taxableAmount: decimal("taxable_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  autoApplied: boolean("auto_applied").notNull().default(false),
+  appliedAt: timestamp("applied_at").notNull().defaultNow(),
+  appliedByEmployeeId: varchar("applied_by_employee_id").references(() => employees.id),
+  businessDate: text("business_date").notNull(),
+  originDeviceId: text("origin_device_id"),
+  voided: boolean("voided").notNull().default(false),
+  voidedAt: timestamp("voided_at"),
+  voidedByEmployeeId: varchar("voided_by_employee_id").references(() => employees.id),
+  voidReason: text("void_reason"),
+}, (table) => [
+  index("idx_check_service_charges_business_date").on(table.businessDate, table.propertyId, table.rvcId),
+  index("idx_check_service_charges_check_id").on(table.checkId),
+  index("idx_check_service_charges_sc_id").on(table.serviceChargeId),
+]);
 
 // ============================================================================
 // RVC COUNTERS (Concurrency-safe check number sequences)
@@ -1240,6 +1274,7 @@ export const insertEmcSessionSchema = createInsertSchema(emcSessions).omit({ id:
 export const insertTenderSchema = createInsertSchema(tenders).omit({ id: true });
 export const insertDiscountSchema = createInsertSchema(discounts).omit({ id: true });
 export const insertServiceChargeSchema = createInsertSchema(serviceCharges).omit({ id: true });
+export const insertCheckServiceChargeSchema = createInsertSchema(checkServiceCharges).omit({ id: true, appliedAt: true });
 export const insertCheckSchema = createInsertSchema(checks).omit({ id: true });
 export const insertRoundSchema = createInsertSchema(rounds).omit({ id: true });
 export const insertCheckItemSchema = createInsertSchema(checkItems).omit({ id: true });
@@ -1341,6 +1376,8 @@ export type Discount = typeof discounts.$inferSelect;
 export type InsertDiscount = z.infer<typeof insertDiscountSchema>;
 export type ServiceCharge = typeof serviceCharges.$inferSelect;
 export type InsertServiceCharge = z.infer<typeof insertServiceChargeSchema>;
+export type CheckServiceCharge = typeof checkServiceCharges.$inferSelect;
+export type InsertCheckServiceCharge = z.infer<typeof insertCheckServiceChargeSchema>;
 export type Check = typeof checks.$inferSelect;
 export type InsertCheck = z.infer<typeof insertCheckSchema>;
 export type Round = typeof rounds.$inferSelect;

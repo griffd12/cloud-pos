@@ -6,7 +6,7 @@ import {
   slus, taxGroups, printClasses, orderDevices, menuItems, menuItemSlus, type MenuItemSlu,
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
   ingredientPrefixes, menuItemRecipeIngredients,
-  tenders, discounts, serviceCharges,
+  tenders, discounts, serviceCharges, checkServiceCharges,
   rvcCounters,
   checks, rounds, checkItems, checkPayments, checkDiscounts, checkLocks, auditLogs, kdsTickets, kdsTicketItems,
   paymentProcessors, paymentTransactions, terminalDevices, terminalSessions,
@@ -55,6 +55,7 @@ import {
   type Tender, type InsertTender,
   type Discount, type InsertDiscount,
   type ServiceCharge, type InsertServiceCharge,
+  type CheckServiceCharge, type InsertCheckServiceCharge,
   type Check, type InsertCheck,
   type Round, type InsertRound,
   type CheckItem, type InsertCheckItem,
@@ -367,6 +368,12 @@ export interface IStorage {
   createServiceCharge(data: InsertServiceCharge): Promise<ServiceCharge>;
   updateServiceCharge(id: string, data: Partial<InsertServiceCharge>): Promise<ServiceCharge | undefined>;
   deleteServiceCharge(id: string): Promise<boolean>;
+
+  // Check Service Charges (ledger entries)
+  getCheckServiceChargesByCheck(checkId: string): Promise<CheckServiceCharge[]>;
+  getCheckServiceChargesByBusinessDate(propertyId: string, businessDate: string, rvcId?: string): Promise<CheckServiceCharge[]>;
+  createCheckServiceCharge(data: InsertCheckServiceCharge): Promise<CheckServiceCharge>;
+  voidCheckServiceCharge(id: string, voidedByEmployeeId: string, voidReason?: string): Promise<CheckServiceCharge | undefined>;
 
   // Checks
   getChecks(rvcId?: string, status?: string, includeTestMode?: boolean): Promise<Check[]>;
@@ -1928,6 +1935,34 @@ export class DatabaseStorage implements IStorage {
   async deleteServiceCharge(id: string): Promise<boolean> {
     const result = await db.delete(serviceCharges).where(eq(serviceCharges.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getCheckServiceChargesByCheck(checkId: string): Promise<CheckServiceCharge[]> {
+    return db.select().from(checkServiceCharges).where(eq(checkServiceCharges.checkId, checkId));
+  }
+
+  async getCheckServiceChargesByBusinessDate(propertyId: string, businessDate: string, rvcId?: string): Promise<CheckServiceCharge[]> {
+    const conditions = [
+      eq(checkServiceCharges.propertyId, propertyId),
+      eq(checkServiceCharges.businessDate, businessDate),
+    ];
+    if (rvcId) conditions.push(eq(checkServiceCharges.rvcId, rvcId));
+    return db.select().from(checkServiceCharges).where(and(...conditions));
+  }
+
+  async createCheckServiceCharge(data: InsertCheckServiceCharge): Promise<CheckServiceCharge> {
+    const [result] = await db.insert(checkServiceCharges).values(sanitizeDates(data)).returning();
+    return result;
+  }
+
+  async voidCheckServiceCharge(id: string, voidedByEmployeeId: string, voidReason?: string): Promise<CheckServiceCharge | undefined> {
+    const [result] = await db.update(checkServiceCharges).set({
+      voided: true,
+      voidedAt: new Date(),
+      voidedByEmployeeId,
+      voidReason: voidReason || null,
+    }).where(eq(checkServiceCharges.id, id)).returning();
+    return result;
   }
 
   // Checks

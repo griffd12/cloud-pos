@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { registerReportingRoutes } from "./reporting-routes";
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
@@ -10,7 +11,7 @@ import archiver from "archiver";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, ne, sql, inArray, and, desc } from "drizzle-orm";
-import { emcUsers, enterprises, properties, employeeAssignments, configOverrides, checks, onlineOrders, onlineOrderSources, kdsTickets, kdsTicketItems, checkItems } from "@shared/schema";
+import { emcUsers, enterprises, properties, employeeAssignments, configOverrides, checks, onlineOrders, onlineOrderSources, kdsTickets, kdsTicketItems, checkItems, checkServiceCharges } from "@shared/schema";
 import { uberEatsIntegration } from "./integrations/uber-eats";
 import { grubhubIntegration } from "./integrations/grubhub";
 import { doorDashIntegration } from "./integrations/doordash";
@@ -28,7 +29,7 @@ import {
   insertPrintClassRoutingSchema, insertMenuItemSchema, insertModifierGroupSchema,
   insertModifierSchema, insertModifierGroupModifierSchema, insertMenuItemModifierGroupSchema,
   insertIngredientPrefixSchema, insertMenuItemRecipeIngredientSchema,
-  insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema,
+  insertTenderSchema, insertDiscountSchema, insertServiceChargeSchema, insertCheckServiceChargeSchema,
   insertCheckSchema, insertCheckItemSchema, insertCheckPaymentSchema,
   insertPosLayoutSchema, insertPosLayoutCellSchema,
   // T&A schemas
@@ -975,6 +976,8 @@ async function finalizePreviewTicket(
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  registerReportingRoutes(app, storage);
+
   // Run schema migrations
   try {
     await db.execute(sql`ALTER TABLE emc_users ADD COLUMN IF NOT EXISTS employee_id VARCHAR REFERENCES employees(id)`);
@@ -4271,6 +4274,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  app.get("/api/checks/:checkId/service-charges", async (req, res) => {
+    const charges = await storage.getCheckServiceChargesByCheck(req.params.checkId);
+    res.json(charges);
+  });
+
+  app.post("/api/checks/:checkId/service-charges", async (req, res) => {
+    const check = await storage.getCheck(req.params.checkId);
+    if (!check) return res.status(404).json({ message: "Check not found" });
+    
+    const serviceCharge = await storage.getServiceCharge(req.body.serviceChargeId);
+    if (!serviceCharge) return res.status(404).json({ message: "Service charge not found" });
+    
+    let amount = parseFloat(req.body.amount || "0");
+    if (serviceCharge.type === "percent") {
+      amount = Math.round(parseFloat(check.subtotal || "0") * parseFloat(serviceCharge.value) / 100 * 100) / 100;
+    } else if (!req.body.amount) {
+      amount = parseFloat(serviceCharge.value);
+    }
+    
+    let taxAmount = 0;
+    let taxRateAtSale = null;
+    let taxableAmount = 0;
+    if (serviceCharge.isTaxable) {
+      taxableAmount = amount;
+      if (serviceCharge.taxGroupId) {
+        const taxGroups = await storage.getTaxGroups();
+        const tg = taxGroups.find(t => t.id === serviceCharge.taxGroupId);
+        if (tg) {
+          taxRateAtSale = parseFloat(tg.rate);
+          taxAmount = Math.round(amount * taxRateAtSale / 100 * 100) / 100;
+        }
+      }
+    }
+
+    const rvc = await storage.getRvc(check.rvcId);
+    const property = rvc ? await storage.getProperty(rvc.propertyId!) : null;
+    
+    const ledgerEntry = await storage.createCheckServiceCharge({
+      enterpriseId: property?.enterpriseId || "",
+      propertyId: rvc?.propertyId || "",
+      rvcId: check.rvcId,
+      checkId: check.id,
+      serviceChargeId: serviceCharge.id,
+      nameAtSale: serviceCharge.name,
+      codeAtSale: serviceCharge.code,
+      isTaxableAtSale: serviceCharge.isTaxable,
+      taxRateAtSale: taxRateAtSale?.toString() || null,
+      amount: amount.toFixed(2),
+      taxableAmount: taxableAmount.toFixed(2),
+      taxAmount: taxAmount.toFixed(2),
+      autoApplied: req.body.autoApplied || false,
+      appliedByEmployeeId: req.body.employeeId || null,
+      businessDate: check.originBusinessDate || new Date().toISOString().split("T")[0],
+      originDeviceId: req.body.originDeviceId || null,
+    });
+
+    const allCharges = await storage.getCheckServiceChargesByCheck(check.id);
+    const scTotal = allCharges.filter(c => !c.voided).reduce((sum, c) => sum + parseFloat(c.amount), 0);
+    const scTaxTotal = allCharges.filter(c => !c.voided).reduce((sum, c) => sum + parseFloat(c.taxAmount || "0"), 0);
+    
+    await storage.updateCheck(check.id, {
+      serviceChargeTotal: scTotal.toFixed(2),
+      taxTotal: (parseFloat(check.taxTotal || "0") + scTaxTotal - parseFloat(check.taxTotal || "0")).toFixed(2),
+    });
+
+    res.status(201).json(ledgerEntry);
+  });
+
+  app.post("/api/check-service-charges/:id/void", async (req, res) => {
+    const result = await storage.voidCheckServiceCharge(
+      req.params.id,
+      req.body.employeeId,
+      req.body.reason
+    );
+    if (!result) return res.status(404).json({ message: "Service charge entry not found" });
+
+    const allCharges = await storage.getCheckServiceChargesByCheck(result.checkId);
+    const scTotal = allCharges.filter(c => !c.voided).reduce((sum, c) => sum + parseFloat(c.amount), 0);
+    await storage.updateCheck(result.checkId, {
+      serviceChargeTotal: scTotal.toFixed(2),
+    });
+
+    res.json(result);
+  });
+
   // ============================================================================
   // CHECK LIFECYCLE ROUTES
   // ============================================================================
@@ -5204,6 +5292,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
 
+      const { drawerAssignmentId } = req.body;
+      let resolvedDrawerAssignmentId: string | null = drawerAssignmentId || null;
+      let resolvedDrawerId: string | null = null;
+
+      if (tender.type === "cash") {
+        if (!drawerAssignmentId) {
+          const checkForDrawer = await storage.getCheck(checkId);
+          if (checkForDrawer) {
+            const rvc = await storage.getRvc(checkForDrawer.rvcId);
+            if (rvc?.propertyId) {
+              const assignments = await storage.getDrawerAssignments(rvc.propertyId);
+              const activeAssignment = assignments.find(a => a.status === "open" && a.employeeId === employeeId);
+              if (activeAssignment) {
+                resolvedDrawerAssignmentId = activeAssignment.id;
+                resolvedDrawerId = activeAssignment.drawerId;
+              }
+            }
+          }
+        } else {
+          const assignment = await storage.getDrawerAssignment(drawerAssignmentId);
+          if (assignment && assignment.status === "open") {
+            resolvedDrawerId = assignment.drawerId;
+          }
+        }
+      }
+
       // DUPLICATE PREVENTION: If paymentTransactionId looks like a check payment ID (from Stripe record-payment),
       // check if this payment already exists to avoid creating duplicates
       if (paymentTransactionId) {
@@ -5256,6 +5370,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         paymentStatus,
         paymentAttemptId: idempotencyKey || undefined,
       });
+
+      if (tender.type === "cash" && resolvedDrawerAssignmentId && resolvedDrawerId && businessDate) {
+        try {
+          const rvcForProp = await storage.getRvc(checkForBiz?.rvcId || "");
+          await storage.createCashTransaction({
+            propertyId: rvcForProp?.propertyId || "",
+            drawerId: resolvedDrawerId,
+            assignmentId: resolvedDrawerAssignmentId,
+            employeeId,
+            transactionType: "sale",
+            amount: amount,
+            businessDate,
+            checkId,
+          });
+        } catch (e) {
+          console.error("Failed to create cash_transaction for sale:", e);
+        }
+      }
 
       const check = await storage.getCheck(checkId);
       if (!check) return res.status(404).json({ message: "Check not found" });
@@ -6710,6 +6842,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         refundItemsData,
         refundPaymentsData
       );
+
+      for (const rp of refundPaymentsData) {
+        const rpTender = await storage.getTender(rp.tenderId);
+        if (rpTender?.type === "cash") {
+          const rvcForCash = await storage.getRvc(rvcId);
+          if (rvcForCash?.propertyId) {
+            const assignments = await storage.getDrawerAssignments(rvcForCash.propertyId);
+            const activeAssignment = assignments.find(a => a.status === "open" && a.employeeId === processedByEmployeeId);
+            if (activeAssignment) {
+              try {
+                await storage.createCashTransaction({
+                  propertyId: rvcForCash.propertyId,
+                  drawerId: activeAssignment.drawerId,
+                  assignmentId: activeAssignment.id,
+                  employeeId: processedByEmployeeId,
+                  transactionType: "refund",
+                  amount: (-parseFloat(rp.amount)).toFixed(2),
+                  businessDate: businessDate || originalCheck.businessDate || new Date().toISOString().split("T")[0],
+                  checkId: originalCheckId,
+                });
+              } catch (e) {
+                console.error("Failed to create cash_transaction for refund:", e);
+              }
+            }
+          }
+        }
+      }
 
       // Create audit log
       const gatewayInfo = gatewayResults.length > 0

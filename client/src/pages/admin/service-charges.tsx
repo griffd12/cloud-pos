@@ -30,6 +30,15 @@ export default function ServiceChargesPage() {
   const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<ServiceCharge>("service_charge", ["/api/service-charges"]);
   const displayedServiceCharges = filterOverriddenInherited(serviceCharges);
 
+  const { data: taxGroups = [] } = useQuery<any[]>({
+    queryKey: ["/api/tax-groups", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/tax-groups${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
   const columns: Column<ServiceCharge>[] = [
     { key: "name", header: "Name", sortable: true },
     { key: "code", header: "Code", sortable: true },
@@ -47,6 +56,21 @@ export default function ServiceChargesPage() {
     {
       key: "autoApply",
       header: "Auto Apply",
+      render: (value) => (value ? <Badge>Yes</Badge> : "-"),
+    },
+    {
+      key: "isTaxable",
+      header: "Taxable",
+      render: (value) => (value ? <Badge>Yes</Badge> : "-"),
+    },
+    {
+      key: "revenueCategory",
+      header: "Revenue",
+      render: (value) => <Badge variant="outline">{value === "non_revenue" ? "Non-Revenue" : "Revenue"}</Badge>,
+    },
+    {
+      key: "postToTipPool",
+      header: "Tip Pool",
       render: (value) => (value ? <Badge>Yes</Badge> : "-"),
     },
     {
@@ -74,6 +98,28 @@ export default function ServiceChargesPage() {
     },
     { name: "value", label: "Value", type: "decimal", placeholder: "e.g., 5.00", required: true },
     { name: "autoApply", label: "Auto Apply", type: "switch", description: "Automatically apply to applicable orders", defaultValue: false },
+    { name: "isTaxable", label: "Taxable", type: "switch", description: "Subject to tax", defaultValue: false },
+    {
+      name: "taxGroupId",
+      label: "Tax Group",
+      type: "select",
+      options: [
+        { value: "", label: "None" },
+        ...taxGroups.map((tg: any) => ({ value: tg.id, label: `${tg.name} (${tg.rate}%)` })),
+      ],
+    },
+    {
+      name: "revenueCategory",
+      label: "Revenue Category",
+      type: "select",
+      options: [
+        { value: "revenue", label: "Revenue" },
+        { value: "non_revenue", label: "Non-Revenue" },
+      ],
+      required: true,
+    },
+    { name: "postToTipPool", label: "Post to Tip Pool", type: "switch", description: "Include in tip pool calculations", defaultValue: false },
+    { name: "tipEligible", label: "Tip Eligible", type: "switch", description: "Distributed to employees as tips", defaultValue: false },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
 
