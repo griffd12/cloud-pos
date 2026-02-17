@@ -345,11 +345,12 @@ export function KdsTicket({
                     .map((mod, idx) => (
                     <span
                       key={idx}
-                      className={`block text-sm pl-1 ${
+                      className={`block text-base font-medium pl-1 ${
                         item.itemStatus === "pending" 
-                          ? (hasAlert ? "opacity-80" : "text-amber-600 dark:text-amber-400 font-medium")
-                          : (hasAlert ? "opacity-80" : "text-muted-foreground")
+                          ? (hasAlert ? "opacity-80" : "text-amber-600 dark:text-amber-400")
+                          : (hasAlert ? "opacity-90 font-semibold" : "text-red-700 dark:text-red-400")
                       }`}
+                      data-testid={`text-modifier-${item.id}-${idx}`}
                     >
                       - {mod.name}
                     </span>
