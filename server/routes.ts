@@ -8713,52 +8713,75 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Voids Report
   app.get("/api/reports/voids", async (req, res) => {
     try {
-      const { propertyId, rvcId, startDate, endDate } = req.query;
+      const { propertyId, rvcId, startDate, endDate, businessDate } = req.query;
+      const useBusinessDate = businessDate && typeof businessDate === 'string' && isValidBusinessDateFormat(businessDate);
       const start = startDate ? new Date(startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
       const end = endDate ? new Date(endDate as string) : new Date();
       
       const allChecks = await storage.getChecks();
+      const allCheckItems = await storage.getAllCheckItems();
       const allRvcs = await storage.getRvcs();
       const employees = await storage.getEmployees();
       
-      let filteredChecks = allChecks.filter(c => {
-        const checkDate = c.status === "closed" && c.closedAt ? new Date(c.closedAt) : (c.openedAt ? new Date(c.openedAt) : null);
-        if (!checkDate) return false;
-        if (checkDate < start || checkDate > end) return false;
-        return true;
-      });
-      
+      let checksInScope = [...allChecks];
       if (propertyId && propertyId !== "all") {
         const propertyRvcs = allRvcs.filter(r => r.propertyId === propertyId).map(r => r.id);
-        filteredChecks = filteredChecks.filter(c => propertyRvcs.includes(c.rvcId));
+        checksInScope = checksInScope.filter(c => propertyRvcs.includes(c.rvcId));
       }
       if (rvcId && rvcId !== "all") {
-        filteredChecks = filteredChecks.filter(c => c.rvcId === rvcId);
+        checksInScope = checksInScope.filter(c => c.rvcId === rvcId);
       }
+      
+      const checkIdsInScope = new Set(checksInScope.map(c => c.id));
+      const checkMap = new Map(checksInScope.map(c => [c.id, c]));
+      
+      const voidedItems = allCheckItems.filter(item => {
+        if (!item.voided) return false;
+        if (!checkIdsInScope.has(item.checkId)) return false;
+        if (useBusinessDate) {
+          return item.businessDate === businessDate;
+        }
+        const itemDate = item.businessDate ? new Date(item.businessDate + "T12:00:00") : (item.addedAt ? new Date(item.addedAt) : null);
+        if (!itemDate) return false;
+        return itemDate >= start && itemDate <= end;
+      });
       
       const voidsByEmployee: Record<string, { name: string; count: number; amount: number }> = {};
+      let totalVoidCount = 0;
+      let totalVoidAmountCents = 0;
       
-      for (const check of filteredChecks) {
-        const items = await storage.getCheckItems(check.id);
-        for (const item of items) {
-          if (!item.voided) continue;
-          const empId = item.voidedByEmployeeId || check.employeeId;
-          const emp = employees.find(e => e.id === empId);
-          const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
-          
-          if (!voidsByEmployee[empId]) {
-            voidsByEmployee[empId] = { name: empName, count: 0, amount: 0 };
-          }
-          voidsByEmployee[empId].count += 1;
-          voidsByEmployee[empId].amount += parseFloat(item.unitPrice) * (item.quantity || 1);
+      for (const item of voidedItems) {
+        const check = checkMap.get(item.checkId);
+        const empId = item.voidedByEmployeeId || check?.employeeId || "unknown";
+        const emp = employees.find(e => e.id === empId);
+        const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Unknown";
+        
+        const qty = item.quantity || 1;
+        const price = parseFloat(item.unitPrice || "0");
+        let modPrice = 0;
+        if (item.modifiers && Array.isArray(item.modifiers)) {
+          modPrice = (item.modifiers as any[]).reduce((s: number, m: any) => s + parseFloat(m.priceDelta || "0"), 0);
         }
+        const itemAmountCents = Math.round((price + modPrice) * qty * 100);
+        
+        if (!voidsByEmployee[empId]) {
+          voidsByEmployee[empId] = { name: empName, count: 0, amount: 0 };
+        }
+        voidsByEmployee[empId].count += qty;
+        voidsByEmployee[empId].amount += itemAmountCents / 100;
+        totalVoidCount += qty;
+        totalVoidAmountCents += itemAmountCents;
       }
       
-      const result = Object.entries(voidsByEmployee)
-        .map(([id, data]) => ({ employeeId: id, ...data }))
+      const byEmployee = Object.entries(voidsByEmployee)
+        .map(([id, data]) => ({ employeeId: id, ...data, amount: Math.round(data.amount * 100) / 100 }))
         .sort((a, b) => b.amount - a.amount);
       
-      res.json(result);
+      res.json({
+        totalCount: totalVoidCount,
+        totalAmount: totalVoidAmountCents / 100,
+        byEmployee,
+      });
     } catch (error) {
       console.error("Voids report error:", error);
       res.status(500).json({ message: "Failed to generate voids report" });
@@ -8895,10 +8918,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
           rvcName: rvc?.name || "Unknown",
           tableNumber: check.tableNumber,
+          guestCount: check.guestCount,
           itemCount,
+          subtotal: parseFloat(check.subtotal || "0"),
+          tax: parseFloat(check.taxTotal || "0"),
           total: parseFloat(check.total || "0"),
           durationMinutes: ageMinutes,
           openedAt: check.openedAt,
+          businessDate: check.businessDate,
         };
       }).sort((a, b) => b.durationMinutes - a.durationMinutes);
       
@@ -8963,8 +8990,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return itemDate >= start && itemDate <= end;
       });
       
+      const allPayments = await storage.getAllPayments();
+      
       // Group by employee and calculate sales
-      const salesByEmployee: Record<string, { name: string; checkCount: number; closedCheckCount: number; openCheckCount: number; itemCount: number; grossSales: number; netSales: number; avgCheck: number }> = {};
+      const salesByEmployee: Record<string, { name: string; checkCount: number; closedCheckCount: number; openCheckCount: number; itemCount: number; grossSales: number; netSales: number; avgCheck: number; tips: number }> = {};
       const employeeChecks: Record<string, Set<string>> = {};
       
       for (const item of itemsInScope) {
@@ -8977,7 +9006,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const itemTotal = parseFloat(item.unitPrice) * (item.quantity || 1);
         
         if (!salesByEmployee[empId]) {
-          salesByEmployee[empId] = { name: empName, checkCount: 0, closedCheckCount: 0, openCheckCount: 0, itemCount: 0, grossSales: 0, netSales: 0, avgCheck: 0 };
+          salesByEmployee[empId] = { name: empName, checkCount: 0, closedCheckCount: 0, openCheckCount: 0, itemCount: 0, grossSales: 0, netSales: 0, avgCheck: 0, tips: 0 };
           employeeChecks[empId] = new Set();
         }
         
@@ -9065,7 +9094,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      // Aggregate tips from payments per employee
       for (const empId of Object.keys(salesByEmployee)) {
+        const empCheckIds = employeeChecks[empId];
+        if (empCheckIds) {
+          for (const checkId of Array.from(empCheckIds)) {
+            const checkPayments = allPayments.filter(p => p.checkId === checkId && p.paymentStatus === "completed");
+            for (const payment of checkPayments) {
+              salesByEmployee[empId].tips += parseFloat(payment.tipAmount || "0");
+            }
+          }
+        }
+        salesByEmployee[empId].tips = Math.round(salesByEmployee[empId].tips * 100) / 100;
         salesByEmployee[empId].avgCheck = salesByEmployee[empId].checkCount > 0
           ? salesByEmployee[empId].netSales / salesByEmployee[empId].checkCount
           : 0;
