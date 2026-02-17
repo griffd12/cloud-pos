@@ -165,6 +165,9 @@ interface EmployeeBalance {
   employeeName: string;
   checkCount: number;
   itemCount: number;
+  grossSales: number;
+  discounts: number;
+  netSales: number;
   subtotal: number;
   tax: number;
   total: number;
