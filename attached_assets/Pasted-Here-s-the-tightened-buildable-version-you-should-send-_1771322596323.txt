@@ -1,0 +1,215 @@
+Here’s the tightened, buildable version you should send back to AI (with acceptance criteria so you can verify).
+
+1) Add service charge details + new ledger (REQUIRED)
+
+Implement:
+
+Add fields to service_charges config:
+
+isTaxable (bool)
+
+taxGroupId (nullable FK) or snapshot at sale time
+
+revenueCategory enum: revenue | non_revenue
+
+postToTipPool (bool) — default false
+
+tipEligible (bool) — default false
+
+Create check_service_charges table (immutable ledger):
+
+id, checkId, serviceChargeId
+
+nameAtSale, codeAtSale
+
+amount, taxableAmount, taxAmount
+
+isTaxableAtSale, taxRateAtSale (or taxGroup snapshot)
+
+appliedAt, appliedByEmployeeId, autoApplied
+
+businessDate NOT NULL, propertyId, rvcId
+
+Acceptance tests:
+
+Apply 2 different service charges on one check (one taxable, one not). BOH daily shows both separately and tax is correct.
+
+Service charge report can group by charge type and counts match checks.
+
+2) Update tips in timecards + reports (REQUIRED)
+
+Decision already made: Tip pooling uses credit card tips only.
+
+Implement:
+
+Keep timecards.tips as Declared Cash Tips (no pooling)
+
+Fix timecard report query so “Declared Tips” column reads timecards.tips
+
+Ensure CC tips are sourced from check_payments.tipAmount only
+
+Acceptance tests:
+
+Enter declared cash tips at clock-out → timecard report shows it.
+
+CC tips appear on Z report tips section and BOH tip summary.
+
+Tip pool totals equal sum of CC tips only (cash tips excluded).
+
+3) Link cash payments to drawer (REQUIRED for FOH accuracy)
+
+Implement:
+
+When a cash payment is posted:
+
+require active drawer_assignment_id
+
+insert a cash_transactions record linked to:
+
+drawerId, assignmentId, employeeId, checkId
+
+type = sale
+
+For cash refunds:
+
+insert cash_transactions type = refund
+
+For paid outs / paid ins / drops / pickups:
+
+must hit cash_transactions (not payments)
+
+Acceptance tests:
+
+Drawer expected cash = opening + cash sales - refunds - paid outs ± paid ins - drops + pickups
+
+Drawer variance matches physical count entry.
+
+4) Create sales + summary reports (DON’T GUESS — BUILD FROM VIEWS)
+
+Implement SQL views (or equivalent DAL queries):
+
+v_sales_lines (from check_items, excludes voided, includes item discounts, tax snapshots)
+
+v_service_charge_lines (from check_service_charges)
+
+v_payments (from check_payments, includes tipAmount)
+
+v_voids (voided check_items)
+
+v_cash_drawer_activity (cash_transactions + assignments)
+
+v_labor_timecards (timecards)
+
+Reports to build:
+FOH:
+
+Z Report (daily)
+
+Cash Drawer Report (per assignment)
+
+Cashier Report (per employee / shift)
+
+BOH:
+
+Daily Sales Summary
+
+Tax Summary by Rate
+
+Discounts Summary
+
+Service Charge Summary
+
+Labor Summary
+
+Tip Pool Summary (CC only)
+
+Acceptance tests:
+
+Net Sales + Tax + Service Charges = Total Revenue
+
+Total Collected (tenders net of refunds) = Total Revenue + Tips (if tips are stored separately from payment amount)
+
+NOTE: if your payment amount already includes tip, then do not add tips again. Pick one model and enforce it.
+
+5) Add service charge management features (EMC + POS)
+
+EMC:
+
+CRUD service charges
+
+set taxable flag + tax group
+
+set posting flags (tipEligible, postToTipPool)
+
+apply rules (order type, rvc, min check amount, auto apply)
+
+POS:
+
+manual apply/remove service charge (permission controlled)
+
+auto apply evaluation at:
+
+check create
+
+item add
+
+pre-tender
+
+ledger entries must be created/updated accordingly (no “header-only totals”)
+
+Acceptance tests:
+
+Auto-grat triggers by rule consistently
+
+Removing a service charge leaves an audit trail (voided ledger entry or reversal row)
+
+6) Update documentation for schema changes
+
+Implement:
+
+Update /docs or your spec to include:
+
+new tables/fields
+
+reporting rules (how totals are calculated)
+
+tip pooling rules (CC only)
+
+cash drawer linkage requirements
+
+7) Final review + reconciliation suite
+
+Implement:
+Add a /api/reports/validate endpoint that runs invariants:
+
+duplicate check numbers (already)
+
+duplicate payment_attempt_id (already)
+
+Revenue reconciliation per business date:
+
+computed from lines vs header totals (must match within rounding tolerance)
+
+cash drawer reconciliation:
+
+expected vs actual cannot be null if closed
+
+service charge totals:
+
+checks.serviceChargeTotal matches SUM(check_service_charges.amount) (or you remove header dependency)
+
+Acceptance tests:
+
+validation returns green for a day with:
+
+discounts
+
+voids
+
+service charges (taxable + non)
+
+cash + card
+
+declared cash tips
+
+drawer closeout

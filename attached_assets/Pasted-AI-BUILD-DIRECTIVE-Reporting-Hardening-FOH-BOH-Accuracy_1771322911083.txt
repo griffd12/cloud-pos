@@ -1,0 +1,350 @@
+AI BUILD DIRECTIVE — Reporting Hardening + FOH/BOH Accuracy (Model A)
+Global Accounting Rule (MODEL A — MUST ENFORCE)
+
+check_payments.amount includes tip (subtotal + tax + service charges + tip).
+
+check_payments.tipAmount is reporting-only metadata.
+
+Any “Total Collected” calculation must use payments.amount only and must NOT add tips again.
+
+Tips reporting uses SUM(check_payments.tipAmount) but does not change collected totals.
+
+1) SERVICE CHARGES — CONFIG + LEDGER (REQUIRED)
+1.1 Update service_charges configuration table
+
+Add fields (defaults must not break existing enterprises):
+
+is_taxable BOOLEAN NOT NULL DEFAULT false
+
+tax_group_id UUID NULL (FK to tax group table if exists)
+
+revenue_category ENUM('revenue','non_revenue') NOT NULL DEFAULT 'revenue'
+
+post_to_tip_pool BOOLEAN NOT NULL DEFAULT false
+
+tip_eligible BOOLEAN NOT NULL DEFAULT false
+
+1.2 Create new transactional ledger table: check_service_charges
+
+Purpose: immutable audit + reporting truth.
+
+Columns (minimum):
+
+id UUID PK
+
+enterprise_id UUID NOT NULL
+
+property_id UUID NOT NULL
+
+rvc_id UUID NOT NULL
+
+check_id UUID NOT NULL (FK)
+
+service_charge_id UUID NOT NULL (FK)
+
+Sale-time snapshot fields (do not depend on config changing later):
+
+name_at_sale TEXT NOT NULL
+
+code_at_sale TEXT NULL
+
+is_taxable_at_sale BOOLEAN NOT NULL
+
+tax_rate_at_sale NUMERIC NULL (or snapshot tax group + rate)
+
+amount NUMERIC NOT NULL
+
+taxable_amount NUMERIC NOT NULL DEFAULT 0
+
+tax_amount NUMERIC NOT NULL DEFAULT 0
+
+Audit
+
+auto_applied BOOLEAN NOT NULL DEFAULT false
+
+applied_at TIMESTAMP NOT NULL DEFAULT now()
+
+applied_by_employee_id UUID NULL
+
+business_date DATE NOT NULL
+
+origin_device_id TEXT NULL (optional)
+
+Indexes:
+
+index on (business_date, property_id, rvc_id)
+
+index on check_id
+
+index on service_charge_id
+
+1.3 Service charge application behavior
+
+Implement server-side functions:
+
+applyServiceCharges(checkId) — evaluates configured rules and writes ledger rows.
+
+addServiceChargeManual(checkId, serviceChargeId, amount?) — permission-controlled.
+
+removeServiceCharge(checkServiceChargeId) — do NOT delete; either:
+
+mark voided=true + void metadata, OR
+
+insert a reversing row (negative amount). Pick one method and standardize.
+
+Rule: checks.serviceChargeTotal becomes a cached total computed from ledger (sum of non-voided rows), not the source of truth.
+
+2) CASH DRAWERS — LINK CASH PAYMENTS TO DRAWER (REQUIRED)
+2.1 Enforce active drawer assignment
+
+When a cash tender is attempted:
+
+POS must include drawerAssignmentId in the request.
+
+Server validates that assignment is active for that workstation/employee.
+
+If missing/invalid:
+
+reject with 409 and message: “No active cash drawer assignment.”
+
+2.2 Auto-create cash_transactions
+
+On successful cash payment:
+
+insert cash_transactions row:
+
+type='sale'
+
+amount = payment.amount (MODEL A includes tip if tip was on card only; for cash it’s just the cash paid)
+
+check_id
+
+drawer_id, drawer_assignment_id
+
+employee_id
+
+business_date
+
+created_at
+
+On cash refund:
+
+type='refund'
+
+amount negative (or consistent sign standard) and included in drawer totals.
+
+FOH cash reports must derive from cash_transactions + assignments, not from check_payments.
+
+3) TIPS — TIME CARDS + REPORTS (KEEP SIMPLE)
+3.1 Declared cash tips
+
+Keep existing timecards.tips as “Declared Cash Tips”.
+
+Fix Timecard Report query/UI mapping so “Declared Tips” shows timecards.tips.
+
+3.2 Tip pooling (CC tips only)
+
+Pool source = SUM(check_payments.tipAmount) where tender is card and check closed.
+
+Do NOT include declared cash tips in pool.
+
+4) REPORTING VIEWS (SQL OR DAL EQUIVALENT) — MUST BUILD
+
+Create these canonical views (or equivalent server queries) and build all reports from them:
+
+v_sales_lines
+
+from check_items
+
+exclude voided=true
+
+compute:
+
+gross_line
+
+discount_line (item-level)
+
+net_line
+
+tax_amount (from item snapshots)
+
+taxable_amount
+
+include: enterprise/property/rvc/business_date/check_id/employee_id
+
+v_check_discounts
+
+from check_discounts
+
+include business_date/property/rvc/check_id/amount/type/employee_id
+
+v_service_charge_lines
+
+from check_service_charges (exclude voided if you use void flag)
+
+include amount + tax_amount + taxable_amount + business_date/property/rvc/check_id
+
+v_payments
+
+from check_payments
+
+include:
+
+amount (MODEL A)
+
+tipAmount (metadata)
+
+tender type flags (cash/card)
+
+business_date/property/rvc/check_id/employee_id
+
+v_voids
+
+from check_items where voided=true
+
+include void amount, reason, voided by, timestamps
+
+v_timecards
+
+from timecards
+
+include hours, pay, declared cash tips (tips), business date grouping logic
+
+v_cash_drawer_activity
+
+from cash_transactions joined to assignments/drawers
+
+summarize by assignment
+
+5) REPORTS TO IMPLEMENT (PILOT REQUIRED)
+FOH Reports
+
+Z Report (Daily Close) by business_date + property + rvc
+
+Gross Sales = sum(v_sales_lines.gross_line)
+
+Discounts = sum(v_sales_lines.discount_line) + sum(v_check_discounts.amount)
+
+Net Sales = Gross - Discounts
+
+Tax = sum(v_sales_lines.tax_amount) + sum(v_service_charge_lines.tax_amount)
+
+Service Charges = sum(v_service_charge_lines.amount)
+
+Total Revenue = Net Sales + Tax + Service Charges
+
+Total Collected = sum(v_payments.amount) ✅ (MODEL A — no adding tip)
+
+Tips (card) = sum(v_payments.tipAmount WHERE card)
+
+Tender breakdown = sum(v_payments.amount by tender)
+
+Voids totals from v_voids
+
+Cash Drawer Report by drawer_assignment_id
+
+Opening
+
+Cash sales (cash_transactions type sale)
+
+Paid outs / paid ins
+
+Refunds
+
+Drops/pickups
+
+Expected vs actual
+
+Variance
+
+Cashier/Employee Report
+
+sales attributed (define: “closed by employee” for pilot)
+
+voids/discounts applied
+
+card tips earned
+
+declared cash tips (timecards.tips)
+
+BOH Reports
+
+Daily Sales Summary
+
+Net sales + tax + service charges + discounts + voids
+
+product mix optional (by major/family/item if available)
+
+Labor Summary
+
+total hours, OT/DT
+
+wages
+
+labor % = wages / net sales
+
+sales per labor hour
+
+Tip Pool Summary (CC tips only)
+
+total pool = sum(card tipAmount)
+
+participants = employees with eligible hours
+
+allocation per policy (hours * weight)
+
+6) VALIDATION / RECONCILIATION ENDPOINT (REQUIRED)
+
+Create /api/reports/validate?businessDate=YYYY-MM-DD&propertyId=...
+
+It must return PASS/FAIL plus details for:
+
+Service charge reconciliation
+
+checks.serviceChargeTotal equals SUM(check_service_charges.amount) per check (within rounding)
+
+No tip double counting
+
+Total Collected equals SUM(payments.amount) (and does not add tips)
+
+Cash drawer linkage
+
+Every cash payment has a matching cash_transactions row
+
+No cash_transactions without assignment
+
+Sales rebuild
+
+Check header totals reconcile to sum of lines + service charges + tax - discounts (within rounding tolerance)
+
+Return a JSON report with counts of mismatches.
+
+7) EMC + POS UI CHANGES (MINIMUM)
+
+EMC:
+
+add fields to service charge config UI (taxable, tax group, revenue category, post_to_tip_pool, tip_eligible)
+
+POS:
+
+allow manual apply/remove service charge (permission controlled)
+
+show service charge lines on check totals panel
+
+include drawer assignment requirement for cash tenders
+
+fix timecard report “Declared Tips” display
+
+DELIVERABLE FORMAT BACK TO YOU
+
+AI must return:
+
+migration DDL / Drizzle schema changes
+
+list of files changed
+
+view SQL (or server query equivalents)
+
+sample queries for each report
+
+output example from /api/reports/validate for a real day

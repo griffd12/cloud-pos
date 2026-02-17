@@ -1,0 +1,375 @@
+What your schema already supports well
+
+Tax reporting is solid because you snapshot tax on check_items (rate/mode/amount/taxable). That’s the right pattern.
+
+Cash drawers are modeled properly (cash_drawers, drawer_assignments, cash_transactions). That’s a huge win for FOH cash accountability.
+
+Tip pooling framework exists (tip_pool_policies, tip_pool_runs, tip_allocations) + job code weights and tip eligibility.
+
+Now the gaps that will cause reporting to be wrong.
+
+1) Service charges must be a ledger, not just a total
+Current state in schema.ts
+
+You have:
+
+service_charges (configuration)
+
+checks.serviceChargeTotal (cached total)
+
+You do not have a table that records which service charges were applied to a check.
+
+Why this breaks reporting
+
+If you only store a total:
+
+you can’t report “Delivery Fee vs Auto Gratuity”
+
+you can’t audit who/when applied it
+
+you can’t treat some as taxable and some not
+
+you can’t handle refunds/voids correctly
+
+tip pool can’t include/exclude service charges correctly
+
+Required schema change (tell AI)
+
+Add two things:
+
+A) Add taxable + posting behavior to the config
+
+Add fields on service_charges:
+
+isTaxable (boolean)
+
+taxGroupId (nullable FK) OR taxRateAtSale snapshot behavior
+
+postToTipPool (boolean) (for auto gratuity that is treated like tips)
+
+tipEligible (boolean) (if it’s distributed to employees)
+
+revenueCategory enum: revenue | non_revenue (delivery fee vs surcharge)
+
+appliesTo scope: orderTypes/rvc already present; keep
+
+B) Add a transactional ledger table
+
+Add check_service_charges:
+
+id
+
+checkId (FK)
+
+serviceChargeId (FK)
+
+snapshot fields at sale time:
+
+nameAtSale, codeAtSale
+
+isTaxableAtSale
+
+taxRateAtSale (or taxGroup snapshot)
+
+amount
+
+taxAmount
+
+appliedAt
+
+appliedByEmployeeId
+
+autoApplied
+
+businessDate NOT NULL
+
+originDeviceId (optional for offline sync parity)
+
+FOH/BOH rule: Service charge totals must be derived from check_service_charges, not from checks.serviceChargeTotal. The check header total can stay as cached UI value.
+
+2) Cash tips declaration exists, but your report is reading the wrong field
+What’s in schema.ts today
+
+timecards has:
+
+tips (decimal default 0)
+
+There is no declaredTips field. So if your report expects “Declared Tips” and it’s blank, that’s likely a mapping bug:
+
+the UI writes to timecards.tips
+
+the report renders declaredTips (or another field name)
+
+result = blank column
+
+Required change (tell AI)
+
+Pick one and standardize everywhere.
+
+Option A (fastest): rename reporting column to use timecards.tips
+
+Keep schema unchanged
+
+Fix report query to display timecards.tips as Declared Cash Tips
+
+Option B (cleanest): split tips fields so pooling is correct
+
+Add to timecards:
+
+declaredCashTips
+
+declaredNonCashTips (optional)
+
+declaredTipsEnteredAt
+
+declaredTipsEnteredByEmployeeId (or manager)
+
+And stop using timecards.tips as a generic bucket.
+
+My recommendation: Option B, because you explicitly want:
+
+credit card tips + declared cash tips
+
+tip pooling with rules
+
+You’ll want separate fields sooner than later.
+
+3) Credit card tips need a single “truth” source for pooling and reporting
+Where CC tips live today
+
+check_payments.tipAmount exists (good).
+
+Problem
+
+Tip pooling needs:
+
+which tips are eligible
+
+which employee gets direct tips (if not pooled)
+
+how pooled tips are distributed
+
+Right now your schema has tip pool runs + allocations, but you need a clear pipeline.
+
+Required pipeline logic (tell AI)
+
+Define these totals by businessDate + propertyId (+ optionally rvcId):
+
+Direct tips (not pooled)
+
+Sum of check_payments.tipAmount where:
+
+check closed
+
+tender is card
+
+employee eligible
+
+tip policy says “direct”
+
+Poolable tips
+
+Poolable = CC tips + (service charges that post to tip pool) + (declared cash tips if you choose to pool cash tips)
+
+Poolable tips calculation:
+
+SUM(check_payments.tipAmount)
+
+SUM(check_service_charges.amount WHERE postToTipPoolAtSale=true)
+
+SUM(timecards.declaredCashTips WHERE includeCashTipsInPool=true) (policy-driven)
+
+Then tip_pool_runs.totalTips should be set from that computed value.
+
+4) Cash drawer reporting must be tied to transactions
+
+You already have:
+
+drawer_assignments
+
+cash_transactions with types: sale/refund/paid_in/paid_out/drop/pickup
+
+This is excellent—but only if the POS actually writes to it consistently.
+
+Required rule (tell AI)
+
+Whenever a cash tender is posted in check_payments, you must also insert a cash_transactions row:
+
+transactionType = sale
+
+amount = cash amount received (net of change if you track it)
+
+drawerId + assignmentId MUST be set
+
+businessDate MUST be set
+
+checkId MUST be set
+
+Same for cash refunds:
+
+transactionType = refund
+
+amount negative (or positive but consistent—pick one standard)
+
+FOH cash reports must come from cash_transactions, not from check_payments.
+That’s how you get cashier accountability.
+
+5) What AI should build for reporting (views + report definitions)
+FOH Reports (minimum for pilot)
+A) Daily Z Report (by property/rvc/businessDate)
+
+Gross Sales (items before discounts)
+
+Discounts (item + check-level)
+
+Net Sales
+
+Tax (sum item tax + service charge tax)
+
+Service Charges (from ledger)
+
+Tips (card tips from payments; cash tips declared from timecards shown separately)
+
+Total Collected (tenders net of refunds)
+
+Tender Breakdown (cash/card/other)
+
+Check Count
+
+Void Count + Void Amount
+
+B) Cash Drawer Report (per drawer assignment)
+
+Opening amount
+
+Cash sales (cash_transactions sale)
+
+Paid in/out
+
+Drops/pickups
+
+Cash refunds
+
+Expected
+
+Actual
+
+Variance
+
+C) Employee Shift Report
+
+Sales attributable (checks closed by employee or checks opened by employee — pick your rule and be consistent)
+
+Voids applied
+
+Discounts applied
+
+Card tips earned
+
+Declared cash tips
+
+Net tender totals for accountability (if you do cashier banking)
+
+BOH Reports
+D) Daily Sales Summary
+
+Net Sales
+
+Tax by rate
+
+Discounts by type
+
+Service charges by type
+
+Tips totals (CC vs declared cash)
+
+Refund totals
+
+Voids totals
+
+Product mix
+
+E) Labor Summary
+
+Hours regular/OT/DT
+
+Wages
+
+Tips declared (separate)
+
+Labor % = wages / net sales
+
+Sales per labor hour
+
+F) Tip Pool Summary
+
+Total poolable tips (by policy)
+
+Participants & hours
+
+Allocations per employee
+
+Direct tips excluded (if applicable)
+
+Exceptions (employees excluded by jobCode or minimum hours)
+
+Copy/paste to your AI (do this next)
+
+Use this as your directive:
+
+REPORTING HARDENING REQUIREMENTS (FOH/BOH + TIP POOLING)
+
+Service Charges
+
+Add config fields on service_charges: isTaxable, taxGroupId, postToTipPool, tipEligible, revenueCategory
+
+Add transactional ledger table check_service_charges with snapshot fields at sale time, amount, taxAmount, appliedBy, autoApplied, businessDate NOT NULL
+
+All reporting must derive service charges from check_service_charges, not checks.serviceChargeTotal
+
+Declared Cash Tips
+
+Fix mismatch: timecards currently store tips, but reports expect “declared tips”.
+
+Either:
+A) map “Declared Tips” column to timecards.tips, OR
+B) add explicit fields declaredCashTips (+ metadata) and use them consistently across UI and reports.
+
+Tip Pooling Sources
+
+Poolable tips = CC tips from check_payments.tipAmount + service charges flagged postToTipPool + (optional) declared cash tips
+
+Implement SQL views that compute poolable totals by businessDate/property (+ rvc) and populate tip_pool_runs.totalTips
+
+Tip allocations must reference worked hours from timecards and policy rules (jobCode tipPoolWeight, exclusions, min hours)
+
+Cash Drawer Accounting
+
+For every cash tender in check_payments, create a cash_transactions row tied to drawer_assignment
+
+FOH cash reports must derive from cash_transactions + drawer_assignments (opening/expected/actual/variance)
+
+Reporting Views
+Create SQL views:
+
+v_sales_detail (from check_items + discounts + void flags)
+
+v_tax_summary (from check_items tax snapshots + service charge tax)
+
+v_service_charge_summary (from check_service_charges)
+
+v_tender_summary (from check_payments + refunds handling)
+
+v_cash_drawer_summary (from cash_transactions + drawer_assignments)
+
+v_tip_summary (CC tips + declared cash tips)
+
+v_labor_summary (from timecards)
+
+Return:
+
+migrations/DDL
+
+view definitions
+
+formulas for Z report, drawer report, employee shift report, daily sales summary, labor %, tip pool summary
