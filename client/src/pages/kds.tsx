@@ -206,18 +206,19 @@ export default function KdsPage() {
   const activeKdsDevice = isDedicatedKds ? configuredKdsDevice : selectedDevice;
   const fontScale = useDocumentFontScale((activeKdsDevice as any)?.fontScale);
 
-  const deviceSettings = selectedDevice ? {
-    newOrderSound: selectedDevice.newOrderSound,
-    newOrderBlinkSeconds: selectedDevice.newOrderBlinkSeconds,
-    colorAlert1Enabled: selectedDevice.colorAlert1Enabled,
-    colorAlert1Seconds: selectedDevice.colorAlert1Seconds,
-    colorAlert1Color: selectedDevice.colorAlert1Color,
-    colorAlert2Enabled: selectedDevice.colorAlert2Enabled,
-    colorAlert2Seconds: selectedDevice.colorAlert2Seconds,
-    colorAlert2Color: selectedDevice.colorAlert2Color,
-    colorAlert3Enabled: selectedDevice.colorAlert3Enabled,
-    colorAlert3Seconds: selectedDevice.colorAlert3Seconds,
-    colorAlert3Color: selectedDevice.colorAlert3Color,
+  const settingsSource = activeKdsDevice || selectedDevice;
+  const deviceSettings = settingsSource ? {
+    newOrderSound: settingsSource.newOrderSound,
+    newOrderBlinkSeconds: settingsSource.newOrderBlinkSeconds,
+    colorAlert1Enabled: settingsSource.colorAlert1Enabled,
+    colorAlert1Seconds: settingsSource.colorAlert1Seconds,
+    colorAlert1Color: settingsSource.colorAlert1Color,
+    colorAlert2Enabled: settingsSource.colorAlert2Enabled,
+    colorAlert2Seconds: settingsSource.colorAlert2Seconds,
+    colorAlert2Color: settingsSource.colorAlert2Color,
+    colorAlert3Enabled: settingsSource.colorAlert3Enabled,
+    colorAlert3Seconds: settingsSource.colorAlert3Seconds,
+    colorAlert3Color: settingsSource.colorAlert3Color,
   } : undefined;
 
   // Build query params - for dedicated KDS, use propertyId; for POS mode, use rvcId

@@ -129,14 +129,14 @@ export function KdsDisplay({
   const blinkDuration = deviceSettings?.newOrderBlinkSeconds ?? 5;
 
   const colorAlerts: ColorAlertSettings = {
-    alert1Enabled: deviceSettings?.colorAlert1Enabled ?? true,
-    alert1Seconds: deviceSettings?.colorAlert1Seconds ?? 60,
+    alert1Enabled: deviceSettings?.colorAlert1Enabled ?? false,
+    alert1Seconds: deviceSettings?.colorAlert1Seconds != null ? deviceSettings.colorAlert1Seconds : 60,
     alert1Color: deviceSettings?.colorAlert1Color ?? "yellow",
-    alert2Enabled: deviceSettings?.colorAlert2Enabled ?? true,
-    alert2Seconds: deviceSettings?.colorAlert2Seconds ?? 180,
+    alert2Enabled: deviceSettings?.colorAlert2Enabled ?? false,
+    alert2Seconds: deviceSettings?.colorAlert2Seconds != null ? deviceSettings.colorAlert2Seconds : 180,
     alert2Color: deviceSettings?.colorAlert2Color ?? "orange",
-    alert3Enabled: deviceSettings?.colorAlert3Enabled ?? true,
-    alert3Seconds: deviceSettings?.colorAlert3Seconds ?? 300,
+    alert3Enabled: deviceSettings?.colorAlert3Enabled ?? false,
+    alert3Seconds: deviceSettings?.colorAlert3Seconds != null ? deviceSettings.colorAlert3Seconds : 300,
     alert3Color: deviceSettings?.colorAlert3Color ?? "red",
   };
 
