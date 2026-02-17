@@ -1,0 +1,283 @@
+Objective
+
+We are preparing the POS system for a June high-volume QSR pilot (2 terminals, 2 KDS, 1 remote label printer).
+
+The goal is production hardening, not new features.
+
+We must implement correctness guarantees across BOTH:
+
+Cloud Server (PostgreSQL)
+
+Windows Electron Offline (SQLite)
+
+Cloud and Offline implementations may differ internally, but must enforce the SAME invariants:
+
+No duplicate check numbers per RVC
+
+No duplicate payments
+
+No duplicate KDS tickets
+
+No duplicate print jobs
+
+Safe concurrency with multiple terminals
+
+Clean future sync compatibility
+
+Do not refactor unrelated areas. Only implement hardening.
+
+SECTION 1 — CHECK NUMBERING (Cloud + Offline)
+Requirements
+
+Replace any MAX()+1 logic.
+
+Cloud (PostgreSQL)
+
+Implement:
+
+Table: rvc_counters
+
+rvc_id PRIMARY KEY
+
+next_check_number BIGINT NOT NULL
+
+updated_at
+
+Use single DB transaction:
+
+Lock row (SELECT ... FOR UPDATE or atomic UPDATE ... RETURNING)
+
+Reserve number
+
+Insert check
+
+Commit
+
+Add constraint:
+UNIQUE (rvc_id, check_number) on checks
+
+Gaps acceptable. Duplicates are not.
+
+Offline (SQLite in Electron)
+
+Implement:
+
+Local rvc_counters table
+
+Use BEGIN IMMEDIATE transaction for write locking
+
+Reserve number
+
+Insert check
+
+Commit
+
+Add UNIQUE (rvc_id, check_number)
+
+Offline must not use MAX()+1.
+
+SECTION 2 — IDEMPOTENCY (Cloud + Offline)
+
+Implement idempotency protection for:
+
+Create Check
+
+Send to KDS
+
+Take Payment
+
+Requirements
+
+Client must send Idempotency-Key header (UUID)
+
+Create table idempotency_keys
+
+Unique index:
+(enterprise_id, workstation_id, operation, idempotency_key)
+
+Behavior:
+
+If key already processed → return stored response
+
+Do not repeat side effects
+
+Store serialized response
+
+Implement TTL cleanup
+
+Cloud → PostgreSQL table
+Offline → SQLite equivalent table
+
+SECTION 3 — KDS STATE CORRECTNESS
+
+WebSockets must not be the source of truth.
+
+Cloud Requirements
+
+Add endpoint:
+GET /api/kds/active-tickets
+
+KDS must fetch full state on:
+
+startup
+
+reconnect
+
+websocket disconnect
+
+WebSocket only pushes updates.
+
+Offline Requirements
+
+KDS must read from local SQLite on startup.
+
+Must not rely on live push for correctness.
+
+Ensure:
+
+Add item after send works
+
+Void after send works
+
+Re-fire works
+
+Bump/recall works
+
+SECTION 4 — PRINT QUEUE EXACTLY-ONCE (Cloud + Offline)
+
+Implement leasing pattern.
+
+Print Queue Schema Requirements
+
+Add fields:
+
+status (queued, processing, printed, failed)
+
+leased_by
+
+leased_until
+
+dedupe_key
+
+Behavior
+
+Agent claims job → sets processing, lease timestamp
+
+On success → set printed
+
+On failure → failed
+
+Expired lease → job re-claimable
+
+dedupe_key prevents duplicates
+
+Cloud → PostgreSQL
+Offline → SQLite
+
+SECTION 5 — UUID-BASED ENTITY SAFETY
+
+All critical entities must use UUID primary keys:
+
+checks
+
+payments
+
+kds_tickets
+
+print_jobs
+
+Offline must generate UUIDs locally.
+
+Add metadata:
+
+origin_device_id
+
+origin_created_at
+
+origin_store_id
+
+This preserves future sync compatibility.
+
+SECTION 6 — STRESS TEST VALIDATION
+
+Enhance existing stress test:
+
+Add:
+
+Two-terminal collision test
+
+Validate no duplicate check numbers
+
+Validate no duplicate payments
+
+Validate no duplicate KDS tickets
+
+Printer saturation test
+
+High volume label generation
+
+Validate queue drains
+
+Validate no duplicate print jobs
+
+Add validation queries:
+
+Duplicate check numbers
+
+Duplicate idempotency keys
+
+Duplicate print dedupe_key
+
+Duplicate KDS ticket per check
+
+RESPONSE FORMAT REQUIRED
+
+Respond with the following structured output:
+
+A) File Changes
+
+List every file modified with short description.
+
+B) Database Migrations
+
+List DDL for:
+
+rvc_counters (cloud + offline)
+
+idempotency_keys (cloud + offline)
+
+unique constraints
+
+print queue updates
+
+C) Pseudocode (Critical Flows)
+
+Provide pseudocode for:
+
+Create Check (cloud)
+
+Create Check (offline)
+
+Send to KDS (idempotent)
+
+Take Payment (idempotent)
+
+Print Lease/Ack cycle
+
+D) Test Execution Steps
+
+Exact steps to run:
+
+Two-terminal collision test
+
+Printer saturation test
+
+Validation SQL queries
+
+E) Known Limitations
+
+List anything not covered.
+
+Do not return full source files. Only structured summary and pseudocode.
+
+End of directive.
