@@ -39,7 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { 
   DollarSign, Users, Receipt, TrendingUp, Clock, ShoppingCart, CreditCard, 
   Banknote, Smartphone, Package, Layers, ChevronDown, ChevronRight, BarChart3,
-  FileText, UserCheck, Timer, GitCompare, X, Download, Printer
+  FileText, UserCheck, Timer, GitCompare, X, Download, Printer, RotateCcw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -435,6 +435,19 @@ interface CheckDetailData {
   };
   items: CheckItem[];
   payments?: CheckPayment[];
+  refunds?: Array<{
+    id: string;
+    total: string;
+    reason: string;
+    createdAt: string;
+    refundedByName: string;
+    items: Array<{
+      menuItemName: string;
+      quantity: number;
+      unitPrice: string;
+      taxAmount: string;
+    }>;
+  }>;
 }
 
 export default function ReportsPage() {
@@ -1044,7 +1057,7 @@ export default function ReportsPage() {
                     {salesSummary?.checksClosed || 0} checks
                   </p>
                   <p className="text-sm text-muted-foreground" data-testid="text-closed-total">
-                    {formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)))}
+                    {formatCurrency(salesSummary?.closedTotal || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1065,11 +1078,11 @@ export default function ReportsPage() {
               <CardTitle className="text-sm">Sales Breakdown</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Gross Sales</p>
                   <p className="font-medium text-lg" data-testid="text-gross-sales">
-                    {formatCurrency(salesSummary?.grossSalesAfterRefunds ?? salesSummary?.grossSales ?? 0)}
+                    {formatCurrency(salesSummary?.grossSales ?? 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1081,7 +1094,19 @@ export default function ReportsPage() {
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Net Sales</p>
                   <p className="font-medium text-lg" data-testid="text-breakdown-net-sales">
-                    {formatCurrency(salesSummary?.netSalesAfterRefunds ?? salesSummary?.netSales ?? 0)}
+                    {formatCurrency(salesSummary?.netSales ?? 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Tax</p>
+                  <p className="font-medium text-lg" data-testid="text-tax-total">
+                    {formatCurrency(salesSummary?.taxTotal ?? 0)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Total with Tax</p>
+                  <p className="font-semibold text-lg" data-testid="text-total-with-tax">
+                    {formatCurrency(salesSummary?.totalWithTax ?? 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1090,18 +1115,22 @@ export default function ReportsPage() {
                     {formatCurrency(salesSummary?.serviceChargeTotal || 0)}
                   </p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Tax</p>
-                  <p className="font-medium text-lg" data-testid="text-tax-total">
-                    {formatCurrency(salesSummary?.taxAfterRefunds ?? salesSummary?.taxTotal ?? 0)}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Total with Tax</p>
-                  <p className="font-semibold text-lg" data-testid="text-total-with-tax">
-                    {formatCurrency((salesSummary?.netSalesAfterRefunds ?? salesSummary?.netSales ?? 0) + (salesSummary?.taxAfterRefunds ?? salesSummary?.taxTotal ?? 0) + (salesSummary?.serviceChargeTotal ?? 0))}
-                  </p>
-                </div>
+                {(salesSummary?.totalRefunds || 0) > 0 && (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">Refunds</p>
+                      <p className="font-medium text-lg text-destructive" data-testid="text-refunds">
+                        -{formatCurrency(salesSummary?.totalRefunds || 0)}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">Net After Refunds</p>
+                      <p className="font-semibold text-lg" data-testid="text-net-after-refunds">
+                        {formatCurrency((salesSummary?.netSales ?? 0) - (salesSummary?.totalRefunds ?? 0))}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1111,25 +1140,45 @@ export default function ReportsPage() {
               <CardTitle className="text-sm">Reconciliation</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-sm">
                 <div className="space-y-3">
                   <p className="font-medium text-muted-foreground">Closed Checks</p>
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Subtotal</span>
-                      <span data-testid="text-closed-subtotal">{formatCurrency(Math.max(0, (salesSummary?.closedSubtotal || 0) - (salesSummary?.refundedSales || 0)))}</span>
+                      <span data-testid="text-closed-subtotal">{formatCurrency(salesSummary?.closedSubtotal || 0)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tax</span>
-                      <span data-testid="text-closed-tax">{formatCurrency(Math.max(0, (salesSummary?.closedTax || 0) - (salesSummary?.refundedTax || 0)))}</span>
+                      <span data-testid="text-closed-tax">{formatCurrency(salesSummary?.closedTax || 0)}</span>
                     </div>
                     <Separator />
                     <div className="flex justify-between font-medium">
                       <span>Total</span>
-                      <span data-testid="text-closed-total-recon">{formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)))}</span>
+                      <span data-testid="text-closed-total-recon">{formatCurrency(salesSummary?.closedTotal || 0)}</span>
                     </div>
                   </div>
                 </div>
+                {(salesSummary?.totalRefunds || 0) > 0 && (
+                  <div className="space-y-3">
+                    <p className="font-medium text-destructive">Refunds</p>
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Count</span>
+                        <span data-testid="text-refund-count-recon">{salesSummary?.refundCount || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Amount</span>
+                        <span className="text-destructive" data-testid="text-refund-amount-recon">-{formatCurrency(salesSummary?.totalRefunds || 0)}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between font-medium">
+                        <span>Net Expected</span>
+                        <span data-testid="text-net-expected">{formatCurrency((salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0))}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-3">
                   <p className="font-medium text-muted-foreground">Open Checks</p>
                   <div className="space-y-1">
@@ -1171,7 +1220,7 @@ export default function ReportsPage() {
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Expected</span>
-                      <span data-testid="text-expected-payments">{formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)))}</span>
+                      <span data-testid="text-expected-payments">{formatCurrency((salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0))}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Received</span>
@@ -1181,10 +1230,10 @@ export default function ReportsPage() {
                     <div className="flex justify-between font-medium">
                       <span>Difference</span>
                       <span 
-                        className={(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)) - (salesSummary?.totalPayments || 0)) !== 0 ? "text-destructive" : ""}
+                        className={((salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0) - (salesSummary?.totalPayments || 0)) !== 0 ? "text-destructive" : ""}
                         data-testid="text-variance"
                       >
-                        {formatCurrency(Math.max(0, (salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0)) - (salesSummary?.totalPayments || 0))}
+                        {formatCurrency((salesSummary?.closedTotal || 0) - (salesSummary?.totalRefunds || 0) - (salesSummary?.totalPayments || 0))}
                       </span>
                     </div>
                   </div>
@@ -1376,6 +1425,20 @@ export default function ReportsPage() {
                 </div>
               </CardContent>
             </Card>
+            {(salesSummary?.totalRefunds || 0) > 0 && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Refunds</CardTitle>
+                  <RotateCcw className="h-4 w-4 text-destructive" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-destructive" data-testid="text-tender-refunds">
+                    -{formatCurrency(salesSummary?.totalRefunds || 0)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{salesSummary?.refundCount || 0} refund(s)</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -1925,9 +1988,8 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
-                      { key: 'subtotal', header: 'Subtotal', format: commonFormatters.currency },
-                      { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'refundAmount', header: 'Refund', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
@@ -1941,9 +2003,8 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
-                      { key: 'subtotal', header: 'Subtotal', format: commonFormatters.currency },
-                      { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'refundAmount', header: 'Refund', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
@@ -1957,9 +2018,8 @@ export default function ReportsPage() {
                       { key: 'checkNumber', header: 'Check #' },
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
-                      { key: 'subtotal', header: 'Subtotal', format: commonFormatters.currency },
-                      { key: 'tax', header: 'Tax', format: commonFormatters.currency },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'refundAmount', header: 'Refund', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
                       { key: 'closedAt', header: 'Closed', format: commonFormatters.dateTime },
@@ -1978,16 +2038,16 @@ export default function ReportsPage() {
                     <TableHead>Check #</TableHead>
                     <TableHead>Employee</TableHead>
                     <TableHead>RVC</TableHead>
-                    <TableHead className="text-right">Subtotal</TableHead>
-                    <TableHead className="text-right">Tax</TableHead>
                     <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Refund</TableHead>
+                    <TableHead className="text-right">Net</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
                     <TableHead className="text-right">Duration</TableHead>
                     <TableHead>Closed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(closedChecksData?.checks || []).map((check) => (
+                  {(closedChecksData?.checks || []).map((check: any) => (
                     <TableRow 
                       key={check.id} 
                       data-testid={`row-closed-check-${check.id}`}
@@ -1997,9 +2057,15 @@ export default function ReportsPage() {
                       <TableCell className="font-medium">{check.checkNumber}</TableCell>
                       <TableCell>{check.employeeName}</TableCell>
                       <TableCell>{check.rvcName}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(check.subtotal)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(check.tax)}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(check.total)}</TableCell>
+                      <TableCell className="text-right">
+                        {check.refundAmount > 0 ? (
+                          <span className="text-destructive">-{formatCurrency(check.refundAmount)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(check.total - (check.refundAmount || 0))}</TableCell>
                       <TableCell className="text-right">{formatCurrency(check.totalPaid)}</TableCell>
                       <TableCell className="text-right">{check.durationMinutes} min</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatDateTime(check.closedAt)}</TableCell>
@@ -2678,6 +2744,39 @@ export default function ReportsPage() {
                     )}
                   </div>
                 </div>
+
+                {checkDetailData.refunds && checkDetailData.refunds.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-3">
+                      <h4 className="font-medium text-destructive flex items-center gap-2">
+                        <RotateCcw className="h-4 w-4" />
+                        Refund History
+                      </h4>
+                      {checkDetailData.refunds.map((refund) => (
+                        <div key={refund.id} className="space-y-2 text-sm" data-testid={`refund-entry-${refund.id}`}>
+                          <div className="flex justify-between flex-wrap gap-1">
+                            <span className="text-muted-foreground">
+                              {formatDateTime(refund.createdAt)} by {refund.refundedByName}
+                            </span>
+                            <span className="font-medium text-destructive">-{formatCurrency(parseFloat(refund.total))}</span>
+                          </div>
+                          {refund.reason && (
+                            <p className="text-xs text-muted-foreground">Reason: {refund.reason}</p>
+                          )}
+                          <div className="pl-2 space-y-0.5">
+                            {refund.items.map((ri, idx) => (
+                              <div key={idx} className="flex justify-between text-xs text-muted-foreground">
+                                <span>{ri.quantity}x {ri.menuItemName}</span>
+                                <span>-{formatCurrency(parseFloat(ri.unitPrice) * ri.quantity + parseFloat(ri.taxAmount))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             </ScrollArea>
           ) : (

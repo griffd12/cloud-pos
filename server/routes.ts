@@ -4451,10 +4451,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const payments = await storage.getPayments(req.params.id);
     const totalTendered = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
     const checkTotal = parseFloat(check.total || "0");
-    // For cash over-tender: paidAmount is what was applied, changeDue is difference
     const paidAmount = Math.min(totalTendered, checkTotal);
     const changeDue = Math.max(0, totalTendered - checkTotal);
-    res.json({ check: { ...check, paidAmount, tenderedAmount: totalTendered, changeDue }, items, payments });
+
+    const checkRefunds = await storage.getRefundsForCheck(req.params.id);
+    const refundData = await Promise.all(checkRefunds.map(async (refund) => {
+      const details = await storage.getRefundWithDetails(refund.id);
+      const emp = await storage.getEmployee(refund.processedByEmployeeId);
+      return {
+        id: refund.id,
+        total: refund.total,
+        reason: refund.reason || "",
+        createdAt: refund.createdAt ? new Date(refund.createdAt).toISOString() : "",
+        refundedByName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+        items: (details?.items || []).map(ri => ({
+          menuItemName: ri.menuItemName,
+          quantity: ri.quantity || 1,
+          unitPrice: ri.unitPrice,
+          taxAmount: ri.taxAmount || "0",
+        })),
+      };
+    }));
+
+    res.json({ check: { ...check, paidAmount, tenderedAmount: totalTendered, changeDue }, items, payments, refunds: refundData });
   });
 
   app.post("/api/checks", async (req, res) => {
@@ -9550,12 +9569,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const rawTax = parseFloat(check.taxTotal || "0");
         
         const refundData = checkRefundMap.get(check.id);
-        const netSubtotal = Math.max(0, rawSubtotal - (refundData?.subtotal || 0));
-        const netTax = Math.max(0, rawTax - (refundData?.tax || 0));
-        const netTotal = Math.max(0, rawCheckTotal - (refundData?.total || 0));
         
         const totalTendered = checkPayments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
-        const totalPaid = Math.min(totalTendered, netTotal);
+        const totalPaid = Math.min(totalTendered, rawCheckTotal);
         
         const durationMinutes = check.openedAt && check.closedAt
           ? Math.floor((new Date(check.closedAt).getTime() - new Date(check.openedAt).getTime()) / 60000)
@@ -9568,9 +9584,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           rvcName: rvc?.name || "Unknown",
           tableNumber: check.tableNumber,
           guestCount: check.guestCount,
-          subtotal: Math.round(netSubtotal * 100) / 100,
-          tax: Math.round(netTax * 100) / 100,
-          total: Math.round(netTotal * 100) / 100,
+          subtotal: Math.round(rawSubtotal * 100) / 100,
+          tax: Math.round(rawTax * 100) / 100,
+          total: Math.round(rawCheckTotal * 100) / 100,
           totalPaid: Math.round(totalPaid * 100) / 100,
           refundAmount: refundData ? Math.round(refundData.total * 100) / 100 : 0,
           durationMinutes,
