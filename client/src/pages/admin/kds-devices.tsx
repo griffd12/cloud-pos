@@ -1,12 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column } from "@/components/admin/data-table";
-import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { insertKdsDeviceSchema, type KdsDevice, type InsertKdsDevice, type Property } from "@shared/schema";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useEmcFilter } from "@/lib/emc-context";
 import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
 import { useScopeLookup } from "@/hooks/use-scope-lookup";
@@ -84,133 +105,116 @@ export default function KdsDevicesPage() {
     getInheritanceColumn<KdsDevice>(contextPropertyId, selectedRvcId),
   ];
 
-  const formFields: FormFieldConfig[] = [
-    { name: "name", label: "KDS Device Name", type: "text", placeholder: "e.g., Hot Line KDS 1", required: true },
-    {
-      name: "stationType",
-      label: "Station Type",
-      type: "select",
-      options: [
-        { value: "hot", label: "Hot Line" },
-        { value: "cold", label: "Cold Line" },
-        { value: "prep", label: "Prep Station" },
-        { value: "expo", label: "Expo (Expediter)" },
-        { value: "bar", label: "Bar" },
-      ],
-      defaultValue: "hot",
+  const form = useForm<InsertKdsDevice>({
+    resolver: zodResolver(insertKdsDeviceSchema),
+    defaultValues: {
+      name: "",
+      stationType: "hot",
+      propertyId: "",
+      showDraftItems: false,
+      showSentItemsOnly: true,
+      groupBy: "order",
+      showTimers: true,
+      autoSortBy: "time",
+      allowBump: true,
+      allowRecall: true,
+      allowVoidDisplay: true,
+      expoMode: false,
+      newOrderSound: true,
+      newOrderBlinkSeconds: 5,
+      colorAlert1Enabled: true,
+      colorAlert1Seconds: 60,
+      colorAlert1Color: "yellow",
+      colorAlert2Enabled: true,
+      colorAlert2Seconds: 180,
+      colorAlert2Color: "orange",
+      colorAlert3Enabled: true,
+      colorAlert3Seconds: 300,
+      colorAlert3Color: "red",
+      fontScale: 100,
+      wsChannel: "",
+      ipAddress: "",
+      active: true,
     },
-    {
-      name: "propertyId",
-      label: "Property",
-      type: "select",
-      options: properties.map((p) => ({ value: p.id, label: p.name })),
-      required: true,
-      defaultValue: contextPropertyId || properties[0]?.id || "",
-    },
-    { name: "showDraftItems", label: "Show Draft (Unsent) Items", type: "switch", defaultValue: false },
-    { name: "showSentItemsOnly", label: "Show Sent Items Only", type: "switch", defaultValue: true },
-    {
-      name: "groupBy",
-      label: "Group Items By",
-      type: "select",
-      options: [
-        { value: "order", label: "Order" },
-        { value: "item", label: "Item" },
-        { value: "course", label: "Course" },
-      ],
-      defaultValue: "order",
-    },
-    { name: "showTimers", label: "Show Timers", type: "switch", defaultValue: true },
-    {
-      name: "autoSortBy",
-      label: "Auto-Sort By",
-      type: "select",
-      options: [
-        { value: "time", label: "Time (Oldest First)" },
-        { value: "priority", label: "Priority" },
-      ],
-      defaultValue: "time",
-    },
-    { name: "allowBump", label: "Allow Bump", type: "switch", defaultValue: true },
-    { name: "allowRecall", label: "Allow Recall", type: "switch", defaultValue: true },
-    { name: "allowVoidDisplay", label: "Allow Void Display", type: "switch", defaultValue: true },
-    { name: "expoMode", label: "Expo Mode", type: "switch", defaultValue: false, description: "Aggregates all items for final check before serving" },
-    // New Order Notification Settings
-    { name: "newOrderSound", label: "New Order Sound", type: "switch", defaultValue: true, description: "Play audio alert when new orders arrive" },
-    { name: "newOrderBlinkSeconds", label: "New Order Blink Duration (seconds)", type: "number", defaultValue: 5, description: "How long new tickets flash (0 to disable)" },
-    // Color Alert Settings
-    { name: "colorAlert1Enabled", label: "Enable First Alert", type: "switch", defaultValue: true },
-    { name: "colorAlert1Seconds", label: "First Alert After (seconds)", type: "number", defaultValue: 60 },
-    {
-      name: "colorAlert1Color",
-      label: "First Alert Color",
-      type: "select",
-      options: [
-        { value: "yellow", label: "Yellow" },
-        { value: "orange", label: "Orange" },
-        { value: "red", label: "Red" },
-        { value: "blue", label: "Blue" },
-        { value: "purple", label: "Purple" },
-      ],
-      defaultValue: "yellow",
-    },
-    { name: "colorAlert2Enabled", label: "Enable Second Alert", type: "switch", defaultValue: true },
-    { name: "colorAlert2Seconds", label: "Second Alert After (seconds)", type: "number", defaultValue: 180 },
-    {
-      name: "colorAlert2Color",
-      label: "Second Alert Color",
-      type: "select",
-      options: [
-        { value: "yellow", label: "Yellow" },
-        { value: "orange", label: "Orange" },
-        { value: "red", label: "Red" },
-        { value: "blue", label: "Blue" },
-        { value: "purple", label: "Purple" },
-      ],
-      defaultValue: "orange",
-    },
-    { name: "colorAlert3Enabled", label: "Enable Third Alert", type: "switch", defaultValue: true },
-    { name: "colorAlert3Seconds", label: "Third Alert After (seconds)", type: "number", defaultValue: 300 },
-    {
-      name: "colorAlert3Color",
-      label: "Third Alert Color",
-      type: "select",
-      options: [
-        { value: "yellow", label: "Yellow" },
-        { value: "orange", label: "Orange" },
-        { value: "red", label: "Red" },
-        { value: "blue", label: "Blue" },
-        { value: "purple", label: "Purple" },
-      ],
-      defaultValue: "red",
-    },
-    {
-      name: "fontScale",
-      label: "Display Font Size",
-      type: "select",
-      options: [
-        { value: "85", label: "Small (85%)" },
-        { value: "100", label: "Medium (100%)" },
-        { value: "120", label: "Large (120%)" },
-        { value: "140", label: "Extra Large (140%)" },
-      ],
-      defaultValue: "100",
-      description: "Scale all text on this KDS display for readability",
-    },
-    { name: "wsChannel", label: "WebSocket Channel", type: "text", placeholder: "e.g., kds-hot-1" },
-    { name: "ipAddress", label: "IP Address", type: "text", placeholder: "e.g., 192.168.1.100" },
-    { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ];
+  });
+
+  useEffect(() => {
+    if (formOpen) {
+      if (editingItem) {
+        form.reset({
+          name: editingItem.name,
+          stationType: editingItem.stationType,
+          propertyId: editingItem.propertyId,
+          showDraftItems: editingItem.showDraftItems ?? false,
+          showSentItemsOnly: editingItem.showSentItemsOnly ?? true,
+          groupBy: editingItem.groupBy ?? "order",
+          showTimers: editingItem.showTimers ?? true,
+          autoSortBy: editingItem.autoSortBy ?? "time",
+          allowBump: editingItem.allowBump ?? true,
+          allowRecall: editingItem.allowRecall ?? true,
+          allowVoidDisplay: editingItem.allowVoidDisplay ?? true,
+          expoMode: editingItem.expoMode ?? false,
+          newOrderSound: editingItem.newOrderSound ?? true,
+          newOrderBlinkSeconds: editingItem.newOrderBlinkSeconds ?? 5,
+          colorAlert1Enabled: editingItem.colorAlert1Enabled ?? true,
+          colorAlert1Seconds: editingItem.colorAlert1Seconds ?? 60,
+          colorAlert1Color: editingItem.colorAlert1Color ?? "yellow",
+          colorAlert2Enabled: editingItem.colorAlert2Enabled ?? true,
+          colorAlert2Seconds: editingItem.colorAlert2Seconds ?? 180,
+          colorAlert2Color: editingItem.colorAlert2Color ?? "orange",
+          colorAlert3Enabled: editingItem.colorAlert3Enabled ?? true,
+          colorAlert3Seconds: editingItem.colorAlert3Seconds ?? 300,
+          colorAlert3Color: editingItem.colorAlert3Color ?? "red",
+          fontScale: editingItem.fontScale ?? 100,
+          wsChannel: editingItem.wsChannel ?? "",
+          ipAddress: editingItem.ipAddress ?? "",
+          active: editingItem.active ?? true,
+        });
+      } else {
+        const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
+        form.reset({
+          name: "",
+          stationType: "hot",
+          propertyId: defaultPropertyId,
+          showDraftItems: false,
+          showSentItemsOnly: true,
+          groupBy: "order",
+          showTimers: true,
+          autoSortBy: "time",
+          allowBump: true,
+          allowRecall: true,
+          allowVoidDisplay: true,
+          expoMode: false,
+          newOrderSound: true,
+          newOrderBlinkSeconds: 5,
+          colorAlert1Enabled: true,
+          colorAlert1Seconds: 60,
+          colorAlert1Color: "yellow",
+          colorAlert2Enabled: true,
+          colorAlert2Seconds: 180,
+          colorAlert2Color: "orange",
+          colorAlert3Enabled: true,
+          colorAlert3Seconds: 300,
+          colorAlert3Color: "red",
+          fontScale: 100,
+          wsChannel: "",
+          ipAddress: "",
+          active: true,
+        });
+      }
+    }
+  }, [formOpen, editingItem, properties, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertKdsDevice) => {
-      const payload = { ...data, fontScale: data.fontScale ? Number(data.fontScale) : 100 };
-      const response = await apiRequest("POST", "/api/kds-devices", payload);
+      const response = await apiRequest("POST", "/api/kds-devices", data);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/kds-devices", filterKeys] });
       setFormOpen(false);
+      setEditingItem(null);
+      form.reset();
       toast({ title: "KDS device created" });
     },
     onError: () => {
@@ -220,14 +224,14 @@ export default function KdsDevicesPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: KdsDevice) => {
-      const payload = { ...data, fontScale: data.fontScale ? Number(data.fontScale) : 100 };
-      const response = await apiRequest("PUT", "/api/kds-devices/" + data.id, payload);
+      const response = await apiRequest("PUT", "/api/kds-devices/" + data.id, data);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/kds-devices", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
+      form.reset();
       toast({ title: "KDS device updated" });
     },
     onError: () => {
@@ -248,22 +252,547 @@ export default function KdsDevicesPage() {
     },
   });
 
-  const handleSubmit = (data: InsertKdsDevice) => {
-    // Convert string number fields to actual numbers
-    const processedData = {
-      ...data,
-      newOrderBlinkSeconds: data.newOrderBlinkSeconds != null ? Number(data.newOrderBlinkSeconds) : null,
-      colorAlert1Seconds: data.colorAlert1Seconds != null ? Number(data.colorAlert1Seconds) : null,
-      colorAlert2Seconds: data.colorAlert2Seconds != null ? Number(data.colorAlert2Seconds) : null,
-      colorAlert3Seconds: data.colorAlert3Seconds != null ? Number(data.colorAlert3Seconds) : null,
-    };
-    
-    if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...processedData } as KdsDevice);
-    } else {
-      createMutation.mutate({ ...processedData, ...scopePayload });
-    }
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: InsertKdsDevice) => {
+      const processedData = {
+        ...data,
+        fontScale: data.fontScale ? Number(data.fontScale) : 100,
+        newOrderBlinkSeconds: data.newOrderBlinkSeconds != null ? Number(data.newOrderBlinkSeconds) : 5,
+        colorAlert1Seconds: data.colorAlert1Seconds != null ? Number(data.colorAlert1Seconds) : 60,
+        colorAlert2Seconds: data.colorAlert2Seconds != null ? Number(data.colorAlert2Seconds) : 180,
+        colorAlert3Seconds: data.colorAlert3Seconds != null ? Number(data.colorAlert3Seconds) : 300,
+      };
+      if (editingItem) {
+        updateMutation.mutate({ ...editingItem, ...processedData } as KdsDevice);
+      } else {
+        createMutation.mutate({ ...processedData, ...scopePayload });
+      }
+    })();
   };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    form.reset();
+  };
+
+  const colorOptions = [
+    { value: "yellow", label: "Yellow" },
+    { value: "orange", label: "Orange" },
+    { value: "red", label: "Red" },
+    { value: "blue", label: "Blue" },
+    { value: "purple", label: "Purple" },
+  ];
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle data-testid="text-form-title">{editingItem ? "Edit KDS Device" : "Add KDS Device"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Basic Info */}
+                <div className="grid grid-cols-4 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>KDS Device Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Hot Line KDS 1" {...field} data-testid="input-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="stationType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Station Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-stationType">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="hot">Hot Line</SelectItem>
+                            <SelectItem value="cold">Cold Line</SelectItem>
+                            <SelectItem value="prep">Prep Station</SelectItem>
+                            <SelectItem value="expo">Expo (Expediter)</SelectItem>
+                            <SelectItem value="bar">Bar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="propertyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Property</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-propertyId">
+                              <SelectValue placeholder="Select property" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {properties.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <FormLabel className="text-sm">Active</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-active" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Display Settings */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Display Settings</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="groupBy"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Group Items By</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "order"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-groupBy">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="order">Order</SelectItem>
+                              <SelectItem value="item">Item</SelectItem>
+                              <SelectItem value="course">Course</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="autoSortBy"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Auto-Sort By</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "time"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-autoSortBy">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="time">Time (Oldest First)</SelectItem>
+                              <SelectItem value="priority">Priority</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="fontScale"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Display Font Size</FormLabel>
+                          <Select
+                            onValueChange={(v) => field.onChange(Number(v))}
+                            value={String(field.value || 100)}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-fontScale">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="85">Small (85%)</SelectItem>
+                              <SelectItem value="100">Medium (100%)</SelectItem>
+                              <SelectItem value="120">Large (120%)</SelectItem>
+                              <SelectItem value="140">Extra Large (140%)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">Scale all text on this KDS display for readability</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Order Flow */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Order Flow</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="showDraftItems"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Show Draft (Unsent) Items</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-showDraftItems" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="showSentItemsOnly"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Show Sent Items Only</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-showSentItemsOnly" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowBump"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Allow Bump</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-allowBump" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowRecall"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Allow Recall</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-allowRecall" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="allowVoidDisplay"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Allow Void Display</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-allowVoidDisplay" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="expoMode"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Expo Mode</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-expoMode" />
+                          </FormControl>
+                          <FormDescription className="text-xs sr-only">Aggregates all items for final check before serving</FormDescription>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Notifications */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Notifications</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="newOrderSound"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">New Order Sound</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-newOrderSound" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="newOrderBlinkSeconds"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New Order Blink Duration (seconds)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? 5}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                              data-testid="input-newOrderBlinkSeconds"
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">How long new tickets flash (0 to disable)</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Color Alerts */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Color Alerts</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="colorAlert1Enabled"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Enable First Alert</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-colorAlert1Enabled" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert1Seconds"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First Alert After (seconds)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? 60}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                              data-testid="input-colorAlert1Seconds"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert1Color"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First Alert Color</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "yellow"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-colorAlert1Color">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {colorOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert2Enabled"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Enable Second Alert</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-colorAlert2Enabled" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert2Seconds"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Second Alert After (seconds)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? 180}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                              data-testid="input-colorAlert2Seconds"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert2Color"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Second Alert Color</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "orange"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-colorAlert2Color">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {colorOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert3Enabled"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Enable Third Alert</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-colorAlert3Enabled" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert3Seconds"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Third Alert After (seconds)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? 300}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                              data-testid="input-colorAlert3Seconds"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="colorAlert3Color"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Third Alert Color</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "red"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-colorAlert3Color">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {colorOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Network */}
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Network</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="wsChannel"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>WebSocket Channel</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., kds-hot-1" {...field} value={field.value ?? ""} data-testid="input-wsChannel" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="ipAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>IP Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value ?? ""} data-testid="input-ipAddress" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="showTimers"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel className="text-sm">Show Timers</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-showTimers" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -283,20 +812,6 @@ export default function KdsDevicesPage() {
         isLoading={isLoading}
         searchPlaceholder="Search KDS devices..."
         emptyMessage="No KDS devices configured"
-      />
-
-      <EntityForm
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
-        }}
-        onSubmit={handleSubmit}
-        schema={insertKdsDeviceSchema}
-        fields={formFields}
-        title={editingItem ? "Edit KDS Device" : "Add KDS Device"}
-        initialData={editingItem || undefined}
-        isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
   );
