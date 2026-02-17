@@ -1455,7 +1455,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold" data-testid="text-total-collected">
-                  {formatCurrency(tenderData?.totalAmount || 0)}
+                  {formatCurrency((tenderData?.totalAmount || 0) + (tenderData?.totalTips || 0))}
                 </div>
               </CardContent>
             </Card>
@@ -1523,6 +1523,7 @@ export default function ReportsPage() {
                       <TableHead className="text-right">Count</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead className="text-right">Tips</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1532,11 +1533,12 @@ export default function ReportsPage() {
                         <TableCell className="text-right">{t.count}</TableCell>
                         <TableCell className="text-right">{formatCurrency(t.amount)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(t.tips)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(t.amount + t.tips)}</TableCell>
                       </TableRow>
                     ))}
                     {(!tenderData?.summary || tenderData.summary.length === 0) && (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
                           No tender data
                         </TableCell>
                       </TableRow>
@@ -1625,7 +1627,7 @@ export default function ReportsPage() {
                             <span>{t.tenderName}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(t.amount)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(t.amount + (t.tipAmount || 0))}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">{formatDateTime(t.paidAt)}</TableCell>
                       </TableRow>
                     ))}
