@@ -378,9 +378,10 @@ export interface IStorage {
   deleteCheck(id: string): Promise<boolean>;
   getNextCheckNumber(rvcId: string): Promise<number>;
 
-  // Idempotency
-  checkIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string): Promise<{ responseStatus: number; responseBody: string } | null>;
-  storeIdempotencyKey(data: { enterpriseId: string; workstationId: string; operation: string; idempotencyKey: string; responseStatus: number; responseBody: string }): Promise<void>;
+  // Idempotency (INSERT-first transactional pattern)
+  acquireIdempotencyLock(enterpriseId: string, workstationId: string, operation: string, key: string, requestHash: string): Promise<{ acquired: boolean; status?: string; requestHash?: string; responseStatus?: number; responseBody?: string }>;
+  completeIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string, responseStatus: number, responseBody: string): Promise<void>;
+  failIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string): Promise<void>;
   cleanupExpiredIdempotencyKeys(): Promise<number>;
 
   // Print Queue Lease Pattern
@@ -2012,12 +2013,49 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  // Idempotency
-  async checkIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string): Promise<{ responseStatus: number; responseBody: string } | null> {
-    const [result] = await db.select({
-      responseStatus: idempotencyKeys.responseStatus,
-      responseBody: idempotencyKeys.responseBody,
-    }).from(idempotencyKeys).where(
+  // Idempotency — INSERT-first transactional pattern
+  async acquireIdempotencyLock(enterpriseId: string, workstationId: string, operation: string, key: string, requestHash: string): Promise<{ acquired: boolean; status?: string; requestHash?: string; responseStatus?: number; responseBody?: string }> {
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    try {
+      await db.insert(idempotencyKeys).values({
+        enterpriseId,
+        workstationId,
+        operation,
+        idempotencyKey: key,
+        status: 'processing',
+        requestHash,
+        expiresAt,
+      });
+      return { acquired: true };
+    } catch (err: any) {
+      if (err.code === '23505') {
+        const [existing] = await db.select().from(idempotencyKeys).where(
+          and(
+            eq(idempotencyKeys.enterpriseId, enterpriseId),
+            eq(idempotencyKeys.workstationId, workstationId),
+            eq(idempotencyKeys.operation, operation),
+            eq(idempotencyKeys.idempotencyKey, key)
+          )
+        );
+        if (!existing) return { acquired: false, status: 'failed' };
+        return {
+          acquired: false,
+          status: existing.status,
+          requestHash: existing.requestHash ?? undefined,
+          responseStatus: existing.responseStatus ?? undefined,
+          responseBody: existing.responseBody ?? undefined,
+        };
+      }
+      throw err;
+    }
+  }
+
+  async completeIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string, responseStatus: number, responseBody: string): Promise<void> {
+    await db.update(idempotencyKeys).set({
+      status: 'completed',
+      responseStatus,
+      responseBody,
+    }).where(
       and(
         eq(idempotencyKeys.enterpriseId, enterpriseId),
         eq(idempotencyKeys.workstationId, workstationId),
@@ -2025,16 +2063,19 @@ export class DatabaseStorage implements IStorage {
         eq(idempotencyKeys.idempotencyKey, key)
       )
     );
-    if (!result || !result.responseBody) return null;
-    return { responseStatus: result.responseStatus!, responseBody: result.responseBody };
   }
 
-  async storeIdempotencyKey(data: { enterpriseId: string; workstationId: string; operation: string; idempotencyKey: string; responseStatus: number; responseBody: string }): Promise<void> {
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await db.insert(idempotencyKeys).values({
-      ...data,
-      expiresAt,
-    }).onConflictDoNothing();
+  async failIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string): Promise<void> {
+    await db.update(idempotencyKeys).set({
+      status: 'failed',
+    }).where(
+      and(
+        eq(idempotencyKeys.enterpriseId, enterpriseId),
+        eq(idempotencyKeys.workstationId, workstationId),
+        eq(idempotencyKeys.operation, operation),
+        eq(idempotencyKeys.idempotencyKey, key)
+      )
+    );
   }
 
   async cleanupExpiredIdempotencyKeys(): Promise<number> {

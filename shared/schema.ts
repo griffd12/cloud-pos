@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial, real, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, decimal, timestamp, jsonb, serial, real, numeric, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -869,9 +869,9 @@ export const checks = pgTable("checks", {
   checkNumber: integer("check_number").notNull(),
   rvcId: varchar("rvc_id").notNull().references(() => rvcs.id),
   employeeId: varchar("employee_id").notNull().references(() => employees.id),
-  customerId: varchar("customer_id"), // Links to loyaltyMembers for customer tracking
-  orderType: text("order_type").notNull(), // 'dine_in', 'take_out', 'delivery', 'pickup'
-  status: text("status").notNull().default("open"), // 'open', 'closed', 'voided'
+  customerId: varchar("customer_id"),
+  orderType: text("order_type").notNull(),
+  status: text("status").notNull().default("open"),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).default("0"),
   taxTotal: decimal("tax_total", { precision: 10, scale: 2 }).default("0"),
   discountTotal: decimal("discount_total", { precision: 10, scale: 2 }).default("0"),
@@ -882,19 +882,20 @@ export const checks = pgTable("checks", {
   tableNumber: text("table_number"),
   openedAt: timestamp("opened_at").defaultNow(),
   closedAt: timestamp("closed_at"),
-  originBusinessDate: text("origin_business_date"), // YYYY-MM-DD format, the business date when check was FIRST created (never changes)
-  businessDate: text("business_date"), // YYYY-MM-DD format, the business date when check was CLOSED (updated on close)
-  loyaltyPointsEarned: integer("loyalty_points_earned"), // Points earned on this check
-  loyaltyPointsRedeemed: integer("loyalty_points_redeemed"), // Points redeemed on this check
+  originBusinessDate: text("origin_business_date"),
+  businessDate: text("business_date"),
+  loyaltyPointsEarned: integer("loyalty_points_earned"),
+  loyaltyPointsRedeemed: integer("loyalty_points_redeemed"),
   testMode: boolean("test_mode").default(false),
-  fulfillmentStatus: text("fulfillment_status"), // null for dine_in, 'received'|'in_progress'|'ready'|'picked_up'|'completed' for pickup/delivery
-  onlineOrderId: varchar("online_order_id"), // Links to online_orders table for delivery platform orders
-  customerName: text("customer_name"), // Customer name for pickup/delivery orders
-  platformSource: text("platform_source"), // 'ubereats', 'grubhub', 'doordash', null for non-platform orders
-  // Origin metadata for sync compatibility
+  fulfillmentStatus: text("fulfillment_status"),
+  onlineOrderId: varchar("online_order_id"),
+  customerName: text("customer_name"),
+  platformSource: text("platform_source"),
   originDeviceId: varchar("origin_device_id"),
   originCreatedAt: timestamp("origin_created_at"),
-});
+}, (table) => [
+  uniqueIndex("idx_checks_rvc_check_number").on(table.rvcId, table.checkNumber),
+]);
 
 // Rounds (each send creates a round)
 export const rounds = pgTable("rounds", {
@@ -965,12 +966,15 @@ export const checkPayments = pgTable("check_payments", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paidAt: timestamp("paid_at").defaultNow(),
   employeeId: varchar("employee_id").references(() => employees.id),
-  businessDate: text("business_date"), // YYYY-MM-DD format, the operating day this payment was applied
-  paymentTransactionId: varchar("payment_transaction_id"), // Link to gateway transaction for card payments (no FK to avoid circular ref)
-  paymentStatus: text("payment_status").default("completed"), // 'authorized' (pre-auth), 'completed' (captured/finalized)
-  tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }), // Tip added to pre-auth
+  businessDate: text("business_date"),
+  paymentTransactionId: varchar("payment_transaction_id"),
+  paymentStatus: text("payment_status").default("completed"),
+  tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }),
   originDeviceId: varchar("origin_device_id"),
-});
+  paymentAttemptId: varchar("payment_attempt_id"),
+}, (table) => [
+  uniqueIndex("idx_check_payments_attempt_id").on(table.paymentAttemptId),
+]);
 
 // Check Discounts Applied
 export const checkDiscounts = pgTable("check_discounts", {
@@ -1181,7 +1185,9 @@ export const printJobs = pgTable("print_jobs", {
   sentToAgentAt: timestamp("sent_to_agent_at"),
   printedAt: timestamp("printed_at"),
   expiresAt: timestamp("expires_at"),
-});
+}, (table) => [
+  uniqueIndex("idx_print_jobs_dedupe").on(table.dedupeKey),
+]);
 
 // ============================================================================
 // INSERT SCHEMAS & TYPES
@@ -3709,11 +3715,16 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
   workstationId: varchar("workstation_id").notNull(),
   operation: text("operation").notNull(),
   idempotencyKey: varchar("idempotency_key").notNull(),
+  status: text("status").notNull().default("processing"),
+  requestHash: text("request_hash"),
   responseStatus: integer("response_status"),
   responseBody: text("response_body"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
-});
+}, (table) => [
+  uniqueIndex("idx_idempotency_keys_unique").on(table.enterpriseId, table.workstationId, table.operation, table.idempotencyKey),
+  index("idx_idempotency_keys_expires_at").on(table.expiresAt),
+]);
 
 export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 export type InsertIdempotencyKey = typeof idempotencyKeys.$inferInsert;

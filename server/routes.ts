@@ -4545,53 +4545,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { rvcId, employeeId, orderType, testMode } = req.body;
 
       const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
-      if (idempotencyKey) {
-        const existing = await storage.checkIdempotencyKey(
-          req.headers['x-enterprise-id'] as string || 'default',
-          req.headers['x-workstation-id'] as string || 'default',
-          'create_check',
-          idempotencyKey
-        );
-        if (existing) {
-          return res.status(existing.responseStatus).json(JSON.parse(existing.responseBody));
-        }
-      }
-      
-      // Get property for business date calculation
-      const rvc = await storage.getRvc(rvcId);
-      let businessDate: string | undefined;
-      if (rvc) {
-        const property = await storage.getProperty(rvc.propertyId);
-        if (property) {
-          businessDate = resolveBusinessDate(new Date(), property);
-        }
-      }
-      
-      const check = await storage.createCheckAtomic(rvcId, {
-        rvcId,
-        employeeId,
-        orderType: orderType || "dine_in",
-        status: "open",
-        originBusinessDate: businessDate,
-        businessDate,
-        testMode: testMode || false,
-      });
-      
-      // Broadcast real-time update for new check
-      broadcastCheckUpdate(check.id, "open", rvcId);
+      const enterpriseId = req.headers['x-enterprise-id'] as string || 'default';
+      const workstationId = req.headers['x-workstation-id'] as string || 'default';
 
       if (idempotencyKey) {
-        await storage.storeIdempotencyKey({
-          enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
-          workstationId: req.headers['x-workstation-id'] as string || 'default',
-          operation: 'create_check',
-          idempotencyKey,
-          responseStatus: 201,
-          responseBody: JSON.stringify(check),
-        });
+        const requestHash = crypto.createHash('sha256').update(JSON.stringify({ method: req.method, path: req.path, body: req.body })).digest('hex');
+        const lock = await storage.acquireIdempotencyLock(enterpriseId, workstationId, 'create_check', idempotencyKey, requestHash);
+        if (!lock.acquired) {
+          if (lock.status === 'completed' && lock.responseBody) {
+            return res.status(lock.responseStatus || 201).json(JSON.parse(lock.responseBody));
+          }
+          if (lock.requestHash && lock.requestHash !== requestHash) {
+            return res.status(409).json({ message: "Idempotency key reuse with different request" });
+          }
+          return res.status(409).json({ message: "Request already in progress" });
+        }
       }
-      
-      res.status(201).json(check);
+
+      try {
+        // Get property for business date calculation
+        const rvc = await storage.getRvc(rvcId);
+        let businessDate: string | undefined;
+        if (rvc) {
+          const property = await storage.getProperty(rvc.propertyId);
+          if (property) {
+            businessDate = resolveBusinessDate(new Date(), property);
+          }
+        }
+        
+        const check = await storage.createCheckAtomic(rvcId, {
+          rvcId,
+          employeeId,
+          orderType: orderType || "dine_in",
+          status: "open",
+          originBusinessDate: businessDate,
+          businessDate,
+          testMode: testMode || false,
+        });
+        
+        // Broadcast real-time update for new check
+        broadcastCheckUpdate(check.id, "open", rvcId);
+
+        if (idempotencyKey) {
+          await storage.completeIdempotencyKey(enterpriseId, workstationId, 'create_check', idempotencyKey, 201, JSON.stringify(check));
+        }
+        
+        res.status(201).json(check);
+      } catch (error) {
+        if (idempotencyKey) {
+          await storage.failIdempotencyKey(enterpriseId, workstationId, 'create_check', idempotencyKey);
+        }
+        throw error;
+      }
     } catch (error) {
       console.error("Create check error:", error);
       res.status(400).json({ message: "Failed to create check" });
@@ -4700,80 +4705,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { employeeId } = req.body;
 
       const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      const enterpriseId = req.headers['x-enterprise-id'] as string || 'default';
+      const workstationId = req.headers['x-workstation-id'] as string || 'default';
+
       if (idempotencyKey) {
-        const existing = await storage.checkIdempotencyKey(
-          req.headers['x-enterprise-id'] as string || 'default',
-          req.headers['x-workstation-id'] as string || 'default',
-          'send_kds',
-          idempotencyKey
-        );
-        if (existing) {
-          return res.status(existing.responseStatus).json(JSON.parse(existing.responseBody));
+        const requestHash = crypto.createHash('sha256').update(JSON.stringify({ method: req.method, path: req.path, body: req.body })).digest('hex');
+        const lock = await storage.acquireIdempotencyLock(enterpriseId, workstationId, 'send_kds', idempotencyKey, requestHash);
+        if (!lock.acquired) {
+          if (lock.status === 'completed' && lock.responseBody) {
+            return res.status(lock.responseStatus || 200).json(JSON.parse(lock.responseBody));
+          }
+          if (lock.requestHash && lock.requestHash !== requestHash) {
+            return res.status(409).json({ message: "Idempotency key reuse with different request" });
+          }
+          return res.status(409).json({ message: "Request already in progress" });
         }
       }
 
-      const check = await storage.getCheck(checkId);
-      if (!check) {
-        return res.status(404).json({ message: "Check not found" });
-      }
+      try {
+        const check = await storage.getCheck(checkId);
+        if (!check) {
+          return res.status(404).json({ message: "Check not found" });
+        }
 
-      const rvc = await storage.getRvc(check.rvcId);
-      
-      // Check if there's a preview ticket (dynamic order mode)
-      const previewResult = await finalizePreviewTicket(checkId, employeeId);
-      if (previewResult) {
-        // Preview ticket was finalized, return updated items
+        const rvc = await storage.getRvc(check.rvcId);
+        
+        // Check if there's a preview ticket (dynamic order mode)
+        const previewResult = await finalizePreviewTicket(checkId, employeeId);
+        if (previewResult) {
+          // Preview ticket was finalized, return updated items
+          const allItems = await storage.getCheckItems(checkId);
+          const responseData = { round: previewResult.round, updatedItems: allItems };
+          if (idempotencyKey) {
+            await storage.completeIdempotencyKey(enterpriseId, workstationId, 'send_kds', idempotencyKey, 200, JSON.stringify(responseData));
+          }
+          return res.json(responseData);
+        }
+
+        // Standard mode - send unsent items normally
+        const items = await storage.getCheckItems(checkId);
+        const unsentItems = items.filter((item) => !item.sent && !item.voided);
+
+        if (unsentItems.length === 0) {
+          const allItems = await storage.getCheckItems(checkId);
+          const responseData = { round: null, updatedItems: allItems };
+          if (idempotencyKey) {
+            await storage.completeIdempotencyKey(enterpriseId, workstationId, 'send_kds', idempotencyKey, 200, JSON.stringify(responseData));
+          }
+          return res.json(responseData);
+        }
+
+        // Use shared helper for consistent send behavior
+        const { round, updatedItems } = await sendItemsToKds(checkId, employeeId, unsentItems);
+        
         const allItems = await storage.getCheckItems(checkId);
-        const responseData = { round: previewResult.round, updatedItems: allItems };
+        const responseData = { round, updatedItems: allItems };
         if (idempotencyKey) {
-          await storage.storeIdempotencyKey({
-            enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
-            workstationId: req.headers['x-workstation-id'] as string || 'default',
-            operation: 'send_kds',
-            idempotencyKey,
-            responseStatus: 200,
-            responseBody: JSON.stringify(responseData),
-          });
+          await storage.completeIdempotencyKey(enterpriseId, workstationId, 'send_kds', idempotencyKey, 200, JSON.stringify(responseData));
         }
-        return res.json(responseData);
-      }
-
-      // Standard mode - send unsent items normally
-      const items = await storage.getCheckItems(checkId);
-      const unsentItems = items.filter((item) => !item.sent && !item.voided);
-
-      if (unsentItems.length === 0) {
-        const allItems = await storage.getCheckItems(checkId);
-        const responseData = { round: null, updatedItems: allItems };
+        res.json(responseData);
+      } catch (error) {
         if (idempotencyKey) {
-          await storage.storeIdempotencyKey({
-            enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
-            workstationId: req.headers['x-workstation-id'] as string || 'default',
-            operation: 'send_kds',
-            idempotencyKey,
-            responseStatus: 200,
-            responseBody: JSON.stringify(responseData),
-          });
+          await storage.failIdempotencyKey(enterpriseId, workstationId, 'send_kds', idempotencyKey);
         }
-        return res.json(responseData);
+        throw error;
       }
-
-      // Use shared helper for consistent send behavior
-      const { round, updatedItems } = await sendItemsToKds(checkId, employeeId, unsentItems);
-      
-      const allItems = await storage.getCheckItems(checkId);
-      const responseData = { round, updatedItems: allItems };
-      if (idempotencyKey) {
-        await storage.storeIdempotencyKey({
-          enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
-          workstationId: req.headers['x-workstation-id'] as string || 'default',
-          operation: 'send_kds',
-          idempotencyKey,
-          responseStatus: 200,
-          responseBody: JSON.stringify(responseData),
-        });
-      }
-      res.json(responseData);
     } catch (error) {
       console.error("Send error:", error);
       res.status(400).json({ message: "Failed to send order" });
@@ -5145,17 +5141,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { tenderId, amount, tipAmount, employeeId, paymentTransactionId } = req.body;
 
       const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      const enterpriseId = req.headers['x-enterprise-id'] as string || 'default';
+      const workstationId = req.headers['x-workstation-id'] as string || 'default';
+
       if (idempotencyKey) {
-        const existing = await storage.checkIdempotencyKey(
-          req.headers['x-enterprise-id'] as string || 'default',
-          req.headers['x-workstation-id'] as string || 'default',
-          'take_payment',
-          idempotencyKey
-        );
-        if (existing) {
-          return res.status(existing.responseStatus).json(JSON.parse(existing.responseBody));
+        const requestHash = crypto.createHash('sha256').update(JSON.stringify({ method: req.method, path: req.path, body: req.body })).digest('hex');
+        const lock = await storage.acquireIdempotencyLock(enterpriseId, workstationId, 'take_payment', idempotencyKey, requestHash);
+        if (!lock.acquired) {
+          if (lock.status === 'completed' && lock.responseBody) {
+            return res.status(lock.responseStatus || 200).json(JSON.parse(lock.responseBody));
+          }
+          if (lock.requestHash && lock.requestHash !== requestHash) {
+            return res.status(409).json({ message: "Idempotency key reuse with different request" });
+          }
+          return res.status(409).json({ message: "Request already in progress" });
         }
       }
+
+      try {
 
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
@@ -5210,6 +5213,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         businessDate,
         paymentTransactionId: paymentTransactionId || null,
         paymentStatus,
+        paymentAttemptId: idempotencyKey || undefined,
       });
 
       const check = await storage.getCheck(checkId);
@@ -5455,14 +5459,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         const closedResponseData = { ...updatedCheck, paidAmount, autoPrintStatus };
         if (idempotencyKey) {
-          await storage.storeIdempotencyKey({
-            enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
-            workstationId: req.headers['x-workstation-id'] as string || 'default',
-            operation: 'take_payment',
-            idempotencyKey,
-            responseStatus: 200,
-            responseBody: JSON.stringify(closedResponseData),
-          });
+          await storage.completeIdempotencyKey(enterpriseId, workstationId, 'take_payment', idempotencyKey, 200, JSON.stringify(closedResponseData));
         }
         return res.json(closedResponseData);
       }
@@ -5472,16 +5469,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const partialResponseData = { ...check, paidAmount };
       if (idempotencyKey) {
-        await storage.storeIdempotencyKey({
-          enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
-          workstationId: req.headers['x-workstation-id'] as string || 'default',
-          operation: 'take_payment',
-          idempotencyKey,
-          responseStatus: 200,
-          responseBody: JSON.stringify(partialResponseData),
-        });
+        await storage.completeIdempotencyKey(enterpriseId, workstationId, 'take_payment', idempotencyKey, 200, JSON.stringify(partialResponseData));
       }
       res.json(partialResponseData);
+      } catch (error) {
+        if (idempotencyKey) {
+          await storage.failIdempotencyKey(enterpriseId, workstationId, 'take_payment', idempotencyKey);
+        }
+        throw error;
+      }
     } catch (error) {
       console.error("Payment error:", error);
       res.status(400).json({ message: "Payment failed" });

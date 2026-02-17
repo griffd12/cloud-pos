@@ -467,19 +467,22 @@ class OfflineDatabase {
         updated_at TEXT DEFAULT (datetime('now'))
       );
 
-      -- Idempotency keys for exactly-once operations
+      -- Idempotency keys for exactly-once operations (INSERT-first pattern)
       CREATE TABLE IF NOT EXISTS idempotency_keys (
         id TEXT PRIMARY KEY,
         enterprise_id TEXT NOT NULL,
         workstation_id TEXT NOT NULL,
         operation TEXT NOT NULL,
         idempotency_key TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'processing',
+        request_hash TEXT,
         response_status INTEGER,
         response_body TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         expires_at TEXT,
         UNIQUE (enterprise_id, workstation_id, operation, idempotency_key)
       );
+      CREATE INDEX IF NOT EXISTS idx_offline_idempotency_expires ON idempotency_keys (expires_at);
 
       -- Sync metadata
       CREATE TABLE IF NOT EXISTS sync_metadata (
@@ -1049,35 +1052,64 @@ class OfflineDatabase {
     }
   }
 
-  checkIdempotencyKey(enterpriseId, workstationId, operation, key) {
-    try {
-      if (this.usingSqlite) {
-        const row = this.db.prepare(
-          'SELECT response_status, response_body FROM idempotency_keys WHERE enterprise_id = ? AND workstation_id = ? AND operation = ? AND idempotency_key = ?'
-        ).get(enterpriseId, workstationId, operation, key);
-        if (row && row.response_body) {
-          return { responseStatus: row.response_status, responseBody: row.response_body };
-        }
-      }
-      return null;
-    } catch (e) {
-      offlineDbLogger.error('Idempotency', 'Check key error', e.message);
-      return null;
-    }
-  }
-
-  storeIdempotencyKey(data) {
+  acquireIdempotencyLock(enterpriseId, workstationId, operation, key, requestHash) {
     try {
       if (this.usingSqlite) {
         const id = require('crypto').randomUUID();
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        try {
+          this.db.prepare(`
+            INSERT INTO idempotency_keys (id, enterprise_id, workstation_id, operation, idempotency_key, status, request_hash, expires_at)
+            VALUES (?, ?, ?, ?, ?, 'processing', ?, ?)
+          `).run(id, enterpriseId, workstationId, operation, key, requestHash, expiresAt);
+          return { acquired: true };
+        } catch (insertErr) {
+          if (insertErr.code === 'SQLITE_CONSTRAINT_UNIQUE' || (insertErr.message && insertErr.message.includes('UNIQUE'))) {
+            const existing = this.db.prepare(
+              'SELECT status, request_hash, response_status, response_body FROM idempotency_keys WHERE enterprise_id = ? AND workstation_id = ? AND operation = ? AND idempotency_key = ?'
+            ).get(enterpriseId, workstationId, operation, key);
+            if (!existing) return { acquired: false, status: 'failed' };
+            return {
+              acquired: false,
+              status: existing.status,
+              requestHash: existing.request_hash || undefined,
+              responseStatus: existing.response_status || undefined,
+              responseBody: existing.response_body || undefined,
+            };
+          }
+          throw insertErr;
+        }
+      }
+      return { acquired: true };
+    } catch (e) {
+      offlineDbLogger.error('Idempotency', 'Acquire lock error', e.message);
+      return { acquired: true };
+    }
+  }
+
+  completeIdempotencyKey(enterpriseId, workstationId, operation, key, responseStatus, responseBody) {
+    try {
+      if (this.usingSqlite) {
         this.db.prepare(`
-          INSERT OR IGNORE INTO idempotency_keys (id, enterprise_id, workstation_id, operation, idempotency_key, response_status, response_body, expires_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, data.enterpriseId, data.workstationId, data.operation, data.idempotencyKey, data.responseStatus, data.responseBody, expiresAt);
+          UPDATE idempotency_keys SET status = 'completed', response_status = ?, response_body = ?
+          WHERE enterprise_id = ? AND workstation_id = ? AND operation = ? AND idempotency_key = ?
+        `).run(responseStatus, responseBody, enterpriseId, workstationId, operation, key);
       }
     } catch (e) {
-      offlineDbLogger.error('Idempotency', 'Store key error', e.message);
+      offlineDbLogger.error('Idempotency', 'Complete key error', e.message);
+    }
+  }
+
+  failIdempotencyKey(enterpriseId, workstationId, operation, key) {
+    try {
+      if (this.usingSqlite) {
+        this.db.prepare(`
+          UPDATE idempotency_keys SET status = 'failed'
+          WHERE enterprise_id = ? AND workstation_id = ? AND operation = ? AND idempotency_key = ?
+        `).run(enterpriseId, workstationId, operation, key);
+      }
+    } catch (e) {
+      offlineDbLogger.error('Idempotency', 'Fail key error', e.message);
     }
   }
 
