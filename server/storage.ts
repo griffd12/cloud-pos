@@ -3237,7 +3237,7 @@ export class DatabaseStorage implements IStorage {
 
   async clearSalesData(propertyId: string): Promise<{ deleted: { 
     checks: number; checkItems: number; payments: number; discounts: number; rounds: number; 
-    kdsTicketItems: number; kdsTickets: number; auditLogs: number; 
+    kdsTicketItems: number; kdsTickets: number; terminalSessions: number; checkLocks: number; printJobs: number; auditLogs: number; 
     timePunches: number; timecards: number; breakSessions: number; timecardExceptions: number; shifts: number; 
     tipAllocations: number; tipPoolRuns: number;
     fiscalPeriods: number; cashTransactions: number; drawerAssignments: number; safeCounts: number;
@@ -3343,6 +3343,15 @@ export class DatabaseStorage implements IStorage {
         await tx.delete(refundPayments).where(inArray(refundPayments.refundId, refundIds));
         await tx.delete(refundItems).where(inArray(refundItems.refundId, refundIds));
         await tx.delete(refunds).where(inArray(refunds.id, refundIds));
+      }
+
+      // 2d. Delete payment_transactions (references check_payments via checkPaymentId FK)
+      if (checkIds.length > 0) {
+        const checkPaymentRecords = await tx.select({ id: checkPayments.id }).from(checkPayments).where(inArray(checkPayments.checkId, checkIds));
+        const checkPaymentIds = checkPaymentRecords.map(cp => cp.id);
+        if (checkPaymentIds.length > 0) {
+          await tx.delete(paymentTransactions).where(inArray(paymentTransactions.checkPaymentId, checkPaymentIds));
+        }
       }
 
       // 3. Delete check_payments and check_discounts
@@ -3457,13 +3466,22 @@ export class DatabaseStorage implements IStorage {
       const additionalExceptions = await tx.delete(timecardExceptions).where(eq(timecardExceptions.propertyId, propertyId));
       timecardExceptionsResult = { rowCount: (timecardExceptionsResult.rowCount || 0) + (additionalExceptions.rowCount || 0) };
 
-      // 3f. Delete break sessions (references timePunches via startPunchId/endPunchId)
+      // 3f. Delete break_attestations (references timecards FK)
+      const breakAttestationsResult = await tx.delete(breakAttestations).where(eq(breakAttestations.propertyId, propertyId));
+
+      // 3f2. Delete break_violations (references break_sessions and timecards FK)
+      const breakViolationsResult = await tx.delete(breakViolations).where(eq(breakViolations.propertyId, propertyId));
+
+      // 3f3. Delete break sessions (references timePunches via startPunchId/endPunchId)
       const breakSessionsResult = await tx.delete(breakSessions).where(eq(breakSessions.propertyId, propertyId));
 
-      // 3g. Delete timecards
+      // 3g. Delete timecard_edits (references property)
+      await tx.delete(timecardEdits).where(eq(timecardEdits.propertyId, propertyId));
+
+      // 3h. Delete timecards
       const timecardsResult = await tx.delete(timecards).where(eq(timecards.propertyId, propertyId));
 
-      // 3h. Delete time punches
+      // 3i. Delete time punches
       const timePunchesResult = await tx.delete(timePunches).where(eq(timePunches.propertyId, propertyId));
 
       // 3i. Delete shifts (schedules)
@@ -3531,6 +3549,11 @@ export class DatabaseStorage implements IStorage {
 
       // 4k. Accounting exports
       const accountingResult = await tx.delete(accountingExports).where(eq(accountingExports.propertyId, propertyId));
+
+      // 4l. Reset RVC counters so check numbers start from 1
+      if (rvcIds.length > 0) {
+        await tx.delete(rvcCounters).where(inArray(rvcCounters.rvcId, rvcIds));
+      }
 
       return {
         deleted: {
