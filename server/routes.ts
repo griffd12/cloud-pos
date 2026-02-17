@@ -8096,8 +8096,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const netSales = netSubtotalCents / 100;
       const totalWithTax = totalWithTaxCents / 100;
       
-      // For item-level breakdown (still useful for reporting)
+      // Adjustments: Voids tracking (Oracle Simphony style)
       const checkIdToRvc = new Map(allChecks.map(c => [c.id, c.rvcId]));
+      const voidedItemsInPeriod = allCheckItems.filter(ci => {
+        if (!ci.voided) return false;
+        if (validRvcIds) {
+          const checkRvc = checkIdToRvc.get(ci.checkId);
+          if (!checkRvc || !validRvcIds.includes(checkRvc)) return false;
+        }
+        if (useBusinessDate) {
+          return ci.businessDate === businessDate;
+        } else {
+          if (!ci.addedAt) return false;
+          const itemDate = new Date(ci.addedAt);
+          return itemDate >= start && itemDate <= end;
+        }
+      });
+      const voidCount = voidedItemsInPeriod.length;
+      let voidAmountCents = 0;
+      for (const vi of voidedItemsInPeriod) {
+        const qty = vi.quantity || 1;
+        const price = parseFloat(vi.unitPrice || "0");
+        let modPrice = 0;
+        if (vi.modifiers && Array.isArray(vi.modifiers)) {
+          modPrice = (vi.modifiers as any[]).reduce((s: number, m: any) => s + parseFloat(m.priceDelta || "0"), 0);
+        }
+        voidAmountCents += Math.round((price + modPrice) * qty * 100);
+      }
+      const voidAmount = voidAmountCents / 100;
+
+      // For item-level breakdown (still useful for reporting)
       const itemsInPeriod = allCheckItems.filter(ci => {
         if (ci.voided) return false;
         if (validRvcIds) {
@@ -8310,6 +8338,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         // Averages
         avgCheck: Math.round(avgCheck * 100) / 100,
+        
+        // Adjustments (Oracle Simphony style)
+        voidCount,
+        voidAmount: Math.round(voidAmount * 100) / 100,
         
         // Legacy fields for backwards compatibility
         checkCount: checksClosed.length,
@@ -9149,8 +9181,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           checkNumber: check?.checkNumber || 0,
           tenderName: tender?.name || "Unknown",
           tenderType: tender?.type || "unknown",
-          amount: parseFloat(p.amount || "0") * ratio, // Applied amount, not tendered
-          tipAmount: 0, // Tips would need separate tracking
+          amount: parseFloat(p.amount || "0") * ratio,
+          tipAmount: parseFloat(p.tipAmount || "0"),
           employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
           rvcName: rvc?.name || "Unknown",
           paidAt: p.paidAt,
@@ -9167,8 +9199,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           summary[name] = { count: 0, amount: 0, tips: 0 };
         }
         summary[name].count += 1;
-        summary[name].amount += parseFloat(p.amount || "0") * ratio; // Applied amount
-        // Tips would need separate tracking
+        summary[name].amount += parseFloat(p.amount || "0") * ratio;
+        summary[name].tips += parseFloat(p.tipAmount || "0");
       }
       
       res.json({
@@ -9691,6 +9723,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allPayments = await storage.getAllPayments();
       const allRefunds = await storage.getRefunds();
       const allRefundItemRecords = await storage.getAllRefundItems();
+      const allTenders = await storage.getTenders();
       
       let closedChecks = allChecks.filter(c => c.status === "closed" && !c.testMode);
       
@@ -9753,6 +9786,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? Math.floor((new Date(check.closedAt).getTime() - new Date(check.openedAt).getTime()) / 60000)
           : 0;
         
+        const totalTips = checkPayments.reduce((sum, p) => sum + parseFloat(p.tipAmount || "0"), 0);
+        const tenderNames = [...new Set(checkPayments.map(p => {
+          const tender = allTenders.find(t => t.id === p.tenderId);
+          return tender?.name || "Unknown";
+        }))].join(", ");
+        
         return {
           id: check.id,
           checkNumber: check.checkNumber,
@@ -9764,6 +9803,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           tax: Math.round(rawTax * 100) / 100,
           total: Math.round(rawCheckTotal * 100) / 100,
           totalPaid: Math.round(totalPaid * 100) / 100,
+          tipAmount: Math.round(totalTips * 100) / 100,
+          tenderName: tenderNames,
           refundAmount: refundData ? Math.round(refundData.total * 100) / 100 : 0,
           durationMinutes,
           openedAt: check.openedAt,
@@ -9777,6 +9818,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         summary: {
           count: result.length,
           totalSales: Math.round(result.reduce((sum, c) => sum + c.total, 0) * 100) / 100,
+          totalTips: Math.round(result.reduce((sum, c) => sum + c.tipAmount, 0) * 100) / 100,
           totalRefunds: Math.round(result.reduce((sum, c) => sum + c.refundAmount, 0) * 100) / 100,
           avgCheck: result.length > 0 ? Math.round(result.reduce((sum, c) => sum + c.total, 0) / result.length * 100) / 100 : 0,
           avgDuration: result.length > 0 ? result.reduce((sum, c) => sum + c.durationMinutes, 0) / result.length : 0,
@@ -9955,6 +9997,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const discountAmount = parseFloat(check.discountTotal || "0");
         employeeData[empId].discounts += discountAmount;
         
+        // Net Sales = Gross Sales - Discounts (Oracle formula)
+        employeeData[empId].netSales += Math.max(0, totalItemSales - checkRefundSubtotal - discountAmount);
+        
         // Calculate tax and total with refund deduction
         if (check.status === "closed") {
           const rawTax = parseFloat(check.taxTotal || "0");
@@ -9974,11 +10019,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             const tenderedAmount = parseFloat(payment.amount || "0");
             const appliedAmount = tenderedAmount * ratio;
             employeeData[empId].totalCollected += appliedAmount;
+            employeeData[empId].tips += parseFloat(payment.tipAmount || "0");
             
             const tender = tenders.find(t => t.id === payment.tenderId);
             if (tender?.type === "cash") {
               employeeData[empId].cashCollected += appliedAmount;
-            } else if (tender?.type === "credit") {
+            } else if (tender?.type === "credit" || tender?.type === "debit") {
               employeeData[empId].creditCollected += appliedAmount;
             } else {
               employeeData[empId].otherCollected += appliedAmount;

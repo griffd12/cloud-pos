@@ -5213,57 +5213,72 @@ export class DatabaseStorage implements IStorage {
     const dayChecks = await db.select().from(checks)
       .where(and(inArray(checks.rvcId, rvcIds), eq(checks.businessDate, businessDate), or(eq(checks.testMode, false), isNull(checks.testMode))));
 
-    let grossSales = 0, netSales = 0, taxCollected = 0, discountsTotal = 0, cashExpected = 0, cardTotal = 0, tipsTotal = 0, serviceChargesTotal = 0, refundsTotal = 0, guestCount = 0;
+    let grossSalesCents = 0, netSalesCents = 0, taxCollectedCents = 0, discountsTotalCents = 0;
+    let cashExpectedCents = 0, cardTotalCents = 0, tipsTotalCents = 0;
+    let serviceChargesTotalCents = 0, refundsTotalCents = 0, guestCount = 0;
+    let voidCount = 0, voidAmountCents = 0;
+    let checksBegun = 0, checksPaid = 0;
 
     for (const check of dayChecks) {
-      grossSales += parseFloat(check.subtotal || "0");
-      taxCollected += parseFloat(check.tax || check.taxTotal || "0");
-      netSales += parseFloat(check.total || "0");
+      checksBegun++;
+      if (check.status === "closed") checksPaid++;
+
+      const subtotalCents = Math.round(parseFloat(check.subtotal || "0") * 100);
+      const discountCents = Math.round(parseFloat(check.discountTotal || "0") * 100);
+      const taxCents = Math.round(parseFloat(check.taxTotal || "0") * 100);
+      const serviceChargeCents = Math.round(parseFloat(check.serviceChargeTotal || "0") * 100);
+
+      grossSalesCents += subtotalCents + discountCents;
+      netSalesCents += subtotalCents;
+      taxCollectedCents += taxCents;
+      discountsTotalCents += discountCents;
+      serviceChargesTotalCents += serviceChargeCents;
       guestCount += check.guestCount || 1;
-      serviceChargesTotal += parseFloat(check.serviceChargeTotal || "0");
-      
-      // Aggregate discounts from check record (stored as discountTotal on check)
-      discountsTotal += parseFloat(check.discountTotal || "0");
-      
-      // Also check the checkDiscounts table for detailed discount records
-      const discountRecords = await db.select().from(checkDiscounts).where(eq(checkDiscounts.checkId, check.id));
-      for (const discount of discountRecords) {
-        // Only add if not already counted in check.discountTotal
-        if (!check.discountTotal || check.discountTotal === "0") {
-          discountsTotal += parseFloat(discount.amount || "0");
-        }
-      }
-      
+
       const payments = await db.select().from(checkPayments).where(eq(checkPayments.checkId, check.id));
       for (const payment of payments) {
+        if (payment.paymentStatus !== "completed") continue;
+        const amountCents = Math.round(parseFloat(payment.amount || "0") * 100);
         const tender = await this.getTender(payment.tenderId);
         if (tender?.type === "cash") {
-          cashExpected += parseFloat(payment.amount || "0");
+          cashExpectedCents += amountCents;
         } else if (tender?.type === "credit" || tender?.type === "debit") {
-          cardTotal += parseFloat(payment.amount || "0");
+          cardTotalCents += amountCents;
         }
-        tipsTotal += parseFloat(payment.tip || "0");
+        tipsTotalCents += Math.round(parseFloat(payment.tipAmount || "0") * 100);
       }
-      
-      // Get refunds for this check
+
       const checkRefunds = await db.select().from(refunds).where(eq(refunds.originalCheckId, check.id));
       for (const refund of checkRefunds) {
-        refundsTotal += parseFloat(refund.total || "0");
+        refundsTotalCents += Math.round(parseFloat(refund.total || "0") * 100);
+      }
+
+      const items = await db.select().from(checkItems).where(eq(checkItems.checkId, check.id));
+      for (const item of items) {
+        if (item.voided) {
+          voidCount++;
+          const itemPrice = parseFloat(item.unitPrice || "0") * (item.quantity || 1);
+          voidAmountCents += Math.round(itemPrice * 100);
+        }
       }
     }
 
     return {
-      grossSales: grossSales.toFixed(2),
-      netSales: netSales.toFixed(2),
-      taxCollected: taxCollected.toFixed(2),
-      discountsTotal: discountsTotal.toFixed(2),
-      tipsTotal: tipsTotal.toFixed(2),
-      serviceChargesTotal: serviceChargesTotal.toFixed(2),
-      refundsTotal: refundsTotal.toFixed(2),
+      grossSales: (grossSalesCents / 100).toFixed(2),
+      netSales: (netSalesCents / 100).toFixed(2),
+      taxCollected: (taxCollectedCents / 100).toFixed(2),
+      discountsTotal: (discountsTotalCents / 100).toFixed(2),
+      tipsTotal: (tipsTotalCents / 100).toFixed(2),
+      serviceChargesTotal: (serviceChargesTotalCents / 100).toFixed(2),
+      refundsTotal: (refundsTotalCents / 100).toFixed(2),
       checkCount: dayChecks.length,
+      checksBegun,
+      checksPaid,
       guestCount,
-      cashExpected: cashExpected.toFixed(2),
-      cardTotal: cardTotal.toFixed(2),
+      cashExpected: (cashExpectedCents / 100).toFixed(2),
+      cardTotal: (cardTotalCents / 100).toFixed(2),
+      voidCount,
+      voidAmount: (voidAmountCents / 100).toFixed(2),
     };
   }
 

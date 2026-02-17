@@ -85,6 +85,12 @@ interface SalesSummary {
   openTotal: number;
   // Today's open checks count (for reconciliation)
   todaysOpenCount: number;
+  // Adjustments (Oracle Simphony style)
+  voidCount: number;
+  voidAmount: number;
+  // Refunds
+  totalRefunds: number;
+  refundCount: number;
 }
 
 interface CategorySale {
@@ -215,6 +221,9 @@ interface ClosedCheck {
   tax: number;
   total: number;
   totalPaid: number;
+  tipAmount: number;
+  tenderName: string;
+  refundAmount: number;
   durationMinutes: number;
   openedAt: string | null;
   closedAt: string | null;
@@ -226,6 +235,8 @@ interface ClosedChecksData {
   summary: {
     count: number;
     totalSales: number;
+    totalTips: number;
+    totalRefunds: number;
     avgCheck: number;
     avgDuration: number;
   };
@@ -1135,6 +1146,64 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Tips</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Direct Charged Tips</p>
+                    <p className="font-medium text-lg" data-testid="text-charged-tips">
+                      {formatCurrency(salesSummary?.totalTips || 0)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Total Tips</p>
+                    <p className="font-semibold text-lg" data-testid="text-total-tips">
+                      {formatCurrency(salesSummary?.totalTips || 0)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Adjustments</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Voids</p>
+                    <p className="font-medium text-lg" data-testid="text-void-count">
+                      {salesSummary?.voidCount || 0}
+                    </p>
+                    <p className="text-sm text-destructive" data-testid="text-void-amount">
+                      {formatCurrency(salesSummary?.voidAmount || 0)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Refunds</p>
+                    <p className="font-medium text-lg" data-testid="text-refund-count">
+                      {salesSummary?.refundCount || 0}
+                    </p>
+                    <p className="text-sm text-destructive" data-testid="text-refund-amount">
+                      {formatCurrency(salesSummary?.totalRefunds || 0)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Total Adjustments</p>
+                    <p className="font-semibold text-lg text-destructive" data-testid="text-total-adjustments">
+                      {formatCurrency((salesSummary?.voidAmount || 0) + (salesSummary?.totalRefunds || 0))}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
             <CardHeader className="py-3">
               <CardTitle className="text-sm">Reconciliation</CardTitle>
@@ -1989,6 +2058,8 @@ export default function ReportsPage() {
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'tipAmount', header: 'Tip', format: commonFormatters.currency },
+                      { key: 'tenderName', header: 'Tender' },
                       { key: 'refundAmount', header: 'Refund', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
@@ -2004,6 +2075,8 @@ export default function ReportsPage() {
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'tipAmount', header: 'Tip', format: commonFormatters.currency },
+                      { key: 'tenderName', header: 'Tender' },
                       { key: 'refundAmount', header: 'Refund', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
@@ -2019,6 +2092,8 @@ export default function ReportsPage() {
                       { key: 'employeeName', header: 'Employee' },
                       { key: 'rvcName', header: 'RVC' },
                       { key: 'total', header: 'Total', format: commonFormatters.currency },
+                      { key: 'tipAmount', header: 'Tip', format: commonFormatters.currency },
+                      { key: 'tenderName', header: 'Tender' },
                       { key: 'refundAmount', header: 'Refund', format: commonFormatters.currency },
                       { key: 'totalPaid', header: 'Paid', format: commonFormatters.currency },
                       { key: 'durationMinutes', header: 'Duration (min)' },
@@ -2039,8 +2114,10 @@ export default function ReportsPage() {
                     <TableHead>Employee</TableHead>
                     <TableHead>RVC</TableHead>
                     <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Tip</TableHead>
                     <TableHead className="text-right">Refund</TableHead>
                     <TableHead className="text-right">Net</TableHead>
+                    <TableHead>Tender</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
                     <TableHead className="text-right">Duration</TableHead>
                     <TableHead>Closed</TableHead>
@@ -2059,6 +2136,13 @@ export default function ReportsPage() {
                       <TableCell>{check.rvcName}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(check.total)}</TableCell>
                       <TableCell className="text-right">
+                        {check.tipAmount > 0 ? (
+                          <span className="text-green-600">{formatCurrency(check.tipAmount)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
                         {check.refundAmount > 0 ? (
                           <span className="text-destructive">-{formatCurrency(check.refundAmount)}</span>
                         ) : (
@@ -2066,6 +2150,7 @@ export default function ReportsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(check.total - (check.refundAmount || 0))}</TableCell>
+                      <TableCell className="text-sm">{check.tenderName || "-"}</TableCell>
                       <TableCell className="text-right">{formatCurrency(check.totalPaid)}</TableCell>
                       <TableCell className="text-right">{check.durationMinutes} min</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatDateTime(check.closedAt)}</TableCell>
@@ -2073,7 +2158,7 @@ export default function ReportsPage() {
                   ))}
                   {(!closedChecksData?.checks || closedChecksData.checks.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground">
                         No closed checks in selected period
                       </TableCell>
                     </TableRow>
