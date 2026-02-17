@@ -7,6 +7,7 @@ import {
   modifierGroups, modifiers, modifierGroupModifiers, menuItemModifierGroups,
   ingredientPrefixes, menuItemRecipeIngredients,
   tenders, discounts, serviceCharges,
+  rvcCounters,
   checks, rounds, checkItems, checkPayments, checkDiscounts, checkLocks, auditLogs, kdsTickets, kdsTicketItems,
   paymentProcessors, paymentTransactions, terminalDevices, terminalSessions,
   workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
@@ -371,6 +372,7 @@ export interface IStorage {
   getCheck(id: string): Promise<Check | undefined>;
   getOpenChecks(rvcId: string): Promise<Check[]>;
   createCheck(data: InsertCheck): Promise<Check>;
+  createCheckAtomic(rvcId: string, data: Omit<InsertCheck, 'checkNumber'>): Promise<Check>;
   updateCheck(id: string, data: Partial<Check>): Promise<Check | undefined>;
   deleteCheck(id: string): Promise<boolean>;
   getNextCheckNumber(rvcId: string): Promise<number>;
@@ -1972,10 +1974,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextCheckNumber(rvcId: string): Promise<number> {
-    const result = await db.select({ maxNum: sql<number>`COALESCE(MAX(${checks.checkNumber}), 0)` })
-      .from(checks)
-      .where(eq(checks.rvcId, rvcId));
-    return (result[0]?.maxNum || 0) + 1;
+    const result = await db.execute(sql`
+      INSERT INTO rvc_counters (rvc_id, next_check_number, updated_at)
+      VALUES (${rvcId}, 2, NOW())
+      ON CONFLICT (rvc_id) DO UPDATE
+        SET next_check_number = rvc_counters.next_check_number + 1,
+            updated_at = NOW()
+      RETURNING next_check_number - 1 AS reserved_number
+    `);
+    return (result.rows[0] as any).reserved_number;
+  }
+
+  async createCheckAtomic(rvcId: string, data: Omit<InsertCheck, 'checkNumber'>): Promise<Check> {
+    return await db.transaction(async (tx) => {
+      const counterResult = await tx.execute(sql`
+        INSERT INTO rvc_counters (rvc_id, next_check_number, updated_at)
+        VALUES (${rvcId}, 2, NOW())
+        ON CONFLICT (rvc_id) DO UPDATE
+          SET next_check_number = rvc_counters.next_check_number + 1,
+              updated_at = NOW()
+        RETURNING next_check_number - 1 AS reserved_number
+      `);
+      const checkNumber = (counterResult.rows[0] as any).reserved_number;
+      const [result] = await tx.insert(checks).values(sanitizeDates({ ...data, checkNumber, rvcId })).returning();
+      return result;
+    });
   }
 
   // Check Items

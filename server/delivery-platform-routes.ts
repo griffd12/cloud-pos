@@ -51,11 +51,9 @@ async function autoInjectOrder(
       return null;
     }
 
-    const checkNumber = await storage.getNextCheckNumber(rvcId);
-    const check = await storage.createCheck({
+    const check = await storage.createCheckAtomic(rvcId, {
       rvcId,
       employeeId: "system",
-      checkNumber,
       orderType: source.defaultOrderType || "delivery",
       status: "open",
       guestCount: 1,
@@ -514,11 +512,9 @@ export function registerDeliveryPlatformRoutes(
         return res.status(400).json({ message: "No RVC configured for this order" });
       }
 
-      const checkNumber = await storage.getNextCheckNumber(rvcId);
-      const check = await storage.createCheck({
+      const check = await storage.createCheckAtomic(rvcId, {
         rvcId,
         employeeId: "system",
-        checkNumber,
         orderType: order.orderType || "delivery",
         status: "open",
         guestCount: 1,

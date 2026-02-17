@@ -4479,7 +4479,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks", async (req, res) => {
     try {
       const { rvcId, employeeId, orderType, testMode } = req.body;
-      const checkNumber = await storage.getNextCheckNumber(rvcId);
       
       // Get property for business date calculation
       const rvc = await storage.getRvc(rvcId);
@@ -4491,8 +4490,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       
-      const check = await storage.createCheck({
-        checkNumber,
+      const check = await storage.createCheckAtomic(rvcId, {
         rvcId,
         employeeId,
         orderType: orderType || "dine_in",
@@ -5624,19 +5622,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const targetIndices = new Set(operations.map((op: any) => op.targetCheckIndex));
       const newChecks: any[] = [];
 
-      // Create new checks as needed
-      for (const targetIndex of Array.from(targetIndices)) {
-        const checkNumber = await storage.getNextCheckNumber(sourceCheck.rvcId);
-        const rvc = await storage.getRvc(sourceCheck.rvcId);
-        let businessDate: string | undefined;
-        if (rvc) {
-          const property = await storage.getProperty(rvc.propertyId);
-          if (property) {
-            businessDate = resolveBusinessDate(new Date(), property);
-          }
+      // Create new checks as needed (using atomic check number assignment)
+      const rvc = await storage.getRvc(sourceCheck.rvcId);
+      let businessDate: string | undefined;
+      if (rvc) {
+        const property = await storage.getProperty(rvc.propertyId);
+        if (property) {
+          businessDate = resolveBusinessDate(new Date(), property);
         }
-        const newCheck = await storage.createCheck({
-          checkNumber,
+      }
+      for (const targetIndex of Array.from(targetIndices)) {
+        const newCheck = await storage.createCheckAtomic(sourceCheck.rvcId, {
           rvcId: sourceCheck.rvcId,
           employeeId: sourceCheck.employeeId,
           orderType: sourceCheck.orderType,

@@ -848,6 +848,19 @@ export const serviceCharges = pgTable("service_charges", {
 });
 
 // ============================================================================
+// RVC COUNTERS (Concurrency-safe check number sequences)
+// ============================================================================
+
+export const rvcCounters = pgTable("rvc_counters", {
+  rvcId: varchar("rvc_id").primaryKey().references(() => rvcs.id),
+  nextCheckNumber: integer("next_check_number").notNull().default(1),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type RvcCounter = typeof rvcCounters.$inferSelect;
+export type InsertRvcCounter = typeof rvcCounters.$inferInsert;
+
+// ============================================================================
 // CHECK LIFECYCLE
 // ============================================================================
 
