@@ -5387,6 +5387,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         paymentAttemptId: idempotencyKey || undefined,
       });
 
+      // Bidirectional link: update payment_transaction with check_payment_id
+      if (paymentTransactionId) {
+        try {
+          await storage.updatePaymentTransaction(paymentTransactionId, { checkPaymentId: payment.id });
+        } catch (linkError: any) {
+          console.error("Failed to link payment_transaction to check_payment:", linkError.message);
+        }
+      }
+
       if (tender.type === "cash" && resolvedDrawerAssignmentId && resolvedDrawerId && businessDate) {
         try {
           const rvcForProp = await storage.getRvc(checkForBiz?.rvcId || "");
@@ -6746,7 +6755,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const tender = await storage.getTender(payment.tenderId);
         const isCardTender = tender && tender.type === "credit";
         const processorId = tender?.paymentProcessorId || null;
-        const hasGatewayTransaction = payment.paymentTransactionId;
+        let resolvedPaymentTransactionId = payment.paymentTransactionId;
+        
+        // Fallback: if payment_transaction_id is null, try to find it via check_payment_id lookup
+        if (!resolvedPaymentTransactionId && isCardTender) {
+          const linkedTxs = await storage.getPaymentTransactions(payment.id);
+          // Use the most recent captured transaction with a gateway ID
+          const validTx = linkedTxs
+            .filter(tx => tx.gatewayTransactionId && tx.status === "captured")
+            .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          if (validTx.length > 0) {
+            resolvedPaymentTransactionId = validTx[0].id;
+            console.log(`[refund] Found payment_transaction via check_payment_id fallback: ${resolvedPaymentTransactionId} (gateway: ${validTx[0].gatewayTransactionId}) for payment ${payment.id}`);
+          }
+        }
+        
+        const hasGatewayTransaction = !!resolvedPaymentTransactionId;
 
         let gatewayRefundId: string | null = null;
         let gatewayStatus: string = "not_applicable";
@@ -6756,7 +6780,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (isCardTender && hasGatewayTransaction) {
           // Card payment with gateway transaction — process refund through payment processor
           try {
-            const paymentTx = await storage.getPaymentTransaction(payment.paymentTransactionId!);
+            const paymentTx = await storage.getPaymentTransaction(resolvedPaymentTransactionId!);
             if (paymentTx && paymentTx.gatewayTransactionId) {
               // Use processor from the transaction first, fall back to tender's processor
               const effectiveProcessorId = paymentTx.paymentProcessorId || processorId;
@@ -18923,14 +18947,24 @@ connect();
       }
 
       // Create a payment_transactions record to link the Stripe paymentIntentId
-      // This is required so refunds can find the gateway transaction and issue Stripe refunds
+      // This is CRITICAL so refunds can find the gateway transaction and issue Stripe refunds
       let paymentTxId: string | null = null;
-      try {
-        const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
-        const propertyId = rvc?.propertyId;
-        const processor = propertyId ? await storage.getActivePaymentProcessor(propertyId) : null;
+      const rvc = check.rvcId ? await storage.getRvc(check.rvcId) : null;
+      const propertyId = rvc?.propertyId;
+      
+      // Try active processor first, then fall back to any Stripe processor for this property
+      let processor = propertyId ? await storage.getActivePaymentProcessor(propertyId) : null;
+      if (!processor && propertyId) {
+        const allProcessors = await storage.getPaymentProcessors(propertyId);
+        const stripeProcessor = allProcessors.find(p => p.gatewayType === "stripe");
+        if (stripeProcessor) {
+          processor = stripeProcessor;
+          console.warn(`[record-payment] No active processor found, using Stripe fallback: ${processor.name} (${processor.id})`);
+        }
+      }
 
-        if (processor) {
+      if (processor) {
+        try {
           const amountCents = Math.round(parseFloat(amount.toString()) * 100);
           const tipCents = tipAmount ? Math.round(parseFloat(tipAmount.toString()) * 100) : 0;
           const paymentTx = await storage.createPaymentTransaction({
@@ -18952,9 +18986,12 @@ connect();
             employeeId: employeeId || null,
           });
           paymentTxId = paymentTx.id;
+          console.log(`[record-payment] Created payment_transaction ${paymentTxId} with gateway_transaction_id=${paymentIntentId}`);
+        } catch (txError: any) {
+          console.error("[record-payment] CRITICAL: Failed to create payment_transaction for Stripe:", txError.message, txError.stack);
         }
-      } catch (txError: any) {
-        console.error("Failed to create payment transaction record for Stripe:", txError.message);
+      } else {
+        console.error(`[record-payment] CRITICAL: No payment processor found for property ${propertyId} — payment_transaction will NOT be created. Refunds will require manual processing.`);
       }
 
       const checkPayment = await storage.createPayment({
