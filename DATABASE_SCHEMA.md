@@ -1683,11 +1683,22 @@ POS workstation configurations with peripheral assignments and operational setti
 | device_token | text | YES | — |
 | registered_device_id | varchar | YES | — |
 | font_scale | integer | YES | `100` |
+| cash_drawer_enabled | boolean | YES | `false` |
+| cash_drawer_printer_id | varchar | YES | — |
+| cash_drawer_kick_pin | text | YES | `'pin2'` |
+| cash_drawer_pulse_duration | integer | YES | `100` |
+| cash_drawer_auto_open_on_cash | boolean | YES | `true` |
+| cash_drawer_auto_open_on_drop | boolean | YES | `true` |
 
 - **Primary Key:** `id`
 - **Foreign Keys:**
   - `property_id` → `properties.id`
   - `rvc_id` → `rvcs.id`
+- **Notes:**
+  - Cash drawer fields configure printer-driven cash drawers connected via ESC/POS receipt printers.
+  - `cash_drawer_printer_id` references a `printers.id` record; defaults to `default_receipt_printer_id` if null.
+  - `cash_drawer_kick_pin`: `pin2` (standard, most drawers) or `pin5` (alternate, dual-drawer setups).
+  - `cash_drawer_pulse_duration`: Electronic kick pulse duration in milliseconds (50–500ms).
 
 ---
 

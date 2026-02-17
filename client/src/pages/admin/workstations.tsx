@@ -158,6 +158,12 @@ export default function WorkstationsPage() {
       autoLogoutMinutes: null,
       active: true,
       fontScale: 100,
+      cashDrawerEnabled: false,
+      cashDrawerPrinterId: null,
+      cashDrawerKickPin: "pin2",
+      cashDrawerPulseDuration: 100,
+      cashDrawerAutoOpenOnCash: true,
+      cashDrawerAutoOpenOnDrop: true,
     },
   });
 
@@ -207,6 +213,12 @@ export default function WorkstationsPage() {
           autoLogoutMinutes: editingItem.autoLogoutMinutes ?? null,
           active: editingItem.active ?? true,
           fontScale: editingItem.fontScale ?? 100,
+          cashDrawerEnabled: editingItem.cashDrawerEnabled ?? false,
+          cashDrawerPrinterId: editingItem.cashDrawerPrinterId || null,
+          cashDrawerKickPin: editingItem.cashDrawerKickPin || "pin2",
+          cashDrawerPulseDuration: editingItem.cashDrawerPulseDuration ?? 100,
+          cashDrawerAutoOpenOnCash: editingItem.cashDrawerAutoOpenOnCash ?? true,
+          cashDrawerAutoOpenOnDrop: editingItem.cashDrawerAutoOpenOnDrop ?? true,
         });
       } else {
         const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
@@ -234,6 +246,12 @@ export default function WorkstationsPage() {
           autoLogoutMinutes: null,
           active: true,
           fontScale: 100,
+          cashDrawerEnabled: false,
+          cashDrawerPrinterId: null,
+          cashDrawerKickPin: "pin2",
+          cashDrawerPulseDuration: 100,
+          cashDrawerAutoOpenOnCash: true,
+          cashDrawerAutoOpenOnDrop: true,
         });
       }
     }
@@ -330,6 +348,7 @@ export default function WorkstationsPage() {
         backupReportPrinterId: cleanPrinterId(data.backupReportPrinterId),
         voidPrinterId: cleanPrinterId(data.voidPrinterId),
         backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
+        cashDrawerPrinterId: cleanPrinterId(data.cashDrawerPrinterId),
       };
       if (editingItem) {
         updateMutation.mutate({ ...editingItem, ...cleanedData } as Workstation);
@@ -710,6 +729,148 @@ export default function WorkstationsPage() {
                       description="Fallback for void printing"
                     />
                   </div>
+                </div>
+
+                <div className="border rounded-md p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Cash Drawer</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Configure a printer-driven cash drawer connected to one of this workstation's receipt printers.
+                  </p>
+
+                  <FormField
+                    control={form.control}
+                    name="cashDrawerEnabled"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between">
+                        <div>
+                          <FormLabel className="text-sm">Cash Drawer Enabled</FormLabel>
+                          <FormDescription className="text-xs">Enable cash drawer kick commands for this workstation</FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-cashDrawerEnabled" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {form.watch("cashDrawerEnabled") && (
+                    <>
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="cashDrawerPrinterId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Drawer Printer</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || "__none__"}
+                              >
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-cashDrawerPrinterId">
+                                    <SelectValue placeholder="Select printer" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {printerOptions.map((opt) => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormDescription className="text-xs">
+                                The receipt printer that controls the cash drawer via its kick connector
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="cashDrawerKickPin"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Kick Pin</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value || "pin2"}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-cashDrawerKickPin">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="pin2">Pin 2 (Standard)</SelectItem>
+                                  <SelectItem value="pin5">Pin 5 (Alternate)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormDescription className="text-xs">
+                                Most drawers (MMF, APG, Star) use Pin 2. Some dual-drawer setups use Pin 5.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="cashDrawerPulseDuration"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Pulse Duration (ms)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="50"
+                                  max="500"
+                                  {...field}
+                                  value={field.value ?? 100}
+                                  onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 100)}
+                                  data-testid="input-cashDrawerPulseDuration"
+                                />
+                              </FormControl>
+                              <FormDescription className="text-xs">
+                                Duration of the electronic kick pulse. 100ms works for most drawers.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="cashDrawerAutoOpenOnCash"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center justify-between">
+                              <div>
+                                <FormLabel className="text-sm">Auto-Open on Cash Tender</FormLabel>
+                                <FormDescription className="text-xs">Automatically open the drawer when a cash payment is applied</FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-cashDrawerAutoOpenOnCash" />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="cashDrawerAutoOpenOnDrop"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center justify-between">
+                              <div>
+                                <FormLabel className="text-sm">Auto-Open on Drop/Pickup</FormLabel>
+                                <FormDescription className="text-xs">Automatically open the drawer for cash drops and pickups</FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-cashDrawerAutoOpenOnDrop" />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="border rounded-md p-4 space-y-4">

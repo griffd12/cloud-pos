@@ -14,7 +14,8 @@ import {
   Activity,
   FileEdit,
   BarChart3,
-  Zap
+  Zap,
+  LockOpen
 } from "lucide-react";
 import { SystemStatusModal } from "./system-status-modal";
 
@@ -36,6 +37,8 @@ interface FunctionsModalProps {
   onAssignTable: () => void;
   onOpenReports?: () => void;
   onStressTest?: () => void;
+  onOpenDrawer?: () => void;
+  cashDrawerEnabled?: boolean;
   privileges: {
     canTransfer: boolean;
     canSplit: boolean;
@@ -101,6 +104,8 @@ export function FunctionsModal({
   onAssignTable,
   onOpenReports,
   onStressTest,
+  onOpenDrawer,
+  cashDrawerEnabled,
   privileges,
   propertyId,
   workstation,
@@ -219,6 +224,14 @@ export function FunctionsModal({
                 onClick={() => onStressTest?.()}
                 variant="secondary"
               />
+              {cashDrawerEnabled && (
+                <FunctionButton
+                  icon={<LockOpen className="w-5 h-5" />}
+                  label="Open Drawer"
+                  description="Open cash drawer manually"
+                  onClick={() => onOpenDrawer?.()}
+                />
+              )}
             </div>
           </div>
         </div>

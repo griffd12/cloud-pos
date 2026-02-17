@@ -258,6 +258,13 @@ export const workstations = pgTable("workstations", {
   deviceToken: text("device_token"), // Hashed token for device authentication
   registeredDeviceId: varchar("registered_device_id"), // Hardware ID of registered device
   fontScale: integer("font_scale").default(100), // Display font scale percentage: 85=Small, 100=Medium, 120=Large, 140=Extra Large
+  // Cash Drawer Settings
+  cashDrawerEnabled: boolean("cash_drawer_enabled").default(false),
+  cashDrawerPrinterId: varchar("cash_drawer_printer_id"),
+  cashDrawerKickPin: text("cash_drawer_kick_pin").default("pin2"), // pin2 or pin5
+  cashDrawerPulseDuration: integer("cash_drawer_pulse_duration").default(100), // milliseconds
+  cashDrawerAutoOpenOnCash: boolean("cash_drawer_auto_open_on_cash").default(true),
+  cashDrawerAutoOpenOnDrop: boolean("cash_drawer_auto_open_on_drop").default(true),
 });
 
 // Printers (Physical print devices)

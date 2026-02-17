@@ -19423,6 +19423,73 @@ connect();
   });
 
   // ============================================================================
+  // CASH DRAWER KICK
+  // ============================================================================
+
+  app.post("/api/cash-drawer-kick", async (req, res) => {
+    try {
+      const { workstationId } = req.body;
+      if (!workstationId) {
+        return res.status(400).json({ message: "workstationId is required" });
+      }
+
+      const workstation = await storage.getWorkstation(workstationId);
+      if (!workstation) {
+        return res.status(404).json({ message: "Workstation not found" });
+      }
+
+      if (!workstation.cashDrawerEnabled) {
+        return res.status(400).json({ message: "Cash drawer is not enabled on this workstation" });
+      }
+
+      const drawerPrinterId = workstation.cashDrawerPrinterId || workstation.defaultReceiptPrinterId;
+      if (!drawerPrinterId) {
+        return res.status(400).json({ message: "No printer assigned for cash drawer kick" });
+      }
+
+      const printer = await storage.getPrinter(drawerPrinterId);
+      if (!printer) {
+        return res.status(404).json({ message: "Drawer printer not found" });
+      }
+
+      const pin = workstation.cashDrawerKickPin === "pin5" ? "pin5" : "pin2";
+      const pulseDuration = Math.max(50, Math.min(500, workstation.cashDrawerPulseDuration || 100));
+
+      const agents = await storage.getPrintAgentsByProperty(workstation.propertyId);
+      const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
+      let sent = false;
+
+      for (const agent of agents) {
+        const agentWs = connectedAgentsMap?.get(agent.id);
+        if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+          const kickId = `kick_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+          agentWs.send(JSON.stringify({
+            type: "DRAWER_KICK",
+            kickId,
+            printerId: drawerPrinterId,
+            printerIp: (printer as any).ipAddress || (printer as any).ip_address,
+            printerPort: (printer as any).port || 9100,
+            pin,
+            pulseDuration,
+          }));
+          sent = true;
+          console.log(`Cash drawer kick sent via agent ${agent.name} for workstation ${workstation.name}`);
+          break;
+        }
+      }
+
+      if (!sent) {
+        return res.status(503).json({ message: "No print agent is online to send the drawer kick command" });
+      }
+
+      res.json({ success: true, message: "Cash drawer kick command sent" });
+    } catch (error: any) {
+      console.error("Cash drawer kick error:", error);
+      res.status(500).json({ message: "Failed to send cash drawer kick" });
+    }
+  });
+
+  // ============================================================================
   // GIFT CARD ROUTES
   // ============================================================================
 

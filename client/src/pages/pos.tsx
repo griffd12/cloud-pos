@@ -811,6 +811,17 @@ export default function PosPage() {
     },
   });
 
+  const triggerCashDrawerKick = async () => {
+    if (!workstationId) return;
+    try {
+      const ws = wsContext?.workstation;
+      if (!ws?.cashDrawerEnabled) return;
+      await apiRequest("POST", "/api/cash-drawer-kick", { workstationId });
+    } catch (err) {
+      console.error("Cash drawer kick failed:", err);
+    }
+  };
+
   const paymentMutation = useMutation({
     mutationFn: async (data: { tenderId: string; amount: number; isCashOverTender?: boolean; paymentTransactionId?: string; tipAmount?: number }) => {
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/payments", {
@@ -821,13 +832,18 @@ export default function PosPage() {
         paymentTransactionId: data.paymentTransactionId,
       }, { "Idempotency-Key": crypto.randomUUID() });
       const result = await response.json();
-      return { ...result, isCashOverTender: data.isCashOverTender, tenderedAmount: data.amount };
+      return { ...result, isCashOverTender: data.isCashOverTender, tenderedAmount: data.amount, appliedTenderId: data.tenderId };
     },
-    onSuccess: async (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number; autoPrintStatus?: { success: boolean; message?: string } }) => {
+    onSuccess: async (result: Check & { paidAmount: number; isCashOverTender?: boolean; tenderedAmount?: number; appliedTenderId?: string; autoPrintStatus?: { success: boolean; message?: string } }) => {
       console.log("Payment result:", result, "status:", result.status);
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id, "payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
+
+      const appliedTender = tenders.find(t => t.id === result.appliedTenderId);
+      if (appliedTender?.type === "cash" && wsContext?.workstation?.cashDrawerAutoOpenOnCash) {
+        triggerCashDrawerKick();
+      }
       if (result.status === "closed") {
         console.log("Check is closed, clearing state");
         
@@ -2346,6 +2362,12 @@ export default function PosPage() {
           canPriceOverride: hasPrivilege("modify_price"),
         }}
         propertyId={currentRvc?.propertyId}
+        onOpenDrawer={() => {
+          setShowFunctionsModal(false);
+          triggerCashDrawerKick();
+          toast({ title: "Cash Drawer", description: "Open drawer command sent" });
+        }}
+        cashDrawerEnabled={!!wsContext?.workstation?.cashDrawerEnabled}
         workstation={wsContext?.workstation ? {
           name: wsContext.workstation.name,
           ipAddress: wsContext.workstation.ipAddress,

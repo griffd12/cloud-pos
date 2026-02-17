@@ -267,6 +267,10 @@ class PrintAgentService {
           this.handlePrintJob(msg);
           break;
 
+        case 'DRAWER_KICK':
+          this.handleDrawerKick(msg);
+          break;
+
         case 'PONG':
         case 'HEARTBEAT_ACK':
           break;
@@ -342,6 +346,107 @@ class PrintAgentService {
         printLogger.error('Job', 'Failed to send job result', e.message);
       }
     }
+  }
+
+  buildDrawerKickCommand(pin, pulseDurationMs) {
+    const pulseOn = Math.max(1, Math.min(255, Math.round((pulseDurationMs || 100) / 2)));
+    const pulseOff = pulseOn;
+    const pinByte = pin === 'pin5' ? 0x01 : 0x00;
+    return Buffer.from([0x1B, 0x70, pinByte, pulseOn, pulseOff]);
+  }
+
+  async handleDrawerKick(msg) {
+    const kickId = msg.kickId || `kick_${Date.now()}`;
+    const printerIp = msg.printerIp;
+    const printerPort = msg.printerPort || 9100;
+    const printerId = msg.printerId;
+    const pin = msg.pin || 'pin2';
+    const pulseDuration = msg.pulseDuration || 100;
+
+    printLogger.info('DrawerKick', `Received drawer kick ${kickId}`, { printer: printerIp || printerId || 'default', pin });
+
+    let targetIp = printerIp;
+    let targetPort = printerPort;
+
+    if (!targetIp && printerId) {
+      const printer = this.printerMap.get(printerId);
+      if (printer) {
+        targetIp = printer.ipAddress;
+        targetPort = printer.port || 9100;
+      }
+    }
+
+    if (!targetIp) {
+      const firstPrinter = this.printerMap.values().next().value;
+      if (firstPrinter) {
+        targetIp = firstPrinter.ipAddress;
+        targetPort = firstPrinter.port || 9100;
+      }
+    }
+
+    if (!targetIp) {
+      printLogger.error('DrawerKick', `No printer IP for kick ${kickId}`);
+      this.sendKickResult(kickId, false, 'No printer configured for cash drawer');
+      return;
+    }
+
+    try {
+      const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
+      await this.sendToPrinter(targetIp, targetPort, kickCommand);
+      this.sendKickResult(kickId, true);
+      printLogger.info('DrawerKick', `Drawer kick ${kickId} sent successfully`, { printer: `${targetIp}:${targetPort}`, pin });
+    } catch (err) {
+      this.sendKickResult(kickId, false, err.message);
+      printLogger.error('DrawerKick', `Drawer kick ${kickId} failed: ${err.message}`);
+    }
+  }
+
+  sendKickResult(kickId, success, error) {
+    if (this.ws && this.isAuthenticated) {
+      try {
+        this.ws.send(JSON.stringify({
+          type: success ? 'KICK_DONE' : 'KICK_ERROR',
+          kickId,
+          ...(error ? { error } : {}),
+        }));
+      } catch (e) {
+        printLogger.error('DrawerKick', 'Failed to send kick result', e.message);
+      }
+    }
+  }
+
+  async kickDrawerLocal(options = {}) {
+    const pin = options.pin || 'pin2';
+    const pulseDuration = options.pulseDuration || 100;
+    const printerId = options.printerId;
+
+    let targetIp = options.printerIp;
+    let targetPort = options.printerPort || 9100;
+
+    if (!targetIp && printerId) {
+      const printer = this.printerMap.get(printerId);
+      if (printer) {
+        targetIp = printer.ipAddress;
+        targetPort = printer.port || 9100;
+      }
+    }
+
+    if (!targetIp) {
+      const firstPrinter = this.printerMap.values().next().value;
+      if (firstPrinter) {
+        targetIp = firstPrinter.ipAddress;
+        targetPort = firstPrinter.port || 9100;
+      }
+    }
+
+    if (!targetIp) {
+      throw new Error('No printer configured for cash drawer kick');
+    }
+
+    const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
+    await this.sendToPrinter(targetIp, targetPort, kickCommand);
+    printLogger.info('DrawerKick', 'Local drawer kick sent', { printer: `${targetIp}:${targetPort}`, pin });
+    return { success: true, printer: targetIp };
   }
 
   sendToPrinter(ipAddress, port, data) {
