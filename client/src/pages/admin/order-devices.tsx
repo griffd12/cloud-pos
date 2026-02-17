@@ -1,11 +1,32 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column } from "@/components/admin/data-table";
-import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { insertOrderDeviceSchema, type OrderDevice, type InsertOrderDevice, type Property, type KdsDevice } from "@shared/schema";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useEmcFilter } from "@/lib/emc-context";
 import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
 import { useScopeLookup } from "@/hooks/use-scope-lookup";
@@ -107,39 +128,53 @@ export default function OrderDevicesPage() {
     ];
   }, [kdsDevices, properties]);
 
-  const formFields: FormFieldConfig[] = useMemo(() => [
-    { name: "name", label: "Device Name", type: "text", placeholder: "e.g., Hot Line Expo", required: true },
-    { name: "code", label: "Code", type: "text", placeholder: "e.g., HOTLINE", required: true, description: "Short code for routing" },
-    {
-      name: "propertyId",
-      label: "Property",
-      type: "select",
-      options: properties.map((p) => ({ value: p.id, label: p.name })),
-      required: true,
-      defaultValue: contextPropertyId || properties[0]?.id || "",
+  const form = useForm<InsertOrderDevice>({
+    resolver: zodResolver(insertOrderDeviceSchema),
+    defaultValues: {
+      name: "",
+      code: "",
+      propertyId: "",
+      kdsDeviceId: null,
+      sendOn: "send_button",
+      sendVoids: true,
+      sendReprints: true,
+      active: true,
     },
-    {
-      name: "kdsDeviceId",
-      label: "Controller KDS Device",
-      type: "select",
-      options: kdsOptions,
-      description: "The KDS device that controls this order device's display and behavior settings",
-    },
-    {
-      name: "sendOn",
-      label: "Send On",
-      type: "select",
-      options: [
-        { value: "send_button", label: "Send Button - Manual send" },
-        { value: "dynamic", label: "Dynamic - Auto-send when ready" },
-      ],
-      defaultValue: "send_button",
-      description: "When should orders be sent to this device",
-    },
-    { name: "sendVoids", label: "Send Voids", type: "switch", defaultValue: true, description: "Send void notifications to this device" },
-    { name: "sendReprints", label: "Send Reprints", type: "switch", defaultValue: true, description: "Allow reprints on this device" },
-    { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ], [properties, kdsOptions, contextPropertyId]);
+  });
+
+  useEffect(() => {
+    if (formOpen) {
+      if (editingItem) {
+        form.reset({
+          name: editingItem.name,
+          code: editingItem.code,
+          propertyId: editingItem.propertyId,
+          kdsDeviceId: editingItem.kdsDeviceId || "__none__",
+          sendOn: editingItem.sendOn || "send_button",
+          sendVoids: editingItem.sendVoids ?? true,
+          sendReprints: editingItem.sendReprints ?? true,
+          active: editingItem.active ?? true,
+        });
+      } else {
+        const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
+        form.reset({
+          name: "",
+          code: "",
+          propertyId: defaultPropertyId,
+          kdsDeviceId: null,
+          sendOn: "send_button",
+          sendVoids: true,
+          sendReprints: true,
+          active: true,
+        });
+      }
+    }
+  }, [formOpen, editingItem, properties, form]);
+
+  const cleanKdsDeviceId = (value: string | null | undefined): string | null => {
+    if (!value || value === "__none__") return null;
+    return value;
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertOrderDevice) => {
@@ -149,6 +184,8 @@ export default function OrderDevicesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/order-devices", filterKeys] });
       setFormOpen(false);
+      setEditingItem(null);
+      form.reset();
       toast({ title: "Order device created" });
     },
     onError: () => {
@@ -165,6 +202,7 @@ export default function OrderDevicesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/order-devices", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
+      form.reset();
       toast({ title: "Order device updated" });
     },
     onError: () => {
@@ -185,30 +223,212 @@ export default function OrderDevicesPage() {
     },
   });
 
-  const cleanKdsDeviceId = (value: string | null | undefined): string | null => {
-    if (!value || value === "__none__") return null;
-    return value;
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: InsertOrderDevice) => {
+      const cleanedData = {
+        ...data,
+        kdsDeviceId: cleanKdsDeviceId(data.kdsDeviceId),
+      };
+      if (editingItem) {
+        updateMutation.mutate({ ...editingItem, ...cleanedData });
+      } else {
+        createMutation.mutate({ ...cleanedData, ...scopePayload });
+      }
+    })();
   };
 
-  const handleSubmit = (data: InsertOrderDevice) => {
-    const cleanedData = {
-      ...data,
-      kdsDeviceId: cleanKdsDeviceId(data.kdsDeviceId),
-    };
-    if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...cleanedData });
-    } else {
-      createMutation.mutate({ ...cleanedData, ...scopePayload });
-    }
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    form.reset();
   };
 
-  const getInitialData = (item: OrderDevice | null) => {
-    if (!item) return undefined;
-    return {
-      ...item,
-      kdsDeviceId: item.kdsDeviceId || "__none__",
-    };
-  };
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle data-testid="text-form-title">{editingItem ? "Edit Order Device" : "Add Order Device"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Device Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Hot Line Expo" {...field} data-testid="input-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., HOTLINE" {...field} data-testid="input-code" />
+                        </FormControl>
+                        <FormDescription className="text-xs">Short code for routing</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="propertyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Property</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-propertyId">
+                              <SelectValue placeholder="Select property" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {properties.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="active"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between">
+                      <FormLabel className="text-sm">Active</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-active" />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Routing Configuration</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="kdsDeviceId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Controller KDS Device</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || "__none__"}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-kdsDeviceId">
+                                <SelectValue placeholder="Select KDS device" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {kdsOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">The KDS device that controls this order device's display and behavior settings</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="sendOn"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Send On</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "send_button"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-sendOn">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="send_button">Send Button - Manual send</SelectItem>
+                              <SelectItem value="dynamic">Dynamic - Auto-send when ready</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">When should orders be sent to this device</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Device Behavior</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="sendVoids"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <div>
+                            <FormLabel className="text-sm">Send Voids</FormLabel>
+                            <FormDescription className="text-xs">Send void notifications to this device</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-sendVoids" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="sendReprints"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <div>
+                            <FormLabel className="text-sm">Send Reprints</FormLabel>
+                            <FormDescription className="text-xs">Allow reprints on this device</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-sendReprints" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -230,20 +450,6 @@ export default function OrderDevicesPage() {
         isLoading={isLoading}
         searchPlaceholder="Search order devices..."
         emptyMessage="No order devices configured"
-      />
-
-      <EntityForm
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
-        }}
-        onSubmit={handleSubmit}
-        schema={insertOrderDeviceSchema}
-        fields={formFields}
-        title={editingItem ? "Edit Order Device" : "Add Order Device"}
-        initialData={getInitialData(editingItem)}
-        isLoading={createMutation.isPending || updateMutation.isPending}
       />
     </div>
   );

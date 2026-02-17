@@ -3661,9 +3661,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.put("/api/kds-devices/:id", async (req, res) => {
-    const data = await storage.updateKdsDevice(req.params.id, req.body);
-    if (!data) return res.status(404).json({ message: "Not found" });
-    res.json(data);
+    try {
+      const body = { ...req.body };
+      if (body.fontScale != null) body.fontScale = Number(body.fontScale);
+      if (body.newOrderBlinkSeconds != null) body.newOrderBlinkSeconds = Number(body.newOrderBlinkSeconds);
+      if (body.colorAlert1Seconds != null) body.colorAlert1Seconds = Number(body.colorAlert1Seconds);
+      if (body.colorAlert2Seconds != null) body.colorAlert2Seconds = Number(body.colorAlert2Seconds);
+      if (body.colorAlert3Seconds != null) body.colorAlert3Seconds = Number(body.colorAlert3Seconds);
+      const data = await storage.updateKdsDevice(req.params.id, body);
+      if (!data) return res.status(404).json({ message: "Not found" });
+      res.json(data);
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || "Invalid data" });
+    }
   });
 
   app.delete("/api/kds-devices/:id", async (req, res) => {
