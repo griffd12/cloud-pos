@@ -15549,12 +15549,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             
             // Update session based on processor status response
             if (status.status === 'succeeded') {
+              // Create payment_transactions record with the Stripe PaymentIntent ID
+              // This is CRITICAL for enabling refunds via the gateway
+              // Idempotency: skip if session already has a paymentTransactionId (re-poll)
+              let paymentTxId: string | null = session.paymentTransactionId || null;
+              
+              if (!paymentTxId) {
+                try {
+                  // Also check if a payment_transaction already exists for this gateway ID
+                  const existingTxs = await storage.getPaymentTransactionByGatewayId(session.processorReference!);
+                  if (existingTxs) {
+                    paymentTxId = existingTxs.id;
+                    console.log(`[terminal-poll] Reusing existing payment_transaction ${paymentTxId} for gateway ${session.processorReference}`);
+                  } else {
+                    const processorForTx = terminal?.paymentProcessorId
+                      ? await storage.getPaymentProcessor(terminal.paymentProcessorId)
+                      : null;
+                    if (processorForTx) {
+                      const paymentTx = await storage.createPaymentTransaction({
+                        paymentProcessorId: processorForTx.id,
+                        gatewayTransactionId: session.processorReference!,
+                        authCode: status.authCode || null,
+                        referenceNumber: session.processorReference!,
+                        cardBrand: status.cardBrand || null,
+                        cardLast4: status.cardLast4 || null,
+                        entryMode: "contactless",
+                        authAmount: status.baseAmount || session.amount,
+                        captureAmount: status.totalAmount || session.amount,
+                        tipAmount: status.tipAmount || 0,
+                        status: "captured",
+                        transactionType: "sale",
+                        responseCode: "succeeded",
+                        responseMessage: "Stripe Terminal payment captured",
+                        workstationId: session.workstationId || undefined,
+                        employeeId: session.employeeId || undefined,
+                        terminalId: terminal?.terminalId || terminal?.id,
+                      });
+                      paymentTxId = paymentTx.id;
+                      console.log(`[terminal-poll] Created payment_transaction ${paymentTxId} with gateway_transaction_id=${session.processorReference} for session ${session.id}`);
+                    } else {
+                      console.error(`[terminal-poll] No payment processor found for terminal ${terminal?.id} — payment_transaction NOT created`);
+                    }
+                  }
+                } catch (txError: any) {
+                  console.error("[terminal-poll] Failed to create payment_transaction:", txError.message);
+                }
+              }
+
               const updated = await storage.updateTerminalSession(session.id, {
                 status: "approved",
                 statusMessage: "Payment approved",
                 completedAt: new Date(),
-                // Store tip amount from EMV terminal (in cents)
                 tipAmount: status.tipAmount || 0,
+                paymentTransactionId: paymentTxId,
+                processorReference: session.processorReference,
               });
               await storage.updateTerminalDeviceStatus(session.terminalDeviceId, "online");
               session = updated || session;
@@ -15856,6 +15904,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             employeeId: session.employeeId || undefined,
           });
 
+          // Bidirectional link: update payment_transaction with check_payment_id
+          if (transaction && checkPayment) {
+            try {
+              await storage.updatePaymentTransaction(transaction.id, { checkPaymentId: checkPayment.id });
+            } catch (linkError: any) {
+              console.error("Failed to link payment_transaction to check_payment (simulate):", linkError.message);
+            }
+          }
+
           // Recalculate check totals and auto-close if fully paid
           await recalculateCheckTotals(session.checkId);
           const updatedCheck = await storage.getCheck(session.checkId);
@@ -16042,6 +16099,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             paymentTransactionId: transaction?.id || `TERM:${authCode}:${cardLast4}`,
             employeeId: session.employeeId || undefined,
           });
+
+          // Bidirectional link: update payment_transaction with check_payment_id
+          if (transaction && checkPayment) {
+            try {
+              await storage.updatePaymentTransaction(transaction.id, { checkPaymentId: checkPayment.id });
+            } catch (linkError: any) {
+              console.error("Failed to link payment_transaction to check_payment (callback):", linkError.message);
+            }
+          }
 
           // Recalculate check totals and auto-close if fully paid
           await recalculateCheckTotals(session.checkId);
