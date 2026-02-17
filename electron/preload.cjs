@@ -131,3 +131,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('print-agent-job-failed', handler);
   },
 });
+
+// Global error handlers for renderer - log to system log
+window.addEventListener('error', (event) => {
+  ipcRenderer.invoke('renderer-log', {
+    level: 'ERROR',
+    subsystem: 'RENDERER',
+    category: 'UncaughtError',
+    message: `${event.message} at ${event.filename}:${event.lineno}:${event.colno}`,
+    data: event.error?.stack || null
+  }).catch(() => {});
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : null;
+  ipcRenderer.invoke('renderer-log', {
+    level: 'ERROR',
+    subsystem: 'RENDERER',
+    category: 'UnhandledRejection',
+    message: message,
+    data: stack
+  }).catch(() => {});
+});

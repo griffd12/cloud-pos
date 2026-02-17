@@ -28,7 +28,7 @@ function setOfflineMode(val: boolean) {
   }
 }
 
-function logToElectron(level: string, subsystem: string, category: string, message: string, data?: any) {
+export function logToElectron(level: string, subsystem: string, category: string, message: string, data?: any) {
   const w = window as any;
   if (w.electronAPI?.log) {
     w.electronAPI.log(level, subsystem, category, message, data).catch(() => {});

@@ -1471,7 +1471,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "PIN and RVC ID required" });
       }
 
-      const employee = await storage.getEmployeeByPin(pin);
+      // Derive enterprise from the selected RVC to scope PIN lookup
+      let employee: Employee | undefined;
+      const rvc = await storage.getRvc(rvcId);
+      if (rvc) {
+        const property = await storage.getProperty(rvc.propertyId);
+        if (property?.enterpriseId) {
+          employee = await storage.getEmployeeByPinAndEnterprise(pin, property.enterpriseId);
+        }
+      }
+      // Fallback to unscoped lookup if RVC/property lookup fails
+      if (!employee) {
+        employee = await storage.getEmployeeByPin(pin);
+      }
       if (!employee || !employee.active) {
         return res.status(401).json({ message: "Invalid PIN" });
       }
@@ -4578,14 +4590,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       try {
+        if (!rvcId) {
+          return res.status(400).json({ message: "RVC ID is required to create a check" });
+        }
+        if (!employeeId) {
+          return res.status(400).json({ message: "Employee ID is required to create a check" });
+        }
+
         // Get property for business date calculation
         const rvc = await storage.getRvc(rvcId);
+        if (!rvc) {
+          return res.status(404).json({ message: `RVC not found: ${rvcId}` });
+        }
         let businessDate: string | undefined;
-        if (rvc) {
-          const property = await storage.getProperty(rvc.propertyId);
-          if (property) {
-            businessDate = resolveBusinessDate(new Date(), property);
-          }
+        const property = await storage.getProperty(rvc.propertyId);
+        if (property) {
+          businessDate = resolveBusinessDate(new Date(), property);
+        }
+
+        const employee = await storage.getEmployee(employeeId);
+        if (!employee) {
+          return res.status(404).json({ message: `Employee not found: ${employeeId}` });
         }
         
         const check = await storage.createCheckAtomic(rvcId, {
@@ -4612,9 +4637,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         throw error;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create check error:", error);
-      res.status(400).json({ message: "Failed to create check" });
+      const detail = error?.message || String(error);
+      res.status(400).json({ message: `Failed to create check: ${detail}` });
     }
   });
 

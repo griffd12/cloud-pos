@@ -42,7 +42,7 @@ import { SoldOutConfirmDialog } from "@/components/pos/sold-out-confirm-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { useItemAvailability } from "@/hooks/use-item-availability";
-import { queryClient, apiRequest, getAuthHeaders, fetchWithTimeout } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders, fetchWithTimeout, logToElectron } from "@/lib/queryClient";
 import { apiClient } from "@/lib/api-client";
 import { usePosContext } from "@/lib/pos-context";
 import { useDeviceContext } from "@/lib/device-context";
@@ -318,8 +318,11 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", currentCheck?.customerId] });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to remove customer", variant: "destructive" });
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Remove customer failed:", detail, error);
+      logToElectron("ERROR", "POS", "RemoveCustomer", `Failed to remove customer: ${detail}`);
+      toast({ title: "Error", description: detail || "Failed to remove customer", variant: "destructive" });
     },
   });
 
@@ -379,8 +382,11 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", currentRvc?.id, "closed-checks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
     },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Void payment failed:", detail, error);
+      logToElectron("ERROR", "POS", "VoidPayment", `Failed to void payment: ${detail}`);
+      toast({ title: "Error", description: detail, variant: "destructive" });
     },
   });
 
@@ -573,8 +579,11 @@ export default function PosPage() {
       setCheckItems([]);
       queryClient.invalidateQueries({ queryKey: ["/api/checks"] });
     },
-    onError: () => {
-      toast({ title: "Failed to create check", variant: "destructive" });
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Create check failed:", detail, error);
+      logToElectron("ERROR", "POS", "CreateCheck", `Failed to create check: ${detail}`);
+      toast({ title: "Failed to create check", description: detail, variant: "destructive" });
     },
   });
 
@@ -614,11 +623,14 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
     },
-    onError: (_error, variables) => {
+    onError: (error: any, variables) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Add item failed:", detail, error);
+      logToElectron("ERROR", "POS", "AddItem", `Failed to add item ${variables?.menuItem?.name || 'unknown'}: ${detail}`);
       setCheckItems((prev) => prev.filter(ci => !String(ci.id).startsWith("optimistic-")));
       queryClient.invalidateQueries({ queryKey: ["/api/item-availability"] });
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
-      toast({ title: "Failed to add item", variant: "destructive" });
+      toast({ title: "Failed to add item", description: detail, variant: "destructive" });
     },
   });
 
@@ -639,8 +651,11 @@ export default function PosPage() {
       setCheckItems([]);
       logout();
     },
-    onError: () => {
-      toast({ title: "Failed to send order", variant: "destructive" });
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Send order failed:", detail, error);
+      logToElectron("ERROR", "POS", "SendOrder", `Failed to send order: ${detail}`);
+      toast({ title: "Failed to send order", description: detail, variant: "destructive" });
     },
   });
 
@@ -670,8 +685,11 @@ export default function PosPage() {
       }
       logout();
     },
-    onError: () => {
-      toast({ title: "Failed to cancel transaction", variant: "destructive" });
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Cancel transaction failed:", detail, error);
+      logToElectron("ERROR", "POS", "CancelTransaction", `Failed to cancel transaction: ${detail}`);
+      toast({ title: "Failed to cancel transaction", description: detail, variant: "destructive" });
     },
   });
 
@@ -696,10 +714,13 @@ export default function PosPage() {
       }
     },
     onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Void item failed:", detail, error);
+      logToElectron("ERROR", "POS", "VoidItem", `Failed to void item: ${detail}`);
       if (showManagerApproval) {
         setApprovalError("Invalid manager PIN or insufficient privileges");
       } else {
-        toast({ title: "Failed to void item", variant: "destructive" });
+        toast({ title: "Failed to void item", description: detail, variant: "destructive" });
       }
     },
   });
@@ -725,6 +746,9 @@ export default function PosPage() {
       toast({ title: "Discount applied" });
     },
     onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Apply discount failed:", detail, error);
+      logToElectron("ERROR", "POS", "ApplyDiscount", `Failed to apply discount: ${detail}`);
       toast({ 
         title: "Failed to apply discount", 
         description: error.message || "Invalid manager PIN or insufficient privileges",
@@ -746,7 +770,10 @@ export default function PosPage() {
       toast({ title: "Discount removed" });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to remove discount", variant: "destructive" });
+      const detail = error?.message || String(error);
+      console.error("[POS] Remove discount failed:", detail, error);
+      logToElectron("ERROR", "POS", "RemoveDiscount", `Failed to remove discount: ${detail}`);
+      toast({ title: "Failed to remove discount", description: detail, variant: "destructive" });
     },
   });
 
@@ -776,8 +803,11 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks", currentCheck?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/kds-tickets"] });
     },
-    onError: () => {
-      toast({ title: "Failed to update modifiers", variant: "destructive" });
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Update modifiers failed:", detail, error);
+      logToElectron("ERROR", "POS", "UpdateModifiers", `Failed to update modifiers: ${detail}`);
+      toast({ title: "Failed to update modifiers", description: detail, variant: "destructive" });
     },
   });
 
@@ -851,9 +881,12 @@ export default function PosPage() {
         setCurrentCheck(result);
       }
     },
-    onError: () => {
+    onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Payment failed:", detail, error);
+      logToElectron("ERROR", "POS", "Payment", `Payment failed: ${detail}`);
       setCashChangeDue(null);
-      toast({ title: "Payment failed", variant: "destructive" });
+      toast({ title: "Payment failed", description: detail, variant: "destructive" });
     },
   });
 
@@ -982,7 +1015,10 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to transfer check", description: error.message, variant: "destructive" });
+      const detail = error?.message || String(error);
+      console.error("[POS] Transfer check failed:", detail, error);
+      logToElectron("ERROR", "POS", "TransferCheck", `Failed to transfer check: ${detail}`);
+      toast({ title: "Failed to transfer check", description: detail, variant: "destructive" });
     },
   });
 
@@ -1009,7 +1045,10 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to split check", description: error.message, variant: "destructive" });
+      const detail = error?.message || String(error);
+      console.error("[POS] Split check failed:", detail, error);
+      logToElectron("ERROR", "POS", "SplitCheck", `Failed to split check: ${detail}`);
+      toast({ title: "Failed to split check", description: detail, variant: "destructive" });
     },
   });
 
@@ -1033,7 +1072,10 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
     },
     onError: (error: any) => {
-      toast({ title: "Failed to merge checks", description: error.message, variant: "destructive" });
+      const detail = error?.message || String(error);
+      console.error("[POS] Merge checks failed:", detail, error);
+      logToElectron("ERROR", "POS", "MergeChecks", `Failed to merge checks: ${detail}`);
+      toast({ title: "Failed to merge checks", description: detail, variant: "destructive" });
     },
   });
 
@@ -1064,7 +1106,10 @@ export default function PosPage() {
       }
     },
     onError: (error: any) => {
-      toast({ title: "Failed to override price", description: error.message, variant: "destructive" });
+      const detail = error?.message || String(error);
+      console.error("[POS] Price override failed:", detail, error);
+      logToElectron("ERROR", "POS", "PriceOverride", `Failed to override price: ${detail}`);
+      toast({ title: "Failed to override price", description: detail, variant: "destructive" });
     },
   });
 
@@ -1093,6 +1138,9 @@ export default function PosPage() {
       logout();
     },
     onError: (error: any) => {
+      const detail = error?.message || String(error);
+      console.error("[POS] Print check failed:", detail, error);
+      logToElectron("ERROR", "POS", "PrintCheck", `Failed to print check: ${detail}`);
       let errorMessage = "Could not print receipt";
       if (error.message) {
         const match = error.message.match(/\{.*"message"\s*:\s*"([^"]+)".*\}/);
