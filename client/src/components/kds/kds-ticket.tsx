@@ -87,8 +87,8 @@ const DEFAULT_COLOR_ALERTS: ColorAlertSettings = {
   alert1Color: "yellow",
   alert2Enabled: true,
   alert2Seconds: 180,
-  alert2Color: "orange",
-  alert3Enabled: true,
+  alert2Color: "red",
+  alert3Enabled: false,
   alert3Seconds: 300,
   alert3Color: "red",
 };
@@ -152,15 +152,13 @@ export function KdsTicket({
   };
 
   const getTimerColorClass = useCallback(() => {
-    if (colorAlerts.alert3Enabled && elapsedSeconds >= colorAlerts.alert3Seconds) return "text-red-500";
-    if (colorAlerts.alert2Enabled && elapsedSeconds >= colorAlerts.alert2Seconds) return "text-orange-500";
+    if (colorAlerts.alert2Enabled && elapsedSeconds >= colorAlerts.alert2Seconds) return "text-red-500";
     if (colorAlerts.alert1Enabled && elapsedSeconds >= colorAlerts.alert1Seconds) return "text-yellow-600 dark:text-yellow-400";
     return "text-green-500";
   }, [elapsedSeconds, colorAlerts]);
 
   const getActiveAlertColor = useCallback((): string | null => {
     if (isRecalled) return "purple";
-    if (colorAlerts.alert3Enabled && elapsedSeconds >= colorAlerts.alert3Seconds) return colorAlerts.alert3Color;
     if (colorAlerts.alert2Enabled && elapsedSeconds >= colorAlerts.alert2Seconds) return colorAlerts.alert2Color;
     if (colorAlerts.alert1Enabled && elapsedSeconds >= colorAlerts.alert1Seconds) return colorAlerts.alert1Color;
     return null;

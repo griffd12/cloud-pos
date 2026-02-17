@@ -134,7 +134,7 @@ export function KdsDisplay({
     alert1Color: deviceSettings?.colorAlert1Color ?? "yellow",
     alert2Enabled: deviceSettings?.colorAlert2Enabled ?? false,
     alert2Seconds: deviceSettings?.colorAlert2Seconds != null ? deviceSettings.colorAlert2Seconds : 180,
-    alert2Color: deviceSettings?.colorAlert2Color ?? "orange",
+    alert2Color: deviceSettings?.colorAlert2Color ?? "red",
     alert3Enabled: deviceSettings?.colorAlert3Enabled ?? false,
     alert3Seconds: deviceSettings?.colorAlert3Seconds != null ? deviceSettings.colorAlert3Seconds : 300,
     alert3Color: deviceSettings?.colorAlert3Color ?? "red",

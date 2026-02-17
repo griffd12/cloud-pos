@@ -127,8 +127,8 @@ export default function KdsDevicesPage() {
       colorAlert1Color: "yellow",
       colorAlert2Enabled: true,
       colorAlert2Seconds: 180,
-      colorAlert2Color: "orange",
-      colorAlert3Enabled: true,
+      colorAlert2Color: "red",
+      colorAlert3Enabled: false,
       colorAlert3Seconds: 300,
       colorAlert3Color: "red",
       fontScale: 100,
@@ -161,8 +161,8 @@ export default function KdsDevicesPage() {
           colorAlert1Color: editingItem.colorAlert1Color ?? "yellow",
           colorAlert2Enabled: editingItem.colorAlert2Enabled ?? true,
           colorAlert2Seconds: editingItem.colorAlert2Seconds ?? 180,
-          colorAlert2Color: editingItem.colorAlert2Color ?? "orange",
-          colorAlert3Enabled: editingItem.colorAlert3Enabled ?? true,
+          colorAlert2Color: editingItem.colorAlert2Color ?? "red",
+          colorAlert3Enabled: false,
           colorAlert3Seconds: editingItem.colorAlert3Seconds ?? 300,
           colorAlert3Color: editingItem.colorAlert3Color ?? "red",
           fontScale: editingItem.fontScale ?? 100,
@@ -192,8 +192,8 @@ export default function KdsDevicesPage() {
           colorAlert1Color: "yellow",
           colorAlert2Enabled: true,
           colorAlert2Seconds: 180,
-          colorAlert2Color: "orange",
-          colorAlert3Enabled: true,
+          colorAlert2Color: "red",
+          colorAlert3Enabled: false,
           colorAlert3Seconds: 300,
           colorAlert3Color: "red",
           fontScale: 100,
@@ -255,13 +255,18 @@ export default function KdsDevicesPage() {
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     form.handleSubmit((data: InsertKdsDevice) => {
+      const allowedColors = ["yellow", "red"];
       const processedData = {
         ...data,
         fontScale: data.fontScale ? Number(data.fontScale) : 100,
         newOrderBlinkSeconds: data.newOrderBlinkSeconds != null ? Number(data.newOrderBlinkSeconds) : 5,
         colorAlert1Seconds: data.colorAlert1Seconds != null ? Number(data.colorAlert1Seconds) : 60,
+        colorAlert1Color: allowedColors.includes(data.colorAlert1Color || "") ? data.colorAlert1Color : "yellow",
         colorAlert2Seconds: data.colorAlert2Seconds != null ? Number(data.colorAlert2Seconds) : 180,
-        colorAlert3Seconds: data.colorAlert3Seconds != null ? Number(data.colorAlert3Seconds) : 300,
+        colorAlert2Color: allowedColors.includes(data.colorAlert2Color || "") ? data.colorAlert2Color : "red",
+        colorAlert3Enabled: false,
+        colorAlert3Seconds: 300,
+        colorAlert3Color: "red",
       };
       if (editingItem) {
         updateMutation.mutate({ ...editingItem, ...processedData } as KdsDevice);
@@ -279,10 +284,7 @@ export default function KdsDevicesPage() {
 
   const colorOptions = [
     { value: "yellow", label: "Yellow" },
-    { value: "orange", label: "Orange" },
     { value: "red", label: "Red" },
-    { value: "blue", label: "Blue" },
-    { value: "purple", label: "Purple" },
   ];
 
   if (formOpen) {
@@ -671,61 +673,9 @@ export default function KdsDevicesPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Second Alert Color</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || "orange"}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-colorAlert2Color">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {colorOptions.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="colorAlert3Enabled"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center justify-between">
-                          <FormLabel className="text-sm">Enable Third Alert</FormLabel>
-                          <FormControl>
-                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-colorAlert3Enabled" />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="colorAlert3Seconds"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Third Alert After (seconds)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              value={field.value ?? 300}
-                              onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
-                              data-testid="input-colorAlert3Seconds"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="colorAlert3Color"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Third Alert Color</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || "red"}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-colorAlert3Color">
+                              <SelectTrigger data-testid="select-colorAlert2Color">
                                 <SelectValue />
                               </SelectTrigger>
                             </FormControl>
