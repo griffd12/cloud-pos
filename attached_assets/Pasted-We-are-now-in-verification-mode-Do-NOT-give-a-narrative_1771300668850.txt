@@ -1,0 +1,123 @@
+We are now in verification mode.
+
+Do NOT give a narrative audit.
+
+Provide proof of correctness for the hardening changes.
+
+Respond strictly in the following structure:
+
+1️⃣ CHECK NUMBERING PROOF (Cloud + Offline)
+Cloud
+
+Show final SQL or Drizzle query used to reserve check number.
+
+Confirm:
+
+It runs inside a transaction.
+
+Insert of check is inside same transaction.
+
+UNIQUE (rvc_id, check_number) exists.
+
+Provide SQL query to prove no duplicates:
+
+SELECT rvc_id, check_number, COUNT(*)
+FROM checks
+GROUP BY rvc_id, check_number
+HAVING COUNT(*) > 1;
+Offline (SQLite)
+
+Show final transaction logic using BEGIN IMMEDIATE.
+
+Show UNIQUE index on (rvc_id, check_number).
+
+Provide equivalent duplicate-check query.
+
+2️⃣ IDEMPOTENCY PROOF
+
+For each operation:
+
+create_check
+
+send_kds
+
+take_payment
+
+Provide:
+
+Exact pseudocode or simplified code path.
+
+Show that INSERT into idempotency_keys happens BEFORE business logic.
+
+Show how duplicate key conflict is handled.
+
+Show unique constraint definition.
+
+Provide validation query to check duplicate idempotency entries.
+
+3️⃣ PRINT LEASE PROOF
+
+Show:
+
+Final lease SQL (cloud)
+
+How SKIP LOCKED or safe leasing is implemented
+
+How dedupe_key is generated (deterministic rule)
+
+Unique index definition
+
+Validation query:
+
+SELECT dedupe_key, COUNT(*)
+FROM print_jobs
+WHERE dedupe_key IS NOT NULL
+GROUP BY dedupe_key
+HAVING COUNT(*) > 1;
+4️⃣ KDS STATE RECOVERY PROOF
+
+Provide:
+
+Endpoint definition for full-state fetch.
+
+Confirm KDS calls this on:
+
+startup
+
+reconnect
+
+Confirm WebSocket is not sole source of truth.
+
+Show example flow when KDS reconnects mid-rush.
+
+5️⃣ OFFLINE PARITY CONFIRMATION
+
+For Electron/SQLite:
+
+Confirm idempotency table exists locally.
+
+Confirm offline check numbering uses transaction + counter table.
+
+Confirm print queue leasing logic matches cloud pattern.
+
+Confirm UUID + origin metadata fields exist.
+
+6️⃣ STRESS TEST VALIDATION OUTPUT
+
+Provide:
+
+Updated stress test scenario definitions.
+
+Show validation queries embedded in stress test.
+
+Show example expected output when duplicates = 0.
+
+7️⃣ REMAINING RISK LIST
+
+List only technical risks that still exist.
+No marketing commentary.
+
+Respond with only structured sections above.
+Do not return full source files.
+Do not summarize.
+Show proof.
