@@ -391,7 +391,11 @@ export default function KdsPage() {
 
   const handleRefresh = useCallback(() => {
     refetch();
-  }, [refetch]);
+    queryClient.invalidateQueries({ queryKey: ["/api/kds-devices/active", propertyId] });
+    if (isDedicatedKds && linkedDeviceId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/kds-devices", linkedDeviceId] });
+    }
+  }, [refetch, propertyId, isDedicatedKds, linkedDeviceId]);
 
   const handleBumpAll = useCallback(() => {
     bumpAllMutation.mutate();
