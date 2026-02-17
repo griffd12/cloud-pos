@@ -252,54 +252,64 @@ export default function KdsPage() {
         createdAt: new Date(t.createdAt),
       })),
     refetchInterval: 2000,
+    refetchOnWindowFocus: true,
   });
 
-  // WebSocket for real-time KDS updates
+  // WebSocket for real-time KDS updates with auto-reconnect
   // For dedicated KDS, subscribe to property-wide updates; for POS mode, subscribe to RVC
   useEffect(() => {
-    // Need either propertyId (dedicated KDS) or currentRvc (POS mode)
     if (!isDedicatedKds && !currentRvc) return;
     if (isDedicatedKds && !propertyId) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/kds`;
-    const socket = new WebSocket(wsUrl);
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let unmounted = false;
 
-    socket.onopen = () => {
-      setWsConnected(true);
-      // Subscribe to KDS channel
-      // For POS mode: subscribe to specific RVC channel
-      // For dedicated KDS: subscribe to global KDS channel (no rvcId filter)
-      // The client-side filtering by propertyId handles ticket relevance
-      const subscribeMsg: Record<string, any> = { type: "subscribe", channel: "kds" };
-      if (!isDedicatedKds && currentRvc?.id) {
-        subscribeMsg.rvcId = currentRvc.id;
-      }
-      // Dedicated KDS subscribes to all KDS updates and filters client-side by propertyId
-      socket.send(JSON.stringify(subscribeMsg));
-    };
+    const connect = () => {
+      if (unmounted) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/ws/kds`;
+      socket = new WebSocket(wsUrl);
 
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        if (message.type === "kds_update") {
-          refetch();
+      socket.onopen = () => {
+        setWsConnected(true);
+        refetch();
+        const subscribeMsg: Record<string, any> = { type: "subscribe", channel: "kds" };
+        if (!isDedicatedKds && currentRvc?.id) {
+          subscribeMsg.rvcId = currentRvc.id;
         }
-      } catch (e) {
-        console.error("WebSocket message error:", e);
-      }
+        socket!.send(JSON.stringify(subscribeMsg));
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === "kds_update") {
+            refetch();
+          }
+        } catch (e) {
+          console.error("WebSocket message error:", e);
+        }
+      };
+
+      socket.onclose = () => {
+        setWsConnected(false);
+        if (!unmounted) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
+
+      socket.onerror = () => {
+        setWsConnected(false);
+      };
     };
 
-    socket.onclose = () => {
-      setWsConnected(false);
-    };
-
-    socket.onerror = () => {
-      setWsConnected(false);
-    };
+    connect();
 
     return () => {
-      socket.close();
+      unmounted = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socket) socket.close();
     };
   }, [currentRvc?.id, propertyId, isDedicatedKds, refetch]);
 

@@ -401,6 +401,8 @@ class OfflineDatabase {
         cloud_id TEXT
       );
 
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_offline_checks_rvc_check_number ON offline_checks (rvc_id, check_number);
+
       -- Offline check items
       CREATE TABLE IF NOT EXISTS offline_check_items (
         id TEXT PRIMARY KEY,
@@ -447,10 +449,36 @@ class OfflineDatabase {
         data TEXT NOT NULL,
         escpos_data TEXT,
         status TEXT DEFAULT 'pending',
+        leased_by TEXT,
+        leased_until TEXT,
+        dedupe_key TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         printed_at TEXT,
         error TEXT,
         retry_count INTEGER DEFAULT 0
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_offline_print_dedupe ON offline_print_jobs (dedupe_key) WHERE dedupe_key IS NOT NULL;
+
+      -- RVC check number counters (concurrency-safe, replaces MAX()+1)
+      CREATE TABLE IF NOT EXISTS rvc_counters (
+        rvc_id TEXT PRIMARY KEY,
+        next_check_number INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Idempotency keys for exactly-once operations
+      CREATE TABLE IF NOT EXISTS idempotency_keys (
+        id TEXT PRIMARY KEY,
+        enterprise_id TEXT NOT NULL,
+        workstation_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        response_status INTEGER,
+        response_body TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        expires_at TEXT,
+        UNIQUE (enterprise_id, workstation_id, operation, idempotency_key)
       );
 
       -- Sync metadata
@@ -945,16 +973,126 @@ class OfflineDatabase {
   getNextCheckNumber(rvcId) {
     try {
       if (this.usingSqlite) {
-        const row = this.db.prepare(
-          'SELECT MAX(check_number) as maxNum FROM offline_checks WHERE rvc_id = ?'
-        ).get(rvcId);
-        const cloudMax = this.getCachedConfig(`last_check_number_${rvcId}`) || 0;
-        const localMax = row?.maxNum || 0;
-        return Math.max(cloudMax, localMax) + 1;
+        const reserved = this.db.transaction(() => {
+          const existing = this.db.prepare(
+            'SELECT next_check_number FROM rvc_counters WHERE rvc_id = ?'
+          ).get(rvcId);
+          
+          if (existing) {
+            const num = existing.next_check_number;
+            this.db.prepare(
+              'UPDATE rvc_counters SET next_check_number = next_check_number + 1, updated_at = datetime(\'now\') WHERE rvc_id = ?'
+            ).run(rvcId);
+            return num;
+          } else {
+            const row = this.db.prepare(
+              'SELECT MAX(check_number) as maxNum FROM offline_checks WHERE rvc_id = ?'
+            ).get(rvcId);
+            const cloudMax = this.getCachedConfig(`last_check_number_${rvcId}`) || 0;
+            const localMax = row?.maxNum || 0;
+            const startNum = Math.max(cloudMax, localMax) + 1;
+            this.db.prepare(
+              'INSERT INTO rvc_counters (rvc_id, next_check_number, updated_at) VALUES (?, ?, datetime(\'now\'))'
+            ).run(rvcId, startNum + 1);
+            return startNum;
+          }
+        })();
+        return reserved;
       }
       return Date.now() % 100000;
     } catch (e) {
+      offlineDbLogger.error('Check', 'getNextCheckNumber error', e.message);
       return Date.now() % 100000;
+    }
+  }
+
+  createCheckAtomic(rvcId, checkData) {
+    try {
+      if (this.usingSqlite) {
+        return this.db.transaction(() => {
+          const existing = this.db.prepare(
+            'SELECT next_check_number FROM rvc_counters WHERE rvc_id = ?'
+          ).get(rvcId);
+          
+          let checkNumber;
+          if (existing) {
+            checkNumber = existing.next_check_number;
+            this.db.prepare(
+              'UPDATE rvc_counters SET next_check_number = next_check_number + 1, updated_at = datetime(\'now\') WHERE rvc_id = ?'
+            ).run(rvcId);
+          } else {
+            const row = this.db.prepare(
+              'SELECT MAX(check_number) as maxNum FROM offline_checks WHERE rvc_id = ?'
+            ).get(rvcId);
+            const cloudMax = this.getCachedConfig(`last_check_number_${rvcId}`) || 0;
+            const localMax = row?.maxNum || 0;
+            checkNumber = Math.max(cloudMax, localMax) + 1;
+            this.db.prepare(
+              'INSERT INTO rvc_counters (rvc_id, next_check_number, updated_at) VALUES (?, ?, datetime(\'now\'))'
+            ).run(rvcId, checkNumber + 1);
+          }
+          
+          const check = { ...checkData, checkNumber, rvcId };
+          const id = check.id || `offline_${require('crypto').randomUUID()}`;
+          this.db.prepare(`
+            INSERT INTO offline_checks (id, check_number, rvc_id, employee_id, order_type, status, data, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(id, checkNumber, rvcId, check.employeeId, check.orderType || 'dine_in', check.status || 'open', JSON.stringify(check));
+          
+          return { ...check, id, checkNumber };
+        })();
+      }
+      return null;
+    } catch (e) {
+      offlineDbLogger.error('Check', 'createCheckAtomic error', e.message);
+      return null;
+    }
+  }
+
+  checkIdempotencyKey(enterpriseId, workstationId, operation, key) {
+    try {
+      if (this.usingSqlite) {
+        const row = this.db.prepare(
+          'SELECT response_status, response_body FROM idempotency_keys WHERE enterprise_id = ? AND workstation_id = ? AND operation = ? AND idempotency_key = ?'
+        ).get(enterpriseId, workstationId, operation, key);
+        if (row && row.response_body) {
+          return { responseStatus: row.response_status, responseBody: row.response_body };
+        }
+      }
+      return null;
+    } catch (e) {
+      offlineDbLogger.error('Idempotency', 'Check key error', e.message);
+      return null;
+    }
+  }
+
+  storeIdempotencyKey(data) {
+    try {
+      if (this.usingSqlite) {
+        const id = require('crypto').randomUUID();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        this.db.prepare(`
+          INSERT OR IGNORE INTO idempotency_keys (id, enterprise_id, workstation_id, operation, idempotency_key, response_status, response_body, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, data.enterpriseId, data.workstationId, data.operation, data.idempotencyKey, data.responseStatus, data.responseBody, expiresAt);
+      }
+    } catch (e) {
+      offlineDbLogger.error('Idempotency', 'Store key error', e.message);
+    }
+  }
+
+  cleanupExpiredIdempotencyKeys() {
+    try {
+      if (this.usingSqlite) {
+        const result = this.db.prepare(
+          "DELETE FROM idempotency_keys WHERE expires_at IS NOT NULL AND expires_at < datetime('now')"
+        ).run();
+        return result.changes || 0;
+      }
+      return 0;
+    } catch (e) {
+      offlineDbLogger.error('Idempotency', 'Cleanup error', e.message);
+      return 0;
     }
   }
 

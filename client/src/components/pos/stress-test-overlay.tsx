@@ -143,7 +143,7 @@ export function StressTestOverlay({
         employeeId,
         orderType: "dine_in",
         testMode: true,
-      });
+      }, { "Idempotency-Key": crypto.randomUUID() });
       const check = await createRes.json();
       checkId = check.id;
       checkNumber = check.checkNumber;
@@ -188,7 +188,7 @@ export function StressTestOverlay({
 
       await apiRequest("POST", `/api/checks/${checkId}/send`, {
         employeeId,
-      });
+      }, { "Idempotency-Key": crypto.randomUUID() });
 
       const checkRes = await fetchWithTimeout(`/api/checks/${checkId}`, {
         credentials: "include",
@@ -211,7 +211,7 @@ export function StressTestOverlay({
         tenderId: selectedTenderId,
         amount: total.toFixed(2),
         employeeId,
-      });
+      }, { "Idempotency-Key": crypto.randomUUID() });
 
       setPhase("complete");
       triggerFlash("rgba(34, 197, 94, 0.4)");

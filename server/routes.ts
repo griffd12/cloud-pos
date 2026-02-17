@@ -10,7 +10,7 @@ import archiver from "archiver";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, ne, sql, inArray, and, desc } from "drizzle-orm";
-import { emcUsers, enterprises, properties, employeeAssignments, configOverrides, checks, onlineOrders, onlineOrderSources } from "@shared/schema";
+import { emcUsers, enterprises, properties, employeeAssignments, configOverrides, checks, onlineOrders, onlineOrderSources, kdsTickets, kdsTicketItems, checkItems } from "@shared/schema";
 import { uberEatsIntegration } from "./integrations/uber-eats";
 import { grubhubIntegration } from "./integrations/grubhub";
 import { doorDashIntegration } from "./integrations/doordash";
@@ -3656,6 +3656,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  app.get("/api/kds/active-tickets", async (req, res) => {
+    try {
+      const { kdsDeviceId, rvcId } = req.query;
+      
+      if (!kdsDeviceId && !rvcId) {
+        return res.status(400).json({ message: "kdsDeviceId or rvcId required" });
+      }
+      
+      let tickets;
+      if (kdsDeviceId) {
+        tickets = await db.select().from(kdsTickets)
+          .where(and(
+            eq(kdsTickets.kdsDeviceId, kdsDeviceId as string),
+            inArray(kdsTickets.status, ['active', 'draft'])
+          ))
+          .orderBy(kdsTickets.createdAt);
+      } else {
+        tickets = await db.select().from(kdsTickets)
+          .where(and(
+            eq(kdsTickets.rvcId, rvcId as string),
+            inArray(kdsTickets.status, ['active', 'draft'])
+          ))
+          .orderBy(kdsTickets.createdAt);
+      }
+      
+      const ticketIds = tickets.map(t => t.id);
+      let ticketItemsData: any[] = [];
+      if (ticketIds.length > 0) {
+        ticketItemsData = await db.select().from(kdsTicketItems)
+          .where(inArray(kdsTicketItems.kdsTicketId, ticketIds));
+      }
+      
+      const checkIds = [...new Set(tickets.map(t => t.checkId))];
+      let checksData: any[] = [];
+      if (checkIds.length > 0) {
+        checksData = await db.select().from(checks)
+          .where(inArray(checks.id, checkIds));
+      }
+      
+      const checkItemIds = ticketItemsData.map(ti => ti.checkItemId);
+      let checkItemsData: any[] = [];
+      if (checkItemIds.length > 0) {
+        checkItemsData = await db.select().from(checkItems)
+          .where(inArray(checkItems.id, checkItemIds));
+      }
+      
+      const fullState = tickets.map(ticket => ({
+        ...ticket,
+        items: ticketItemsData
+          .filter(ti => ti.kdsTicketId === ticket.id)
+          .map(ti => ({
+            ...ti,
+            checkItem: checkItemsData.find(ci => ci.id === ti.checkItemId),
+          })),
+        check: checksData.find(c => c.id === ticket.checkId),
+      }));
+      
+      res.json({ tickets: fullState, fetchedAt: new Date().toISOString() });
+    } catch (error) {
+      console.error("KDS active-tickets error:", error);
+      res.status(500).json({ message: "Failed to fetch active tickets" });
+    }
+  });
+
   // ============================================================================
   // PRINT CLASS ROUTING
   // ============================================================================
@@ -4479,6 +4543,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks", async (req, res) => {
     try {
       const { rvcId, employeeId, orderType, testMode } = req.body;
+
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      if (idempotencyKey) {
+        const existing = await storage.checkIdempotencyKey(
+          req.headers['x-enterprise-id'] as string || 'default',
+          req.headers['x-workstation-id'] as string || 'default',
+          'create_check',
+          idempotencyKey
+        );
+        if (existing) {
+          return res.status(existing.responseStatus).json(JSON.parse(existing.responseBody));
+        }
+      }
       
       // Get property for business date calculation
       const rvc = await storage.getRvc(rvcId);
@@ -4502,6 +4579,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Broadcast real-time update for new check
       broadcastCheckUpdate(check.id, "open", rvcId);
+
+      if (idempotencyKey) {
+        await storage.storeIdempotencyKey({
+          enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
+          workstationId: req.headers['x-workstation-id'] as string || 'default',
+          operation: 'create_check',
+          idempotencyKey,
+          responseStatus: 201,
+          responseBody: JSON.stringify(check),
+        });
+      }
       
       res.status(201).json(check);
     } catch (error) {
@@ -4611,6 +4699,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkId = req.params.id;
       const { employeeId } = req.body;
 
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      if (idempotencyKey) {
+        const existing = await storage.checkIdempotencyKey(
+          req.headers['x-enterprise-id'] as string || 'default',
+          req.headers['x-workstation-id'] as string || 'default',
+          'send_kds',
+          idempotencyKey
+        );
+        if (existing) {
+          return res.status(existing.responseStatus).json(JSON.parse(existing.responseBody));
+        }
+      }
+
       const check = await storage.getCheck(checkId);
       if (!check) {
         return res.status(404).json({ message: "Check not found" });
@@ -4623,7 +4724,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (previewResult) {
         // Preview ticket was finalized, return updated items
         const allItems = await storage.getCheckItems(checkId);
-        return res.json({ round: previewResult.round, updatedItems: allItems });
+        const responseData = { round: previewResult.round, updatedItems: allItems };
+        if (idempotencyKey) {
+          await storage.storeIdempotencyKey({
+            enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
+            workstationId: req.headers['x-workstation-id'] as string || 'default',
+            operation: 'send_kds',
+            idempotencyKey,
+            responseStatus: 200,
+            responseBody: JSON.stringify(responseData),
+          });
+        }
+        return res.json(responseData);
       }
 
       // Standard mode - send unsent items normally
@@ -4632,14 +4744,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       if (unsentItems.length === 0) {
         const allItems = await storage.getCheckItems(checkId);
-        return res.json({ round: null, updatedItems: allItems });
+        const responseData = { round: null, updatedItems: allItems };
+        if (idempotencyKey) {
+          await storage.storeIdempotencyKey({
+            enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
+            workstationId: req.headers['x-workstation-id'] as string || 'default',
+            operation: 'send_kds',
+            idempotencyKey,
+            responseStatus: 200,
+            responseBody: JSON.stringify(responseData),
+          });
+        }
+        return res.json(responseData);
       }
 
       // Use shared helper for consistent send behavior
       const { round, updatedItems } = await sendItemsToKds(checkId, employeeId, unsentItems);
       
       const allItems = await storage.getCheckItems(checkId);
-      res.json({ round, updatedItems: allItems });
+      const responseData = { round, updatedItems: allItems };
+      if (idempotencyKey) {
+        await storage.storeIdempotencyKey({
+          enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
+          workstationId: req.headers['x-workstation-id'] as string || 'default',
+          operation: 'send_kds',
+          idempotencyKey,
+          responseStatus: 200,
+          responseBody: JSON.stringify(responseData),
+        });
+      }
+      res.json(responseData);
     } catch (error) {
       console.error("Send error:", error);
       res.status(400).json({ message: "Failed to send order" });
@@ -5010,6 +5144,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const checkId = req.params.id;
       const { tenderId, amount, tipAmount, employeeId, paymentTransactionId } = req.body;
 
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      if (idempotencyKey) {
+        const existing = await storage.checkIdempotencyKey(
+          req.headers['x-enterprise-id'] as string || 'default',
+          req.headers['x-workstation-id'] as string || 'default',
+          'take_payment',
+          idempotencyKey
+        );
+        if (existing) {
+          return res.status(existing.responseStatus).json(JSON.parse(existing.responseBody));
+        }
+      }
+
       const tender = await storage.getTender(tenderId);
       if (!tender) return res.status(400).json({ message: "Invalid tender" });
 
@@ -5306,13 +5453,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
         }
         
-        return res.json({ ...updatedCheck, paidAmount, autoPrintStatus });
+        const closedResponseData = { ...updatedCheck, paidAmount, autoPrintStatus };
+        if (idempotencyKey) {
+          await storage.storeIdempotencyKey({
+            enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
+            workstationId: req.headers['x-workstation-id'] as string || 'default',
+            operation: 'take_payment',
+            idempotencyKey,
+            responseStatus: 200,
+            responseBody: JSON.stringify(closedResponseData),
+          });
+        }
+        return res.json(closedResponseData);
       }
 
       // Broadcast real-time update for partial payment
       broadcastPaymentUpdate(checkId);
       
-      res.json({ ...check, paidAmount });
+      const partialResponseData = { ...check, paidAmount };
+      if (idempotencyKey) {
+        await storage.storeIdempotencyKey({
+          enterpriseId: req.headers['x-enterprise-id'] as string || 'default',
+          workstationId: req.headers['x-workstation-id'] as string || 'default',
+          operation: 'take_payment',
+          idempotencyKey,
+          responseStatus: 200,
+          responseBody: JSON.stringify(partialResponseData),
+        });
+      }
+      res.json(partialResponseData);
     } catch (error) {
       console.error("Payment error:", error);
       res.status(400).json({ message: "Payment failed" });
@@ -23540,6 +23709,30 @@ connect();
   registerStressTestRoutes(app, storage);
   registerOnboardingRoutes(app);
   registerDeliveryPlatformRoutes(app, storage, broadcastPosEvent, calculateTaxSnapshot, recalculateCheckTotals);
+
+  // Idempotency key TTL cleanup - every hour
+  setInterval(async () => {
+    try {
+      const cleaned = await storage.cleanupExpiredIdempotencyKeys();
+      if (cleaned > 0) {
+        console.log(`[idempotency] Cleaned up ${cleaned} expired keys`);
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+  }, 60 * 60 * 1000);
+
+  // Print lease recovery - every 30 seconds
+  setInterval(async () => {
+    try {
+      const recovered = await storage.recoverExpiredLeases();
+      if (recovered > 0) {
+        console.log(`[print-queue] Recovered ${recovered} expired print leases`);
+      }
+    } catch (e) {
+      // Ignore recovery errors
+    }
+  }, 30 * 1000);
 
   return httpServer;
 }

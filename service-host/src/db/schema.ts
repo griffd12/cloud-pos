@@ -1268,6 +1268,9 @@ CREATE TABLE IF NOT EXISTS print_queue (
   priority INTEGER DEFAULT 0,
   attempts INTEGER DEFAULT 0,
   error_message TEXT,
+  lease_id TEXT,
+  lease_expires_at TEXT,
+  dedupe_key TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   completed_at TEXT
 );

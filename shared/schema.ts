@@ -891,6 +891,9 @@ export const checks = pgTable("checks", {
   onlineOrderId: varchar("online_order_id"), // Links to online_orders table for delivery platform orders
   customerName: text("customer_name"), // Customer name for pickup/delivery orders
   platformSource: text("platform_source"), // 'ubereats', 'grubhub', 'doordash', null for non-platform orders
+  // Origin metadata for sync compatibility
+  originDeviceId: varchar("origin_device_id"),
+  originCreatedAt: timestamp("origin_created_at"),
 });
 
 // Rounds (each send creates a round)
@@ -966,6 +969,7 @@ export const checkPayments = pgTable("check_payments", {
   paymentTransactionId: varchar("payment_transaction_id"), // Link to gateway transaction for card payments (no FK to avoid circular ref)
   paymentStatus: text("payment_status").default("completed"), // 'authorized' (pre-auth), 'completed' (captured/finalized)
   tipAmount: decimal("tip_amount", { precision: 10, scale: 2 }), // Tip added to pre-auth
+  originDeviceId: varchar("origin_device_id"),
 });
 
 // Check Discounts Applied
@@ -1085,6 +1089,7 @@ export const kdsTickets = pgTable("kds_tickets", {
   bumpedAt: timestamp("bumped_at"),
   bumpedByEmployeeId: varchar("bumped_by_employee_id").references(() => employees.id),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }), // DOM: display subtotal on ticket
+  originDeviceId: varchar("origin_device_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1165,6 +1170,12 @@ export const printJobs = pgTable("print_jobs", {
   attempts: integer("attempts").default(0),
   maxAttempts: integer("max_attempts").default(3),
   lastError: text("last_error"),
+  // Lease-based exactly-once delivery
+  leasedBy: varchar("leased_by"),
+  leasedUntil: timestamp("leased_until"),
+  dedupeKey: varchar("dedupe_key"),
+  // Origin metadata for sync compatibility
+  originDeviceId: varchar("origin_device_id"),
   // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
   sentToAgentAt: timestamp("sent_to_agent_at"),
@@ -3687,3 +3698,22 @@ export const configOverrides = pgTable("config_overrides", {
 export const insertConfigOverrideSchema = createInsertSchema(configOverrides).omit({ id: true, createdAt: true });
 export type ConfigOverride = typeof configOverrides.$inferSelect;
 export type InsertConfigOverride = z.infer<typeof insertConfigOverrideSchema>;
+
+// ============================================================================
+// IDEMPOTENCY KEYS (Production Hardening)
+// ============================================================================
+
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: varchar("enterprise_id").notNull(),
+  workstationId: varchar("workstation_id").notNull(),
+  operation: text("operation").notNull(),
+  idempotencyKey: varchar("idempotency_key").notNull(),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+});
+
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type InsertIdempotencyKey = typeof idempotencyKeys.$inferInsert;

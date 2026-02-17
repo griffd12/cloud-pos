@@ -158,6 +158,7 @@ import {
   type ServiceHostAlert, type InsertServiceHostAlert,
   workstationServiceBindings,
   type WorkstationServiceBinding, type InsertWorkstationServiceBinding,
+  idempotencyKeys,
   calPackages, calPackageVersions, calPackagePrerequisites, calDeployments, calDeploymentTargets,
   type CalPackage, type InsertCalPackage,
   type CalPackageVersion, type InsertCalPackageVersion,
@@ -376,6 +377,16 @@ export interface IStorage {
   updateCheck(id: string, data: Partial<Check>): Promise<Check | undefined>;
   deleteCheck(id: string): Promise<boolean>;
   getNextCheckNumber(rvcId: string): Promise<number>;
+
+  // Idempotency
+  checkIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string): Promise<{ responseStatus: number; responseBody: string } | null>;
+  storeIdempotencyKey(data: { enterpriseId: string; workstationId: string; operation: string; idempotencyKey: string; responseStatus: number; responseBody: string }): Promise<void>;
+  cleanupExpiredIdempotencyKeys(): Promise<number>;
+
+  // Print Queue Lease Pattern
+  claimPrintJob(agentId: string, leaseDurationSeconds?: number): Promise<PrintJob | null>;
+  ackPrintJob(jobId: string, success: boolean, error?: string): Promise<void>;
+  recoverExpiredLeases(): Promise<number>;
 
   // Check Items
   getCheckItems(checkId: string): Promise<CheckItem[]>;
@@ -1999,6 +2010,93 @@ export class DatabaseStorage implements IStorage {
       const [result] = await tx.insert(checks).values(sanitizeDates({ ...data, checkNumber, rvcId })).returning();
       return result;
     });
+  }
+
+  // Idempotency
+  async checkIdempotencyKey(enterpriseId: string, workstationId: string, operation: string, key: string): Promise<{ responseStatus: number; responseBody: string } | null> {
+    const [result] = await db.select({
+      responseStatus: idempotencyKeys.responseStatus,
+      responseBody: idempotencyKeys.responseBody,
+    }).from(idempotencyKeys).where(
+      and(
+        eq(idempotencyKeys.enterpriseId, enterpriseId),
+        eq(idempotencyKeys.workstationId, workstationId),
+        eq(idempotencyKeys.operation, operation),
+        eq(idempotencyKeys.idempotencyKey, key)
+      )
+    );
+    if (!result || !result.responseBody) return null;
+    return { responseStatus: result.responseStatus!, responseBody: result.responseBody };
+  }
+
+  async storeIdempotencyKey(data: { enterpriseId: string; workstationId: string; operation: string; idempotencyKey: string; responseStatus: number; responseBody: string }): Promise<void> {
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.insert(idempotencyKeys).values({
+      ...data,
+      expiresAt,
+    }).onConflictDoNothing();
+  }
+
+  async cleanupExpiredIdempotencyKeys(): Promise<number> {
+    const result = await db.delete(idempotencyKeys).where(
+      and(
+        isNotNull(idempotencyKeys.expiresAt),
+        lte(idempotencyKeys.expiresAt, new Date())
+      )
+    );
+    return result.rowCount ?? 0;
+  }
+
+  // Print Queue Lease Pattern
+  async claimPrintJob(agentId: string, leaseDurationSeconds: number = 30): Promise<any> {
+    const leaseUntil = new Date(Date.now() + leaseDurationSeconds * 1000);
+    const result = await db.execute(sql`
+      UPDATE print_jobs
+      SET status = 'processing', leased_by = ${agentId}, leased_until = ${leaseUntil}
+      WHERE id = (
+        SELECT id FROM print_jobs
+        WHERE status = 'pending'
+          AND (leased_until IS NULL OR leased_until < NOW())
+        ORDER BY priority ASC, created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+    return result.rows[0] || null;
+  }
+
+  async ackPrintJob(jobId: string, success: boolean, error?: string): Promise<void> {
+    if (success) {
+      await db.update(printJobs).set({
+        status: 'completed',
+        printedAt: new Date(),
+        leasedBy: null,
+        leasedUntil: null,
+      }).where(eq(printJobs.id, jobId));
+    } else {
+      await db.update(printJobs).set({
+        status: 'failed',
+        lastError: error || 'Unknown error',
+        leasedBy: null,
+        leasedUntil: null,
+      }).where(eq(printJobs.id, jobId));
+    }
+  }
+
+  async recoverExpiredLeases(): Promise<number> {
+    const result = await db.update(printJobs).set({
+      status: 'pending',
+      leasedBy: null,
+      leasedUntil: null,
+    }).where(
+      and(
+        eq(printJobs.status, 'processing'),
+        isNotNull(printJobs.leasedUntil),
+        lte(printJobs.leasedUntil, new Date())
+      )
+    );
+    return result.rowCount ?? 0;
   }
 
   // Check Items

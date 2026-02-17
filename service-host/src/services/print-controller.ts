@@ -17,12 +17,17 @@ export class PrintController {
   private db: Database;
   private printTimeout: number = 10000;
   private processingQueue: boolean = false;
+  private agentId: string;
   
   constructor(db: Database) {
     this.db = db;
+    this.agentId = randomUUID();
     
     // Start queue processor
     setInterval(() => this.processQueue(), 2000);
+    
+    // Start lease recovery processor (every 15 seconds)
+    setInterval(() => this.recoverExpiredLeases(), 15000);
   }
   
   // Submit a print job
@@ -84,51 +89,45 @@ export class PrintController {
     };
   }
   
-  // Process pending print jobs
+  // Process pending print jobs using lease-based claiming
   private async processQueue(): Promise<void> {
     if (this.processingQueue) return;
     this.processingQueue = true;
     
     try {
-      const jobs = this.db.all<PrintJobRow>(
-        `SELECT * FROM print_queue WHERE status = 'pending' AND attempts < 3 ORDER BY created_at LIMIT 5`
-      );
-      
-      for (const job of jobs) {
+      // Claim and process up to 5 jobs
+      for (let i = 0; i < 5; i++) {
+        const job = this.db.claimPrintJob(this.agentId);
+        if (!job) break; // No more jobs to claim
+        
         await this.printJob(job);
       }
     } finally {
       this.processingQueue = false;
     }
   }
+
+  // Recover jobs with expired leases (run periodically)
+  private recoverExpiredLeases(): void {
+    const recoveredCount = this.db.recoverExpiredLeases();
+    if (recoveredCount > 0) {
+      console.log(`[PrintController] Recovered ${recoveredCount} expired lease(s)`);
+    }
+  }
   
   private async printJob(job: PrintJobRow): Promise<void> {
-    // Mark as printing
-    this.db.run(
-      `UPDATE print_queue SET status = 'printing', attempts = attempts + 1 WHERE id = ?`,
-      [job.id]
-    );
-    
     try {
       await this.sendToPrinter(job.printer_ip, job.printer_port, job.content);
       
-      // Mark as completed
-      this.db.run(
-        `UPDATE print_queue SET status = 'completed' WHERE id = ?`,
-        [job.id]
-      );
-      
+      // Acknowledge successful completion
+      this.db.ackPrintJob(job.id, true);
       console.log(`Print job ${job.id} completed`);
     } catch (e) {
       const error = (e as Error).message;
       console.error(`Print job ${job.id} failed:`, error);
       
-      // Mark as failed or pending for retry
-      const status = job.attempts >= 2 ? 'failed' : 'pending';
-      this.db.run(
-        `UPDATE print_queue SET status = ?, error = ? WHERE id = ?`,
-        [status, error, job.id]
-      );
+      // Acknowledge failure and release lease for retry
+      this.db.ackPrintJob(job.id, false, error);
     }
   }
   

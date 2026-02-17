@@ -138,10 +138,12 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  extraHeaders?: Record<string, string>,
 ): Promise<Response> {
   const authHeaders = getAuthHeaders();
   const headers: Record<string, string> = {
     ...authHeaders,
+    ...extraHeaders,
   };
   
   if (data) {

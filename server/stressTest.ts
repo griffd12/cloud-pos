@@ -460,4 +460,117 @@ export function registerStressTestRoutes(app: any, storage: IStorage) {
       res.status(500).json({ message: "Cleanup failed: " + error.message });
     }
   });
+
+  app.post("/api/stress-test/collision-test", async (req: any, res: any) => {
+    try {
+      const { rvcId, employeeId, concurrentRequests = 20 } = req.body;
+      if (!rvcId || !employeeId) {
+        return res.status(400).json({ message: "rvcId and employeeId are required" });
+      }
+      if (concurrentRequests < 2 || concurrentRequests > 100) {
+        return res.status(400).json({ message: "concurrentRequests must be between 2 and 100" });
+      }
+
+      const promises = Array.from({ length: concurrentRequests }, () =>
+        storage.createCheckAtomic(rvcId, {
+          rvcId,
+          employeeId,
+          orderType: 'dine_in',
+          status: 'open',
+          testMode: true,
+        })
+      );
+      const results = await Promise.all(promises);
+
+      const checkNumbers = results.map(c => c.checkNumber);
+      const seen = new Set<number>();
+      const duplicates: number[] = [];
+      for (const num of checkNumbers) {
+        if (seen.has(num)) {
+          duplicates.push(num);
+        } else {
+          seen.add(num);
+        }
+      }
+
+      const testCheckIds = results.map(c => c.id);
+      const batchSize = 100;
+      for (let i = 0; i < testCheckIds.length; i += batchSize) {
+        const batch = testCheckIds.slice(i, i + batchSize);
+        await db.delete(checks).where(inArray(checks.id, batch));
+      }
+
+      res.json({
+        success: duplicates.length === 0,
+        checkNumbers,
+        duplicates,
+        totalRequests: concurrentRequests,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Collision test failed: " + error.message });
+    }
+  });
+
+  app.get("/api/stress-test/validate", async (_req: any, res: any) => {
+    try {
+      const [
+        duplicateCheckNumbers,
+        duplicatePayments,
+        duplicateKdsTickets,
+        duplicatePrintJobs,
+        duplicateIdempotencyKeys,
+      ] = await Promise.all([
+        db.execute(sql`
+          SELECT rvc_id, check_number, COUNT(*) as cnt
+          FROM checks
+          GROUP BY rvc_id, check_number
+          HAVING COUNT(*) > 1
+        `),
+        db.execute(sql`
+          SELECT check_id, tender_id, amount, COUNT(*) as cnt
+          FROM check_payments
+          GROUP BY check_id, tender_id, amount
+          HAVING COUNT(*) > 1
+        `),
+        db.execute(sql`
+          SELECT check_id, round_id, kds_device_id, COUNT(*) as cnt
+          FROM kds_tickets
+          GROUP BY check_id, round_id, kds_device_id
+          HAVING COUNT(*) > 1
+        `),
+        db.execute(sql`
+          SELECT dedupe_key, COUNT(*) as cnt
+          FROM print_jobs
+          WHERE dedupe_key IS NOT NULL
+          GROUP BY dedupe_key
+          HAVING COUNT(*) > 1
+        `),
+        db.execute(sql`
+          SELECT enterprise_id, workstation_id, operation, idempotency_key, COUNT(*) as cnt
+          FROM idempotency_keys
+          GROUP BY enterprise_id, workstation_id, operation, idempotency_key
+          HAVING COUNT(*) > 1
+        `),
+      ]);
+
+      const results = {
+        duplicateCheckNumbers: duplicateCheckNumbers.rows,
+        duplicatePayments: duplicatePayments.rows,
+        duplicateKdsTickets: duplicateKdsTickets.rows,
+        duplicatePrintJobs: duplicatePrintJobs.rows,
+        duplicateIdempotencyKeys: duplicateIdempotencyKeys.rows,
+      };
+
+      const valid =
+        results.duplicateCheckNumbers.length === 0 &&
+        results.duplicatePayments.length === 0 &&
+        results.duplicateKdsTickets.length === 0 &&
+        results.duplicatePrintJobs.length === 0 &&
+        results.duplicateIdempotencyKeys.length === 0;
+
+      res.json({ valid, results });
+    } catch (error: any) {
+      res.status(500).json({ message: "Validation failed: " + error.message });
+    }
+  });
 }

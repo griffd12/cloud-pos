@@ -9,6 +9,7 @@
  */
 
 import { CREATE_SCHEMA_SQL, SCHEMA_VERSION } from './schema';
+import { randomUUID } from 'crypto';
 
 const BetterSqlite3 = require('better-sqlite3');
 
@@ -819,6 +820,70 @@ export class Database {
   
   getPrintersByProperty(propertyId: string): any[] {
     return this.all('SELECT * FROM printers WHERE property_id = ? AND active = 1', [propertyId]);
+  }
+
+  // ==========================================================================
+  // Print Queue - Lease Management
+  // ==========================================================================
+
+  claimPrintJob(agentId: string): any | null {
+    const now = new Date().toISOString();
+    const leaseExpiresAt = new Date(Date.now() + 30000).toISOString(); // 30 second lease
+    const leaseId = randomUUID();
+
+    // Find and claim the oldest pending job without an active lease
+    const job = this.get<any>(
+      `SELECT * FROM print_queue 
+       WHERE status = 'pending' 
+       AND (lease_expires_at IS NULL OR lease_expires_at < ?)
+       ORDER BY priority DESC, created_at ASC 
+       LIMIT 1`,
+      [now]
+    );
+
+    if (!job) return null;
+
+    // Claim the job with a lease
+    this.run(
+      `UPDATE print_queue 
+       SET lease_id = ?, lease_expires_at = ?, status = 'claimed'
+       WHERE id = ?`,
+      [leaseId, leaseExpiresAt, job.id]
+    );
+
+    return { ...job, leaseId, leaseExpiresAt };
+  }
+
+  ackPrintJob(jobId: string, success: boolean, error?: string): void {
+    if (success) {
+      this.run(
+        `UPDATE print_queue 
+         SET status = 'completed', completed_at = datetime('now'), lease_id = NULL, lease_expires_at = NULL
+         WHERE id = ?`,
+        [jobId]
+      );
+    } else {
+      this.run(
+        `UPDATE print_queue 
+         SET status = 'pending', error_message = ?, lease_id = NULL, lease_expires_at = NULL, attempts = attempts + 1
+         WHERE id = ?`,
+        [error || 'Unknown error', jobId]
+      );
+    }
+  }
+
+  recoverExpiredLeases(): number {
+    const now = new Date().toISOString();
+    
+    // Reset jobs with expired leases back to pending
+    const result = this.run(
+      `UPDATE print_queue 
+       SET status = 'pending', lease_id = NULL, lease_expires_at = NULL
+       WHERE status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?`,
+      [now]
+    );
+
+    return result.changes;
   }
   
   upsertKdsDevice(kds: any): void {

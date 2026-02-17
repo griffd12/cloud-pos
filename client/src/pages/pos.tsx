@@ -565,7 +565,7 @@ export default function PosPage() {
         rvcId: currentRvc?.id,
         employeeId: currentEmployee?.id,
         orderType,
-      });
+      }, { "Idempotency-Key": crypto.randomUUID() });
       return response.json();
     },
     onSuccess: (check: Check) => {
@@ -626,7 +626,7 @@ export default function PosPage() {
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/send", {
         employeeId: currentEmployee?.id,
-      });
+      }, { "Idempotency-Key": crypto.randomUUID() });
       return response.json();
     },
     onSuccess: (data: { round: any; updatedItems: CheckItem[] }) => {
@@ -789,7 +789,7 @@ export default function PosPage() {
         tipAmount: data.tipAmount?.toString(),
         employeeId: currentEmployee?.id,
         paymentTransactionId: data.paymentTransactionId,
-      });
+      }, { "Idempotency-Key": crypto.randomUUID() });
       const result = await response.json();
       return { ...result, isCashOverTender: data.isCashOverTender, tenderedAmount: data.amount };
     },
@@ -1074,7 +1074,7 @@ export default function PosPage() {
       if (unsentItems.length > 0) {
         await apiRequest("POST", `/api/checks/${checkId}/send`, {
           employeeId: currentEmployee?.id,
-        });
+        }, { "Idempotency-Key": crypto.randomUUID() });
       }
 
       const response = await apiRequest("POST", `/api/checks/${checkId}/print`, {
@@ -2435,7 +2435,7 @@ export default function PosPage() {
                 rvcId: currentRvc?.id,
                 employeeId: currentEmployee?.id,
                 orderType: "dine_in",
-              });
+              }, { "Idempotency-Key": crypto.randomUUID() });
               const newCheck = await newCheckRes.json();
               checkToUse = newCheck;
               setCurrentCheck(newCheck);

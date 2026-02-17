@@ -551,10 +551,8 @@ class OfflineApiInterceptor {
 
   createOfflineCheck(body) {
     const id = `offline_${crypto.randomUUID()}`;
-    const checkNumber = this.db.getNextCheckNumber(body.rvcId);
-    const check = {
+    const checkData = {
       id,
-      checkNumber,
       rvcId: body.rvcId,
       employeeId: body.employeeId,
       customerId: body.customerId || null,
@@ -572,7 +570,10 @@ class OfflineApiInterceptor {
       isOffline: true,
     };
 
-    this.db.saveOfflineCheck(check);
+    const check = this.db.createCheckAtomic(body.rvcId, checkData);
+    if (!check) {
+      return { status: 500, data: { message: 'Failed to create offline check' } };
+    }
     this.db.queueOperation('create_check', '/api/checks', 'POST', body, 1);
 
     return { status: 201, data: check };
