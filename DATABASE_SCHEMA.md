@@ -2,7 +2,7 @@
 
 > Auto-generated schema documentation. Last updated: 2026-02-17
 > **This document must be updated whenever database schema changes are made.**
-> Total tables: 133 | Database: PostgreSQL
+> Total tables: 134 | Database: PostgreSQL
 
 ---
 
@@ -660,6 +660,11 @@ Automatic or manual service charges (e.g., gratuity for large parties).
 | value | numeric(10,2) | NO | — |
 | auto_apply | boolean | YES | `false` |
 | order_types | text[] | YES | — |
+| is_taxable | boolean | YES | `false` |
+| tax_group_id | varchar | YES | — |
+| revenue_category | text | YES | `'revenue'` |
+| post_to_tip_pool | boolean | YES | `false` |
+| tip_eligible | boolean | YES | `false` |
 | active | boolean | YES | `true` |
 
 - **Primary Key:** `id`
@@ -667,6 +672,48 @@ Automatic or manual service charges (e.g., gratuity for large parties).
   - `enterprise_id` → `enterprises.id`
   - `property_id` → `properties.id`
   - `rvc_id` → `rvcs.id`
+  - `tax_group_id` → `tax_groups.id`
+- **Notes:** `is_taxable` + `tax_group_id` control tax applicability. `revenue_category` is `'revenue'` or `'non_revenue'`. `post_to_tip_pool` includes in tip pool calculations; `tip_eligible` marks for employee tip distribution.
+
+---
+
+### `check_service_charges`
+
+Transactional ledger of service charges applied to checks. Each row snapshots the charge configuration at time of application for audit/reporting.
+
+| Column | Data Type | Nullable | Default |
+|--------|-----------|----------|---------|
+| id | varchar (UUID) | NO | `gen_random_uuid()` |
+| check_id | varchar | NO | — |
+| service_charge_id | varchar | NO | — |
+| name | text | NO | — |
+| code | text | NO | — |
+| charge_type | text | NO | — |
+| charge_value | numeric(10,2) | NO | — |
+| computed_amount | numeric(12,2) | NO | — |
+| is_taxable | boolean | YES | `false` |
+| tax_group_id | varchar | YES | — |
+| revenue_category | text | YES | `'revenue'` |
+| post_to_tip_pool | boolean | YES | `false` |
+| tip_eligible | boolean | YES | `false` |
+| voided | boolean | YES | `false` |
+| voided_by | varchar | YES | — |
+| voided_at | timestamp | YES | — |
+| void_reason | text | YES | — |
+| business_date | date | YES | — |
+| applied_by | varchar | YES | — |
+| applied_at | timestamp | YES | `now()` |
+
+- **Primary Key:** `id`
+- **Foreign Keys:**
+  - `check_id` → `checks.id`
+  - `service_charge_id` → `service_charges.id`
+  - `applied_by` → `employees.id`
+  - `voided_by` → `employees.id`
+- **Indexes:**
+  - `idx_check_sc_check_id` on `check_id`
+  - `idx_check_sc_biz_date` on `business_date`
+- **Notes:** Reports read from this ledger excluding `voided=true`. `computed_amount` is the actual dollar amount applied. Snapshot fields (`name`, `code`, `charge_type`, `charge_value`, `is_taxable`, etc.) capture config at time of application for audit trail.
 
 ---
 

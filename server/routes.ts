@@ -4331,12 +4331,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
 
     const allCharges = await storage.getCheckServiceChargesByCheck(check.id);
-    const scTotal = allCharges.filter(c => !c.voided).reduce((sum, c) => sum + parseFloat(c.amount), 0);
-    const scTaxTotal = allCharges.filter(c => !c.voided).reduce((sum, c) => sum + parseFloat(c.taxAmount || "0"), 0);
+    const activeCharges = allCharges.filter(c => !c.voided);
+    const scTotal = activeCharges.reduce((sum, c) => sum + parseFloat(c.amount), 0);
+    const scTaxTotal = activeCharges.reduce((sum, c) => sum + parseFloat(c.taxAmount || "0"), 0);
+    
+    const checkItems = await storage.getCheckItems(check.id);
+    const itemTax = checkItems
+      .filter(i => !i.voided)
+      .reduce((sum, i) => sum + parseFloat(i.taxAmount || "0"), 0);
     
     await storage.updateCheck(check.id, {
       serviceChargeTotal: scTotal.toFixed(2),
-      taxTotal: (parseFloat(check.taxTotal || "0") + scTaxTotal - parseFloat(check.taxTotal || "0")).toFixed(2),
+      taxTotal: (itemTax + scTaxTotal).toFixed(2),
     });
 
     res.status(201).json(ledgerEntry);
@@ -4351,9 +4357,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!result) return res.status(404).json({ message: "Service charge entry not found" });
 
     const allCharges = await storage.getCheckServiceChargesByCheck(result.checkId);
-    const scTotal = allCharges.filter(c => !c.voided).reduce((sum, c) => sum + parseFloat(c.amount), 0);
+    const activeCharges = allCharges.filter(c => !c.voided);
+    const scTotal = activeCharges.reduce((sum, c) => sum + parseFloat(c.amount), 0);
+    const scTaxTotal = activeCharges.reduce((sum, c) => sum + parseFloat(c.taxAmount || "0"), 0);
+    
+    const check = await storage.getCheck(result.checkId);
+    const items = check ? await storage.getCheckItems(check.id) : [];
+    const itemTax = items
+      .filter(i => !i.voided)
+      .reduce((sum, i) => sum + parseFloat(i.taxAmount || "0"), 0);
+    
     await storage.updateCheck(result.checkId, {
       serviceChargeTotal: scTotal.toFixed(2),
+      taxTotal: (itemTax + scTaxTotal).toFixed(2),
     });
 
     res.json(result);
