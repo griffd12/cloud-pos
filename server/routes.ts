@@ -3812,6 +3812,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tenders", async (req, res) => {
     try {
       const validated = insertTenderSchema.parse(req.body);
+      if ((validated.type === "credit" || validated.type === "debit") && !validated.paymentProcessorId) {
+        return res.status(400).json({ message: "Credit and debit tenders require a linked payment processor for gateway integration." });
+      }
       const data = await storage.createTender(validated);
       broadcastConfigUpdate("tenders", "create", data.id, data.enterpriseId);
       res.status(201).json(data);
@@ -3821,10 +3824,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.put("/api/tenders/:id", async (req, res) => {
-    const data = await storage.updateTender(req.params.id, req.body);
-    if (!data) return res.status(404).json({ message: "Not found" });
-    broadcastConfigUpdate("tenders", "update", data.id, data.enterpriseId);
-    res.json(data);
+    try {
+      const body = req.body;
+      const tenderType = body.type;
+      if ((tenderType === "credit" || tenderType === "debit") && !body.paymentProcessorId) {
+        return res.status(400).json({ message: "Credit and debit tenders require a linked payment processor for gateway integration." });
+      }
+      if (tenderType && tenderType !== "credit" && tenderType !== "debit") {
+        body.paymentProcessorId = null;
+      }
+      const data = await storage.updateTender(req.params.id, body);
+      if (!data) return res.status(404).json({ message: "Not found" });
+      broadcastConfigUpdate("tenders", "update", data.id, data.enterpriseId);
+      res.json(data);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid tender data" });
+    }
   });
 
   app.delete("/api/tenders/:id", async (req, res) => {

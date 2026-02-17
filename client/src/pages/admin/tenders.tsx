@@ -12,6 +12,13 @@ import { useScopeLookup } from "@/hooks/use-scope-lookup";
 import { insertTenderSchema, type Tender, type InsertTender } from "@shared/schema";
 import { useConfigOverride } from "@/hooks/use-config-override";
 
+interface PaymentProcessor {
+  id: string;
+  name: string;
+  gatewayType: string;
+  active: boolean;
+}
+
 export default function TendersPage() {
   const { toast } = useToast();
   usePosWebSocket();
@@ -29,6 +36,18 @@ export default function TendersPage() {
     },
   });
 
+  const { data: processors = [] } = useQuery<PaymentProcessor[]>({
+    queryKey: ["/api/payment-processors", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/payment-processors${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  const activeProcessors = processors.filter(p => p.active);
+  const processorMap = processors.reduce((acc, p) => { acc[p.id] = p; return acc; }, {} as Record<string, PaymentProcessor>);
+
   const { getOverrideActions, filterOverriddenInherited, canDeleteItem, getScopeQueryParams } = useConfigOverride<Tender>("tender", ["/api/tenders"]);
   const displayedTenders = filterOverriddenInherited(tenders);
 
@@ -39,6 +58,15 @@ export default function TendersPage() {
       key: "type",
       header: "Type",
       render: (value) => <Badge variant="outline">{value}</Badge>,
+    },
+    {
+      key: "paymentProcessorId",
+      header: "Payment Processor",
+      render: (value) => {
+        if (!value) return <span className="text-muted-foreground">—</span>;
+        const proc = processorMap[value as string];
+        return proc ? <Badge variant="secondary">{proc.name}</Badge> : <span className="text-muted-foreground">Unknown</span>;
+      },
     },
     {
       key: "active",
@@ -60,10 +88,21 @@ export default function TendersPage() {
       options: [
         { value: "cash", label: "Cash" },
         { value: "credit", label: "Credit Card" },
+        { value: "debit", label: "Debit Card" },
         { value: "gift", label: "Gift Card" },
         { value: "other", label: "Other" },
       ],
       required: true,
+    },
+    {
+      name: "paymentProcessorId",
+      label: "Payment Processor",
+      type: "select",
+      options: activeProcessors.map(p => ({ value: p.id, label: `${p.name} (${p.gatewayType})` })),
+      required: true,
+      placeholder: "Select payment processor...",
+      description: "Required for credit and debit card tenders to process payments and refunds.",
+      visibleWhen: { field: "type", values: ["credit", "debit"] },
     },
     { name: "active", label: "Active", type: "switch", defaultValue: true },
   ];
@@ -78,8 +117,8 @@ export default function TendersPage() {
       setFormOpen(false);
       toast({ title: "Tender created" });
     },
-    onError: () => {
-      toast({ title: "Failed to create tender", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to create tender", variant: "destructive" });
     },
   });
 
@@ -94,8 +133,8 @@ export default function TendersPage() {
       setEditingItem(null);
       toast({ title: "Tender updated" });
     },
-    onError: () => {
-      toast({ title: "Failed to update tender", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: error?.message || "Failed to update tender", variant: "destructive" });
     },
   });
 
@@ -113,10 +152,14 @@ export default function TendersPage() {
   });
 
   const handleSubmit = (data: InsertTender) => {
+    const cleanedData = { ...data };
+    if (cleanedData.type !== "credit" && cleanedData.type !== "debit") {
+      cleanedData.paymentProcessorId = null;
+    }
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, ...cleanedData });
     } else {
-      createMutation.mutate({ ...data, ...scopePayload });
+      createMutation.mutate({ ...cleanedData, ...scopePayload });
     }
   };
 

@@ -39,6 +39,7 @@ export interface FormFieldConfig {
   options?: { value: string; label: string }[];
   required?: boolean;
   defaultValue?: any;
+  visibleWhen?: { field: string; values: string[] };
 }
 
 interface EntityFormProps<T extends z.ZodTypeAny> {
@@ -105,7 +106,14 @@ export function EntityForm<T extends z.ZodTypeAny>({
           <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-2 gap-4 py-1">
-                {fields.map((fieldConfig) => (
+                {fields.map((fieldConfig) => {
+                  if (fieldConfig.visibleWhen) {
+                    const watchedValue = form.watch(fieldConfig.visibleWhen.field as any);
+                    if (!fieldConfig.visibleWhen.values.includes(watchedValue)) {
+                      return null;
+                    }
+                  }
+                  return (
                   <FormField
                     key={fieldConfig.name}
                     control={form.control}
@@ -239,7 +247,8 @@ export function EntityForm<T extends z.ZodTypeAny>({
                       </FormItem>
                     )}
                   />
-                ))}
+                  );
+                })}
               </div>
             </div>
 
