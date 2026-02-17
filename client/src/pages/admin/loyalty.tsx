@@ -5,7 +5,6 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
-import { EntityForm, FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
 import { useScopeLookup } from "@/hooks/use-scope-lookup";
@@ -14,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -32,7 +33,6 @@ import {
   type Property,
 } from "@shared/schema";
 
-// Extended member type from API that includes enrollments
 type MemberWithEnrollments = LoyaltyMember & {
   enrollments?: (LoyaltyMemberEnrollment & { program?: LoyaltyProgram })[];
 };
@@ -64,6 +64,13 @@ export default function LoyaltyPage() {
   
   const [memberFormOpen, setMemberFormOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<MemberWithEnrollments | null>(null);
+  const [memberFirstName, setMemberFirstName] = useState("");
+  const [memberLastName, setMemberLastName] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberPhone, setMemberPhone] = useState("");
+  const [memberBirthDate, setMemberBirthDate] = useState("");
+  const [memberNotes, setMemberNotes] = useState("");
+
   const [selectedMember, setSelectedMember] = useState<MemberWithEnrollments | null>(null);
   const [memberDetailOpen, setMemberDetailOpen] = useState(false);
   const [lookupDialogOpen, setLookupDialogOpen] = useState(false);
@@ -71,6 +78,18 @@ export default function LoyaltyPage() {
   
   const [rewardFormOpen, setRewardFormOpen] = useState(false);
   const [editingReward, setEditingReward] = useState<LoyaltyReward | null>(null);
+  const [rewardProgramId, setRewardProgramId] = useState("");
+  const [rewardName, setRewardName] = useState("");
+  const [rewardDescription, setRewardDescription] = useState("");
+  const [rewardType, setRewardType] = useState("discount");
+  const [rewardDiscountAmount, setRewardDiscountAmount] = useState("");
+  const [rewardDiscountPercent, setRewardDiscountPercent] = useState("");
+  const [rewardFreeMenuItemId, setRewardFreeMenuItemId] = useState("");
+  const [rewardGiftCardAmount, setRewardGiftCardAmount] = useState("");
+  const [rewardPointsCost, setRewardPointsCost] = useState("");
+  const [rewardAutoAwardAtPoints, setRewardAutoAwardAtPoints] = useState("");
+  const [rewardAutoAwardOnce, setRewardAutoAwardOnce] = useState(true);
+  const [rewardActive, setRewardActive] = useState(true);
   
   const [earnPointsOpen, setEarnPointsOpen] = useState(false);
   const [earnPoints, setEarnPoints] = useState("");
@@ -264,60 +283,6 @@ export default function LoyaltyPage() {
     },
   ];
 
-
-  const memberFormFields: FormFieldConfig[] = [
-    { name: "firstName", label: "First Name", type: "text", required: true },
-    { name: "lastName", label: "Last Name", type: "text", required: true },
-    { name: "email", label: "Email", type: "text", required: true },
-    { name: "phone", label: "Phone", type: "text" },
-    { name: "birthDate", label: "Birth Date", type: "text", placeholder: "YYYY-MM-DD" },
-    { name: "notes", label: "Notes", type: "textarea" },
-  ];
-
-  const rewardFormFields: FormFieldConfig[] = [
-    {
-      name: "programId",
-      label: "Loyalty Program",
-      type: "select",
-      options: programs.map(p => ({ 
-        value: p.id, 
-        label: `${p.name} (${properties.find(prop => prop.id === p.propertyId)?.name || 'No property'})` 
-      })),
-      required: true,
-      description: "Which program this reward belongs to (property is inherited from program)",
-    },
-    { name: "name", label: "Reward Name", type: "text", placeholder: "Free Appetizer", required: true },
-    { name: "description", label: "Description", type: "textarea", placeholder: "Redeem for any appetizer" },
-    {
-      name: "rewardType",
-      label: "Reward Type",
-      type: "select",
-      options: [
-        { value: "discount", label: "Discount - Apply $ or % off" },
-        { value: "free_item", label: "Free Item - Award a specific menu item" },
-        { value: "gift_card", label: "Gift Card - Issue a gift card amount" },
-        { value: "points_multiplier", label: "Points Multiplier - Bonus points on next visit" },
-      ],
-      required: true,
-      defaultValue: "discount",
-      description: "How the reward will be applied",
-    },
-    { name: "discountAmount", label: "Discount Amount ($)", type: "decimal", placeholder: "5.00", description: "For Discount type: fixed dollar amount off" },
-    { name: "discountPercent", label: "Discount Percent (%)", type: "decimal", placeholder: "10", description: "For Discount type: percentage off" },
-    {
-      name: "freeMenuItemId",
-      label: "Free Menu Item",
-      type: "select",
-      options: menuItems.map(m => ({ value: m.id, label: `${m.name} ($${m.price})` })),
-      description: "For Free Item type: select the specific item to award",
-    },
-    { name: "giftCardAmount", label: "Gift Card Amount ($)", type: "decimal", placeholder: "10.00", description: "For Gift Card type: the value of the gift card issued" },
-    { name: "pointsCost", label: "Points to Redeem", type: "number", placeholder: "100", description: "Points required for manual redemption at POS" },
-    { name: "autoAwardAtPoints", label: "Auto-Award at Points", type: "number", placeholder: "500", description: "Automatically award when member reaches this many lifetime points (leave blank for manual only)" },
-    { name: "autoAwardOnce", label: "Auto-Award Once Only", type: "switch", defaultValue: true, description: "Only auto-award this reward once per member" },
-    { name: "active", label: "Active", type: "switch", defaultValue: true },
-  ];
-
   const programMutation = useMutation({
     mutationFn: async (data: InsertLoyaltyProgram) => {
       if (editingProgram) {
@@ -352,6 +317,7 @@ export default function LoyaltyPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty-members", filterKeys] });
       setMemberFormOpen(false);
       setEditingMember(null);
+      resetMemberForm();
       toast({ title: editingMember ? "Member updated" : "Member enrolled" });
     },
     onError: () => {
@@ -361,7 +327,6 @@ export default function LoyaltyPage() {
 
   const rewardMutation = useMutation({
     mutationFn: async (data: InsertLoyaltyReward) => {
-      // Auto-set propertyId from the selected program
       const selectedProgram = programs.find(p => p.id === data.programId);
       const enrichedData = {
         ...data,
@@ -378,6 +343,7 @@ export default function LoyaltyPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/loyalty-rewards", filterKeys] });
       setRewardFormOpen(false);
       setEditingReward(null);
+      resetRewardForm();
       toast({ title: editingReward ? "Reward updated" : "Reward created" });
     },
     onError: () => {
@@ -447,7 +413,6 @@ export default function LoyaltyPage() {
       setEnrollInProgramOpen(false);
       setEnrollProgramId("");
       toast({ title: "Enrolled in program successfully" });
-      // Refresh selected member data
       if (selectedMember) {
         const updatedMember = members.find(m => m.id === selectedMember.id);
         if (updatedMember) setSelectedMember(updatedMember);
@@ -475,6 +440,141 @@ export default function LoyaltyPage() {
     },
   });
 
+  const resetMemberForm = () => {
+    setMemberFirstName("");
+    setMemberLastName("");
+    setMemberEmail("");
+    setMemberPhone("");
+    setMemberBirthDate("");
+    setMemberNotes("");
+  };
+
+  const resetRewardForm = () => {
+    setRewardProgramId("");
+    setRewardName("");
+    setRewardDescription("");
+    setRewardType("discount");
+    setRewardDiscountAmount("");
+    setRewardDiscountPercent("");
+    setRewardFreeMenuItemId("");
+    setRewardGiftCardAmount("");
+    setRewardPointsCost("");
+    setRewardAutoAwardAtPoints("");
+    setRewardAutoAwardOnce(true);
+    setRewardActive(true);
+  };
+
+  const resetProgramForm = () => {
+    setProgramFormData({
+      name: "",
+      propertyId: "",
+      programType: "points",
+      pointsPerDollar: "1",
+      visitsForReward: "10",
+      minimumPointsRedeem: "100",
+      pointsRedemptionValue: "0.01",
+      spendThreshold: "100",
+      active: true,
+    });
+  };
+
+  const handleCancelProgram = () => {
+    setProgramFormOpen(false);
+    setEditingProgram(null);
+    resetProgramForm();
+  };
+
+  const handleCancelMember = () => {
+    setMemberFormOpen(false);
+    setEditingMember(null);
+    resetMemberForm();
+  };
+
+  const handleCancelReward = () => {
+    setRewardFormOpen(false);
+    setEditingReward(null);
+    resetRewardForm();
+  };
+
+  const handleSubmitProgram = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const data: any = {
+      name: programFormData.name,
+      ...scopePayload,
+      programType: programFormData.programType,
+      active: programFormData.active,
+    };
+    if (programFormData.programType === "points" || programFormData.programType === "tiered") {
+      data.pointsPerDollar = programFormData.pointsPerDollar;
+      data.minimumPointsRedeem = parseInt(programFormData.minimumPointsRedeem) || 100;
+      data.pointsRedemptionValue = programFormData.pointsRedemptionValue;
+    }
+    if (programFormData.programType === "visits") {
+      data.visitsForReward = parseInt(programFormData.visitsForReward) || 10;
+    }
+    programMutation.mutate(data);
+  };
+
+  const handleSubmitMember = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const data: any = {
+      firstName: memberFirstName,
+      lastName: memberLastName,
+      email: memberEmail,
+      phone: memberPhone || undefined,
+      birthDate: memberBirthDate || undefined,
+      notes: memberNotes || undefined,
+    };
+    memberMutation.mutate(data);
+  };
+
+  const handleSubmitReward = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const data: any = {
+      programId: rewardProgramId,
+      name: rewardName,
+      description: rewardDescription || undefined,
+      rewardType: rewardType,
+      discountAmount: rewardDiscountAmount || undefined,
+      discountPercent: rewardDiscountPercent || undefined,
+      freeMenuItemId: rewardFreeMenuItemId || undefined,
+      giftCardAmount: rewardGiftCardAmount || undefined,
+      pointsCost: rewardPointsCost ? parseInt(rewardPointsCost) : undefined,
+      autoAwardAtPoints: rewardAutoAwardAtPoints ? parseInt(rewardAutoAwardAtPoints) : undefined,
+      autoAwardOnce: rewardAutoAwardOnce,
+      active: rewardActive,
+    };
+    rewardMutation.mutate(data);
+  };
+
+  const openEditMember = (member: MemberWithEnrollments) => {
+    setEditingMember(member);
+    setMemberFirstName(member.firstName || "");
+    setMemberLastName(member.lastName || "");
+    setMemberEmail(member.email || "");
+    setMemberPhone(member.phone || "");
+    setMemberBirthDate(member.birthDate || "");
+    setMemberNotes(member.notes || "");
+    setMemberFormOpen(true);
+  };
+
+  const openEditReward = (reward: LoyaltyReward) => {
+    setEditingReward(reward);
+    setRewardProgramId(reward.programId || "");
+    setRewardName(reward.name || "");
+    setRewardDescription(reward.description || "");
+    setRewardType(reward.rewardType || "discount");
+    setRewardDiscountAmount(reward.discountAmount || "");
+    setRewardDiscountPercent(reward.discountPercent || "");
+    setRewardFreeMenuItemId(reward.freeMenuItemId || "");
+    setRewardGiftCardAmount(reward.giftCardAmount || "");
+    setRewardPointsCost(reward.pointsCost?.toString() || "");
+    setRewardAutoAwardAtPoints(reward.autoAwardAtPoints?.toString() || "");
+    setRewardAutoAwardOnce(reward.autoAwardOnce ?? true);
+    setRewardActive(reward.active ?? true);
+    setRewardFormOpen(true);
+  };
+
   const handleViewMember = (member: MemberWithEnrollments) => {
     setSelectedMember(member);
     setMemberDetailOpen(true);
@@ -491,7 +591,6 @@ export default function LoyaltyPage() {
   }, 0);
   const activePrograms = programs.filter(p => p.active).length;
 
-  // Get available rewards based on selected member's enrollments
   const availableRewards = selectedMember?.enrollments?.flatMap(enrollment => {
     return rewards.filter(r => 
       r.active && 
@@ -499,6 +598,448 @@ export default function LoyaltyPage() {
       (enrollment.currentPoints || 0) >= (r.pointsCost || 0)
     );
   }) || [];
+
+  if (programFormOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingProgram ? "Edit Program" : "Create Loyalty Program"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelProgram} data-testid="button-cancel-program">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitProgram}
+                  disabled={!programFormData.name || programMutation.isPending}
+                  data-testid="button-save-program"
+                >
+                  {programMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingProgram ? "Update Program" : "Create Program"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmitProgram} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="prog-name">Program Name</Label>
+                  <Input
+                    id="prog-name"
+                    value={programFormData.name}
+                    onChange={(e) => setProgramFormData({ ...programFormData, name: e.target.value })}
+                    placeholder="Rewards Program"
+                    data-testid="input-program-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Program Type</Label>
+                  <Select
+                    value={programFormData.programType}
+                    onValueChange={(value: "points" | "visits" | "spend" | "tiered") => 
+                      setProgramFormData({ ...programFormData, programType: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-program-type">
+                      <SelectValue placeholder="Select program type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="points">Points Based</SelectItem>
+                      <SelectItem value="visits">Visits Based</SelectItem>
+                      <SelectItem value="spend">Spend Based</SelectItem>
+                      <SelectItem value="tiered">Tiered Rewards</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch
+                    checked={programFormData.active}
+                    onCheckedChange={(checked) => setProgramFormData({ ...programFormData, active: checked })}
+                    data-testid="switch-program-active"
+                  />
+                  <Label>Active</Label>
+                </div>
+              </div>
+              
+              {programFormData.programType === "points" && (
+                <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium text-sm">Points Configuration</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="points-per-dollar">Points per Dollar</Label>
+                      <Input
+                        id="points-per-dollar"
+                        type="number"
+                        step="0.5"
+                        value={programFormData.pointsPerDollar}
+                        onChange={(e) => setProgramFormData({ ...programFormData, pointsPerDollar: e.target.value })}
+                        placeholder="1"
+                        data-testid="input-points-per-dollar"
+                      />
+                      <p className="text-xs text-muted-foreground">Points earned for each $1 spent</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="min-redeem">Minimum Points to Redeem</Label>
+                      <Input
+                        id="min-redeem"
+                        type="number"
+                        value={programFormData.minimumPointsRedeem}
+                        onChange={(e) => setProgramFormData({ ...programFormData, minimumPointsRedeem: e.target.value })}
+                        placeholder="100"
+                        data-testid="input-min-redeem"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="point-value">Point Redemption Value ($)</Label>
+                      <Input
+                        id="point-value"
+                        type="number"
+                        step="0.01"
+                        value={programFormData.pointsRedemptionValue}
+                        onChange={(e) => setProgramFormData({ ...programFormData, pointsRedemptionValue: e.target.value })}
+                        placeholder="0.01"
+                        data-testid="input-point-value"
+                      />
+                      <p className="text-xs text-muted-foreground">Dollar value per point when redeeming</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {programFormData.programType === "visits" && (
+                <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium text-sm">Visits Configuration</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="visits-for-reward">Visits Required for Reward</Label>
+                      <Input
+                        id="visits-for-reward"
+                        type="number"
+                        value={programFormData.visitsForReward}
+                        onChange={(e) => setProgramFormData({ ...programFormData, visitsForReward: e.target.value })}
+                        placeholder="10"
+                        data-testid="input-visits-for-reward"
+                      />
+                      <p className="text-xs text-muted-foreground">Number of visits before earning a reward</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {programFormData.programType === "spend" && (
+                <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium text-sm">Spend Configuration</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="spend-threshold">Spend Threshold ($)</Label>
+                      <Input
+                        id="spend-threshold"
+                        type="number"
+                        step="10"
+                        value={programFormData.spendThreshold}
+                        onChange={(e) => setProgramFormData({ ...programFormData, spendThreshold: e.target.value })}
+                        placeholder="100"
+                        data-testid="input-spend-threshold"
+                      />
+                      <p className="text-xs text-muted-foreground">Total amount customer must spend to earn a reward</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {programFormData.programType === "tiered" && (
+                <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium text-sm">Tiered Configuration</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Tiered programs reward customers based on their total spend or points. 
+                    Configure tiers (Bronze, Silver, Gold) with different point multipliers and benefits.
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="tier-points-per-dollar">Base Points per Dollar</Label>
+                      <Input
+                        id="tier-points-per-dollar"
+                        type="number"
+                        step="0.5"
+                        value={programFormData.pointsPerDollar}
+                        onChange={(e) => setProgramFormData({ ...programFormData, pointsPerDollar: e.target.value })}
+                        placeholder="1"
+                        data-testid="input-tier-points-per-dollar"
+                      />
+                      <p className="text-xs text-muted-foreground">Base points (higher tiers get multipliers)</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tier-min-redeem">Minimum Points to Redeem</Label>
+                      <Input
+                        id="tier-min-redeem"
+                        type="number"
+                        value={programFormData.minimumPointsRedeem}
+                        onChange={(e) => setProgramFormData({ ...programFormData, minimumPointsRedeem: e.target.value })}
+                        placeholder="100"
+                        data-testid="input-tier-min-redeem"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (memberFormOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingMember ? "Edit Member" : "Enroll New Member"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelMember} data-testid="button-cancel-member">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitMember}
+                  disabled={!memberFirstName || !memberLastName || !memberEmail || memberMutation.isPending}
+                  data-testid="button-save-member"
+                >
+                  {memberMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingMember ? "Update Member" : "Enroll Member"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmitMember} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>First Name</Label>
+                  <Input
+                    value={memberFirstName}
+                    onChange={(e) => setMemberFirstName(e.target.value)}
+                    placeholder="First name"
+                    data-testid="input-member-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Last Name</Label>
+                  <Input
+                    value={memberLastName}
+                    onChange={(e) => setMemberLastName(e.target.value)}
+                    placeholder="Last name"
+                    data-testid="input-member-last-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={memberEmail}
+                    onChange={(e) => setMemberEmail(e.target.value)}
+                    placeholder="member@example.com"
+                    data-testid="input-member-email"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    value={memberPhone}
+                    onChange={(e) => setMemberPhone(e.target.value)}
+                    placeholder="Phone number"
+                    data-testid="input-member-phone"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Birth Date</Label>
+                  <Input
+                    value={memberBirthDate}
+                    onChange={(e) => setMemberBirthDate(e.target.value)}
+                    placeholder="YYYY-MM-DD"
+                    data-testid="input-member-birth-date"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={memberNotes}
+                  onChange={(e) => setMemberNotes(e.target.value)}
+                  placeholder="Optional notes about this member"
+                  data-testid="input-member-notes"
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (rewardFormOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingReward ? "Edit Reward" : "Create Reward"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelReward} data-testid="button-cancel-reward">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitReward}
+                  disabled={!rewardProgramId || !rewardName || !rewardType || rewardMutation.isPending}
+                  data-testid="button-save-reward"
+                >
+                  {rewardMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingReward ? "Update Reward" : "Create Reward"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmitReward} className="space-y-6">
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Loyalty Program</Label>
+                  <Select value={rewardProgramId} onValueChange={setRewardProgramId}>
+                    <SelectTrigger data-testid="select-reward-program"><SelectValue placeholder="Select program" /></SelectTrigger>
+                    <SelectContent>
+                      {programs.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} ({properties.find(prop => prop.id === p.propertyId)?.name || 'No property'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Which program this reward belongs to</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Reward Name</Label>
+                  <Input
+                    value={rewardName}
+                    onChange={(e) => setRewardName(e.target.value)}
+                    placeholder="Free Appetizer"
+                    data-testid="input-reward-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reward Type</Label>
+                  <Select value={rewardType} onValueChange={setRewardType}>
+                    <SelectTrigger data-testid="select-reward-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="discount">Discount</SelectItem>
+                      <SelectItem value="free_item">Free Item</SelectItem>
+                      <SelectItem value="gift_card">Gift Card</SelectItem>
+                      <SelectItem value="points_multiplier">Points Multiplier</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">How the reward will be applied</p>
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch checked={rewardActive} onCheckedChange={setRewardActive} data-testid="switch-reward-active" />
+                  <Label>Active</Label>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Discount Amount ($)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={rewardDiscountAmount}
+                    onChange={(e) => setRewardDiscountAmount(e.target.value)}
+                    placeholder="5.00"
+                    data-testid="input-reward-discount-amount"
+                  />
+                  <p className="text-xs text-muted-foreground">Fixed dollar amount off</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Discount Percent (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={rewardDiscountPercent}
+                    onChange={(e) => setRewardDiscountPercent(e.target.value)}
+                    placeholder="10"
+                    data-testid="input-reward-discount-percent"
+                  />
+                  <p className="text-xs text-muted-foreground">Percentage off</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Free Menu Item</Label>
+                  <Select value={rewardFreeMenuItemId} onValueChange={setRewardFreeMenuItemId}>
+                    <SelectTrigger data-testid="select-reward-free-item"><SelectValue placeholder="Select item" /></SelectTrigger>
+                    <SelectContent>
+                      {menuItems.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name} (${m.price})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">For Free Item type</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Gift Card Amount ($)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={rewardGiftCardAmount}
+                    onChange={(e) => setRewardGiftCardAmount(e.target.value)}
+                    placeholder="10.00"
+                    data-testid="input-reward-gift-card-amount"
+                  />
+                  <p className="text-xs text-muted-foreground">For Gift Card type</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Points to Redeem</Label>
+                  <Input
+                    type="number"
+                    value={rewardPointsCost}
+                    onChange={(e) => setRewardPointsCost(e.target.value)}
+                    placeholder="100"
+                    data-testid="input-reward-points-cost"
+                  />
+                  <p className="text-xs text-muted-foreground">Points required for manual redemption</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Auto-Award at Points</Label>
+                  <Input
+                    type="number"
+                    value={rewardAutoAwardAtPoints}
+                    onChange={(e) => setRewardAutoAwardAtPoints(e.target.value)}
+                    placeholder="500"
+                    data-testid="input-reward-auto-award"
+                  />
+                  <p className="text-xs text-muted-foreground">Auto-award when member reaches this many points</p>
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch checked={rewardAutoAwardOnce} onCheckedChange={setRewardAutoAwardOnce} data-testid="switch-reward-auto-once" />
+                  <Label>Auto-Award Once Only</Label>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={rewardDescription}
+                  onChange={(e) => setRewardDescription(e.target.value)}
+                  placeholder="Redeem for any appetizer"
+                  data-testid="input-reward-description"
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -565,17 +1106,7 @@ export default function LoyaltyPage() {
             columns={programColumns}
             onAdd={() => { 
               setEditingProgram(null); 
-              setProgramFormData({
-                name: "",
-                propertyId: "",
-                programType: "points",
-                pointsPerDollar: "1",
-                visitsForReward: "10",
-                minimumPointsRedeem: "100",
-                pointsRedemptionValue: "0.01",
-                spendThreshold: "100",
-                active: true,
-              });
+              resetProgramForm();
               setProgramFormOpen(true); 
             }}
             onEdit={(item) => { 
@@ -602,7 +1133,7 @@ export default function LoyaltyPage() {
         <TabsContent value="rewards" className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-4">
             <p className="text-muted-foreground text-sm">Rewards grouped by program</p>
-            <Button onClick={() => { setEditingReward(null); setRewardFormOpen(true); }} data-testid="button-add-reward">
+            <Button onClick={() => { setEditingReward(null); resetRewardForm(); setRewardFormOpen(true); }} data-testid="button-add-reward">
               <Plus className="w-4 h-4 mr-2" />
               Add Reward
             </Button>
@@ -672,7 +1203,7 @@ export default function LoyaltyPage() {
                                   <Button
                                     size="icon"
                                     variant="ghost"
-                                    onClick={() => { setEditingReward(reward); setRewardFormOpen(true); }}
+                                    onClick={() => openEditReward(reward)}
                                     data-testid={`button-edit-reward-${reward.id}`}
                                   >
                                     <Pencil className="w-4 h-4" />
@@ -708,8 +1239,8 @@ export default function LoyaltyPage() {
           <DataTable
             data={members}
             columns={memberColumns}
-            onAdd={() => { setEditingMember(null); setMemberFormOpen(true); }}
-            onEdit={(item) => { setEditingMember(item); setMemberFormOpen(true); }}
+            onAdd={() => { setEditingMember(null); resetMemberForm(); setMemberFormOpen(true); }}
+            onEdit={(item) => openEditMember(item)}
             customActions={memberActions}
             isLoading={membersLoading}
             searchPlaceholder="Search members..."
@@ -718,221 +1249,13 @@ export default function LoyaltyPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={programFormOpen} onOpenChange={(open) => { if (!open) { setProgramFormOpen(false); setEditingProgram(null); }}}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingProgram ? "Edit Program" : "Create Loyalty Program"}</DialogTitle>
-            <DialogDescription>Configure your loyalty program settings</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="space-y-2">
-              <Label htmlFor="prog-name">Program Name</Label>
-              <Input
-                id="prog-name"
-                value={programFormData.name}
-                onChange={(e) => setProgramFormData({ ...programFormData, name: e.target.value })}
-                placeholder="Rewards Program"
-                data-testid="input-program-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Program Type</Label>
-              <Select
-                value={programFormData.programType}
-                onValueChange={(value: "points" | "visits" | "spend" | "tiered") => 
-                  setProgramFormData({ ...programFormData, programType: value })
-                }
-              >
-                <SelectTrigger data-testid="select-program-type">
-                  <SelectValue placeholder="Select program type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="points">Points Based - Earn points per dollar spent</SelectItem>
-                  <SelectItem value="visits">Visits Based - Reward after X visits</SelectItem>
-                  <SelectItem value="spend">Spend Based - Reward after spending $X</SelectItem>
-                  <SelectItem value="tiered">Tiered Rewards - Multiple reward levels</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {programFormData.programType === "points" && (
-              <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-medium text-sm">Points Configuration</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="points-per-dollar">Points per Dollar</Label>
-                    <Input
-                      id="points-per-dollar"
-                      type="number"
-                      step="0.5"
-                      value={programFormData.pointsPerDollar}
-                      onChange={(e) => setProgramFormData({ ...programFormData, pointsPerDollar: e.target.value })}
-                      placeholder="1"
-                      data-testid="input-points-per-dollar"
-                    />
-                    <p className="text-xs text-muted-foreground">Points earned for each $1 spent</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="min-redeem">Minimum Points to Redeem</Label>
-                    <Input
-                      id="min-redeem"
-                      type="number"
-                      value={programFormData.minimumPointsRedeem}
-                      onChange={(e) => setProgramFormData({ ...programFormData, minimumPointsRedeem: e.target.value })}
-                      placeholder="100"
-                      data-testid="input-min-redeem"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="point-value">Point Redemption Value ($)</Label>
-                  <Input
-                    id="point-value"
-                    type="number"
-                    step="0.01"
-                    value={programFormData.pointsRedemptionValue}
-                    onChange={(e) => setProgramFormData({ ...programFormData, pointsRedemptionValue: e.target.value })}
-                    placeholder="0.01"
-                    data-testid="input-point-value"
-                  />
-                  <p className="text-xs text-muted-foreground">Dollar value per point when redeeming (e.g., 0.01 = 1 cent per point)</p>
-                </div>
-              </div>
-            )}
-            
-            {programFormData.programType === "visits" && (
-              <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-medium text-sm">Visits Configuration</h4>
-                <div className="space-y-2">
-                  <Label htmlFor="visits-for-reward">Visits Required for Reward</Label>
-                  <Input
-                    id="visits-for-reward"
-                    type="number"
-                    value={programFormData.visitsForReward}
-                    onChange={(e) => setProgramFormData({ ...programFormData, visitsForReward: e.target.value })}
-                    placeholder="10"
-                    data-testid="input-visits-for-reward"
-                  />
-                  <p className="text-xs text-muted-foreground">Number of visits before earning a reward (e.g., "Buy 10, Get 1 Free")</p>
-                </div>
-              </div>
-            )}
-            
-            {programFormData.programType === "spend" && (
-              <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-medium text-sm">Spend Configuration</h4>
-                <div className="space-y-2">
-                  <Label htmlFor="spend-threshold">Spend Threshold ($)</Label>
-                  <Input
-                    id="spend-threshold"
-                    type="number"
-                    step="10"
-                    value={programFormData.spendThreshold}
-                    onChange={(e) => setProgramFormData({ ...programFormData, spendThreshold: e.target.value })}
-                    placeholder="100"
-                    data-testid="input-spend-threshold"
-                  />
-                  <p className="text-xs text-muted-foreground">Total amount customer must spend to earn a reward</p>
-                </div>
-              </div>
-            )}
-            
-            {programFormData.programType === "tiered" && (
-              <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-medium text-sm">Tiered Configuration</h4>
-                <p className="text-sm text-muted-foreground">
-                  Tiered programs reward customers based on their total spend or points. 
-                  Configure tiers (Bronze, Silver, Gold) with different point multipliers and benefits.
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="tier-points-per-dollar">Base Points per Dollar</Label>
-                    <Input
-                      id="tier-points-per-dollar"
-                      type="number"
-                      step="0.5"
-                      value={programFormData.pointsPerDollar}
-                      onChange={(e) => setProgramFormData({ ...programFormData, pointsPerDollar: e.target.value })}
-                      placeholder="1"
-                      data-testid="input-tier-points-per-dollar"
-                    />
-                    <p className="text-xs text-muted-foreground">Base points (higher tiers get multipliers)</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tier-min-redeem">Minimum Points to Redeem</Label>
-                    <Input
-                      id="tier-min-redeem"
-                      type="number"
-                      value={programFormData.minimumPointsRedeem}
-                      onChange={(e) => setProgramFormData({ ...programFormData, minimumPointsRedeem: e.target.value })}
-                      placeholder="100"
-                      data-testid="input-tier-min-redeem"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => { setProgramFormOpen(false); setEditingProgram(null); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                const data: any = {
-                  name: programFormData.name,
-                  ...scopePayload,
-                  programType: programFormData.programType,
-                  active: programFormData.active,
-                };
-                if (programFormData.programType === "points" || programFormData.programType === "tiered") {
-                  data.pointsPerDollar = programFormData.pointsPerDollar;
-                  data.minimumPointsRedeem = parseInt(programFormData.minimumPointsRedeem) || 100;
-                  data.pointsRedemptionValue = programFormData.pointsRedemptionValue;
-                }
-                if (programFormData.programType === "visits") {
-                  data.visitsForReward = parseInt(programFormData.visitsForReward) || 10;
-                }
-                programMutation.mutate(data);
-              }}
-              disabled={!programFormData.name || programMutation.isPending}
-              data-testid="button-save-program"
-            >
-              {editingProgram ? "Update Program" : "Create Program"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <EntityForm
-        open={memberFormOpen}
-        onClose={() => { setMemberFormOpen(false); setEditingMember(null); }}
-        onSubmit={(data) => memberMutation.mutate(data)}
-        schema={insertLoyaltyMemberSchema}
-        fields={memberFormFields}
-        title={editingMember ? "Edit Member" : "Enroll New Member"}
-        initialData={editingMember || undefined}
-        isLoading={memberMutation.isPending}
-      />
-
-      <EntityForm
-        open={rewardFormOpen}
-        onClose={() => { setRewardFormOpen(false); setEditingReward(null); }}
-        onSubmit={(data) => rewardMutation.mutate(data)}
-        schema={insertLoyaltyRewardSchema}
-        fields={rewardFormFields}
-        title={editingReward ? "Edit Reward" : "Create Reward"}
-        initialData={editingReward || undefined}
-        isLoading={rewardMutation.isPending}
-      />
-
       <Dialog open={lookupDialogOpen} onOpenChange={setLookupDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Lookup Loyalty Member</DialogTitle>
             <DialogDescription>Enter email to find member</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
@@ -945,7 +1268,7 @@ export default function LoyaltyPage() {
               />
             </div>
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setLookupDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => lookupMutation.mutate(lookupEmail)}
@@ -960,14 +1283,14 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={memberDetailOpen} onOpenChange={setMemberDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Member Details</DialogTitle>
             <DialogDescription>
               {selectedMember?.firstName} {selectedMember?.lastName}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
           {selectedMember && (
             <Tabs defaultValue="info" className="mt-4">
               <TabsList>
@@ -994,7 +1317,6 @@ export default function LoyaltyPage() {
                   </div>
                 </div>
 
-                {/* Program Enrollments */}
                 <div className="space-y-3">
                   <h4 className="font-medium">Program Enrollments</h4>
                   {selectedMember.enrollments && selectedMember.enrollments.length > 0 ? (
@@ -1098,12 +1420,12 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={earnPointsOpen} onOpenChange={(open) => { setEarnPointsOpen(open); if (!open) setSelectedEnrollmentId(""); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Add Points</DialogTitle>
             <DialogDescription>Add points to {selectedMember?.firstName}'s account</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             {selectedMember?.enrollments && selectedMember.enrollments.length > 1 && (
               <div className="space-y-2">
                 <Label>Target Program (optional)</Label>
@@ -1148,7 +1470,7 @@ export default function LoyaltyPage() {
               </div>
             </div>
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setEarnPointsOpen(false)}>Cancel</Button>
             <Button
               onClick={() => selectedMember && earnMutation.mutate({
@@ -1167,14 +1489,14 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={redeemRewardOpen} onOpenChange={(open) => { setRedeemRewardOpen(open); if (!open) { setSelectedRewardId(""); setSelectedEnrollmentId(""); }}}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Redeem Reward</DialogTitle>
             <DialogDescription>
               Select which program to redeem from
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Select Program</Label>
@@ -1218,7 +1540,7 @@ export default function LoyaltyPage() {
               )}
             </div>
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setRedeemRewardOpen(false)}>Cancel</Button>
             <Button
               onClick={() => {
@@ -1242,14 +1564,14 @@ export default function LoyaltyPage() {
       </Dialog>
 
       <Dialog open={enrollInProgramOpen} onOpenChange={(open) => { setEnrollInProgramOpen(open); if (!open) setEnrollProgramId(""); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Enroll in Program</DialogTitle>
             <DialogDescription>
               Select a loyalty program to enroll {selectedMember?.firstName} in
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label>Select Program</Label>
               <Select value={enrollProgramId} onValueChange={setEnrollProgramId}>
@@ -1273,7 +1595,7 @@ export default function LoyaltyPage() {
               </p>
             )}
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setEnrollInProgramOpen(false)}>Cancel</Button>
             <Button
               onClick={() => {

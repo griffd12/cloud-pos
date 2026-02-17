@@ -19,14 +19,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -71,7 +63,7 @@ const DEFAULT_FORM = {
 export default function OvertimeRulesPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<OvertimeRule | null>(null);
   const [ruleForm, setRuleForm] = useState(DEFAULT_FORM);
 
@@ -99,7 +91,8 @@ export default function OvertimeRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Overtime rule created." });
-      setIsDialogOpen(false);
+      setFormOpen(false);
+      setEditingRule(null);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
     },
@@ -114,7 +107,7 @@ export default function OvertimeRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Overtime rule updated." });
-      setIsDialogOpen(false);
+      setFormOpen(false);
       setEditingRule(null);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/overtime-rules"] });
@@ -144,7 +137,7 @@ export default function OvertimeRulesPage() {
 
   const openCreateDialog = () => {
     resetForm();
-    setIsDialogOpen(true);
+    setFormOpen(true);
   };
 
   const openEditDialog = (rule: OvertimeRule) => {
@@ -163,10 +156,11 @@ export default function OvertimeRulesPage() {
       weekStartDay: rule.weekStartDay || 0,
       active: rule.active !== false,
     });
-    setIsDialogOpen(true);
+    setFormOpen(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     const data = {
       ...ruleForm,
       ...scopePayload,
@@ -180,7 +174,193 @@ export default function OvertimeRulesPage() {
     }
   };
 
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingRule(null);
+    resetForm();
+  };
+
   const activeRule = rules.find(r => r.active);
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>{editingRule ? "Edit Overtime Rule" : "Create Overtime Rule"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!ruleForm.name || createMutation.isPending || updateMutation.isPending}
+                  data-testid="button-save-rule"
+                >
+                  {editingRule ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>Rule Name</Label>
+                  <Input
+                    value={ruleForm.name}
+                    onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
+                    placeholder="e.g., California Labor Law"
+                    data-testid="input-rule-name"
+                  />
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Input
+                    value={ruleForm.description}
+                    onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value })}
+                    placeholder="Brief description of this rule"
+                    data-testid="input-description"
+                  />
+                </div>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-4">
+                <h4 className="font-medium">Daily Overtime Settings</h4>
+                
+                <div className="flex items-center justify-between">
+                  <Label>Enable Daily Overtime</Label>
+                  <Switch
+                    checked={ruleForm.enableDailyOvertime}
+                    onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableDailyOvertime: v })}
+                    data-testid="switch-daily-ot"
+                  />
+                </div>
+
+                {ruleForm.enableDailyOvertime && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>OT After (hours)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={ruleForm.dailyOvertimeThreshold}
+                        onChange={(e) => setRuleForm({ ...ruleForm, dailyOvertimeThreshold: e.target.value })}
+                        data-testid="input-daily-ot-threshold"
+                      />
+                    </div>
+                    <div>
+                      <Label>OT Multiplier</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        value={ruleForm.overtimeMultiplier}
+                        onChange={(e) => setRuleForm({ ...ruleForm, overtimeMultiplier: e.target.value })}
+                        data-testid="input-ot-multiplier"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Enable Daily Double Time</Label>
+                    <p className="text-xs text-muted-foreground">For states like California</p>
+                  </div>
+                  <Switch
+                    checked={ruleForm.enableDailyDoubleTime}
+                    onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableDailyDoubleTime: v })}
+                    data-testid="switch-daily-dt"
+                  />
+                </div>
+
+                {ruleForm.enableDailyDoubleTime && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>Double After (hours)</Label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={ruleForm.dailyDoubleTimeThreshold}
+                        onChange={(e) => setRuleForm({ ...ruleForm, dailyDoubleTimeThreshold: e.target.value })}
+                        data-testid="input-daily-dt-threshold"
+                      />
+                    </div>
+                    <div>
+                      <Label>Double Multiplier</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        value={ruleForm.doubleTimeMultiplier}
+                        onChange={(e) => setRuleForm({ ...ruleForm, doubleTimeMultiplier: e.target.value })}
+                        data-testid="input-dt-multiplier"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-4">
+                <h4 className="font-medium">Weekly Overtime Settings</h4>
+                
+                <div className="flex items-center justify-between">
+                  <Label>Enable Weekly Overtime</Label>
+                  <Switch
+                    checked={ruleForm.enableWeeklyOvertime}
+                    onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableWeeklyOvertime: v })}
+                    data-testid="switch-weekly-ot"
+                  />
+                </div>
+
+                {ruleForm.enableWeeklyOvertime && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>OT After (hours/week)</Label>
+                      <Input
+                        type="number"
+                        step="1"
+                        value={ruleForm.weeklyOvertimeThreshold}
+                        onChange={(e) => setRuleForm({ ...ruleForm, weeklyOvertimeThreshold: e.target.value })}
+                        data-testid="input-weekly-ot-threshold"
+                      />
+                    </div>
+                    <div>
+                      <Label>Week Starts On</Label>
+                      <Select
+                        value={String(ruleForm.weekStartDay)}
+                        onValueChange={(v) => setRuleForm({ ...ruleForm, weekStartDay: parseInt(v) })}
+                      >
+                        <SelectTrigger data-testid="select-week-start">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {WEEK_DAYS.map((day) => (
+                            <SelectItem key={day.value} value={day.value}>
+                              {day.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Label>Active</Label>
+                <Switch
+                  checked={ruleForm.active}
+                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, active: v })}
+                  data-testid="switch-active"
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -345,187 +525,6 @@ export default function OvertimeRulesPage() {
           </Card>
         </>
       )}
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>
-              {editingRule ? "Edit Overtime Rule" : "Create Overtime Rule"}
-            </DialogTitle>
-            <DialogDescription>
-              Configure overtime thresholds and multipliers for this property
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Rule Name</Label>
-                  <Input
-                    value={ruleForm.name}
-                    onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
-                    placeholder="e.g., California Labor Law"
-                    data-testid="input-rule-name"
-                  />
-                </div>
-                <div>
-                  <Label>Description</Label>
-                  <Input
-                    value={ruleForm.description}
-                    onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value })}
-                    placeholder="Brief description of this rule"
-                    data-testid="input-description"
-                  />
-                </div>
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-4">
-                <h4 className="font-medium">Daily Overtime Settings</h4>
-                
-                <div className="flex items-center justify-between">
-                  <Label>Enable Daily Overtime</Label>
-                  <Switch
-                    checked={ruleForm.enableDailyOvertime}
-                    onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableDailyOvertime: v })}
-                    data-testid="switch-daily-ot"
-                  />
-                </div>
-
-                {ruleForm.enableDailyOvertime && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>OT After (hours)</Label>
-                      <Input
-                        type="number"
-                        step="0.25"
-                        value={ruleForm.dailyOvertimeThreshold}
-                        onChange={(e) => setRuleForm({ ...ruleForm, dailyOvertimeThreshold: e.target.value })}
-                        data-testid="input-daily-ot-threshold"
-                      />
-                    </div>
-                    <div>
-                      <Label>OT Multiplier</Label>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        value={ruleForm.overtimeMultiplier}
-                        onChange={(e) => setRuleForm({ ...ruleForm, overtimeMultiplier: e.target.value })}
-                        data-testid="input-ot-multiplier"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Enable Daily Double Time</Label>
-                    <p className="text-xs text-muted-foreground">For states like California</p>
-                  </div>
-                  <Switch
-                    checked={ruleForm.enableDailyDoubleTime}
-                    onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableDailyDoubleTime: v })}
-                    data-testid="switch-daily-dt"
-                  />
-                </div>
-
-                {ruleForm.enableDailyDoubleTime && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Double After (hours)</Label>
-                      <Input
-                        type="number"
-                        step="0.25"
-                        value={ruleForm.dailyDoubleTimeThreshold}
-                        onChange={(e) => setRuleForm({ ...ruleForm, dailyDoubleTimeThreshold: e.target.value })}
-                        data-testid="input-daily-dt-threshold"
-                      />
-                    </div>
-                    <div>
-                      <Label>Double Multiplier</Label>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        value={ruleForm.doubleTimeMultiplier}
-                        onChange={(e) => setRuleForm({ ...ruleForm, doubleTimeMultiplier: e.target.value })}
-                        data-testid="input-dt-multiplier"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-4">
-                <h4 className="font-medium">Weekly Overtime Settings</h4>
-                
-                <div className="flex items-center justify-between">
-                  <Label>Enable Weekly Overtime</Label>
-                  <Switch
-                    checked={ruleForm.enableWeeklyOvertime}
-                    onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableWeeklyOvertime: v })}
-                    data-testid="switch-weekly-ot"
-                  />
-                </div>
-
-                {ruleForm.enableWeeklyOvertime && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>OT After (hours/week)</Label>
-                      <Input
-                        type="number"
-                        step="1"
-                        value={ruleForm.weeklyOvertimeThreshold}
-                        onChange={(e) => setRuleForm({ ...ruleForm, weeklyOvertimeThreshold: e.target.value })}
-                        data-testid="input-weekly-ot-threshold"
-                      />
-                    </div>
-                    <div>
-                      <Label>Week Starts On</Label>
-                      <Select
-                        value={String(ruleForm.weekStartDay)}
-                        onValueChange={(v) => setRuleForm({ ...ruleForm, weekStartDay: parseInt(v) })}
-                      >
-                        <SelectTrigger data-testid="select-week-start">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {WEEK_DAYS.map((day) => (
-                            <SelectItem key={day.value} value={day.value}>
-                              {day.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label>Active</Label>
-                <Switch
-                  checked={ruleForm.active}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, active: v })}
-                  data-testid="switch-active"
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!ruleForm.name || createMutation.isPending || updateMutation.isPending}
-              data-testid="button-save-rule"
-            >
-              {editingRule ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -127,11 +127,18 @@ interface CreatedServiceHost extends ServiceHost {
   encryptionKey: string;
 }
 
+const serviceTypeOptions = [
+  { value: "caps", label: "CAPS - Offline Transaction Processing", description: "The main brain for offline mode. Stores local database, handles transactions when cloud is unavailable." },
+  { value: "print", label: "Print Service", description: "Routes print jobs to network printers. Handles receipts, kitchen tickets, reports." },
+  { value: "kds", label: "KDS Controller", description: "Manages kitchen display routing and order flow." },
+  { value: "payment", label: "Payment Controller", description: "Handles payment terminal communication and authorization." },
+];
+
 export default function ServiceHostsPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createFormOpen, setCreateFormOpen] = useState(false);
   const [createdHost, setCreatedHost] = useState<CreatedServiceHost | null>(null);
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
 
@@ -181,6 +188,21 @@ export default function ServiceHostsPage() {
     refetchInterval: 30000,
   });
 
+  const form = useForm<ServiceHostFormData>({
+    resolver: zodResolver(serviceHostFormSchema),
+    defaultValues: {
+      name: "",
+      hostWorkstationId: "",
+      serviceType: "caps",
+    },
+  });
+
+  const selectedServiceType = form.watch("serviceType");
+
+  const filteredWorkstations = contextPropertyId
+    ? workstations.filter(ws => ws.propertyId === contextPropertyId)
+    : workstations;
+
   const createServiceHostMutation = useMutation({
     mutationFn: async (data: ServiceHostFormData) => {
       const res = await apiRequest("POST", "/api/service-hosts", {
@@ -200,7 +222,8 @@ export default function ServiceHostsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-hosts", filterKeys] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-hosts/status-dashboard", filterKeys] });
       queryClient.invalidateQueries({ queryKey: ["/api/workstation-service-bindings", filterKeys] });
-      setCreateDialogOpen(false);
+      setCreateFormOpen(false);
+      form.reset();
       setCreatedHost(data);
       setTokenDialogOpen(true);
       toast({ title: "Service registered successfully" });
@@ -237,7 +260,6 @@ export default function ServiceHostsPage() {
 
   const getServiceBindingsForWorkstation = (workstationId: string) => {
     const bindings = allBindings.filter(b => b.workstationId === workstationId && b.active);
-    // Deduplicate by serviceType (keep first occurrence)
     const uniqueBindings = bindings.reduce((acc, binding) => {
       if (!acc.find(b => b.serviceType === binding.serviceType)) {
         acc.push(binding);
@@ -289,6 +311,200 @@ export default function ServiceHostsPage() {
         return <Badge variant="secondary">Info</Badge>;
     }
   };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: ServiceHostFormData) => {
+      createServiceHostMutation.mutate(data);
+    })();
+  };
+
+  const handleCancel = () => {
+    setCreateFormOpen(false);
+    form.reset();
+  };
+
+  if (createFormOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>Register Service</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-register"
+                  disabled={createServiceHostMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createServiceHostMutation.isPending ? "Registering..." : "Register Host"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Host Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Store-001 Primary Host" {...field} data-testid="input-host-name" />
+                        </FormControl>
+                        <FormDescription>A descriptive name for this service</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="serviceType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Service Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-service-type">
+                              <SelectValue placeholder="Select service type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {serviceTypeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {serviceTypeOptions.find(o => o.value === selectedServiceType)?.description || 
+                           "Select the type of service this host will provide"}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="hostWorkstationId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Host Workstation</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-host-workstation">
+                              <SelectValue placeholder="Select host workstation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {filteredWorkstations.map((ws) => (
+                              <SelectItem key={ws.id} value={ws.id}>
+                                {ws.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          The workstation that will run this service. CAL Wizard will install the service on this device.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+
+        <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-primary" />
+                Service Registered
+              </DialogTitle>
+              <DialogDescription>
+                Save these credentials securely. The token is only shown once and cannot be retrieved later.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {createdHost && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-md">
+                    <p className="text-sm text-amber-600 font-medium mb-2">
+                      Copy these credentials now - they will not be shown again!
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Service ID</label>
+                    <div className="flex gap-2">
+                      <Input value={createdHost.id} readOnly className="font-mono text-xs" />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(createdHost.id, "Service ID")}
+                        data-testid="button-copy-host-id"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Registration Token</label>
+                    <div className="flex gap-2">
+                      <Input value={createdHost.registrationToken} readOnly className="font-mono text-xs" />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(createdHost.registrationToken, "Registration Token")}
+                        data-testid="button-copy-token"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Encryption Key</label>
+                    <div className="flex gap-2">
+                      <Input value={createdHost.encryptionKey} readOnly className="font-mono text-xs" />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(createdHost.encryptionKey, "Encryption Key")}
+                        data-testid="button-copy-encryption-key"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="pt-4 border-t mt-4">
+              <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
+                I've Saved These Credentials
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -516,7 +732,10 @@ export default function ServiceHostsPage() {
                   Services registered for on-premise deployment. Each service receives a unique token for authentication.
                 </CardDescription>
               </div>
-              <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-add-service">
+              <Button onClick={() => {
+                form.reset({ name: "", hostWorkstationId: "", serviceType: "caps" });
+                setCreateFormOpen(true);
+              }} data-testid="button-add-service">
                 <Plus className="h-4 w-4 mr-2" />
                 Register Service
               </Button>
@@ -693,7 +912,7 @@ export default function ServiceHostsPage() {
                     <Settings className="h-4 w-4 mt-0.5 text-primary" />
                     <div>
                       <strong className="text-foreground">KDS Controller</strong> - Manages kitchen display 
-                      tickets locally.
+                      routing and order flow.
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
@@ -740,17 +959,8 @@ export default function ServiceHostsPage() {
         </TabsContent>
       </Tabs>
 
-      <CreateServiceHostDialog
-        open={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
-        workstations={workstations}
-        onSubmit={(data) => createServiceHostMutation.mutate(data)}
-        isLoading={createServiceHostMutation.isPending}
-        contextPropertyId={contextPropertyId}
-      />
-
       <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
@@ -761,64 +971,64 @@ export default function ServiceHostsPage() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          {createdHost && (
-            <div className="space-y-4">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-md">
-                <p className="text-sm text-amber-600 font-medium mb-2">
-                  Copy these credentials now - they will not be shown again!
-                </p>
-              </div>
+          <div className="space-y-4">
+            {createdHost && (
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-md">
+                  <p className="text-sm text-amber-600 font-medium mb-2">
+                    Copy these credentials now - they will not be shown again!
+                  </p>
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Service ID</label>
-                <div className="flex gap-2">
-                  <Input value={createdHost.id} readOnly className="font-mono text-xs" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(createdHost.id, "Service ID")}
-                    data-testid="button-copy-host-id"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Service ID</label>
+                  <div className="flex gap-2">
+                    <Input value={createdHost.id} readOnly className="font-mono text-xs" />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(createdHost.id, "Service ID")}
+                      data-testid="button-copy-host-id"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Registration Token</label>
+                  <div className="flex gap-2">
+                    <Input value={createdHost.registrationToken} readOnly className="font-mono text-xs" />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(createdHost.registrationToken, "Registration Token")}
+                      data-testid="button-copy-token"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Encryption Key</label>
+                  <div className="flex gap-2">
+                    <Input value={createdHost.encryptionKey} readOnly className="font-mono text-xs" />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(createdHost.encryptionKey, "Encryption Key")}
+                      data-testid="button-copy-encryption-key"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Registration Token</label>
-                <div className="flex gap-2">
-                  <Input value={createdHost.registrationToken} readOnly className="font-mono text-xs" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(createdHost.registrationToken, "Registration Token")}
-                    data-testid="button-copy-token"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Encryption Key</label>
-                <div className="flex gap-2">
-                  <Input value={createdHost.encryptionKey} readOnly className="font-mono text-xs" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(createdHost.encryptionKey, "Encryption Key")}
-                    data-testid="button-copy-encryption-key"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+            )}
           </div>
 
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
               I've Saved These Credentials
             </Button>
@@ -826,142 +1036,5 @@ export default function ServiceHostsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-interface CreateServiceHostDialogProps {
-  open: boolean;
-  onClose: () => void;
-  workstations: Workstation[];
-  onSubmit: (data: ServiceHostFormData) => void;
-  isLoading: boolean;
-  contextPropertyId: string | null;
-}
-
-function CreateServiceHostDialog({ open, onClose, workstations, onSubmit, isLoading, contextPropertyId }: CreateServiceHostDialogProps) {
-  const form = useForm<ServiceHostFormData>({
-    resolver: zodResolver(serviceHostFormSchema),
-    defaultValues: {
-      name: "",
-      hostWorkstationId: "",
-      serviceType: "caps",
-    },
-  });
-
-  const selectedServiceType = form.watch("serviceType");
-  
-  const filteredWorkstations = contextPropertyId
-    ? workstations.filter(ws => ws.propertyId === contextPropertyId)
-    : workstations;
-
-  const handleSubmit = (data: ServiceHostFormData) => {
-    onSubmit(data);
-  };
-
-  const serviceTypeOptions = [
-    { value: "caps", label: "CAPS - Offline Transaction Processing", description: "The main brain for offline mode. Stores local database, handles transactions when cloud is unavailable." },
-    { value: "print", label: "Print Service", description: "Routes print jobs to network printers. Handles receipts, kitchen tickets, reports." },
-    { value: "kds", label: "KDS Controller", description: "Manages kitchen display routing and order flow." },
-    { value: "payment", label: "Payment Controller", description: "Handles payment terminal communication and authorization." },
-  ];
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Register Service</DialogTitle>
-          <DialogDescription>
-            Register a new on-premise service. You'll receive authentication credentials for the service to connect to the cloud.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Host Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Store-001 Primary Host" {...field} data-testid="input-host-name" />
-                  </FormControl>
-                  <FormDescription>A descriptive name for this service</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="serviceType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Service Type</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-service-type">
-                        <SelectValue placeholder="Select service type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {serviceTypeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    {serviceTypeOptions.find(o => o.value === selectedServiceType)?.description || 
-                     "Select the type of service this host will provide"}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-                control={form.control}
-                name="hostWorkstationId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Host Workstation</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-host-workstation">
-                          <SelectValue placeholder="Select host workstation" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {filteredWorkstations.map((ws) => (
-                          <SelectItem key={ws.id} value={ws.id}>
-                            {ws.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      The workstation that will run this service. CAL Wizard will install the service on this device.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-            </div>
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading} data-testid="button-register">
-                {isLoading ? "Registering..." : "Register Host"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
   );
 }

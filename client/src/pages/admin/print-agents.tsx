@@ -151,6 +151,7 @@ export default function PrintAgentsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/print-agents", filterKeys] });
       setFormOpen(false);
+      setEditingItem(null);
       form.reset();
       if (data.agentToken) {
         setNewAgentToken(data.agentToken);
@@ -238,7 +239,6 @@ export default function PrintAgentsPage() {
   };
 
   const handleAdd = () => {
-    console.log("handleAdd called - opening form dialog");
     setEditingItem(null);
     const defaultPropertyId = contextPropertyId || properties[0]?.id || undefined;
     form.reset({
@@ -247,15 +247,23 @@ export default function PrintAgentsPage() {
       description: "",
     });
     setFormOpen(true);
-    console.log("formOpen set to true");
   };
 
-  const onSubmit = (data: FormData) => {
-    if (editingItem) {
-      updateMutation.mutate({ ...data, id: editingItem.id });
-    } else {
-      createMutation.mutate({ ...data, ...scopePayload });
-    }
+  const onSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: FormData) => {
+      if (editingItem) {
+        updateMutation.mutate({ ...data, id: editingItem.id });
+      } else {
+        createMutation.mutate({ ...data, ...scopePayload });
+      }
+    })();
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    form.reset();
   };
 
   const copyToClipboard = (text: string) => {
@@ -273,6 +281,178 @@ export default function PrintAgentsPage() {
   };
 
   const displayToken = newAgentToken || regeneratedToken;
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>{editingItem ? "Edit Print Agent" : "Add Print Agent"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-agent">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save-agent"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={onSubmit}
+                >
+                  {createMutation.isPending || updateMutation.isPending ? (
+                    <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  {editingItem ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={onSubmit} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Kitchen Agent" {...field} data-testid="input-agent-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="propertyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Property (Optional)</FormLabel>
+                        <Select
+                          value={field.value || "__global__"}
+                          onValueChange={(val) => field.onChange(val === "__global__" ? undefined : val)}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-property">
+                              <SelectValue placeholder="Global (all properties)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__global__">Global (all properties)</SelectItem>
+                            {properties.map((prop) => (
+                              <SelectItem key={prop.id} value={prop.id}>
+                                {prop.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Optionally restrict this agent to a specific property
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Describe the agent's purpose or location..."
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-agent-description"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+
+        <Dialog open={tokenDialogOpen} onOpenChange={(open) => {
+          setTokenDialogOpen(open);
+          if (!open) {
+            setNewAgentToken(null);
+            setRegeneratedToken(null);
+          }
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Agent Token</DialogTitle>
+              <DialogDescription>
+                Copy this token now. It will not be shown again.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Alert>
+                <AlertTitle>Important</AlertTitle>
+                <AlertDescription>
+                  Save this token securely. You will need it to configure the print agent.
+                  If you lose it, you can regenerate a new token, but the old one will stop working.
+                </AlertDescription>
+              </Alert>
+              <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                <code className="flex-1 text-sm break-all font-mono" data-testid="text-agent-token">
+                  {displayToken}
+                </code>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => displayToken && copyToClipboard(displayToken)}
+                  data-testid="button-copy-token"
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <DialogFooter className="pt-4 border-t mt-4">
+              <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
+                Done
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Regenerate Token?</DialogTitle>
+              <DialogDescription>
+                This will invalidate the current token. Any agent using the old token will need to be updated.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="pt-4 border-t mt-4">
+              <Button variant="outline" onClick={() => setRegenerateConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => agentToRegenerate && regenerateTokenMutation.mutate(agentToRegenerate.id)}
+                disabled={regenerateTokenMutation.isPending}
+                data-testid="button-confirm-regenerate"
+              >
+                {regenerateTokenMutation.isPending ? (
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                Regenerate
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -358,105 +538,6 @@ export default function PrintAgentsPage() {
         ]}
       />
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen} modal={true}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col z-[9999]">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Print Agent" : "Add Print Agent"}</DialogTitle>
-            <DialogDescription>
-              {editingItem ? "Update the print agent details below." : "Configure a new print agent to relay print jobs to your local printers."}
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Kitchen Agent" {...field} data-testid="input-agent-name" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="propertyId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Property (Optional)</FormLabel>
-                    <Select
-                      value={field.value || "__global__"}
-                      onValueChange={(val) => field.onChange(val === "__global__" ? undefined : val)}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-property">
-                          <SelectValue placeholder="Global (all properties)" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="z-[10000]">
-                        <SelectItem value="__global__">Global (all properties)</SelectItem>
-                        {properties.map((prop) => (
-                          <SelectItem key={prop.id} value={prop.id}>
-                            {prop.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Optionally restrict this agent to a specific property
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description (Optional)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Describe the agent's purpose or location..."
-                        {...field}
-                        value={field.value || ""}
-                        data-testid="input-agent-description"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              </div>
-              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-                <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="button-save-agent"
-                >
-                  {createMutation.isPending || updateMutation.isPending ? (
-                    <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  {editingItem ? "Update" : "Create"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={tokenDialogOpen} onOpenChange={(open) => {
         setTokenDialogOpen(open);
         if (!open) {
@@ -464,36 +545,36 @@ export default function PrintAgentsPage() {
           setRegeneratedToken(null);
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Agent Token</DialogTitle>
             <DialogDescription>
               Copy this token now. It will not be shown again.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          <Alert>
-            <AlertTitle>Important</AlertTitle>
-            <AlertDescription>
-              Save this token securely. You will need it to configure the print agent.
-              If you lose it, you can regenerate a new token, but the old one will stop working.
-            </AlertDescription>
-          </Alert>
-          <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-            <code className="flex-1 text-sm break-all font-mono" data-testid="text-agent-token">
-              {displayToken}
-            </code>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => displayToken && copyToClipboard(displayToken)}
-              data-testid="button-copy-token"
-            >
-              <Copy className="w-4 h-4" />
-            </Button>
+          <div className="space-y-4">
+            <Alert>
+              <AlertTitle>Important</AlertTitle>
+              <AlertDescription>
+                Save this token securely. You will need it to configure the print agent.
+                If you lose it, you can regenerate a new token, but the old one will stop working.
+              </AlertDescription>
+            </Alert>
+            <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+              <code className="flex-1 text-sm break-all font-mono" data-testid="text-agent-token">
+                {displayToken}
+              </code>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => displayToken && copyToClipboard(displayToken)}
+                data-testid="button-copy-token"
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button onClick={() => setTokenDialogOpen(false)} data-testid="button-close-token-dialog">
               Done
             </Button>
@@ -502,14 +583,14 @@ export default function PrintAgentsPage() {
       </Dialog>
 
       <Dialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Regenerate Token?</DialogTitle>
             <DialogDescription>
               This will invalidate the current token. Any agent using the old token will need to be updated.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setRegenerateConfirmOpen(false)}>
               Cancel
             </Button>

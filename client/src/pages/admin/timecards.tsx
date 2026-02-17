@@ -17,13 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Collapsible,
   CollapsibleContent,
@@ -294,6 +288,184 @@ export default function TimecardsPage() {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const pendingExceptions = exceptions.filter((e) => e.status === "pending");
+
+  const handleTimecardSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!editForm.reason.trim()) {
+      toast({ title: "Error", description: "Edit reason is required", variant: "destructive" });
+      return;
+    }
+    updateTimecardMutation.mutate({
+      id: editingTimecard!.id,
+      clockInTime: editForm.clockIn ? `${editingTimecard!.businessDate}T${editForm.clockIn}:00` : undefined,
+      clockOutTime: editForm.clockOut ? `${editingTimecard!.businessDate}T${editForm.clockOut}:00` : undefined,
+      reason: editForm.reason,
+    });
+  };
+
+  const handleTimecardCancel = () => {
+    setEditingTimecard(null);
+    setEditForm({ clockIn: "", clockOut: "", reason: "" });
+  };
+
+  const handlePunchSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!punchEditForm.reason.trim()) {
+      toast({ title: "Error", description: "Edit reason is required", variant: "destructive" });
+      return;
+    }
+    if (!punchEditForm.date || !punchEditForm.time) {
+      toast({ title: "Error", description: "Date and time are required", variant: "destructive" });
+      return;
+    }
+    const utcDateTime = fromZonedTime(`${punchEditForm.date}T${punchEditForm.time}:00`, selectedPropertyTimezone);
+    updatePunchMutation.mutate({
+      id: editingPunch!.id,
+      actualTimestamp: utcDateTime.toISOString(),
+      editReason: punchEditForm.reason,
+    });
+  };
+
+  const handlePunchCancel = () => {
+    setEditingPunch(null);
+    setPunchEditForm({ date: "", time: "", reason: "" });
+  };
+
+  if (editingTimecard) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Edit Timecard
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleTimecardCancel} data-testid="button-cancel-timecard">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleTimecardSubmit}
+                  disabled={updateTimecardMutation.isPending}
+                  data-testid="button-save-timecard"
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleTimecardSubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="clockIn">Clock In Time</Label>
+                  <Input
+                    id="clockIn"
+                    type="time"
+                    value={editForm.clockIn}
+                    onChange={(e) => setEditForm({ ...editForm, clockIn: e.target.value })}
+                    data-testid="input-clock-in"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clockOut">Clock Out Time</Label>
+                  <Input
+                    id="clockOut"
+                    type="time"
+                    value={editForm.clockOut}
+                    onChange={(e) => setEditForm({ ...editForm, clockOut: e.target.value })}
+                    data-testid="input-clock-out"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editReason">Edit Reason (Required)</Label>
+                <Textarea
+                  id="editReason"
+                  value={editForm.reason}
+                  onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                  placeholder="Explain why this timecard is being edited..."
+                  data-testid="input-edit-reason"
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (editingPunch) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Edit Time Punch
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handlePunchCancel} data-testid="button-cancel-punch">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handlePunchSubmit}
+                  disabled={updatePunchMutation.isPending}
+                  data-testid="button-save-punch"
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePunchSubmit} className="space-y-6">
+              <div className="p-3 bg-muted rounded-md">
+                <div className="text-sm text-muted-foreground mb-1">Punch Type</div>
+                <div className="font-medium">
+                  {editingPunch.punchType === "clock_in" ? "Clock In" : "Clock Out"}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="punchDate">Date</Label>
+                  <Input
+                    id="punchDate"
+                    type="date"
+                    value={punchEditForm.date}
+                    onChange={(e) => setPunchEditForm({ ...punchEditForm, date: e.target.value })}
+                    data-testid="input-punch-date"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="punchTime">Time</Label>
+                  <Input
+                    id="punchTime"
+                    type="time"
+                    value={punchEditForm.time}
+                    onChange={(e) => setPunchEditForm({ ...punchEditForm, time: e.target.value })}
+                    data-testid="input-punch-time"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="punchEditReason">Edit Reason (Required)</Label>
+                <Textarea
+                  id="punchEditReason"
+                  value={punchEditForm.reason}
+                  onChange={(e) => setPunchEditForm({ ...punchEditForm, reason: e.target.value })}
+                  placeholder="Explain why this punch is being edited..."
+                  data-testid="input-punch-edit-reason"
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -603,158 +775,6 @@ export default function TimecardsPage() {
         </div>
       )}
 
-      <Dialog open={!!editingTimecard} onOpenChange={() => setEditingTimecard(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Edit Timecard
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          {editingTimecard && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Clock In Time</label>
-                  <Input
-                    type="time"
-                    value={editForm.clockIn}
-                    onChange={(e) => setEditForm({ ...editForm, clockIn: e.target.value })}
-                    data-testid="input-clock-in"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Clock Out Time</label>
-                  <Input
-                    type="time"
-                    value={editForm.clockOut}
-                    onChange={(e) => setEditForm({ ...editForm, clockOut: e.target.value })}
-                    data-testid="input-clock-out"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Edit Reason (Required)</label>
-                <Textarea
-                  value={editForm.reason}
-                  onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
-                  placeholder="Explain why this timecard is being edited..."
-                  data-testid="input-edit-reason"
-                />
-              </div>
-            </div>
-          )}
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setEditingTimecard(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                if (!editForm.reason.trim()) {
-                  toast({ title: "Error", description: "Edit reason is required", variant: "destructive" });
-                  return;
-                }
-                updateTimecardMutation.mutate({
-                  id: editingTimecard!.id,
-                  clockInTime: editForm.clockIn ? `${editingTimecard!.businessDate}T${editForm.clockIn}:00` : undefined,
-                  clockOutTime: editForm.clockOut ? `${editingTimecard!.businessDate}T${editForm.clockOut}:00` : undefined,
-                  reason: editForm.reason,
-                });
-              }}
-              disabled={updateTimecardMutation.isPending}
-              data-testid="button-save-timecard"
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!editingPunch} onOpenChange={() => setEditingPunch(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Edit Time Punch
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          {editingPunch && (
-            <div className="space-y-4">
-              <div className="p-3 bg-muted rounded-md">
-                <div className="text-sm text-muted-foreground mb-1">Punch Type</div>
-                <div className="font-medium">
-                  {editingPunch.punchType === "clock_in" ? "Clock In" : "Clock Out"}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Date</label>
-                  <Input
-                    type="date"
-                    value={punchEditForm.date}
-                    onChange={(e) => setPunchEditForm({ ...punchEditForm, date: e.target.value })}
-                    data-testid="input-punch-date"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Time</label>
-                  <Input
-                    type="time"
-                    value={punchEditForm.time}
-                    onChange={(e) => setPunchEditForm({ ...punchEditForm, time: e.target.value })}
-                    data-testid="input-punch-time"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Edit Reason (Required)</label>
-                <Textarea
-                  value={punchEditForm.reason}
-                  onChange={(e) => setPunchEditForm({ ...punchEditForm, reason: e.target.value })}
-                  placeholder="Explain why this punch is being edited..."
-                  data-testid="input-punch-edit-reason"
-                />
-              </div>
-            </div>
-          )}
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setEditingPunch(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                if (!punchEditForm.reason.trim()) {
-                  toast({ title: "Error", description: "Edit reason is required", variant: "destructive" });
-                  return;
-                }
-                if (!punchEditForm.date || !punchEditForm.time) {
-                  toast({ title: "Error", description: "Date and time are required", variant: "destructive" });
-                  return;
-                }
-                // Convert from property timezone to UTC for storage
-                const utcDateTime = fromZonedTime(`${punchEditForm.date}T${punchEditForm.time}:00`, selectedPropertyTimezone);
-                updatePunchMutation.mutate({
-                  id: editingPunch!.id,
-                  actualTimestamp: utcDateTime.toISOString(),
-                  editReason: punchEditForm.reason,
-                });
-              }}
-              disabled={updatePunchMutation.isPending}
-              data-testid="button-save-punch"
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

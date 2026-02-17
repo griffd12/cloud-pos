@@ -6,13 +6,7 @@ import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column, type CustomAction } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -48,13 +42,18 @@ export default function MenuItemsPage() {
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
   const scopeLookup = useScopeLookup();
   
-  // Enable real-time updates via WebSocket
   usePosWebSocket();
   
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedSlus, setSelectedSlus] = useState<string[]>([]);
+  const [selectedModifierGroups, setSelectedModifierGroups] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [menuBuildEnabled, setMenuBuildEnabled] = useState(false);
+  const [recipeIngredients, setRecipeIngredients] = useState<Array<{modifierId: string; defaultPrefixId: string | null; sortOrder: number}>>([]);
 
   const { data: menuItems = [], isLoading } = useQuery<MenuItem[]>({
     queryKey: ["/api/menu-items", filterKeys],
@@ -409,132 +408,9 @@ export default function MenuItemsPage() {
     },
   });
 
-  return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-48" data-testid="select-category-filter">
-              <SelectValue placeholder="Filter by category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="unlinked">Unlinked Items</SelectItem>
-              {slus.map((slu) => (
-                <SelectItem key={slu.id} value={slu.id}>
-                  {slu.buttonLabel || slu.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-menu">
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importMutation.isPending}
-            data-testid="button-import-menu"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            {importMutation.isPending ? "Importing..." : "Import CSV"}
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleImport}
-            className="hidden"
-            data-testid="input-import-file"
-          />
-        </div>
-      </div>
-      
-      <DataTable
-        data={filteredMenuItems}
-        columns={columns}
-        title="Menu Items"
-        onAdd={() => {
-          setEditingItem(null);
-          setFormOpen(true);
-        }}
-        onEdit={(item) => {
-          setEditingItem(item);
-          setFormOpen(true);
-        }}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        canDelete={canDeleteItem}
-        onDuplicate={(item) => createDuplicate.mutate(item)}
-        customActions={[
-          {
-            label: "Unlink from Categories",
-            icon: Unlink,
-            onClick: (item) => unlinkMutation.mutate(item.id),
-          },
-          ...getOverrideActions(),
-        ] as CustomAction<MenuItem>[]}
-        isLoading={isLoading}
-        searchPlaceholder="Search menu items..."
-        emptyMessage="No menu items configured"
-      />
-
-      <MenuItemFormDialog
-        key={editingItem?.id || "new"}
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
-        }}
-        editingItem={editingItem}
-        taxGroups={taxGroups}
-        printClasses={printClasses}
-        slus={slus}
-        existingSlus={allMenuItemSlus}
-        modifierGroups={modifierGroups}
-        majorGroups={majorGroups}
-        familyGroups={familyGroups}
-      />
-    </div>
-  );
-}
-
-interface MenuItemFormDialogProps {
-  open: boolean;
-  onClose: () => void;
-  editingItem: MenuItem | null;
-  taxGroups: TaxGroup[];
-  printClasses: PrintClass[];
-  slus: Slu[];
-  existingSlus: MenuItemSlu[];
-  modifierGroups: ModifierGroup[];
-  majorGroups: MajorGroup[];
-  familyGroups: FamilyGroup[];
-}
-
-function MenuItemFormDialog({
-  open,
-  onClose,
-  editingItem,
-  taxGroups,
-  printClasses,
-  slus,
-  existingSlus,
-  modifierGroups,
-  majorGroups,
-  familyGroups,
-}: MenuItemFormDialogProps) {
-  const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
-  
   const initialSluIds = editingItem 
-    ? existingSlus.filter(l => l.menuItemId === editingItem.id).map(l => l.sluId)
+    ? allMenuItemSlus.filter(l => l.menuItemId === editingItem.id).map(l => l.sluId)
     : [];
-    
-  const [selectedSlus, setSelectedSlus] = useState<string[]>(initialSluIds);
-  const [selectedModifierGroups, setSelectedModifierGroups] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
 
   const { data: existingModGroupLinks = [] } = useQuery<MenuItemModifierGroup[]>({
     queryKey: ["/api/menu-items", editingItem?.id, "modifier-groups"],
@@ -551,9 +427,6 @@ function MenuItemFormDialog({
       setSelectedModifierGroups(existingModGroupLinks.map(l => l.modifierGroupId));
     }
   }, [existingModGroupLinks]);
-
-  const [menuBuildEnabled, setMenuBuildEnabled] = useState(editingItem?.menuBuildEnabled ?? false);
-  const [recipeIngredients, setRecipeIngredients] = useState<Array<{modifierId: string; defaultPrefixId: string | null; sortOrder: number}>>([]);
 
   const { data: ingredientPrefixes = [] } = useQuery<IngredientPrefix[]>({
     queryKey: ["/api/ingredient-prefixes", filterKeys],
@@ -599,21 +472,7 @@ function MenuItemFormDialog({
 
   const form = useForm<InsertMenuItem>({
     resolver: zodResolver(insertMenuItemSchema),
-    defaultValues: editingItem ? {
-      name: editingItem.name,
-      shortName: editingItem.shortName || "",
-      price: editingItem.price,
-      taxGroupId: editingItem.taxGroupId || "__none__",
-      printClassId: editingItem.printClassId || "__none__",
-      majorGroupId: editingItem.majorGroupId || "__none__",
-      familyGroupId: editingItem.familyGroupId || "__none__",
-      color: editingItem.color || "#3B82F6",
-      active: editingItem.active ?? true,
-      menuBuildEnabled: editingItem.menuBuildEnabled ?? false,
-      enterpriseId: editingItem.enterpriseId,
-      propertyId: editingItem.propertyId,
-      rvcId: editingItem.rvcId,
-    } : {
+    defaultValues: {
       name: "",
       shortName: "",
       price: "",
@@ -627,6 +486,45 @@ function MenuItemFormDialog({
     },
   });
 
+  useEffect(() => {
+    if (formOpen && editingItem) {
+      form.reset({
+        name: editingItem.name,
+        shortName: editingItem.shortName || "",
+        price: editingItem.price,
+        taxGroupId: editingItem.taxGroupId || "__none__",
+        printClassId: editingItem.printClassId || "__none__",
+        majorGroupId: editingItem.majorGroupId || "__none__",
+        familyGroupId: editingItem.familyGroupId || "__none__",
+        color: editingItem.color || "#3B82F6",
+        active: editingItem.active ?? true,
+        menuBuildEnabled: editingItem.menuBuildEnabled ?? false,
+        enterpriseId: editingItem.enterpriseId,
+        propertyId: editingItem.propertyId,
+        rvcId: editingItem.rvcId,
+      });
+      setSelectedSlus(initialSluIds);
+      setMenuBuildEnabled(editingItem.menuBuildEnabled ?? false);
+    } else if (formOpen && !editingItem) {
+      form.reset({
+        name: "",
+        shortName: "",
+        price: "",
+        taxGroupId: "__none__",
+        printClassId: "__none__",
+        majorGroupId: "__none__",
+        familyGroupId: "__none__",
+        color: "#3B82F6",
+        active: true,
+        menuBuildEnabled: false,
+      });
+      setSelectedSlus([]);
+      setSelectedModifierGroups([]);
+      setMenuBuildEnabled(false);
+      setRecipeIngredients([]);
+    }
+  }, [formOpen, editingItem]);
+
   const toggleSlu = (sluId: string) => {
     setSelectedSlus(prev => 
       prev.includes(sluId)
@@ -635,7 +533,7 @@ function MenuItemFormDialog({
     );
   };
 
-  const handleSubmit = async (data: InsertMenuItem) => {
+  const handleFormSubmit = async (data: InsertMenuItem) => {
     setIsSaving(true);
     try {
       const cleanedData: InsertMenuItem = {
@@ -684,7 +582,8 @@ function MenuItemFormDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/menu-items", menuItemId, "recipe-ingredients"] });
       
       toast({ title: editingItem ? "Menu item updated" : "Menu item created" });
-      onClose();
+      setFormOpen(false);
+      setEditingItem(null);
     } catch (error: any) {
       toast({ title: error.message || "Failed to save menu item", variant: "destructive" });
     } finally {
@@ -692,13 +591,14 @@ function MenuItemFormDialog({
     }
   };
 
-  const handleClose = () => {
+  const handleCancel = () => {
     form.reset();
     setSelectedSlus([]);
     setSelectedModifierGroups([]);
     setMenuBuildEnabled(false);
     setRecipeIngredients([]);
-    onClose();
+    setFormOpen(false);
+    setEditingItem(null);
   };
 
   const addRecipeIngredient = (modifierId: string) => {
@@ -729,19 +629,31 @@ function MenuItemFormDialog({
     );
   };
 
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle data-testid="text-form-title">
-            {editingItem ? "Edit Menu Item" : "Add Menu Item"}
-          </DialogTitle>
-        </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                <div className="grid grid-cols-2 gap-4">
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle data-testid="text-form-title">{editingItem ? "Edit Menu Item" : "Add Menu Item"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving} data-testid="button-cancel-menu-item">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-form-submit"
+                  disabled={isSaving}
+                  onClick={form.handleSubmit(handleFormSubmit)}
+                >
+                  {isSaving ? "Saving..." : (editingItem ? "Update" : "Create")}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+                <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
                     name="name"
@@ -785,6 +697,36 @@ function MenuItemFormDialog({
                     )}
                   />
 
+                  <FormField
+                    control={form.control}
+                    name="color"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Button Color</FormLabel>
+                        <FormControl>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={field.value || "#3B82F6"}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              className="w-10 h-10 rounded border cursor-pointer"
+                              data-testid="color-color"
+                            />
+                            <Input
+                              placeholder="#3B82F6"
+                              {...field}
+                              value={field.value || ""}
+                              className="flex-1"
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
                     name="taxGroupId"
@@ -879,34 +821,6 @@ function MenuItemFormDialog({
                           </SelectContent>
                         </Select>
                         <FormDescription>Sub-category for detailed reporting</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="color"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Button Color</FormLabel>
-                        <FormControl>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="color"
-                              value={field.value || "#3B82F6"}
-                              onChange={(e) => field.onChange(e.target.value)}
-                              className="w-10 h-10 rounded border cursor-pointer"
-                              data-testid="color-color"
-                            />
-                            <Input
-                              placeholder="#3B82F6"
-                              {...field}
-                              value={field.value || ""}
-                              className="flex-1"
-                            />
-                          </div>
-                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1118,24 +1032,84 @@ function MenuItemFormDialog({
                     </>
                   )}
                 </div>
-            </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleClose}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSaving} data-testid="button-form-submit">
-                {isSaving ? "Saving..." : (editingItem ? "Update" : "Create")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+  return (
+    <div className="p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-48" data-testid="select-category-filter">
+              <SelectValue placeholder="Filter by category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="unlinked">Unlinked Items</SelectItem>
+              {slus.map((slu) => (
+                <SelectItem key={slu.id} value={slu.id}>
+                  {slu.buttonLabel || slu.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={handleExport} data-testid="button-export-menu">
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importMutation.isPending}
+            data-testid="button-import-menu"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {importMutation.isPending ? "Importing..." : "Import CSV"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleImport}
+            className="hidden"
+            data-testid="input-import-file"
+          />
+        </div>
+      </div>
+      
+      <DataTable
+        data={filteredMenuItems}
+        columns={columns}
+        title="Menu Items"
+        onAdd={() => {
+          setEditingItem(null);
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
+        onDuplicate={(item) => createDuplicate.mutate(item)}
+        customActions={[
+          {
+            label: "Unlink from Categories",
+            icon: Unlink,
+            onClick: (item) => unlinkMutation.mutate(item.id),
+          },
+          ...getOverrideActions(),
+        ] as CustomAction<MenuItem>[]}
+        isLoading={isLoading}
+        searchPlaceholder="Search menu items..."
+        emptyMessage="No menu items configured"
+      />
+    </div>
   );
 }

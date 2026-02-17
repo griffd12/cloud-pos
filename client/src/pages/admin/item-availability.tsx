@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
@@ -145,6 +144,20 @@ export default function ItemAvailabilityPage() {
     setShowPrepDialog(false);
   };
 
+  const handleCancelAvailability = () => {
+    setShowAvailabilityDialog(false);
+    setSelectedMenuItem(null);
+    setAvailableQuantity("");
+    setInitialQuantity("");
+  };
+
+  const handleCancelPrep = () => {
+    setShowPrepDialog(false);
+    setPrepName("");
+    setPrepQuantity("");
+    setPrepUnit("each");
+  };
+
   const openAvailabilityDialog = (item: MenuItem) => {
     const existing = itemAvailability.find(a => a.menuItemId === item.id);
     setSelectedMenuItem(item);
@@ -153,7 +166,8 @@ export default function ItemAvailabilityPage() {
     setShowAvailabilityDialog(true);
   };
 
-  const handleSaveAvailability = () => {
+  const handleSaveAvailability = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!selectedMenuItem || !selectedPropertyId) return;
     updateAvailabilityMutation.mutate({
       menuItemId: selectedMenuItem.id,
@@ -164,7 +178,8 @@ export default function ItemAvailabilityPage() {
     });
   };
 
-  const handleCreatePrep = () => {
+  const handleCreatePrep = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!prepName || !prepQuantity || !selectedPropertyId) return;
     createPrepMutation.mutate({
       propertyId: selectedPropertyId,
@@ -186,6 +201,100 @@ export default function ItemAvailabilityPage() {
 
   const sold86Items = itemAvailability.filter(a => a.is86ed);
   const lowStockItems = itemAvailability.filter(a => isLowStock(a) && !a.is86ed);
+
+  if (showAvailabilityDialog) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Update Availability - {selectedMenuItem?.name}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelAvailability} data-testid="button-cancel-availability">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveAvailability}
+                  disabled={updateAvailabilityMutation.isPending}
+                  data-testid="button-save-availability"
+                >
+                  {updateAvailabilityMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Save
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveAvailability} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Current Quantity</Label>
+                  <Input type="number" value={availableQuantity} onChange={(e) => setAvailableQuantity(e.target.value)} placeholder="0" data-testid="input-available-qty" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Initial Quantity</Label>
+                  <Input type="number" value={initialQuantity} onChange={(e) => setInitialQuantity(e.target.value)} placeholder="0" data-testid="input-threshold" />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (showPrepDialog) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Add Prep Item</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelPrep} data-testid="button-cancel-prep">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreatePrep}
+                  disabled={!prepName || !prepQuantity || createPrepMutation.isPending}
+                  data-testid="button-save-prep"
+                >
+                  {createPrepMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Create
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreatePrep} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value={prepName} onChange={(e) => setPrepName(e.target.value)} placeholder="e.g., Sliced Tomatoes" data-testid="input-prep-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Quantity</Label>
+                  <Input type="number" value={prepQuantity} onChange={(e) => setPrepQuantity(e.target.value)} placeholder="0" data-testid="input-prep-qty" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Unit</Label>
+                  <Select value={prepUnit} onValueChange={setPrepUnit}>
+                    <SelectTrigger data-testid="select-prep-unit"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="each">Each</SelectItem>
+                      <SelectItem value="portions">Portions</SelectItem>
+                      <SelectItem value="oz">Oz</SelectItem>
+                      <SelectItem value="lb">Lb</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -388,76 +497,6 @@ export default function ItemAvailabilityPage() {
           </Tabs>
         </>
       )}
-
-      <Dialog open={showAvailabilityDialog} onOpenChange={(open) => { if (!open) resetAvailabilityDialog(); setShowAvailabilityDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Update Availability - {selectedMenuItem?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Current Quantity</Label>
-                  <Input type="number" value={availableQuantity} onChange={(e) => setAvailableQuantity(e.target.value)} placeholder="0" data-testid="input-available-qty" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Initial Quantity</Label>
-                  <Input type="number" value={initialQuantity} onChange={(e) => setInitialQuantity(e.target.value)} placeholder="0" data-testid="input-threshold" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetAvailabilityDialog}>Cancel</Button>
-            <Button onClick={handleSaveAvailability} disabled={updateAvailabilityMutation.isPending} data-testid="button-save-availability">
-              {updateAvailabilityMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showPrepDialog} onOpenChange={(open) => { if (!open) resetPrepDialog(); setShowPrepDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Add Prep Item</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={prepName} onChange={(e) => setPrepName(e.target.value)} placeholder="e.g., Sliced Tomatoes" data-testid="input-prep-name" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Quantity</Label>
-                  <Input type="number" value={prepQuantity} onChange={(e) => setPrepQuantity(e.target.value)} placeholder="0" data-testid="input-prep-qty" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Unit</Label>
-                  <Select value={prepUnit} onValueChange={setPrepUnit}>
-                    <SelectTrigger data-testid="select-prep-unit"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="each">Each</SelectItem>
-                      <SelectItem value="portions">Portions</SelectItem>
-                      <SelectItem value="oz">Oz</SelectItem>
-                      <SelectItem value="lb">Lb</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetPrepDialog}>Cancel</Button>
-            <Button onClick={handleCreatePrep} disabled={!prepName || !prepQuantity || createPrepMutation.isPending} data-testid="button-save-prep">
-              {createPrepMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

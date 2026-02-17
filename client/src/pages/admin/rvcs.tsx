@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { usePosWebSocket } from "@/hooks/use-pos-websocket";
 import { DataTable, type Column } from "@/components/admin/data-table";
-import { EntityForm, type FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -46,6 +46,15 @@ export default function RvcsPage() {
   const [trailerLines, setTrailerLines] = useState<string[]>(Array(MAX_TRAILER_LINES).fill(""));
   const [overrideHeader, setOverrideHeader] = useState(false);
   const [overrideTrailer, setOverrideTrailer] = useState(false);
+
+  const [rvcName, setRvcName] = useState("");
+  const [rvcCode, setRvcCode] = useState("");
+  const [rvcPropertyId, setRvcPropertyId] = useState(contextPropertyId || "");
+  const [defaultOrderType, setDefaultOrderType] = useState("dine_in");
+  const [fastTransactionDefault, setFastTransactionDefault] = useState(false);
+  const [dynamicOrderMode, setDynamicOrderMode] = useState(false);
+  const [domSendMode, setDomSendMode] = useState("fire_on_fly");
+  const [conversationalOrderingEnabled, setConversationalOrderingEnabled] = useState(false);
 
   const { data: rvcs = [], isLoading } = useQuery<Rvc[]>({
     queryKey: ["/api/rvcs", filterKeys],
@@ -120,59 +129,31 @@ export default function RvcsPage() {
     },
   ];
 
-  const formFields: FormFieldConfig[] = [
-    { name: "name", label: "RVC Name", type: "text", placeholder: "Enter name", required: true },
-    { name: "code", label: "Code", type: "text", placeholder: "e.g., RVC001", required: true },
-    {
-      name: "propertyId",
-      label: "Property",
-      type: "select",
-      options: properties.map((p) => ({ value: p.id, label: p.name })),
-      required: true,
-      defaultValue: contextPropertyId || properties[0]?.id || "",
-    },
-    {
-      name: "defaultOrderType",
-      label: "Default Order Type",
-      type: "select",
-      options: ORDER_TYPES.map((t) => ({ value: t, label: t.replace("_", " ").toUpperCase() })),
-      defaultValue: "dine_in",
-    },
-    {
-      name: "fastTransactionDefault",
-      label: "Fast Transaction Mode",
-      type: "switch",
-      description: "Enable fast transaction mode by default for this RVC",
-      defaultValue: false,
-    },
-    {
-      name: "dynamicOrderMode",
-      label: "Dynamic Order Mode",
-      type: "switch",
-      description: "Items appear on KDS immediately when added to check (no send required)",
-      defaultValue: false,
-    },
-    {
-      name: "domSendMode",
-      label: "DOM Send Mode",
-      type: "select",
-      options: DOM_SEND_MODES.map((mode) => ({
-        value: mode,
-        label: mode === "fire_on_fly" ? "Fire on Fly (immediate)" :
-               mode === "fire_on_next" ? "Fire on Next (when next item rung)" :
-               "Fire on Tender (when payment made)",
-      })),
-      description: "When Dynamic Order Mode is enabled, controls when items are sent to KDS",
-      defaultValue: "fire_on_fly",
-    },
-    {
-      name: "conversationalOrderingEnabled",
-      label: "Conversational Ordering",
-      type: "switch",
-      description: "Enable MICROS RES 3700-style conversational ordering with Menu Build support",
-      defaultValue: false,
-    },
-  ];
+  const resetForm = () => {
+    setRvcName("");
+    setRvcCode("");
+    setRvcPropertyId(contextPropertyId || properties[0]?.id || "");
+    setDefaultOrderType("dine_in");
+    setFastTransactionDefault(false);
+    setDynamicOrderMode(false);
+    setDomSendMode("fire_on_fly");
+    setConversationalOrderingEnabled(false);
+  };
+
+  useEffect(() => {
+    if (editingItem) {
+      setRvcName(editingItem.name);
+      setRvcCode(editingItem.code || "");
+      setRvcPropertyId(editingItem.propertyId || "");
+      setDefaultOrderType(editingItem.defaultOrderType || "dine_in");
+      setFastTransactionDefault(editingItem.fastTransactionDefault ?? false);
+      setDynamicOrderMode(editingItem.dynamicOrderMode ?? false);
+      setDomSendMode(editingItem.domSendMode || "fire_on_fly");
+      setConversationalOrderingEnabled(editingItem.conversationalOrderingEnabled ?? false);
+    } else {
+      resetForm();
+    }
+  }, [editingItem]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertRvc) => {
@@ -182,6 +163,8 @@ export default function RvcsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", filterKeys] });
       setFormOpen(false);
+      setEditingItem(null);
+      resetForm();
       toast({ title: "Revenue Center created" });
     },
     onError: () => {
@@ -198,6 +181,7 @@ export default function RvcsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/rvcs", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
+      resetForm();
       toast({ title: "Revenue Center updated" });
     },
     onError: () => {
@@ -240,8 +224,7 @@ export default function RvcsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/descriptors"] });
-      setDescriptorsOpen(false);
-      setDescriptorsRvc(null);
+      handleCancelDescriptors();
       toast({ title: "Descriptors saved successfully" });
     },
     onError: (error: Error) => {
@@ -294,7 +277,25 @@ export default function RvcsPage() {
     }
   };
 
-  const handleSubmit = (data: InsertRvc) => {
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    if (!rvcName || !rvcCode || !rvcPropertyId) {
+      toast({ title: "Please fill all required fields", variant: "destructive" });
+      return;
+    }
+
+    const data: InsertRvc = {
+      name: rvcName,
+      code: rvcCode,
+      propertyId: rvcPropertyId,
+      defaultOrderType,
+      fastTransactionDefault,
+      dynamicOrderMode,
+      domSendMode,
+      conversationalOrderingEnabled,
+    } as InsertRvc;
+
     if (editingItem) {
       updateMutation.mutate({ ...editingItem, ...data });
     } else {
@@ -302,54 +303,43 @@ export default function RvcsPage() {
     }
   };
 
-  return (
-    <div className="p-6">
-      <DataTable
-        data={rvcs}
-        columns={columns}
-        title="Revenue Centers"
-        onAdd={() => {
-          setEditingItem(null);
-          setFormOpen(true);
-        }}
-        onEdit={(item) => {
-          setEditingItem(item);
-          setFormOpen(true);
-        }}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        isLoading={isLoading}
-        searchPlaceholder="Search RVCs..."
-        emptyMessage="No revenue centers configured"
-      />
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    resetForm();
+  };
 
-      <EntityForm
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
-        }}
-        onSubmit={handleSubmit}
-        schema={insertRvcSchema}
-        fields={formFields}
-        title={editingItem ? "Edit Revenue Center" : "Add Revenue Center"}
-        initialData={editingItem || undefined}
-        isLoading={createMutation.isPending || updateMutation.isPending}
-      />
+  const handleCancelDescriptors = () => {
+    setDescriptorsOpen(false);
+    setDescriptorsRvc(null);
+  };
 
-      <Dialog open={descriptorsOpen} onOpenChange={(open) => { if (!open) { setDescriptorsOpen(false); setDescriptorsRvc(null); } }}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Receipt Descriptors - {descriptorsRvc?.name}
-            </DialogTitle>
-            <DialogDescription>
+  if (descriptorsOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Receipt Descriptors - {descriptorsRvc?.name}
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelDescriptors} data-testid="button-cancel-descriptors">
+                  Cancel
+                </Button>
+                <Button onClick={() => saveDescriptorsMutation.mutate()} disabled={saveDescriptorsMutation.isPending} data-testid="button-save-descriptors">
+                  {saveDescriptorsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Descriptors
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-sm text-muted-foreground">
               Configure receipt header and trailer lines for this RVC. These override property-level settings.
-            </DialogDescription>
-          </DialogHeader>
+            </p>
 
-          <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-6 pr-2">
             <div className="flex flex-wrap gap-4 p-4 bg-muted/50 rounded-md">
               <div className="flex items-center gap-2">
                 <Switch
@@ -430,19 +420,170 @@ export default function RvcsPage() {
                 </ScrollArea>
               </div>
             </div>
-          </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => { setDescriptorsOpen(false); setDescriptorsRvc(null); }}>
-              Cancel
-            </Button>
-            <Button onClick={() => saveDescriptorsMutation.mutate()} disabled={saveDescriptorsMutation.isPending}>
-              {saveDescriptorsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save Descriptors
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>{editingItem ? "Edit Revenue Center" : "Add Revenue Center"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-rvc">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  data-testid="button-submit-rvc"
+                >
+                  {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingItem ? "Save Changes" : "Create RVC"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="rvcName">RVC Name *</Label>
+                  <Input
+                    id="rvcName"
+                    value={rvcName}
+                    onChange={(e) => setRvcName(e.target.value)}
+                    placeholder="Enter name"
+                    data-testid="input-rvc-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rvcCode">Code *</Label>
+                  <Input
+                    id="rvcCode"
+                    value={rvcCode}
+                    onChange={(e) => setRvcCode(e.target.value)}
+                    placeholder="e.g., RVC001"
+                    data-testid="input-rvc-code"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rvcProperty">Property *</Label>
+                  <Select value={rvcPropertyId} onValueChange={setRvcPropertyId}>
+                    <SelectTrigger data-testid="select-rvc-property">
+                      <SelectValue placeholder="Select property" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {properties.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="orderType">Default Order Type</Label>
+                  <Select value={defaultOrderType} onValueChange={setDefaultOrderType}>
+                    <SelectTrigger data-testid="select-order-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ORDER_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t.replace("_", " ").toUpperCase()}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="domMode">DOM Send Mode</Label>
+                  <Select value={domSendMode} onValueChange={setDomSendMode}>
+                    <SelectTrigger data-testid="select-dom-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DOM_SEND_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {mode === "fire_on_fly" ? "Fire on Fly (immediate)" :
+                           mode === "fire_on_next" ? "Fire on Next (when next item rung)" :
+                           "Fire on Tender (when payment made)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">When Dynamic Order Mode is enabled, controls when items are sent to KDS</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-4">
+                <div className="flex items-center space-x-2 pt-2">
+                  <Switch
+                    id="fastTransaction"
+                    checked={fastTransactionDefault}
+                    onCheckedChange={setFastTransactionDefault}
+                    data-testid="switch-fast-transaction"
+                  />
+                  <div>
+                    <Label htmlFor="fastTransaction">Fast Transaction Mode</Label>
+                    <p className="text-xs text-muted-foreground">Enable fast transaction mode by default for this RVC</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Switch
+                    id="dynamicOrder"
+                    checked={dynamicOrderMode}
+                    onCheckedChange={setDynamicOrderMode}
+                    data-testid="switch-dynamic-order"
+                  />
+                  <div>
+                    <Label htmlFor="dynamicOrder">Dynamic Order Mode</Label>
+                    <p className="text-xs text-muted-foreground">Items appear on KDS immediately when added to check</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Switch
+                    id="conversational"
+                    checked={conversationalOrderingEnabled}
+                    onCheckedChange={setConversationalOrderingEnabled}
+                    data-testid="switch-conversational"
+                  />
+                  <div>
+                    <Label htmlFor="conversational">Conversational Ordering</Label>
+                    <p className="text-xs text-muted-foreground">Enable MICROS RES 3700-style conversational ordering</p>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <DataTable
+        data={rvcs}
+        columns={columns}
+        title="Revenue Centers"
+        onAdd={() => {
+          setEditingItem(null);
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        isLoading={isLoading}
+        searchPlaceholder="Search RVCs..."
+        emptyMessage="No revenue centers configured"
+      />
     </div>
   );
 }

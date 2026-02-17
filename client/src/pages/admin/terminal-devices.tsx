@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,14 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,28 +68,23 @@ import {
 } from "lucide-react";
 
 const MODEL_LABELS: Record<string, string> = {
-  // PAX Models
   pax_a920: "PAX A920",
   pax_s300: "PAX S300",
   pax_a35: "PAX A35 (Heartland)",
   pax_a77: "PAX A77 (Heartland)",
-  // Verifone Models
   verifone_vx520: "Verifone VX520",
   verifone_vx820: "Verifone VX820",
   verifone_p400: "Verifone P400",
   verifone_t650c: "Verifone Trinity T650c (Heartland)",
   verifone_t650p: "Verifone Trinity T650p (Heartland)",
   verifone_p630: "Verifone P630 (Heartland)",
-  // Ingenico Models
   ingenico_lane_3000: "Ingenico Lane 3000",
   ingenico_lane_5000: "Ingenico Lane 5000",
   ingenico_ipp350: "Ingenico iPP 350 (Heartland OPI)",
   ingenico_isc_touch_250: "Ingenico iSC Touch 250 (Heartland OPI)",
-  // Stripe Models
   stripe_s700: "Stripe S700",
   stripe_m2: "Stripe M2",
   stripe_wisepos_e: "Stripe WisePOS E",
-  // Other
   bbpos_chipper: "BBPOS Chipper",
   generic: "Generic Terminal",
 };
@@ -120,9 +107,9 @@ type FormData = z.infer<typeof formSchema>;
 export default function TerminalDevicesPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<TerminalDevice | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingDevice, setDeletingDevice] = useState<TerminalDevice | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -211,7 +198,7 @@ export default function TerminalDevicesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", filterKeys] });
-      closeDialog();
+      handleCancel();
       toast({ title: "Terminal device created successfully" });
     },
     onError: (error: Error) => {
@@ -226,7 +213,7 @@ export default function TerminalDevicesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/terminal-devices", filterKeys] });
-      closeDialog();
+      handleCancel();
       toast({ title: "Terminal device updated successfully" });
     },
     onError: (error: Error) => {
@@ -286,7 +273,7 @@ export default function TerminalDevicesPage() {
 
   const syncAllMutation = useMutation({
     mutationFn: async () => {
-      const propertyIds = [...new Set(devices.map(d => d.propertyId))];
+      const propertyIds = Array.from(new Set(devices.map(d => d.propertyId)));
       const results = [];
       for (const propertyId of propertyIds) {
         const response = await apiRequest("POST", "/api/terminal-devices/sync-all", { propertyId });
@@ -304,8 +291,7 @@ export default function TerminalDevicesPage() {
     },
   });
 
-  function openAddDialog() {
-    setEditingDevice(null);
+  function resetForm() {
     form.reset({
       name: "",
       model: "generic",
@@ -321,10 +307,15 @@ export default function TerminalDevicesPage() {
       capabilities: { contactless: true, chip: true, swipe: true, pinDebit: true },
       active: true,
     });
-    setDialogOpen(true);
   }
 
-  function openEditDialog(device: TerminalDevice) {
+  function openAddForm() {
+    setEditingDevice(null);
+    resetForm();
+    setFormOpen(true);
+  }
+
+  function openEditForm(device: TerminalDevice) {
     setEditingDevice(device);
     form.reset({
       name: device.name,
@@ -341,7 +332,7 @@ export default function TerminalDevicesPage() {
       capabilities: (device.capabilities as any) || { contactless: true, chip: true, swipe: true, pinDebit: true },
       active: device.active ?? true,
     });
-    setDialogOpen(true);
+    setFormOpen(true);
   }
 
   function openDeleteDialog(device: TerminalDevice) {
@@ -349,10 +340,15 @@ export default function TerminalDevicesPage() {
     setDeleteDialogOpen(true);
   }
 
-  function closeDialog() {
-    setDialogOpen(false);
+  function handleCancel() {
+    setFormOpen(false);
     setEditingDevice(null);
-    form.reset();
+    resetForm();
+  }
+
+  function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    form.handleSubmit(onSubmit)();
   }
 
   function onSubmit(data: FormData) {
@@ -380,6 +376,341 @@ export default function TerminalDevicesPage() {
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingDevice ? "Edit Terminal Device" : "Add Terminal Device"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-submit"
+                  disabled={isSubmitting}
+                  onClick={handleSubmit}
+                >
+                  {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingDevice ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Front Counter Terminal" data-testid="input-name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Model</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-model">
+                              <SelectValue placeholder="Select model" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {Object.entries(MODEL_LABELS).map(([key, label]) => (
+                              <SelectItem key={key} value={key}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="workstationId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Workstation (Optional)</FormLabel>
+                        <Select 
+                          onValueChange={(val) => field.onChange(val === "__none__" ? undefined : val)} 
+                          value={field.value || "__none__"}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-workstation">
+                              <SelectValue placeholder="Assign to workstation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">None (Floating)</SelectItem>
+                            {filteredWorkstations.map((ws) => (
+                              <SelectItem key={ws.id} value={ws.id}>
+                                {ws.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Leave blank for roaming terminals</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="paymentProcessorId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Payment Processor (Optional)</FormLabel>
+                      <Select 
+                        onValueChange={(val) => field.onChange(val === "__none__" ? undefined : val)} 
+                        value={field.value || "__none__"}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-processor">
+                            <SelectValue placeholder="Use property default" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">Use property default</SelectItem>
+                          {filteredProcessors.map((proc) => (
+                            <SelectItem key={proc.id} value={proc.id}>
+                              {proc.name} ({proc.gatewayType})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Override the property's default processor for this terminal</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="connectionType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Connection Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "ethernet"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-connection">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {Object.entries(CONNECTION_TYPES).map(([key, label]) => (
+                              <SelectItem key={key} value={key}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {(connectionType === "ethernet" || connectionType === "wifi") && (
+                    <FormField
+                      control={form.control}
+                      name="networkAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>IP Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="192.168.1.100" data-testid="input-ip" {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {(connectionType === "ethernet" || connectionType === "wifi") && (
+                    <FormField
+                      control={form.control}
+                      name="port"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Port (Optional)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="9100" 
+                              data-testid="input-port" 
+                              {...field} 
+                              value={field.value || ""} 
+                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                            />
+                          </FormControl>
+                          <FormDescription>Network port for terminal communication</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="serialNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Serial Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="SN12345678" data-testid="input-serial" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="terminalId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Terminal ID</FormLabel>
+                        <FormControl>
+                          <Input placeholder="TID from processor" data-testid="input-tid" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormDescription>Processor-assigned terminal ID</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {connectionType === "cloud" && (
+                    <FormField
+                      control={form.control}
+                      name="cloudDeviceId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Cloud Device ID</FormLabel>
+                          <FormControl>
+                            <Input placeholder="tmr_xxxxx" data-testid="input-cloud-id" {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormDescription>Device ID from cloud payment provider</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <FormLabel>Capabilities</FormLabel>
+                  <div className="grid grid-cols-4 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="capabilities"
+                      render={({ field }) => {
+                        const caps = (field.value as any) || {};
+                        const updateCap = (key: string, val: boolean) => {
+                          field.onChange({ ...caps, [key]: val });
+                        };
+                        return (
+                          <>
+                            <div className="flex items-center justify-between rounded-lg border p-3">
+                              <span className="text-sm">Contactless (NFC)</span>
+                              <Switch
+                                checked={caps.contactless ?? true}
+                                onCheckedChange={(val) => updateCap("contactless", val)}
+                                data-testid="switch-contactless"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg border p-3">
+                              <span className="text-sm">Chip (EMV)</span>
+                              <Switch
+                                checked={caps.chip ?? true}
+                                onCheckedChange={(val) => updateCap("chip", val)}
+                                data-testid="switch-chip"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg border p-3">
+                              <span className="text-sm">Swipe (Magstripe)</span>
+                              <Switch
+                                checked={caps.swipe ?? true}
+                                onCheckedChange={(val) => updateCap("swipe", val)}
+                                data-testid="switch-swipe"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg border p-3">
+                              <span className="text-sm">PIN Debit</span>
+                              <Switch
+                                checked={caps.pinDebit ?? true}
+                                onCheckedChange={(val) => updateCap("pinDebit", val)}
+                                data-testid="switch-pin-debit"
+                              />
+                            </div>
+                          </>
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="active"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                      <div>
+                        <FormLabel>Active</FormLabel>
+                        <FormDescription>Enable this terminal for payment processing</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value ?? true}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-active"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Terminal Device</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{deletingDevice?.name}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deletingDevice && deleteMutation.mutate(deletingDevice.id)}
+                data-testid="button-confirm-delete"
+              >
+                {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -402,7 +733,7 @@ export default function TerminalDevicesPage() {
             )}
             Sync Status
           </Button>
-          <Button type="button" onClick={openAddDialog} data-testid="button-add-terminal">
+          <Button type="button" onClick={openAddForm} data-testid="button-add-terminal">
             <Plus className="w-4 h-4 mr-2" />
             Add Terminal
           </Button>
@@ -513,7 +844,7 @@ export default function TerminalDevicesPage() {
                           type="button"
                           size="icon"
                           variant="ghost"
-                          onClick={() => openEditDialog(device)}
+                          onClick={() => openEditForm(device)}
                           data-testid={`button-edit-${device.id}`}
                         >
                           <Pencil className="w-4 h-4" />
@@ -536,319 +867,6 @@ export default function TerminalDevicesPage() {
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingDevice ? "Edit Terminal Device" : "Add Terminal Device"}</DialogTitle>
-            <DialogDescription>
-              Configure a payment terminal or EMV card reader.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Front Counter Terminal" data-testid="input-name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="model"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Model</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-model">
-                            <SelectValue placeholder="Select model" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {Object.entries(MODEL_LABELS).map(([key, label]) => (
-                            <SelectItem key={key} value={key}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="workstationId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Workstation (Optional)</FormLabel>
-                      <Select 
-                        onValueChange={(val) => field.onChange(val === "__none__" ? undefined : val)} 
-                        value={field.value || "__none__"}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-workstation">
-                            <SelectValue placeholder="Assign to workstation" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">None (Floating)</SelectItem>
-                          {filteredWorkstations.map((ws) => (
-                            <SelectItem key={ws.id} value={ws.id}>
-                              {ws.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Leave blank for roaming terminals</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="paymentProcessorId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Payment Processor (Optional)</FormLabel>
-                    <Select 
-                      onValueChange={(val) => field.onChange(val === "__none__" ? undefined : val)} 
-                      value={field.value || "__none__"}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-processor">
-                          <SelectValue placeholder="Use property default" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none__">Use property default</SelectItem>
-                        {filteredProcessors.map((proc) => (
-                          <SelectItem key={proc.id} value={proc.id}>
-                            {proc.name} ({proc.gatewayType})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Override the property's default processor for this terminal</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="connectionType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Connection Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "ethernet"}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-connection">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {Object.entries(CONNECTION_TYPES).map(([key, label]) => (
-                            <SelectItem key={key} value={key}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {(connectionType === "ethernet" || connectionType === "wifi") && (
-                  <FormField
-                    control={form.control}
-                    name="networkAddress"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>IP Address</FormLabel>
-                        <FormControl>
-                          <Input placeholder="192.168.1.100" data-testid="input-ip" {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </div>
-
-              {(connectionType === "ethernet" || connectionType === "wifi") && (
-                <FormField
-                  control={form.control}
-                  name="port"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Port (Optional)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="9100" 
-                          data-testid="input-port" 
-                          {...field} 
-                          value={field.value || ""} 
-                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        />
-                      </FormControl>
-                      <FormDescription>Network port for terminal communication</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="serialNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Serial Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="SN12345678" data-testid="input-serial" {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="terminalId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Terminal ID</FormLabel>
-                      <FormControl>
-                        <Input placeholder="TID from processor" data-testid="input-tid" {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormDescription>Processor-assigned terminal ID</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {connectionType === "cloud" && (
-                <FormField
-                  control={form.control}
-                  name="cloudDeviceId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cloud Device ID</FormLabel>
-                      <FormControl>
-                        <Input placeholder="tmr_xxxxx" data-testid="input-cloud-id" {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormDescription>Device ID from cloud payment provider</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              <div className="space-y-3">
-                <FormLabel>Capabilities</FormLabel>
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField
-                    control={form.control}
-                    name="capabilities"
-                    render={({ field }) => {
-                      const caps = (field.value as any) || {};
-                      const updateCap = (key: string, val: boolean) => {
-                        field.onChange({ ...caps, [key]: val });
-                      };
-                      return (
-                        <>
-                          <div className="flex items-center justify-between rounded-lg border p-3">
-                            <span className="text-sm">Contactless (NFC)</span>
-                            <Switch
-                              checked={caps.contactless ?? true}
-                              onCheckedChange={(val) => updateCap("contactless", val)}
-                              data-testid="switch-contactless"
-                            />
-                          </div>
-                          <div className="flex items-center justify-between rounded-lg border p-3">
-                            <span className="text-sm">Chip (EMV)</span>
-                            <Switch
-                              checked={caps.chip ?? true}
-                              onCheckedChange={(val) => updateCap("chip", val)}
-                              data-testid="switch-chip"
-                            />
-                          </div>
-                          <div className="flex items-center justify-between rounded-lg border p-3">
-                            <span className="text-sm">Swipe (Magstripe)</span>
-                            <Switch
-                              checked={caps.swipe ?? true}
-                              onCheckedChange={(val) => updateCap("swipe", val)}
-                              data-testid="switch-swipe"
-                            />
-                          </div>
-                          <div className="flex items-center justify-between rounded-lg border p-3">
-                            <span className="text-sm">PIN Debit</span>
-                            <Switch
-                              checked={caps.pinDebit ?? true}
-                              onCheckedChange={(val) => updateCap("pinDebit", val)}
-                              data-testid="switch-pin-debit"
-                            />
-                          </div>
-                        </>
-                      );
-                    }}
-                  />
-                </div>
-              </div>
-
-              <FormField
-                control={form.control}
-                name="active"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <FormLabel>Active</FormLabel>
-                      <FormDescription>Enable this terminal for payment processing</FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value ?? true}
-                        onCheckedChange={field.onChange}
-                        data-testid="switch-active"
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              </div>
-              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-                <Button type="button" variant="outline" onClick={closeDialog} data-testid="button-cancel">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isSubmitting} data-testid="button-submit">
-                  {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {editingDevice ? "Update" : "Create"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

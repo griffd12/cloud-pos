@@ -5,16 +5,16 @@ import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { useToast } from "@/hooks/use-toast";
 import { DataTable, Column, CustomAction } from "@/components/admin/data-table";
-import { EntityForm, FormFieldConfig } from "@/components/admin/entity-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { insertGiftCardSchema, type GiftCard, type GiftCardTransaction, type InsertGiftCard } from "@shared/schema";
-import { CreditCard, Search, Plus, DollarSign, RefreshCw, History, Ban } from "lucide-react";
+import { CreditCard, Search, Plus, DollarSign, RefreshCw, History, Ban, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
 import { useScopeLookup } from "@/hooks/use-scope-lookup";
@@ -34,6 +34,11 @@ export default function GiftCardsPage() {
   const [reloadAmount, setReloadAmount] = useState("");
   const [redeemDialogOpen, setRedeemDialogOpen] = useState(false);
   const [redeemAmount, setRedeemAmount] = useState("");
+
+  const [cardNumber, setCardNumber] = useState("");
+  const [initialBalance, setInitialBalance] = useState("");
+  const [pin, setPin] = useState("");
+  const [cardStatus, setCardStatus] = useState("active");
 
   const { data: giftCards = [], isLoading } = useQuery<GiftCard[]>({
     queryKey: ["/api/gift-cards", filterKeys],
@@ -95,23 +100,6 @@ export default function GiftCardsPage() {
     getInheritanceColumn<GiftCard>(selectedPropertyId, selectedRvcId),
   ];
 
-  const formFields: FormFieldConfig[] = [
-    { name: "cardNumber", label: "Card Number", type: "text", placeholder: "Auto-generated if blank" },
-    { name: "initialBalance", label: "Initial Balance ($)", type: "decimal", placeholder: "25.00", required: true },
-    { name: "pin", label: "PIN (optional)", type: "password", placeholder: "4-digit PIN" },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      options: [
-        { value: "active", label: "Active" },
-        { value: "inactive", label: "Inactive" },
-        { value: "suspended", label: "Suspended" },
-      ],
-      defaultValue: "active",
-    },
-  ];
-
   const createMutation = useMutation({
     mutationFn: async (data: InsertGiftCard) => {
       const cardData = {
@@ -125,6 +113,7 @@ export default function GiftCardsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", filterKeys] });
       setFormOpen(false);
+      resetForm();
       toast({ title: "Gift card created successfully" });
     },
     onError: () => {
@@ -141,6 +130,7 @@ export default function GiftCardsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/gift-cards", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
+      resetForm();
       toast({ title: "Gift card updated" });
     },
     onError: () => {
@@ -198,16 +188,34 @@ export default function GiftCardsPage() {
     },
   });
 
-  const handleSubmit = (data: any) => {
+  const resetForm = () => {
+    setCardNumber("");
+    setInitialBalance("");
+    setPin("");
+    setCardStatus("active");
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    resetForm();
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (editingItem) {
-      updateMutation.mutate({ ...editingItem, ...data });
+      updateMutation.mutate({ ...editingItem, cardNumber: cardNumber || editingItem.cardNumber, initialBalance, pin: pin || editingItem.pin, status: cardStatus });
     } else {
-      createMutation.mutate({ ...data, ...scopePayload });
+      createMutation.mutate({ cardNumber, initialBalance, pin, status: cardStatus, ...scopePayload } as any);
     }
   };
 
   const handleEdit = (item: GiftCard) => {
     setEditingItem(item);
+    setCardNumber(item.cardNumber || "");
+    setInitialBalance(item.initialBalance || "");
+    setPin("");
+    setCardStatus(item.status || "active");
     setFormOpen(true);
   };
 
@@ -234,6 +242,80 @@ export default function GiftCardsPage() {
   const totalBalance = giftCards.reduce((sum, c) => sum + parseFloat(c.currentBalance || "0"), 0);
   const totalActive = activeCards.reduce((sum, c) => sum + parseFloat(c.currentBalance || "0"), 0);
 
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingItem ? "Edit Gift Card" : "Issue New Gift Card"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-card">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!initialBalance || createMutation.isPending || updateMutation.isPending}
+                  data-testid="button-save-card"
+                >
+                  {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingItem ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Card Number</Label>
+                  <Input
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    placeholder="Auto-generated if blank"
+                    data-testid="input-card-number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Initial Balance ($)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={initialBalance}
+                    onChange={(e) => setInitialBalance(e.target.value)}
+                    placeholder="25.00"
+                    data-testid="input-initial-balance"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>PIN (optional)</Label>
+                  <Input
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    placeholder="4-digit PIN"
+                    data-testid="input-pin"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={cardStatus} onValueChange={setCardStatus}>
+                    <SelectTrigger data-testid="select-card-status"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -246,7 +328,7 @@ export default function GiftCardsPage() {
             <Search className="w-4 h-4 mr-2" />
             Lookup Card
           </Button>
-          <Button onClick={() => { setEditingItem(null); setFormOpen(true); }} data-testid="button-create-card">
+          <Button onClick={() => { setEditingItem(null); resetForm(); setFormOpen(true); }} data-testid="button-create-card">
             <Plus className="w-4 h-4 mr-2" />
             Issue New Card
           </Button>
@@ -296,24 +378,13 @@ export default function GiftCardsPage() {
         hideSearch
       />
 
-      <EntityForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setEditingItem(null); }}
-        onSubmit={handleSubmit}
-        schema={insertGiftCardSchema}
-        fields={formFields}
-        title={editingItem ? "Edit Gift Card" : "Issue New Gift Card"}
-        initialData={editingItem || undefined}
-        isLoading={createMutation.isPending || updateMutation.isPending}
-      />
-
       <Dialog open={lookupDialogOpen} onOpenChange={setLookupDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Lookup Gift Card</DialogTitle>
             <DialogDescription>Enter the card number to check balance and details</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cardNumber">Card Number</Label>
               <Input
@@ -325,7 +396,7 @@ export default function GiftCardsPage() {
               />
             </div>
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setLookupDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => lookupMutation.mutate(lookupCardNumber)}
@@ -340,12 +411,12 @@ export default function GiftCardsPage() {
       </Dialog>
 
       <Dialog open={cardDetailOpen} onOpenChange={setCardDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Gift Card Details</DialogTitle>
             <DialogDescription>Card: {selectedCard?.cardNumber}</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             {selectedCard && (
               <Tabs defaultValue="info" className="mt-4">
                 <TabsList>
@@ -433,12 +504,12 @@ export default function GiftCardsPage() {
       </Dialog>
 
       <Dialog open={reloadDialogOpen} onOpenChange={setReloadDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Reload Gift Card</DialogTitle>
             <DialogDescription>Add value to card {selectedCard?.cardNumber}</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="reloadAmount">Amount ($)</Label>
               <Input
@@ -453,7 +524,7 @@ export default function GiftCardsPage() {
               />
             </div>
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setReloadDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => selectedCard && reloadMutation.mutate({ cardId: selectedCard.id, amount: reloadAmount })}
@@ -467,14 +538,14 @@ export default function GiftCardsPage() {
       </Dialog>
 
       <Dialog open={redeemDialogOpen} onOpenChange={setRedeemDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Redeem Gift Card</DialogTitle>
             <DialogDescription>
               Available balance: ${parseFloat(selectedCard?.currentBalance || "0").toFixed(2)}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="redeemAmount">Amount ($)</Label>
               <Input
@@ -490,7 +561,7 @@ export default function GiftCardsPage() {
               />
             </div>
           </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
+          <DialogFooter className="pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setRedeemDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => selectedCard && redeemMutation.mutate({ cardId: selectedCard.id, amount: redeemAmount })}

@@ -5,18 +5,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { insertPaymentProcessorSchema, type PaymentProcessor, type InsertPaymentProcessor, type Property } from "@shared/schema";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -205,12 +198,15 @@ export default function PaymentProcessorsPage() {
     },
   });
 
-  const handleSubmit = (data: InsertPaymentProcessor) => {
-    if (editingItem) {
-      updateMutation.mutate({ id: editingItem.id, data });
-    } else {
-      createMutation.mutate({ ...data, ...scopePayload });
-    }
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: InsertPaymentProcessor) => {
+      if (editingItem) {
+        updateMutation.mutate({ id: editingItem.id, data });
+      } else {
+        createMutation.mutate({ ...data, ...scopePayload });
+      }
+    })();
   };
 
   const handleEdit = (item: PaymentProcessor) => {
@@ -229,7 +225,6 @@ export default function PaymentProcessorsPage() {
 
   const handleAdd = () => {
     setEditingItem(null);
-    // Use EMC context property first, then fall back to first available property
     const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
     form.reset({
       name: "",
@@ -241,6 +236,12 @@ export default function PaymentProcessorsPage() {
       active: true,
     });
     setFormOpen(true);
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    form.reset();
   };
 
   const getCredentialHint = () => {
@@ -258,53 +259,34 @@ export default function PaymentProcessorsPage() {
     }
   };
 
-  return (
-    <div className="p-6">
-      <DataTable
-        data={processors}
-        columns={columns}
-        title="Payment Processors"
-        onAdd={handleAdd}
-        onEdit={handleEdit}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        isLoading={isLoading}
-        searchPlaceholder="Search payment processors..."
-        emptyMessage="No payment processors configured"
-        actions={(item) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => testConnectionMutation.mutate(item.id)}
-            disabled={testingId === item.id}
-            data-testid={`button-test-connection-${item.id}`}
-          >
-            {testingId === item.id ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <TestTube className="h-4 w-4" />
-            )}
-          </Button>
-        )}
-      />
-
-      <Dialog open={formOpen} onOpenChange={(open) => {
-        if (!open) {
-          setFormOpen(false);
-          setEditingItem(null);
-        }
-      }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Payment Processor" : "Add Payment Processor"}</DialogTitle>
-            <DialogDescription>
-              Configure a payment gateway for processing credit card transactions.
-            </DialogDescription>
-          </DialogHeader>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                <div className="grid grid-cols-2 gap-4">
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingItem ? "Edit Payment Processor" : "Add Payment Processor"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {(createMutation.isPending || updateMutation.isPending) && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {editingItem ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="name"
@@ -439,35 +421,42 @@ export default function PaymentProcessorsPage() {
                     )}
                   />
                 </div>
-              </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setFormOpen(false);
-                    setEditingItem(null);
-                  }}
-                  data-testid="button-cancel"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="button-submit"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {editingItem ? "Update" : "Create"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+  return (
+    <div className="p-6">
+      <DataTable
+        data={processors}
+        columns={columns}
+        title="Payment Processors"
+        onAdd={handleAdd}
+        onEdit={handleEdit}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        isLoading={isLoading}
+        searchPlaceholder="Search payment processors..."
+        emptyMessage="No payment processors configured"
+        actions={(item) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => testConnectionMutation.mutate(item.id)}
+            disabled={testingId === item.id}
+            data-testid={`button-test-connection-${item.id}`}
+          >
+            {testingId === item.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <TestTube className="h-4 w-4" />
+            )}
+          </Button>
+        )}
+      />
     </div>
   );
 }

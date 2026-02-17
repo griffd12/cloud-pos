@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
@@ -396,7 +397,12 @@ export default function OnlineOrderingPage() {
     setShowSourceDialog(true);
   };
 
-  const handleSaveSource = () => {
+  const handleCancelSource = () => {
+    resetSourceDialog();
+  };
+
+  const handleSaveSource = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!formSourceName || !formPlatform) return;
     const data: Record<string, unknown> = {
       sourceName: formSourceName,
@@ -433,6 +439,181 @@ export default function OnlineOrderingPage() {
       </div>
     ));
   };
+
+  if (showSourceDialog) {
+    return (
+      <div className="p-6 space-y-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>{editingSource ? "Edit Platform Connection" : "Add Platform Connection"}</CardTitle>
+                <CardDescription>
+                  {editingSource ? "Update the delivery platform integration settings." : "Configure a new delivery platform integration."}
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleCancelSource} data-testid="button-cancel-source">Cancel</Button>
+                <Button
+                  onClick={handleSaveSource}
+                  disabled={!formSourceName || createSourceMutation.isPending || updateSourceMutation.isPending}
+                  data-testid="button-save-source"
+                >
+                  {(createSourceMutation.isPending || updateSourceMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingSource ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveSource} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Platform</Label>
+                  <Select value={formPlatform} onValueChange={setFormPlatform}>
+                    <SelectTrigger data-testid="select-platform">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLATFORM_OPTIONS.map(p => (
+                        <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Source Name</Label>
+                  <Input
+                    value={formSourceName}
+                    onChange={(e) => setFormSourceName(e.target.value)}
+                    placeholder="e.g., DoorDash Main Store"
+                    data-testid="input-source-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Source Type</Label>
+                  <Select value={formSourceType} onValueChange={setFormSourceType}>
+                    <SelectTrigger data-testid="select-source-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SOURCE_TYPE_OPTIONS.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Client ID</Label>
+                  <Input
+                    value={formClientId}
+                    onChange={(e) => setFormClientId(e.target.value)}
+                    placeholder="API Client ID"
+                    data-testid="input-client-id"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Client Secret</Label>
+                  <Input
+                    type="password"
+                    value={formClientSecret}
+                    onChange={(e) => setFormClientSecret(e.target.value)}
+                    placeholder="API Client Secret"
+                    data-testid="input-client-secret"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Merchant/Store ID</Label>
+                  <Input
+                    value={formMerchantStoreId}
+                    onChange={(e) => setFormMerchantStoreId(e.target.value)}
+                    placeholder="Store identifier"
+                    data-testid="input-merchant-store-id"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Webhook Secret</Label>
+                  <Input
+                    type="password"
+                    value={formWebhookSecret}
+                    onChange={(e) => setFormWebhookSecret(e.target.value)}
+                    placeholder="Webhook signing secret"
+                    data-testid="input-webhook-secret"
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Default RVC</Label>
+                  <Select value={formDefaultRvcId} onValueChange={setFormDefaultRvcId}>
+                    <SelectTrigger data-testid="select-default-rvc">
+                      <SelectValue placeholder="Select RVC..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {rvcs.map(rvc => (
+                        <SelectItem key={rvc.id} value={rvc.id}>{rvc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Default Prep Time (min)</Label>
+                  <Input
+                    type="number"
+                    value={formDefaultPrepMinutes}
+                    onChange={(e) => setFormDefaultPrepMinutes(e.target.value)}
+                    placeholder="15"
+                    data-testid="input-prep-minutes"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Commission %</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={formCommissionPercent}
+                    onChange={(e) => setFormCommissionPercent(e.target.value)}
+                    placeholder="0"
+                    data-testid="input-commission"
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-4 gap-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Auto-Accept Orders</Label>
+                  <Switch checked={formAutoAccept} onCheckedChange={setFormAutoAccept} data-testid="switch-auto-accept" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Auto-Inject to POS</Label>
+                  <Switch checked={formAutoInject} onCheckedChange={setFormAutoInject} data-testid="switch-auto-inject" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Sound Enabled</Label>
+                  <Switch checked={formSoundEnabled} onCheckedChange={setFormSoundEnabled} data-testid="switch-sound-enabled" />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Active</Label>
+                  <Switch checked={formActive} onCheckedChange={setFormActive} data-testid="switch-active" />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -910,176 +1091,6 @@ export default function OnlineOrderingPage() {
           </TabsContent>
         </Tabs>
       )}
-
-      <Dialog open={showSourceDialog} onOpenChange={(open) => { if (!open) resetSourceDialog(); setShowSourceDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingSource ? "Edit Platform Connection" : "Add Platform Connection"}</DialogTitle>
-            <DialogDescription>
-              {editingSource ? "Update the delivery platform integration settings." : "Configure a new delivery platform integration."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Platform</Label>
-                <Select value={formPlatform} onValueChange={setFormPlatform}>
-                  <SelectTrigger data-testid="select-platform">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PLATFORM_OPTIONS.map(p => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Source Name</Label>
-                <Input
-                  value={formSourceName}
-                  onChange={(e) => setFormSourceName(e.target.value)}
-                  placeholder="e.g., DoorDash Main Store"
-                  data-testid="input-source-name"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Source Type</Label>
-              <Select value={formSourceType} onValueChange={setFormSourceType}>
-                <SelectTrigger data-testid="select-source-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_TYPE_OPTIONS.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Client ID</Label>
-                <Input
-                  value={formClientId}
-                  onChange={(e) => setFormClientId(e.target.value)}
-                  placeholder="API Client ID"
-                  data-testid="input-client-id"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Client Secret</Label>
-                <Input
-                  type="password"
-                  value={formClientSecret}
-                  onChange={(e) => setFormClientSecret(e.target.value)}
-                  placeholder="API Client Secret"
-                  data-testid="input-client-secret"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Merchant/Store ID</Label>
-                <Input
-                  value={formMerchantStoreId}
-                  onChange={(e) => setFormMerchantStoreId(e.target.value)}
-                  placeholder="Store identifier"
-                  data-testid="input-merchant-store-id"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Webhook Secret</Label>
-                <Input
-                  type="password"
-                  value={formWebhookSecret}
-                  onChange={(e) => setFormWebhookSecret(e.target.value)}
-                  placeholder="Webhook signing secret"
-                  data-testid="input-webhook-secret"
-                />
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Default RVC</Label>
-                <Select value={formDefaultRvcId} onValueChange={setFormDefaultRvcId}>
-                  <SelectTrigger data-testid="select-default-rvc">
-                    <SelectValue placeholder="Select RVC..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {rvcs.map(rvc => (
-                      <SelectItem key={rvc.id} value={rvc.id}>{rvc.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Default Prep Time (min)</Label>
-                <Input
-                  type="number"
-                  value={formDefaultPrepMinutes}
-                  onChange={(e) => setFormDefaultPrepMinutes(e.target.value)}
-                  placeholder="15"
-                  data-testid="input-prep-minutes"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Commission %</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={formCommissionPercent}
-                onChange={(e) => setFormCommissionPercent(e.target.value)}
-                placeholder="0"
-                data-testid="input-commission"
-              />
-            </div>
-
-            <Separator />
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <Label>Auto-Accept Orders</Label>
-                <Switch checked={formAutoAccept} onCheckedChange={setFormAutoAccept} data-testid="switch-auto-accept" />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label>Auto-Inject to POS</Label>
-                <Switch checked={formAutoInject} onCheckedChange={setFormAutoInject} data-testid="switch-auto-inject" />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label>Sound Enabled</Label>
-                <Switch checked={formSoundEnabled} onCheckedChange={setFormSoundEnabled} data-testid="switch-sound-enabled" />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label>Active</Label>
-                <Switch checked={formActive} onCheckedChange={setFormActive} data-testid="switch-active" />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetSourceDialog} data-testid="button-cancel-source">Cancel</Button>
-            <Button
-              onClick={handleSaveSource}
-              disabled={!formSourceName || createSourceMutation.isPending || updateSourceMutation.isPending}
-              data-testid="button-save-source"
-            >
-              {(createSourceMutation.isPending || updateSourceMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editingSource ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showDenyDialog} onOpenChange={(open) => { if (!open) { setShowDenyDialog(false); setDenyOrderId(null); setDenyReason(""); } }}>
         <DialogContent>

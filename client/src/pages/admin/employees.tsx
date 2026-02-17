@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
@@ -266,8 +266,8 @@ export default function EmployeesPage() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     
     if (!firstName || !lastName || !roleId) {
       toast({ title: "Please fill all required fields", variant: "destructive" });
@@ -361,43 +361,36 @@ export default function EmployeesPage() {
     );
   };
 
-  return (
-    <div className="p-6">
-      <DataTable
-        data={displayedEmployees}
-        columns={columns}
-        title="Employees"
-        onAdd={() => {
-          setEditingItem(null);
-          resetForm();
-          setFormOpen(true);
-        }}
-        onEdit={(item) => {
-          setEditingItem(item);
-          setFormOpen(true);
-        }}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        canDelete={canDeleteItem}
-        customActions={getOverrideActions()}
-        isLoading={isLoading}
-        searchPlaceholder="Search employees..."
-        emptyMessage="No employees configured"
-      />
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    resetForm();
+  };
 
-      <Dialog open={formOpen} onOpenChange={(open) => {
-        if (!open) {
-          setFormOpen(false);
-          setEditingItem(null);
-          resetForm();
-        }
-      }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Employee" : "Add Employee"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingItem ? "Edit Employee" : "Add Employee"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-employee">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-submit-employee"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {editingItem ? "Save Changes" : "Create Employee"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="employeeNumber">Employee Number (auto if blank)</Label>
                   <Input 
@@ -419,9 +412,6 @@ export default function EmployeesPage() {
                     placeholder="4-6 digit PIN"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name *</Label>
                   <Input 
@@ -444,7 +434,7 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="dateOfBirth">Date of Birth</Label>
                   <Input 
@@ -475,6 +465,15 @@ export default function EmployeesPage() {
                   <p className="text-xs text-muted-foreground">
                     Fallback role when not clocked in to a specific job
                   </p>
+                </div>
+                <div className="flex items-center space-x-2 pt-6">
+                  <Switch 
+                    id="active"
+                    data-testid="switch-active"
+                    checked={active}
+                    onCheckedChange={setActive}
+                  />
+                  <Label htmlFor="active">Active</Label>
                 </div>
               </div>
 
@@ -660,41 +659,35 @@ export default function EmployeesPage() {
                   </div>
                 </div>
               </div>
-            
-              <div className="flex items-center space-x-2">
-                <Switch 
-                  id="active"
-                  data-testid="switch-active"
-                  checked={active}
-                  onCheckedChange={setActive}
-                />
-                <Label htmlFor="active">Active</Label>
-              </div>
-            </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => {
-                  setFormOpen(false);
-                  setEditingItem(null);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                data-testid="button-submit-employee"
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {editingItem ? "Save Changes" : "Create Employee"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+  return (
+    <div className="p-6">
+      <DataTable
+        data={displayedEmployees}
+        columns={columns}
+        title="Employees"
+        onAdd={() => {
+          setEditingItem(null);
+          resetForm();
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
+        customActions={getOverrideActions()}
+        isLoading={isLoading}
+        searchPlaceholder="Search employees..."
+        emptyMessage="No employees configured"
+      />
     </div>
   );
 }

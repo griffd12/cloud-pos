@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAuthHeaders, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Calendar, Clock, CheckCircle2, AlertCircle, ArrowRight, CalendarClock } from "lucide-react";
@@ -104,7 +103,6 @@ export default function FiscalClosePage() {
 
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
 
-  // Mutation to advance business date to a specific date
   const advanceBusinessDateMutation = useMutation({
     mutationFn: async ({ propertyId, targetDate, pin }: { propertyId: string; targetDate: string; pin: string }) => {
       const res = await apiRequest("POST", `/api/properties/${propertyId}/business-date/advance`, {
@@ -143,9 +141,15 @@ export default function FiscalClosePage() {
     setShowPinPrompt(true);
   };
 
-  const handleConfirmAdvance = () => {
+  const handleConfirmAdvance = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!selectedPropertyId || !targetDate || !pin) return;
     advanceBusinessDateMutation.mutate({ propertyId: selectedPropertyId, targetDate, pin });
+  };
+
+  const handleCancelPin = () => {
+    setShowPinPrompt(false);
+    setPin("");
   };
 
   const formatCurrency = (value: string | null | undefined) => {
@@ -173,6 +177,60 @@ export default function FiscalClosePage() {
     cashExpected: currentPeriod?.cashExpected || "0",
     cardTotal: currentPeriod?.cardTotal || "0",
   };
+
+  if (showPinPrompt) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>Admin Authorization Required</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelPin} data-testid="button-cancel-pin">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmAdvance}
+                  disabled={!pin || advanceBusinessDateMutation.isPending}
+                  data-testid="button-confirm-advance"
+                >
+                  {advanceBusinessDateMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Advancing...
+                    </>
+                  ) : (
+                    "Confirm"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleConfirmAdvance} className="space-y-4">
+              <p className="text-muted-foreground">
+                Enter your PIN to advance the business date to {targetDate}
+              </p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-pin">Employee PIN</Label>
+                  <Input
+                    id="admin-pin"
+                    type="password"
+                    placeholder="Enter PIN"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleConfirmAdvance()}
+                    data-testid="input-admin-pin"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -407,64 +465,6 @@ export default function FiscalClosePage() {
           </TabsContent>
         </Tabs>
       )}
-
-      {/* PIN Prompt Dialog */}
-      <Dialog open={showPinPrompt} onOpenChange={(open) => {
-        if (!open) {
-          setShowPinPrompt(false);
-          setPin("");
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Admin Authorization Required</DialogTitle>
-            <DialogDescription>
-              Enter your PIN to advance the business date to {targetDate}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="space-y-2">
-                <Label htmlFor="admin-pin">Employee PIN</Label>
-                <Input
-                  id="admin-pin"
-                  type="password"
-                  placeholder="Enter PIN"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleConfirmAdvance()}
-                  data-testid="input-admin-pin"
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowPinPrompt(false);
-                setPin("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmAdvance}
-              disabled={!pin || advanceBusinessDateMutation.isPending}
-              data-testid="button-confirm-advance"
-            >
-              {advanceBusinessDateMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Advancing...
-                </>
-              ) : (
-                "Confirm"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

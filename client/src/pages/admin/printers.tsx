@@ -5,18 +5,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column, type CustomAction } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
 import { Printer as PrinterIcon } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -167,6 +161,93 @@ export default function PrintersPage() {
     getInheritanceColumn<Printer>(contextPropertyId, selectedRvcId),
   ];
 
+  const form = useForm<InsertPrinter>({
+    resolver: zodResolver(insertPrinterSchema),
+    defaultValues: {
+      name: "",
+      printerType: "kitchen",
+      propertyId: "",
+      connectionType: "network",
+      ipAddress: "",
+      subnetMask: "255.255.255.0",
+      port: 9100,
+      driverProtocol: "epson",
+      model: "TM-T88VII",
+      characterWidth: 42,
+      autoCut: true,
+      printLogo: false,
+      printOrderHeader: true,
+      printOrderFooter: true,
+      printVoids: true,
+      printReprints: true,
+      retryAttempts: 3,
+      failureHandlingMode: "alert_cashier",
+      active: true,
+    },
+  });
+
+  const selectedBrand = form.watch("driverProtocol");
+  const modelOptions = selectedBrand === "star" ? STAR_MODELS : EPSON_MODELS;
+
+  useEffect(() => {
+    if (formOpen) {
+      if (editingItem) {
+        form.reset({
+          name: editingItem.name,
+          printerType: editingItem.printerType,
+          propertyId: editingItem.propertyId,
+          connectionType: editingItem.connectionType,
+          ipAddress: editingItem.ipAddress || "",
+          subnetMask: editingItem.subnetMask || "255.255.255.0",
+          port: editingItem.port ?? 9100,
+          driverProtocol: editingItem.driverProtocol || "epson",
+          model: editingItem.model || "TM-T88VII",
+          characterWidth: editingItem.characterWidth ?? 42,
+          autoCut: editingItem.autoCut ?? true,
+          printLogo: editingItem.printLogo ?? false,
+          printOrderHeader: editingItem.printOrderHeader ?? true,
+          printOrderFooter: editingItem.printOrderFooter ?? true,
+          printVoids: editingItem.printVoids ?? true,
+          printReprints: editingItem.printReprints ?? true,
+          retryAttempts: editingItem.retryAttempts ?? 3,
+          failureHandlingMode: editingItem.failureHandlingMode || "alert_cashier",
+          active: editingItem.active ?? true,
+        });
+      } else {
+        const defaultPropertyId = properties[0]?.id || "";
+        form.reset({
+          name: "",
+          printerType: "kitchen",
+          propertyId: defaultPropertyId,
+          connectionType: "network",
+          ipAddress: "",
+          subnetMask: "255.255.255.0",
+          port: 9100,
+          driverProtocol: "epson",
+          model: "TM-T88VII",
+          characterWidth: 42,
+          autoCut: true,
+          printLogo: false,
+          printOrderHeader: true,
+          printOrderFooter: true,
+          printVoids: true,
+          printReprints: true,
+          retryAttempts: 3,
+          failureHandlingMode: "alert_cashier",
+          active: true,
+        });
+      }
+    }
+  }, [formOpen, editingItem, properties]);
+
+  useEffect(() => {
+    const currentModel = form.getValues("model");
+    const isValidForBrand = modelOptions.some(m => m.value === currentModel);
+    if (!isValidForBrand) {
+      form.setValue("model", modelOptions[0]?.value || "");
+    }
+  }, [selectedBrand]);
+
   const createMutation = useMutation({
     mutationFn: async (data: InsertPrinter) => {
       const response = await apiRequest("POST", "/api/printers", data);
@@ -175,6 +256,8 @@ export default function PrintersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/printers", filterKeys] });
       setFormOpen(false);
+      setEditingItem(null);
+      form.reset();
       toast({ title: "Printer created" });
     },
     onError: () => {
@@ -191,6 +274,7 @@ export default function PrintersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/printers", filterKeys] });
       setFormOpen(false);
       setEditingItem(null);
+      form.reset();
       toast({ title: "Printer updated" });
     },
     onError: () => {
@@ -242,163 +326,48 @@ export default function PrintersPage() {
     },
   ];
 
-  const handleOpenForm = (item: Printer | null) => {
-    setEditingItem(item);
-    setFormOpen(true);
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: InsertPrinter) => {
+      if (editingItem) {
+        updateMutation.mutate({ ...editingItem, ...data } as Printer);
+      } else {
+        createMutation.mutate({ ...data, ...scopePayload });
+      }
+    })();
   };
 
-  const handleCloseForm = () => {
+  const handleCancel = () => {
     setFormOpen(false);
     setEditingItem(null);
+    form.reset();
   };
 
-  return (
-    <div className="p-6">
-      <DataTable
-        data={printers}
-        columns={columns}
-        title="Printers"
-        onAdd={() => handleOpenForm(null)}
-        onEdit={(item) => handleOpenForm(item)}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        customActions={customActions}
-        isLoading={isLoading}
-        searchPlaceholder="Search printers..."
-        emptyMessage="No printers configured"
-      />
-
-      <PrinterFormDialog
-        open={formOpen}
-        onClose={handleCloseForm}
-        editingItem={editingItem}
-        properties={properties}
-        onSubmit={(data) => {
-          if (editingItem) {
-            updateMutation.mutate({ ...editingItem, ...data } as Printer);
-          } else {
-            createMutation.mutate({ ...data, ...scopePayload });
-          }
-        }}
-        isLoading={createMutation.isPending || updateMutation.isPending}
-      />
-    </div>
-  );
-}
-
-interface PrinterFormDialogProps {
-  open: boolean;
-  onClose: () => void;
-  editingItem: Printer | null;
-  properties: Property[];
-  onSubmit: (data: InsertPrinter) => void;
-  isLoading: boolean;
-}
-
-function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, isLoading }: PrinterFormDialogProps) {
-  const form = useForm<InsertPrinter>({
-    resolver: zodResolver(insertPrinterSchema),
-    defaultValues: {
-      name: "",
-      printerType: "kitchen",
-      propertyId: "",
-      connectionType: "network",
-      ipAddress: "",
-      subnetMask: "255.255.255.0",
-      port: 9100,
-      driverProtocol: "epson",
-      model: "TM-T88VII",
-      characterWidth: 42,
-      autoCut: true,
-      printLogo: false,
-      printOrderHeader: true,
-      printOrderFooter: true,
-      printVoids: true,
-      printReprints: true,
-      retryAttempts: 3,
-      failureHandlingMode: "alert_cashier",
-      active: true,
-    },
-  });
-
-  const selectedBrand = form.watch("driverProtocol");
-  const modelOptions = selectedBrand === "star" ? STAR_MODELS : EPSON_MODELS;
-
-  useEffect(() => {
-    if (open) {
-      if (editingItem) {
-        form.reset({
-          name: editingItem.name,
-          printerType: editingItem.printerType,
-          propertyId: editingItem.propertyId,
-          connectionType: editingItem.connectionType,
-          ipAddress: editingItem.ipAddress || "",
-          subnetMask: editingItem.subnetMask || "255.255.255.0",
-          port: editingItem.port ?? 9100,
-          driverProtocol: editingItem.driverProtocol || "epson",
-          model: editingItem.model || "TM-T88VII",
-          characterWidth: editingItem.characterWidth ?? 42,
-          autoCut: editingItem.autoCut ?? true,
-          printLogo: editingItem.printLogo ?? false,
-          printOrderHeader: editingItem.printOrderHeader ?? true,
-          printOrderFooter: editingItem.printOrderFooter ?? true,
-          printVoids: editingItem.printVoids ?? true,
-          printReprints: editingItem.printReprints ?? true,
-          retryAttempts: editingItem.retryAttempts ?? 3,
-          failureHandlingMode: editingItem.failureHandlingMode || "alert_cashier",
-          active: editingItem.active ?? true,
-        });
-      } else {
-        const defaultPropertyId = properties[0]?.id || "";
-        form.reset({
-          name: "",
-          printerType: "kitchen",
-          propertyId: defaultPropertyId,
-          connectionType: "network",
-          ipAddress: "",
-          subnetMask: "255.255.255.0",
-          port: 9100,
-          driverProtocol: "epson",
-          model: "TM-T88VII",
-          characterWidth: 42,
-          autoCut: true,
-          printLogo: false,
-          printOrderHeader: true,
-          printOrderFooter: true,
-          printVoids: true,
-          printReprints: true,
-          retryAttempts: 3,
-          failureHandlingMode: "alert_cashier",
-          active: true,
-        });
-      }
-    }
-  }, [open, editingItem, properties]);
-
-  useEffect(() => {
-    const currentModel = form.getValues("model");
-    const isValidForBrand = modelOptions.some(m => m.value === currentModel);
-    if (!isValidForBrand) {
-      form.setValue("model", modelOptions[0]?.value || "");
-    }
-  }, [selectedBrand]);
-
-  const handleSubmit = (data: InsertPrinter) => {
-    onSubmit(data);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle data-testid="text-form-title">
-            {editingItem ? "Edit Printer" : "Add Printer"}
-          </DialogTitle>
-        </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                <div className="grid grid-cols-2 gap-4">
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle data-testid="text-form-title">{editingItem ? "Edit Printer" : "Add Printer"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="name"
@@ -437,9 +406,7 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                       </FormItem>
                     )}
                   />
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="connectionType"
@@ -464,7 +431,7 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
                     name="ipAddress"
@@ -492,9 +459,7 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                       </FormItem>
                     )}
                   />
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="port"
@@ -538,7 +503,7 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="model"
@@ -587,121 +552,6 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                       </FormItem>
                     )}
                   />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="autoCut"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Auto Cut</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-autoCut" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="printLogo"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Print Logo</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-printLogo" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="printOrderHeader"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Print Order Header</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printOrderHeader" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="printOrderFooter"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Print Order Footer</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printOrderFooter" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="printVoids"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Print Voids</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printVoids" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="printReprints"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Print Reprints</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printReprints" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="active"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <FormLabel>Active</FormLabel>
-                        <FormControl>
-                          <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-active" />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="retryAttempts"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Retry Attempts</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="3" 
-                            {...field} 
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 3)}
-                            data-testid="input-retryAttempts" 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
 
                   <FormField
                     control={form.control}
@@ -725,19 +575,150 @@ function PrinterFormDialog({ open, onClose, editingItem, properties, onSubmit, i
                     )}
                   />
                 </div>
-            </div>
 
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading} data-testid="button-save">
-                {isLoading ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+                <div className="border rounded-md p-4 space-y-3">
+                  <h4 className="font-medium text-sm">Print Options</h4>
+                  <div className="grid grid-cols-4 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="autoCut"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Auto Cut</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-autoCut" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="printLogo"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Print Logo</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-printLogo" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="printOrderHeader"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Print Order Header</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printOrderHeader" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="printOrderFooter"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Print Order Footer</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printOrderFooter" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="printVoids"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Print Voids</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printVoids" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="printReprints"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Print Reprints</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-printReprints" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="active"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between">
+                          <FormLabel>Active</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value ?? true} onCheckedChange={field.onChange} data-testid="switch-active" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="retryAttempts"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Retry Attempts</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="3" 
+                              {...field} 
+                              onChange={(e) => field.onChange(parseInt(e.target.value) || 3)}
+                              data-testid="input-retryAttempts" 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <DataTable
+        data={printers}
+        columns={columns}
+        title="Printers"
+        onAdd={() => {
+          setEditingItem(null);
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        customActions={customActions}
+        isLoading={isLoading}
+        searchPlaceholder="Search printers..."
+        emptyMessage="No printers configured"
+      />
+    </div>
   );
 }

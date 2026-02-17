@@ -18,7 +18,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -237,6 +236,7 @@ export default function RegisteredDevicesPage() {
     onSuccess: (newDevice: RegisteredDevice) => {
       queryClient.invalidateQueries({ queryKey: ["/api/registered-devices", filterKeys] });
       setFormOpen(false);
+      setEditingItem(null);
       form.reset();
       setEnrollmentCodeDialog({ device: newDevice });
       toast({ title: "Device registered successfully" });
@@ -343,6 +343,12 @@ export default function RegisteredDevicesPage() {
     }
   };
 
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    form.reset();
+  };
+
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({ title: "Enrollment code copied to clipboard" });
@@ -350,7 +356,6 @@ export default function RegisteredDevicesPage() {
 
   const actionButtons = (device: RegisteredDevice) => (
     <div className="flex items-center gap-1">
-      {/* Replace button - available for all statuses except revoked */}
       {device.status !== "revoked" && (
         <Button
           size="sm"
@@ -408,6 +413,218 @@ export default function RegisteredDevicesPage() {
     </div>
   );
 
+  if (formOpen) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <CardTitle>{editingItem ? "Edit Device" : "Register New Device"}</CardTitle>
+                <CardDescription className="mt-1">
+                  {editingItem
+                    ? "Update device information and metadata."
+                    : "Register a new device to allow it to access the POS or KDS system."}
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={form.handleSubmit(handleSubmit)}
+                  data-testid="button-submit"
+                >
+                  {(createMutation.isPending || updateMutation.isPending) && (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  )}
+                  {editingItem ? "Update Device" : "Register Device"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    rules={{ required: "Device name is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Device Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Front Counter PC" {...field} data-testid="input-name" />
+                        </FormControl>
+                        <FormDescription>A friendly name to identify this device</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="deviceType"
+                    rules={{ required: "Device type is required" }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Device Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={!!editingItem}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-device-type">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="pos_workstation">
+                              <div className="flex items-center gap-2">
+                                <Monitor className="w-4 h-4" />
+                                POS Workstation
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="kds_display">
+                              <div className="flex items-center gap-2">
+                                <Tv className="w-4 h-4" />
+                                KDS Display
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {deviceType === "pos_workstation" && (
+                    <FormField
+                      control={form.control}
+                      name="workstationId"
+                      rules={{ required: "Workstation is required for POS devices" }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Linked Workstation</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-workstation">
+                                <SelectValue placeholder="Select workstation" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {filteredWorkstations.map((ws) => (
+                                <SelectItem key={ws.id} value={ws.id}>
+                                  {ws.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>The workstation this device will operate as</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {deviceType === "kds_display" && (
+                    <FormField
+                      control={form.control}
+                      name="kdsDeviceId"
+                      rules={{ required: "KDS device is required for KDS displays" }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Linked KDS Device</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-kds-device">
+                                <SelectValue placeholder="Select KDS device" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {filteredKdsDevices.map((kds) => (
+                                <SelectItem key={kds.id} value={kds.id}>
+                                  {kds.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>The KDS station this display will show</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-medium mb-3">Optional Hardware Information</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="serialNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Serial Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Device serial number" {...field} data-testid="input-serial" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="assetTag"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Asset Tag</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Internal asset tag" {...field} data-testid="input-asset-tag" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="macAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>MAC Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 00:1B:44:11:3A:B7" {...field} data-testid="input-mac" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notes</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Optional notes about this device" {...field} data-testid="input-notes" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -461,213 +678,8 @@ export default function RegisteredDevicesPage() {
         actionButtons={actionButtons}
       />
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Device" : "Register New Device"}</DialogTitle>
-            <DialogDescription>
-              {editingItem
-                ? "Update device information and metadata."
-                : "Register a new device to allow it to access the POS or KDS system."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="name"
-                rules={{ required: "Device name is required" }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Device Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Front Counter PC" {...field} data-testid="input-name" />
-                    </FormControl>
-                    <FormDescription>A friendly name to identify this device</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="deviceType"
-                rules={{ required: "Device type is required" }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Device Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={!!editingItem}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-device-type">
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="pos_workstation">
-                          <div className="flex items-center gap-2">
-                            <Monitor className="w-4 h-4" />
-                            POS Workstation
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="kds_display">
-                          <div className="flex items-center gap-2">
-                            <Tv className="w-4 h-4" />
-                            KDS Display
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              </div>
-
-              {deviceType === "pos_workstation" && (
-                <FormField
-                  control={form.control}
-                  name="workstationId"
-                  rules={{ required: "Workstation is required for POS devices" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Linked Workstation</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-workstation">
-                            <SelectValue placeholder="Select workstation" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredWorkstations.map((ws) => (
-                            <SelectItem key={ws.id} value={ws.id}>
-                              {ws.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>The workstation this device will operate as</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              {deviceType === "kds_display" && (
-                <FormField
-                  control={form.control}
-                  name="kdsDeviceId"
-                  rules={{ required: "KDS device is required for KDS displays" }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Linked KDS Device</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-kds-device">
-                            <SelectValue placeholder="Select KDS device" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredKdsDevices.map((kds) => (
-                            <SelectItem key={kds.id} value={kds.id}>
-                              {kds.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>The KDS station this display will show</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-3">Optional Hardware Information</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="serialNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Serial Number</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Device serial number" {...field} data-testid="input-serial" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="assetTag"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Asset Tag</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Internal asset tag" {...field} data-testid="input-asset-tag" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="macAddress"
-                    render={({ field }) => (
-                      <FormItem className="col-span-2">
-                        <FormLabel>MAC Address</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., 00:1B:44:11:3A:B7" {...field} data-testid="input-mac" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Notes</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Optional notes about this device" {...field} data-testid="input-notes" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              </div>
-              <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-                <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  data-testid="button-submit"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  )}
-                  {editingItem ? "Update Device" : "Register Device"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={!!enrollmentCodeDialog} onOpenChange={() => setEnrollmentCodeDialog(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="w-5 h-5" />
@@ -678,7 +690,6 @@ export default function RegisteredDevicesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {enrollmentCodeDialog?.device && (
             <div className="space-y-4">
               <div className="bg-muted rounded-lg p-6 text-center">
@@ -706,7 +717,6 @@ export default function RegisteredDevicesPage() {
               </Button>
             </div>
           )}
-          </div>
         </DialogContent>
       </Dialog>
     </div>

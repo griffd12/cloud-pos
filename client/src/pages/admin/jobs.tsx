@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -23,7 +23,6 @@ export default function JobsPage() {
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload } = useEmcFilter();
   const scopeLookup = useScopeLookup();
   
-  // Enable real-time updates via WebSocket
   usePosWebSocket();
   
   const [formOpen, setFormOpen] = useState(false);
@@ -188,8 +187,8 @@ export default function JobsPage() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     
     if (!name || !code) {
       toast({ title: "Please fill all required fields", variant: "destructive" });
@@ -216,36 +215,36 @@ export default function JobsPage() {
     }
   };
 
-  return (
-    <div className="p-6">
-      <DataTable
-        title="Jobs"
-        columns={columns}
-        data={displayedJobs}
-        isLoading={isLoading}
-        onAdd={() => {
-          setEditingItem(null);
-          resetForm();
-          setFormOpen(true);
-        }}
-        onEdit={(item) => {
-          setEditingItem(item);
-          setFormOpen(true);
-        }}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        canDelete={canDeleteItem}
-        customActions={getOverrideActions()}
-        searchPlaceholder="Search jobs..."
-      />
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    resetForm();
+  };
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Job" : "New Job"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="grid grid-cols-2 gap-4">
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>{editingItem ? "Edit Job" : "New Job"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-job">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save-job"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="code">Code *</Label>
                   <Input
@@ -266,9 +265,6 @@ export default function JobsPage() {
                     placeholder="e.g., Server, Bartender"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="role">Role (for permissions)</Label>
                   <Select value={roleId} onValueChange={setRoleId}>
@@ -303,26 +299,28 @@ export default function JobsPage() {
               </div>
 
               {compensationType === "hourly" && (
-                <div className="grid gap-2">
-                  <Label htmlFor="hourlyRate">Default Hourly Rate</Label>
-                  <Input
-                    id="hourlyRate"
-                    data-testid="input-job-hourly-rate"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={hourlyRate}
-                    onChange={(e) => setHourlyRate(e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Default rate used when no employee-specific rate is set
-                  </p>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="hourlyRate">Default Hourly Rate</Label>
+                    <Input
+                      id="hourlyRate"
+                      data-testid="input-job-hourly-rate"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={hourlyRate}
+                      onChange={(e) => setHourlyRate(e.target.value)}
+                      placeholder="0.00"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Default rate used when no employee-specific rate is set
+                    </p>
+                  </div>
                 </div>
               )}
 
               {compensationType === "salaried" && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="salaryAmount">Salary Amount</Label>
                     <Input
@@ -353,7 +351,7 @@ export default function JobsPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="tipMode">Tip Mode</Label>
                   <Select value={tipMode} onValueChange={setTipMode}>
@@ -378,28 +376,34 @@ export default function JobsPage() {
                   <Label htmlFor="active">Active</Label>
                 </div>
               </div>
-            </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setFormOpen(false)}
-                data-testid="button-cancel-job"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                data-testid="button-save-job"
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+  return (
+    <div className="p-6">
+      <DataTable
+        title="Jobs"
+        columns={columns}
+        data={displayedJobs}
+        isLoading={isLoading}
+        onAdd={() => {
+          setEditingItem(null);
+          resetForm();
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
+        customActions={getOverrideActions()}
+        searchPlaceholder="Search jobs..."
+      />
     </div>
   );
 }

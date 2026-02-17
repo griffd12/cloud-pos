@@ -6,6 +6,7 @@ import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
@@ -17,13 +18,6 @@ import {
   type PrintClassRouting,
   type Property
 } from "@shared/schema";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -45,6 +39,8 @@ export default function PrintClassesPage() {
   const scopeLookup = useScopeLookup();
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PrintClass | null>(null);
+  const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: printClasses = [], isLoading } = useQuery<PrintClass[]>({
     queryKey: ["/api/print-classes", filterKeys],
@@ -166,125 +162,50 @@ export default function PrintClassesPage() {
     },
   });
 
-  return (
-    <div className="p-6">
-      <DataTable
-        data={displayedPrintClasses}
-        columns={columns}
-        title="Print Classes"
-        onAdd={() => {
-          setEditingItem(null);
-          setFormOpen(true);
-        }}
-        onEdit={(item) => {
-          setEditingItem(item);
-          setFormOpen(true);
-        }}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        canDelete={canDeleteItem}
-        customActions={getOverrideActions()}
-        isLoading={isLoading}
-        searchPlaceholder="Search print classes..."
-        emptyMessage="No print classes configured"
-      />
-
-      <PrintClassFormDialog
-        key={editingItem?.id || "new"}
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
-        }}
-        editingItem={editingItem}
-        orderDevices={orderDevices}
-        properties={properties}
-        existingRoutings={allRoutings}
-        onSubmit={async (data, selectedOrderDeviceIds) => {
-          try {
-            let printClassId: string;
-            
-            if (editingItem) {
-              await updateMutation.mutateAsync({ ...editingItem, ...data });
-              printClassId = editingItem.id;
-            } else {
-              const result = await createMutation.mutateAsync({ ...data, ...scopePayload });
-              printClassId = result.id;
-            }
-
-            const existingRoutingsForClass = allRoutings.filter(r => r.printClassId === printClassId);
-            const existingOrderDeviceIds = existingRoutingsForClass.map(r => r.orderDeviceId);
-
-            const toAdd = selectedOrderDeviceIds.filter(id => !existingOrderDeviceIds.includes(id));
-            const toRemove = existingRoutingsForClass.filter(r => !selectedOrderDeviceIds.includes(r.orderDeviceId));
-
-            for (const orderDeviceId of toAdd) {
-              await apiRequest("POST", "/api/print-class-routing", {
-                printClassId,
-                orderDeviceId,
-              });
-            }
-
-            for (const routing of toRemove) {
-              await apiRequest("DELETE", `/api/print-class-routing/${routing.id}`);
-            }
-
-            queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", filterKeys] });
-            setFormOpen(false);
-            setEditingItem(null);
-            toast({ title: editingItem ? "Print class updated" : "Print class created" });
-          } catch (error) {
-            toast({ title: "Failed to save print class", variant: "destructive" });
-          }
-        }}
-        isLoading={createMutation.isPending || updateMutation.isPending}
-      />
-    </div>
-  );
-}
-
-interface PrintClassFormDialogProps {
-  open: boolean;
-  onClose: () => void;
-  editingItem: PrintClass | null;
-  orderDevices: OrderDevice[];
-  properties: Property[];
-  existingRoutings: PrintClassRouting[];
-  onSubmit: (data: InsertPrintClass, selectedOrderDeviceIds: string[]) => Promise<void>;
-  isLoading: boolean;
-}
-
-function PrintClassFormDialog({ 
-  open, 
-  onClose, 
-  editingItem, 
-  orderDevices,
-  properties,
-  existingRoutings,
-  onSubmit, 
-  isLoading 
-}: PrintClassFormDialogProps) {
-  const initialOrderDevices = editingItem 
-    ? existingRoutings.filter(r => r.printClassId === editingItem.id).map(r => r.orderDeviceId)
-    : [];
-    
-  const [selectedOrderDevices, setSelectedOrderDevices] = useState<string[]>(initialOrderDevices);
-  const [isSaving, setIsSaving] = useState(false);
-
   const form = useForm<InsertPrintClass>({
     resolver: zodResolver(insertPrintClassSchema),
-    defaultValues: editingItem ? {
-      name: editingItem.name,
-      code: editingItem.code,
-      enterpriseId: editingItem.enterpriseId,
-      propertyId: editingItem.propertyId,
-      rvcId: editingItem.rvcId,
-      active: editingItem.active ?? true,
-    } : {
+    defaultValues: {
       name: "",
       code: "",
       active: true,
     },
   });
+
+  const resetForm = () => {
+    form.reset({
+      name: "",
+      code: "",
+      active: true,
+    });
+    setSelectedOrderDevices([]);
+  };
+
+  const openAdd = () => {
+    setEditingItem(null);
+    resetForm();
+    setFormOpen(true);
+  };
+
+  const openEdit = (item: PrintClass) => {
+    setEditingItem(item);
+    const initialOrderDevices = allRoutings.filter(r => r.printClassId === item.id).map(r => r.orderDeviceId);
+    setSelectedOrderDevices(initialOrderDevices);
+    form.reset({
+      name: item.name,
+      code: item.code,
+      enterpriseId: item.enterpriseId,
+      propertyId: item.propertyId,
+      rvcId: item.rvcId,
+      active: item.active ?? true,
+    });
+    setFormOpen(true);
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    resetForm();
+  };
 
   const toggleOrderDevice = (orderDeviceId: string) => {
     setSelectedOrderDevices(prev => 
@@ -294,78 +215,133 @@ function PrintClassFormDialog({
     );
   };
 
-  const handleSubmit = async (data: InsertPrintClass) => {
+  const getPropertyName = (propertyId: string) => {
+    return properties.find(p => p.id === propertyId)?.name || "Unknown";
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    const valid = await form.trigger();
+    if (!valid) return;
+
+    const data = form.getValues();
     setIsSaving(true);
     try {
-      await onSubmit(data, selectedOrderDevices);
+      let printClassId: string;
+      
+      if (editingItem) {
+        await updateMutation.mutateAsync({ ...editingItem, ...data });
+        printClassId = editingItem.id;
+      } else {
+        const result = await createMutation.mutateAsync({ ...data, ...scopePayload });
+        printClassId = result.id;
+      }
+
+      const existingRoutingsForClass = allRoutings.filter(r => r.printClassId === printClassId);
+      const existingOrderDeviceIds = existingRoutingsForClass.map(r => r.orderDeviceId);
+
+      const toAdd = selectedOrderDevices.filter(id => !existingOrderDeviceIds.includes(id));
+      const toRemove = existingRoutingsForClass.filter(r => !selectedOrderDevices.includes(r.orderDeviceId));
+
+      for (const orderDeviceId of toAdd) {
+        await apiRequest("POST", "/api/print-class-routing", {
+          printClassId,
+          orderDeviceId,
+        });
+      }
+
+      for (const routing of toRemove) {
+        await apiRequest("DELETE", `/api/print-class-routing/${routing.id}`);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/print-class-routing", filterKeys] });
+      setFormOpen(false);
+      setEditingItem(null);
+      resetForm();
+      toast({ title: editingItem ? "Print class updated" : "Print class created" });
+    } catch (error) {
+      toast({ title: "Failed to save print class", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const getPropertyName = (propertyId: string) => {
-    return properties.find(p => p.id === propertyId)?.name || "Unknown";
-  };
+  const isFormLoading = createMutation.isPending || updateMutation.isPending || isSaving;
 
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle data-testid="text-form-title">
-            {editingItem ? "Edit Print Class" : "Add Print Class"}
-          </DialogTitle>
-        </DialogHeader>
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle data-testid="text-form-title">
+                {editingItem ? "Edit Print Class" : "Add Print Class"}
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save"
+                  disabled={isFormLoading}
+                  onClick={handleSubmit}
+                >
+                  {isFormLoading ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Print Class Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Hot/Cold" {...field} data-testid="input-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Print Class Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Hot/Cold" {...field} data-testid="input-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., HOT_COLD" {...field} data-testid="input-code" />
+                        </FormControl>
+                        <FormDescription>Short code for identification</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="code"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Code</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., HOT_COLD" {...field} data-testid="input-code" />
-                      </FormControl>
-                      <FormDescription>Short code for identification</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="active"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between pt-6">
+                        <FormLabel>Active</FormLabel>
+                        <FormControl>
+                          <Switch 
+                            checked={field.value ?? true} 
+                            onCheckedChange={field.onChange} 
+                            data-testid="switch-active" 
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="active"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between">
-                      <FormLabel>Active</FormLabel>
-                      <FormControl>
-                        <Switch 
-                          checked={field.value ?? true} 
-                          onCheckedChange={field.onChange} 
-                          data-testid="switch-active" 
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
 
                 <div className="border rounded-md p-4 space-y-3">
                   <div>
@@ -419,19 +395,29 @@ function PrintClassFormDialog({
                     </div>
                   )}
                 </div>
-            </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading || isSaving} data-testid="button-save">
-                {isLoading || isSaving ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+  return (
+    <div className="p-6">
+      <DataTable
+        data={displayedPrintClasses}
+        columns={columns}
+        title="Print Classes"
+        onAdd={openAdd}
+        onEdit={openEdit}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        canDelete={canDeleteItem}
+        customActions={getOverrideActions()}
+        isLoading={isLoading}
+        searchPlaceholder="Search print classes..."
+        emptyMessage="No print classes configured"
+      />
+    </div>
   );
 }

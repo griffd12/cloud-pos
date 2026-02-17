@@ -5,17 +5,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { DataTable, type Column } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
 import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -36,6 +30,17 @@ import {
 } from "@/components/ui/select";
 import { getScopeColumn, getZoneColumn, getInheritanceColumn } from "@/components/admin/scope-column";
 import { useScopeLookup } from "@/hooks/use-scope-lookup";
+
+const PRINTER_FIELDS = [
+  "defaultReceiptPrinterId",
+  "backupReceiptPrinterId",
+  "reportPrinterId",
+  "backupReportPrinterId",
+  "voidPrinterId",
+  "backupVoidPrinterId",
+] as const;
+
+type PrinterFieldName = typeof PRINTER_FIELDS[number];
 
 export default function WorkstationsPage() {
   const { toast } = useToast();
@@ -127,137 +132,6 @@ export default function WorkstationsPage() {
     getInheritanceColumn<Workstation>(contextPropertyId, selectedRvcId),
   ];
 
-  const createMutation = useMutation({
-    mutationFn: async (data: InsertWorkstation) => {
-      const response = await apiRequest("POST", "/api/workstations", data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
-      setFormOpen(false);
-      toast({ title: "Workstation created" });
-    },
-    onError: () => {
-      toast({ title: "Failed to create workstation", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async (data: Workstation) => {
-      const response = await apiRequest("PUT", "/api/workstations/" + data.id, data);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText);
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
-      setFormOpen(false);
-      setEditingItem(null);
-      toast({ title: "Workstation updated" });
-    },
-    onError: (error) => {
-      toast({ title: "Failed to update workstation", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", "/api/workstations/" + id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
-      toast({ title: "Workstation deleted" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete workstation", variant: "destructive" });
-    },
-  });
-
-  return (
-    <div className="p-6">
-      <DataTable
-        data={workstations}
-        columns={columns}
-        title="Workstations"
-        onAdd={() => {
-          setEditingItem(null);
-          setFormOpen(true);
-        }}
-        onEdit={(item) => {
-          setEditingItem(item);
-          setFormOpen(true);
-        }}
-        onDelete={(item) => deleteMutation.mutate(item.id)}
-        isLoading={isLoading}
-        searchPlaceholder="Search workstations..."
-        emptyMessage="No workstations configured"
-      />
-
-      <WorkstationFormDialog
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingItem(null);
-        }}
-        editingItem={editingItem}
-        properties={properties}
-        rvcs={rvcs}
-        printers={printers}
-        workstations={workstations}
-        onSubmit={(data) => {
-          if (editingItem) {
-            updateMutation.mutate({ ...editingItem, ...data } as Workstation);
-          } else {
-            createMutation.mutate({ ...data, ...scopePayload });
-          }
-        }}
-        isLoading={createMutation.isPending || updateMutation.isPending}
-        contextPropertyId={contextPropertyId}
-      />
-    </div>
-  );
-}
-
-interface WorkstationFormDialogProps {
-  open: boolean;
-  onClose: () => void;
-  editingItem: Workstation | null;
-  properties: Property[];
-  rvcs: Rvc[];
-  printers: Printer[];
-  workstations: Workstation[];
-  onSubmit: (data: InsertWorkstation) => void;
-  isLoading: boolean;
-  contextPropertyId?: string;
-}
-
-const PRINTER_FIELDS = [
-  "defaultReceiptPrinterId",
-  "backupReceiptPrinterId",
-  "reportPrinterId",
-  "backupReportPrinterId",
-  "voidPrinterId",
-  "backupVoidPrinterId",
-] as const;
-
-type PrinterFieldName = typeof PRINTER_FIELDS[number];
-
-function WorkstationFormDialog({ 
-  open, 
-  onClose, 
-  editingItem, 
-  properties, 
-  rvcs, 
-  printers,
-  workstations,
-  onSubmit, 
-  isLoading,
-  contextPropertyId 
-}: WorkstationFormDialogProps) {
-  const { toast } = useToast();
-  
   const form = useForm<InsertWorkstation>({
     resolver: zodResolver(insertWorkstationSchema),
     defaultValues: {
@@ -307,7 +181,7 @@ function WorkstationFormDialog({
   ], [rvcs]);
 
   useEffect(() => {
-    if (open) {
+    if (formOpen) {
       if (editingItem) {
         form.reset({
           name: editingItem.name,
@@ -335,7 +209,6 @@ function WorkstationFormDialog({
           fontScale: editingItem.fontScale ?? 100,
         });
       } else {
-        // Use EMC context property first, then fall back to first available property
         const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
         form.reset({
           name: "",
@@ -364,7 +237,7 @@ function WorkstationFormDialog({
         });
       }
     }
-  }, [open, editingItem, properties, form]);
+  }, [formOpen, editingItem, properties, form]);
 
   const cleanPrinterId = (value: string | null | undefined): string | null => {
     if (!value || value === "__none__") return null;
@@ -394,18 +267,82 @@ function WorkstationFormDialog({
     });
   };
 
-  const handleSubmit = (data: InsertWorkstation) => {
-    const cleanedData = {
-      ...data,
-      rvcId: cleanPrinterId(data.rvcId),
-      defaultReceiptPrinterId: cleanPrinterId(data.defaultReceiptPrinterId),
-      backupReceiptPrinterId: cleanPrinterId(data.backupReceiptPrinterId),
-      reportPrinterId: cleanPrinterId(data.reportPrinterId),
-      backupReportPrinterId: cleanPrinterId(data.backupReportPrinterId),
-      voidPrinterId: cleanPrinterId(data.voidPrinterId),
-      backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
-    };
-    onSubmit(cleanedData);
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertWorkstation) => {
+      const response = await apiRequest("POST", "/api/workstations", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
+      setFormOpen(false);
+      setEditingItem(null);
+      form.reset();
+      toast({ title: "Workstation created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create workstation", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Workstation) => {
+      const response = await apiRequest("PUT", "/api/workstations/" + data.id, data);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
+      setFormOpen(false);
+      setEditingItem(null);
+      form.reset();
+      toast({ title: "Workstation updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to update workstation", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", "/api/workstations/" + id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
+      toast({ title: "Workstation deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete workstation", variant: "destructive" });
+    },
+  });
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    form.handleSubmit((data: InsertWorkstation) => {
+      const cleanedData = {
+        ...data,
+        rvcId: cleanPrinterId(data.rvcId),
+        defaultReceiptPrinterId: cleanPrinterId(data.defaultReceiptPrinterId),
+        backupReceiptPrinterId: cleanPrinterId(data.backupReceiptPrinterId),
+        reportPrinterId: cleanPrinterId(data.reportPrinterId),
+        backupReportPrinterId: cleanPrinterId(data.backupReportPrinterId),
+        voidPrinterId: cleanPrinterId(data.voidPrinterId),
+        backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
+      };
+      if (editingItem) {
+        updateMutation.mutate({ ...editingItem, ...cleanedData } as Workstation);
+      } else {
+        createMutation.mutate({ ...cleanedData, ...scopePayload });
+      }
+    })();
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    form.reset();
   };
 
   const PrinterSelectField = ({ 
@@ -455,110 +392,122 @@ function WorkstationFormDialog({
     />
   );
 
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle data-testid="text-form-title">
-            {editingItem ? "Edit Workstation" : "Add Workstation"}
-          </DialogTitle>
-        </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Workstation Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Front Counter 1" {...field} data-testid="input-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="deviceType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Device Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle data-testid="text-form-title">{editingItem ? "Edit Workstation" : "Add Workstation"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="button-save"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  onClick={handleSubmit}
+                >
+                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-4 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Workstation Name</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-deviceType">
-                            <SelectValue />
-                          </SelectTrigger>
+                          <Input placeholder="e.g., Front Counter 1" {...field} data-testid="input-name" />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="pos_terminal">POS Terminal</SelectItem>
-                          <SelectItem value="kiosk">Self-Service Kiosk</SelectItem>
-                          <SelectItem value="manager_station">Manager Station</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="rvcId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Revenue Center (Optional)</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value || "__none__"}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-rvcId">
-                            <SelectValue placeholder="Select RVC" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {rvcOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="deviceType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Device Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-deviceType">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="pos_terminal">POS Terminal</SelectItem>
+                            <SelectItem value="kiosk">Self-Service Kiosk</SelectItem>
+                            <SelectItem value="manager_station">Manager Station</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="defaultOrderType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Default Order Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "dine_in"}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-defaultOrderType">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="dine_in">Dine In</SelectItem>
-                          <SelectItem value="take_out">Take Out</SelectItem>
-                          <SelectItem value="delivery">Delivery</SelectItem>
-                          <SelectItem value="drive_thru">Drive Thru</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="rvcId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Revenue Center (Optional)</FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value || "__none__"}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-rvcId">
+                              <SelectValue placeholder="Select RVC" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {rvcOptions.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="defaultOrderType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Default Order Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "dine_in"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-defaultOrderType">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="dine_in">Dine In</SelectItem>
+                            <SelectItem value="take_out">Take Out</SelectItem>
+                            <SelectItem value="delivery">Delivery</SelectItem>
+                            <SelectItem value="drive_thru">Drive Thru</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 <div className="border rounded-md p-4 space-y-3">
                   <h4 className="font-medium text-sm">Workstation Settings</h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-4 gap-3">
                     <FormField
                       control={form.control}
                       name="fastTransactionEnabled"
@@ -657,63 +606,65 @@ function WorkstationFormDialog({
                     />
                   </div>
                   
-                  <FormField
-                    control={form.control}
-                    name="autoLogoutMinutes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Auto-Logout (minutes)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="0 = disabled"
-                            {...field}
-                            value={field.value ?? ""}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              field.onChange(val === "" ? null : parseInt(val, 10));
-                            }}
-                            data-testid="input-autoLogoutMinutes"
-                          />
-                        </FormControl>
-                        <FormDescription className="text-xs">
-                          Automatically sign out employee after this many minutes of inactivity. Unsent items will be cancelled. Set to 0 or leave empty to disable.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="fontScale"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Display Font Size</FormLabel>
-                        <Select
-                          onValueChange={(val) => field.onChange(parseInt(val, 10))}
-                          value={String(field.value ?? 100)}
-                        >
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="autoLogoutMinutes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Auto-Logout (minutes)</FormLabel>
                           <FormControl>
-                            <SelectTrigger data-testid="select-fontScale">
-                              <SelectValue />
-                            </SelectTrigger>
+                            <Input
+                              type="number"
+                              min="0"
+                              placeholder="0 = disabled"
+                              {...field}
+                              value={field.value ?? ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                field.onChange(val === "" ? null : parseInt(val, 10));
+                              }}
+                              data-testid="input-autoLogoutMinutes"
+                            />
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="85">Small (85%)</SelectItem>
-                            <SelectItem value="100">Medium (100%) - Default</SelectItem>
-                            <SelectItem value="120">Large (120%)</SelectItem>
-                            <SelectItem value="140">Extra Large (140%)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormDescription className="text-xs">
-                          Controls the text size on POS screens, check details, popups, and KDS tickets for this workstation. Use Large or Extra Large for smaller touchscreens.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          <FormDescription className="text-xs">
+                            Automatically sign out employee after this many minutes of inactivity. Unsent items will be cancelled. Set to 0 or leave empty to disable.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="fontScale"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Display Font Size</FormLabel>
+                          <Select
+                            onValueChange={(val) => field.onChange(parseInt(val, 10))}
+                            value={String(field.value ?? 100)}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-fontScale">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="85">Small (85%)</SelectItem>
+                              <SelectItem value="100">Medium (100%) - Default</SelectItem>
+                              <SelectItem value="120">Large (120%)</SelectItem>
+                              <SelectItem value="140">Extra Large (140%)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Controls the text size on POS screens, check details, popups, and KDS tickets for this workstation. Use Large or Extra Large for smaller touchscreens.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </div>
 
                 <div className="border rounded-md p-4 space-y-4">
@@ -722,91 +673,105 @@ function WorkstationFormDialog({
                     Select a printer and click "Set for all" to apply it to all printer types.
                   </p>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                  <PrinterSelectField
-                    name="defaultReceiptPrinterId"
-                    label="Receipt Printer"
-                    description="Primary printer for guest checks"
-                  />
-                  
-                  <PrinterSelectField
-                    name="backupReceiptPrinterId"
-                    label="Backup Receipt Printer"
-                    description="Fallback if primary is offline"
-                  />
-                  
-                  <PrinterSelectField
-                    name="reportPrinterId"
-                    label="Report Printer"
-                    description="Printer for reports and summaries"
-                  />
-                  
-                  <PrinterSelectField
-                    name="backupReportPrinterId"
-                    label="Backup Report Printer"
-                    description="Fallback for report printing"
-                  />
-                  
-                  <PrinterSelectField
-                    name="voidPrinterId"
-                    label="Void Printer"
-                    description="Printer for void receipts"
-                  />
-                  
-                  <PrinterSelectField
-                    name="backupVoidPrinterId"
-                    label="Backup Void Printer"
-                    description="Fallback for void printing"
-                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <PrinterSelectField
+                      name="defaultReceiptPrinterId"
+                      label="Receipt Printer"
+                      description="Primary printer for guest checks"
+                    />
+                    
+                    <PrinterSelectField
+                      name="backupReceiptPrinterId"
+                      label="Backup Receipt Printer"
+                      description="Fallback if primary is offline"
+                    />
+                    
+                    <PrinterSelectField
+                      name="reportPrinterId"
+                      label="Report Printer"
+                      description="Printer for reports and summaries"
+                    />
+                    
+                    <PrinterSelectField
+                      name="backupReportPrinterId"
+                      label="Backup Report Printer"
+                      description="Fallback for report printing"
+                    />
+                    
+                    <PrinterSelectField
+                      name="voidPrinterId"
+                      label="Void Printer"
+                      description="Printer for void receipts"
+                    />
+                    
+                    <PrinterSelectField
+                      name="backupVoidPrinterId"
+                      label="Backup Void Printer"
+                      description="Fallback for void printing"
+                    />
                   </div>
                 </div>
 
                 <div className="border rounded-md p-4 space-y-4">
                   <h4 className="font-medium text-sm">Network Settings</h4>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="ipAddress"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>IP Address</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value || ""} data-testid="input-ipAddress" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="ipAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>IP Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 192.168.1.100" {...field} value={field.value || ""} data-testid="input-ipAddress" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="hostname"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Hostname</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., pos-terminal-1" {...field} value={field.value || ""} data-testid="input-hostname" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    <FormField
+                      control={form.control}
+                      name="hostname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Hostname</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., pos-terminal-1" {...field} value={field.value || ""} data-testid="input-hostname" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 </div>
-            </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading} data-testid="button-save">
-                {isLoading ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+  return (
+    <div className="p-6">
+      <DataTable
+        data={workstations}
+        columns={columns}
+        title="Workstations"
+        onAdd={() => {
+          setEditingItem(null);
+          setFormOpen(true);
+        }}
+        onEdit={(item) => {
+          setEditingItem(item);
+          setFormOpen(true);
+        }}
+        onDelete={(item) => deleteMutation.mutate(item.id)}
+        isLoading={isLoading}
+        searchPlaceholder="Search workstations..."
+        emptyMessage="No workstations configured"
+      />
+    </div>
   );
 }

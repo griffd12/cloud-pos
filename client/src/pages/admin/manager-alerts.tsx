@@ -10,12 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
-import { Loader2, Bell, AlertTriangle, AlertCircle, Info, Check, CheckCheck, Settings, Trash2 } from "lucide-react";
+import { Loader2, Bell, AlertTriangle, AlertCircle, Info, Check, CheckCheck } from "lucide-react";
 import type { Property, ManagerAlert, AlertSubscription } from "@shared/schema";
 
 const ALERT_TYPES = ["void", "discount", "refund", "overtime", "exception", "hardware", "inventory", "security", "cash_variance"];
@@ -31,8 +29,6 @@ export default function ManagerAlertsPage() {
       setSelectedPropertyId(contextPropertyId);
     }
   }, [contextPropertyId]);
-  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
-  const [selectedAlertTypes, setSelectedAlertTypes] = useState<string[]>([]);
 
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties", filterKeys],

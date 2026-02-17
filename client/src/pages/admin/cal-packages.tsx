@@ -8,13 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { type CalPackage, type CalPackageVersion, type CalDeployment, type Enterprise, type Workstation, CAL_PACKAGE_TYPES, CAL_DEPLOYMENT_ACTIONS, CAL_VERSION_REGEX, CAL_VERSION_FORMAT_MESSAGE } from "@shared/schema";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -86,17 +79,29 @@ const PACKAGE_TYPE_LABELS: Record<string, string> = {
   custom: "Custom",
 };
 
+type InlineFormMode = null | "add-package" | "edit-package" | "add-version" | "deploy";
+
 export default function CalPackagesPage() {
   const { toast } = useToast();
-  const { filterParam, filterKeys, selectedEnterpriseId, scopePayload } = useEmcFilter();
+  const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, scopePayload } = useEmcFilter();
   const [selectedPackage, setSelectedPackage] = useState<CalPackage | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<CalPackageVersion | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
-  const [showPackageDialog, setShowPackageDialog] = useState(false);
-  const [showEditPackageDialog, setShowEditPackageDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showVersionDialog, setShowVersionDialog] = useState(false);
-  const [showDeployDialog, setShowDeployDialog] = useState(false);
+  const [inlineForm, setInlineForm] = useState<InlineFormMode>(null);
+
+  const [pkgName, setPkgName] = useState("");
+  const [pkgType, setPkgType] = useState("service_host");
+  const [pkgDescription, setPkgDescription] = useState("");
+
+  const [versionNumber, setVersionNumber] = useState("");
+  const [releaseNotes, setReleaseNotes] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
+  const [versionError, setVersionError] = useState("");
+  const [urlError, setUrlError] = useState("");
+
+  const [deploymentScope, setDeploymentScope] = useState("property");
+  const [deployAction, setDeployAction] = useState("install");
 
   const { data: packages = [], isLoading: packagesLoading } = useQuery<CalPackage[]>({
     queryKey: ["/api/cal-packages", filterKeys],
@@ -150,6 +155,55 @@ export default function CalPackagesPage() {
     });
   };
 
+  const resetPackageForm = () => {
+    setPkgName("");
+    setPkgType("service_host");
+    setPkgDescription("");
+  };
+
+  const resetVersionForm = () => {
+    setVersionNumber("");
+    setReleaseNotes("");
+    setDownloadUrl("");
+    setVersionError("");
+    setUrlError("");
+  };
+
+  const resetDeployForm = () => {
+    setDeploymentScope("property");
+    setDeployAction("install");
+  };
+
+  const handleCancelInlineForm = () => {
+    setInlineForm(null);
+    resetPackageForm();
+    resetVersionForm();
+    resetDeployForm();
+  };
+
+  const openAddPackage = () => {
+    resetPackageForm();
+    setInlineForm("add-package");
+  };
+
+  const openEditPackage = () => {
+    if (selectedPackage) {
+      setPkgName(selectedPackage.name);
+      setPkgDescription(selectedPackage.description || "");
+      setInlineForm("edit-package");
+    }
+  };
+
+  const openAddVersion = () => {
+    resetVersionForm();
+    setInlineForm("add-version");
+  };
+
+  const openDeploy = () => {
+    resetDeployForm();
+    setInlineForm("deploy");
+  };
+
   const createPackageMutation = useMutation({
     mutationFn: async (data: { name: string; packageType: string; description: string }) => {
       const res = await apiRequest("POST", "/api/cal-packages", {
@@ -160,7 +214,8 @@ export default function CalPackagesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", filterKeys] });
-      setShowPackageDialog(false);
+      setInlineForm(null);
+      resetPackageForm();
       toast({ title: "CAL package created" });
     },
     onError: () => {
@@ -178,7 +233,8 @@ export default function CalPackagesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", selectedPackage?.id, "versions", filterKeys] });
-      setShowVersionDialog(false);
+      setInlineForm(null);
+      resetVersionForm();
       toast({ title: "Version created" });
     },
     onError: () => {
@@ -193,8 +249,9 @@ export default function CalPackagesPage() {
     },
     onSuccess: (updatedPackage) => {
       queryClient.invalidateQueries({ queryKey: ["/api/cal-packages", filterKeys] });
-      setShowEditPackageDialog(false);
+      setInlineForm(null);
       setSelectedPackage(updatedPackage);
+      resetPackageForm();
       toast({ title: "Package updated" });
     },
     onError: () => {
@@ -218,14 +275,362 @@ export default function CalPackagesPage() {
     },
   });
 
+  const createDeploymentMutation = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, string> = {
+        ...scopePayload,
+        packageVersionId: selectedVersion!.id,
+        deploymentScope,
+        action: deployAction,
+      };
+      
+      const res = await apiRequest("POST", "/api/cal-deployments", payload);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to create deployment");
+      }
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cal-deployments", filterKeys] });
+      setInlineForm(null);
+      resetDeployForm();
+      toast({ title: "Deployment scheduled" });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create deployment", variant: "destructive" });
+    },
+  });
+
+  const validateVersion = (v: string) => {
+    if (!v) {
+      setVersionError("");
+      return false;
+    }
+    if (!CAL_VERSION_REGEX.test(v)) {
+      setVersionError(CAL_VERSION_FORMAT_MESSAGE);
+      return false;
+    }
+    setVersionError("");
+    return true;
+  };
+
+  const validateUrl = (url: string) => {
+    if (!url) {
+      setUrlError("");
+      return false;
+    }
+    try {
+      new URL(url);
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        setUrlError("URL must start with http:// or https://");
+        return false;
+      }
+      setUrlError("");
+      return true;
+    } catch {
+      setUrlError("Please enter a valid URL");
+      return false;
+    }
+  };
+
+  const handleVersionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setVersionNumber(v);
+    validateVersion(v);
+  };
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setDownloadUrl(url);
+    validateUrl(url);
+  };
+
+  const handlePackageSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    createPackageMutation.mutate({ name: pkgName, packageType: pkgType, description: pkgDescription });
+  };
+
+  const handleEditPackageSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    updatePackageMutation.mutate({ name: pkgName, description: pkgDescription });
+  };
+
+  const handleVersionSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (validateVersion(versionNumber) && validateUrl(downloadUrl)) {
+      createVersionMutation.mutate({ version: versionNumber, releaseNotes, downloadUrl });
+    }
+  };
+
+  const handleDeploySubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    createDeploymentMutation.mutate();
+  };
+
+  const isVersionValid = versionNumber && CAL_VERSION_REGEX.test(versionNumber) && downloadUrl && !urlError;
+
+  if (inlineForm === "add-package") {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Add CAL Package</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelInlineForm} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handlePackageSubmit}
+                  disabled={createPackageMutation.isPending || !pkgName}
+                  data-testid="button-save-package"
+                >
+                  {createPackageMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePackageSubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Package Name</Label>
+                  <Input
+                    value={pkgName}
+                    onChange={(e) => setPkgName(e.target.value)}
+                    placeholder="e.g., Service Host"
+                    data-testid="input-package-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Package Type</Label>
+                  <Select value={pkgType} onValueChange={setPkgType}>
+                    <SelectTrigger data-testid="select-package-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAL_PACKAGE_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {PACKAGE_TYPE_LABELS[type] || type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={pkgDescription}
+                    onChange={(e) => setPkgDescription(e.target.value)}
+                    placeholder="Optional description"
+                    data-testid="input-package-description"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (inlineForm === "edit-package" && selectedPackage) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Edit CAL Package</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelInlineForm} data-testid="button-cancel-edit">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleEditPackageSubmit}
+                  disabled={updatePackageMutation.isPending || !pkgName}
+                  data-testid="button-save-edit-package"
+                >
+                  {updatePackageMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleEditPackageSubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Package Name</Label>
+                  <Input
+                    value={pkgName}
+                    onChange={(e) => setPkgName(e.target.value)}
+                    placeholder="e.g., Service Host"
+                    data-testid="input-edit-package-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Package Type</Label>
+                  <Badge variant="secondary">{PACKAGE_TYPE_LABELS[selectedPackage.packageType] || selectedPackage.packageType}</Badge>
+                  <p className="text-xs text-muted-foreground">Package type cannot be changed after creation</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={pkgDescription}
+                    onChange={(e) => setPkgDescription(e.target.value)}
+                    placeholder="Optional description"
+                    data-testid="input-edit-package-description"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (inlineForm === "add-version") {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Add Version</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelInlineForm} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleVersionSubmit}
+                  disabled={createVersionMutation.isPending || !isVersionValid}
+                  data-testid="button-save-version"
+                >
+                  {createVersionMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleVersionSubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Version</Label>
+                  <Input
+                    value={versionNumber}
+                    onChange={handleVersionChange}
+                    placeholder="e.g., 1.0.0"
+                    data-testid="input-version"
+                    className={versionError ? "border-destructive" : ""}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Format: X.X.X (Major.Patch.Hotfix) - e.g., 1.0.0, 3.5.2, 19.3.1
+                  </p>
+                  {versionError && (
+                    <p className="text-xs text-destructive">{versionError}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Download URL <span className="text-destructive">*</span></Label>
+                  <Input
+                    value={downloadUrl}
+                    onChange={handleUrlChange}
+                    placeholder="https://example.com/packages/mypackage-1.0.0.tar.gz"
+                    data-testid="input-download-url"
+                    className={urlError ? "border-destructive" : ""}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    URL where Service Hosts will download the .tar.gz package file
+                  </p>
+                  {urlError && (
+                    <p className="text-xs text-destructive">{urlError}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Release Notes</Label>
+                  <Textarea
+                    value={releaseNotes}
+                    onChange={(e) => setReleaseNotes(e.target.value)}
+                    placeholder="What's new in this version"
+                    data-testid="input-release-notes"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (inlineForm === "deploy" && selectedVersion) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Deploy {selectedVersion.version}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelInlineForm} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeploySubmit}
+                  disabled={createDeploymentMutation.isPending}
+                  data-testid="button-deploy-confirm"
+                >
+                  {createDeploymentMutation.isPending ? "Deploying..." : "Deploy"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleDeploySubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Deployment Scope</Label>
+                  <Select value={deploymentScope} onValueChange={setDeploymentScope}>
+                    <SelectTrigger data-testid="select-deployment-scope">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="enterprise">Enterprise (All Properties)</SelectItem>
+                      <SelectItem value="property">Property</SelectItem>
+                      <SelectItem value="workstation">Workstation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Action</Label>
+                  <Select value={deployAction} onValueChange={setDeployAction}>
+                    <SelectTrigger data-testid="select-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAL_DEPLOYMENT_ACTIONS.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {a.charAt(0).toUpperCase() + a.slice(1)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-2 mb-6">
         <div>
           <h1 className="text-2xl font-bold">CAL Packages</h1>
           <p className="text-muted-foreground">Configuration Application Loader - Manage and deploy software packages</p>
         </div>
-        <Button onClick={() => setShowPackageDialog(true)} data-testid="button-add-package">
+        <Button onClick={openAddPackage} data-testid="button-add-package">
           <Plus className="h-4 w-4 mr-2" />
           Add Package
         </Button>
@@ -340,13 +745,13 @@ export default function CalPackagesPage() {
           {selectedPackage ? (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div>
                     <CardTitle>{selectedPackage.name}</CardTitle>
                     <CardDescription>{selectedPackage.description || "No description"}</CardDescription>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowEditPackageDialog(true)} data-testid="button-edit-package">
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="outline" size="sm" onClick={openEditPackage} data-testid="button-edit-package">
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
@@ -354,12 +759,12 @@ export default function CalPackagesPage() {
                       <Trash2 className="h-4 w-4 mr-1" />
                       Delete
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowVersionDialog(true)} data-testid="button-add-version">
+                    <Button variant="outline" size="sm" onClick={openAddVersion} data-testid="button-add-version">
                       <Plus className="h-4 w-4 mr-1" />
                       Add Version
                     </Button>
                     {selectedVersion && (
-                      <Button size="sm" onClick={() => setShowDeployDialog(true)} data-testid="button-deploy">
+                      <Button size="sm" onClick={openDeploy} data-testid="button-deploy">
                         <Rocket className="h-4 w-4 mr-1" />
                         Deploy
                       </Button>
@@ -391,7 +796,7 @@ export default function CalPackagesPage() {
                         }`}
                         data-testid={`select-version-${version.id}`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{version.version}</span>
                             {version.isLatest && (
@@ -424,39 +829,6 @@ export default function CalPackagesPage() {
         </div>
       </div>
 
-      <PackageDialog
-        open={showPackageDialog}
-        onClose={() => setShowPackageDialog(false)}
-        onSubmit={(data) => createPackageMutation.mutate(data)}
-        isLoading={createPackageMutation.isPending}
-      />
-
-      <VersionDialog
-        open={showVersionDialog}
-        onClose={() => setShowVersionDialog(false)}
-        onSubmit={(data) => createVersionMutation.mutate(data)}
-        isLoading={createVersionMutation.isPending}
-      />
-
-      {selectedVersion && (
-        <DeployDialog
-          open={showDeployDialog}
-          onClose={() => setShowDeployDialog(false)}
-          packageVersion={selectedVersion}
-          enterpriseId={selectedEnterpriseId || ""}
-        />
-      )}
-
-      {selectedPackage && (
-        <EditPackageDialog
-          open={showEditPackageDialog}
-          onClose={() => setShowEditPackageDialog(false)}
-          onSubmit={(data) => updatePackageMutation.mutate(data)}
-          isLoading={updatePackageMutation.isPending}
-          package={selectedPackage}
-        />
-      )}
-
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -479,390 +851,5 @@ export default function CalPackagesPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
-}
-
-function PackageDialog({
-  open,
-  onClose,
-  onSubmit,
-  isLoading,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: { name: string; packageType: string; description: string }) => void;
-  isLoading: boolean;
-}) {
-  const [name, setName] = useState("");
-  const [packageType, setPackageType] = useState("service_host");
-  const [description, setDescription] = useState("");
-
-  const handleSubmit = () => {
-    onSubmit({ name, packageType, description });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Add CAL Package</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Package Name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Service Host"
-                  data-testid="input-package-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Package Type</Label>
-                <Select value={packageType} onValueChange={setPackageType}>
-                  <SelectTrigger data-testid="select-package-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAL_PACKAGE_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {PACKAGE_TYPE_LABELS[type] || type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional description"
-                data-testid="input-package-description"
-              />
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-          <Button variant="outline" onClick={onClose} data-testid="button-cancel">
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading || !name} data-testid="button-save-package">
-            {isLoading ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EditPackageDialog({
-  open,
-  onClose,
-  onSubmit,
-  isLoading,
-  package: pkg,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: { name: string; description: string }) => void;
-  isLoading: boolean;
-  package: CalPackage;
-}) {
-  const [name, setName] = useState(pkg.name);
-  const [description, setDescription] = useState(pkg.description || "");
-
-  useEffect(() => {
-    setName(pkg.name);
-    setDescription(pkg.description || "");
-  }, [pkg.id, pkg.name, pkg.description]);
-
-  const handleSubmit = () => {
-    onSubmit({ name, description });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Edit CAL Package</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Package Name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Service Host"
-                  data-testid="input-edit-package-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Package Type</Label>
-                <Badge variant="secondary">{PACKAGE_TYPE_LABELS[pkg.packageType] || pkg.packageType}</Badge>
-                <p className="text-xs text-muted-foreground">Package type cannot be changed after creation</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional description"
-                data-testid="input-edit-package-description"
-              />
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-          <Button variant="outline" onClick={onClose} data-testid="button-cancel-edit">
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading || !name} data-testid="button-save-edit-package">
-            {isLoading ? "Saving..." : "Save Changes"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function VersionDialog({
-  open,
-  onClose,
-  onSubmit,
-  isLoading,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: { version: string; releaseNotes: string; downloadUrl: string }) => void;
-  isLoading: boolean;
-}) {
-  const [version, setVersion] = useState("");
-  const [releaseNotes, setReleaseNotes] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
-  const [versionError, setVersionError] = useState("");
-  const [urlError, setUrlError] = useState("");
-
-  const validateVersion = (v: string) => {
-    if (!v) {
-      setVersionError("");
-      return false;
-    }
-    if (!CAL_VERSION_REGEX.test(v)) {
-      setVersionError(CAL_VERSION_FORMAT_MESSAGE);
-      return false;
-    }
-    setVersionError("");
-    return true;
-  };
-
-  const validateUrl = (url: string) => {
-    if (!url) {
-      setUrlError("");
-      return false;
-    }
-    try {
-      new URL(url);
-      if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        setUrlError("URL must start with http:// or https://");
-        return false;
-      }
-      setUrlError("");
-      return true;
-    } catch {
-      setUrlError("Please enter a valid URL");
-      return false;
-    }
-  };
-
-  const handleVersionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setVersion(v);
-    validateVersion(v);
-  };
-
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const url = e.target.value;
-    setDownloadUrl(url);
-    validateUrl(url);
-  };
-
-  const handleSubmit = () => {
-    if (validateVersion(version) && validateUrl(downloadUrl)) {
-      onSubmit({ version, releaseNotes, downloadUrl });
-    }
-  };
-
-  const isValid = version && CAL_VERSION_REGEX.test(version) && downloadUrl && !urlError;
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Add Version</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Version</Label>
-                <Input
-                  value={version}
-                  onChange={handleVersionChange}
-                  placeholder="e.g., 1.0.0"
-                  data-testid="input-version"
-                  className={versionError ? "border-destructive" : ""}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Format: X.X.X (Major.Patch.Hotfix) - e.g., 1.0.0, 3.5.2, 19.3.1
-                </p>
-                {versionError && (
-                  <p className="text-xs text-destructive">{versionError}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Download URL <span className="text-destructive">*</span></Label>
-                <Input
-                  value={downloadUrl}
-                  onChange={handleUrlChange}
-                  placeholder="https://example.com/packages/mypackage-1.0.0.tar.gz"
-                  data-testid="input-download-url"
-                  className={urlError ? "border-destructive" : ""}
-                />
-                <p className="text-xs text-muted-foreground">
-                  URL where Service Hosts will download the .tar.gz package file
-                </p>
-                {urlError && (
-                  <p className="text-xs text-destructive">{urlError}</p>
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Release Notes</Label>
-              <Textarea
-                value={releaseNotes}
-                onChange={(e) => setReleaseNotes(e.target.value)}
-                placeholder="What's new in this version"
-                data-testid="input-release-notes"
-              />
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-          <Button variant="outline" onClick={onClose} data-testid="button-cancel">
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading || !isValid} data-testid="button-save-version">
-            {isLoading ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DeployDialog({
-  open,
-  onClose,
-  packageVersion,
-  enterpriseId,
-}: {
-  open: boolean;
-  onClose: () => void;
-  packageVersion: CalPackageVersion;
-  enterpriseId: string;
-}) {
-  const { toast } = useToast();
-  const { scopePayload, selectedPropertyId } = useEmcFilter();
-  const [deploymentScope, setDeploymentScope] = useState("property");
-  const [action, setAction] = useState("install");
-
-  const createDeploymentMutation = useMutation({
-    mutationFn: async () => {
-      const payload: Record<string, string> = {
-        ...scopePayload,
-        packageVersionId: packageVersion.id,
-        deploymentScope,
-        action,
-      };
-      
-      const res = await apiRequest("POST", "/api/cal-deployments", payload);
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to create deployment");
-      }
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cal-deployments", enterpriseId] });
-      onClose();
-      toast({ title: "Deployment scheduled" });
-    },
-    onError: (error: Error) => {
-      toast({ title: error.message || "Failed to create deployment", variant: "destructive" });
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Deploy {packageVersion.version}</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Deployment Scope</Label>
-                <Select value={deploymentScope} onValueChange={setDeploymentScope}>
-                  <SelectTrigger data-testid="select-deployment-scope">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="enterprise">Enterprise (All Properties)</SelectItem>
-                    <SelectItem value="property">Property</SelectItem>
-                    <SelectItem value="workstation">Workstation</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Action</Label>
-                <Select value={action} onValueChange={setAction}>
-                  <SelectTrigger data-testid="select-action">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAL_DEPLOYMENT_ACTIONS.map((a) => (
-                      <SelectItem key={a} value={a}>
-                        {a.charAt(0).toUpperCase() + a.slice(1)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-          </div>
-        </div>
-        <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-          <Button variant="outline" onClick={onClose} data-testid="button-cancel">
-            Cancel
-          </Button>
-          <Button 
-            onClick={() => createDeploymentMutation.mutate()} 
-            disabled={createDeploymentMutation.isPending}
-            data-testid="button-deploy-confirm"
-          >
-            {createDeploymentMutation.isPending ? "Deploying..." : "Deploy"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

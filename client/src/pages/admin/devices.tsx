@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -87,7 +86,6 @@ export default function DevicesPage() {
 
   const buildDevicesQuery = () => {
     const params = new URLSearchParams();
-    // Use selectedEnterpriseId from EMC context, or fall back to local filter
     const effectiveEnterpriseId = selectedEnterpriseId || filterEnterpriseId;
     if (effectiveEnterpriseId) params.set("enterpriseId", effectiveEnterpriseId);
     if (filterPropertyId) params.set("propertyId", filterPropertyId);
@@ -182,7 +180,6 @@ export default function DevicesPage() {
     onError: (err: Error) => toast({ title: "Failed to delete token", description: err.message, variant: "destructive" }),
   });
 
-  // Import preview query
   const { data: importPreview, isLoading: importPreviewLoading, refetch: refetchImportPreview } = useQuery<{
     property: { id: string; name: string };
     enterprise: { id: string; name: string } | null;
@@ -226,7 +223,6 @@ export default function DevicesPage() {
     onError: (err: Error) => toast({ title: "Failed to import devices", description: err.message, variant: "destructive" }),
   });
 
-  // Refetch import preview when property changes
   useEffect(() => {
     if (importPropertyId && importOpen) {
       refetchImportPreview();
@@ -275,7 +271,8 @@ export default function DevicesPage() {
     setDetailOpen(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!formData.name || !formData.deviceId) {
       toast({ title: "Please fill in required fields", variant: "destructive" });
       return;
@@ -287,12 +284,34 @@ export default function DevicesPage() {
     }
   };
 
-  const handleTokenSubmit = () => {
+  const handleTokenSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!tokenFormData.name) {
       toast({ title: "Please fill in required fields", variant: "destructive" });
       return;
     }
     createToken.mutate(tokenFormData);
+  };
+
+  const handleCancelDevice = () => {
+    setFormOpen(false);
+    setSelectedDevice(null);
+    resetForm();
+  };
+
+  const handleCancelToken = () => {
+    setTokenFormOpen(false);
+    resetTokenForm();
+  };
+
+  const handleCancelDetail = () => {
+    setDetailOpen(false);
+    setSelectedDevice(null);
+  };
+
+  const handleCancelImport = () => {
+    setImportOpen(false);
+    setImportPropertyId("");
   };
 
   const copyToClipboard = (text: string) => {
@@ -306,6 +325,449 @@ export default function DevicesPage() {
   const filterProperties = filterEnterpriseId
     ? properties.filter((p) => p.enterpriseId === filterEnterpriseId)
     : properties;
+
+  if (formOpen) {
+    return (
+      <div className="container mx-auto p-4 space-y-4">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>{selectedDevice ? "Edit Device" : "Add Device"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelDevice} data-testid="button-cancel-device">
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={createDevice.isPending || updateDevice.isPending} data-testid="button-save-device">
+                  {createDevice.isPending || updateDevice.isPending ? "Saving..." : selectedDevice ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="POS Terminal 1"
+                    data-testid="input-device-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deviceId">Device ID *</Label>
+                  <Input
+                    id="deviceId"
+                    value={formData.deviceId}
+                    onChange={(e) => setFormData({ ...formData, deviceId: e.target.value })}
+                    placeholder="POS-001"
+                    data-testid="input-device-id"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Device Type *</Label>
+                  <Select value={formData.deviceType} onValueChange={(v) => setFormData({ ...formData, deviceType: v })}>
+                    <SelectTrigger data-testid="select-device-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEVICE_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="macAddress">MAC Address</Label>
+                  <Input
+                    id="macAddress"
+                    value={formData.macAddress}
+                    onChange={(e) => setFormData({ ...formData, macAddress: e.target.value })}
+                    placeholder="00:1A:2B:3C:4D:5E"
+                    data-testid="input-device-mac"
+                  />
+                </div>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="osType">OS Type</Label>
+                  <Input
+                    id="osType"
+                    value={formData.osType}
+                    onChange={(e) => setFormData({ ...formData, osType: e.target.value })}
+                    placeholder="Windows 11"
+                    data-testid="input-device-os"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hardwareModel">Hardware Model</Label>
+                  <Input
+                    id="hardwareModel"
+                    value={formData.hardwareModel}
+                    onChange={(e) => setFormData({ ...formData, hardwareModel: e.target.value })}
+                    placeholder="Dell OptiPlex 7010"
+                    data-testid="input-device-model"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="serialNumber">Serial Number</Label>
+                  <Input
+                    id="serialNumber"
+                    value={formData.serialNumber}
+                    onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
+                    placeholder="SN12345678"
+                    data-testid="input-device-serial"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ipAddress">IP Address</Label>
+                  <Input
+                    id="ipAddress"
+                    value={formData.ipAddress}
+                    onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
+                    placeholder="192.168.1.100"
+                    data-testid="input-device-ip"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (tokenFormOpen) {
+    return (
+      <div className="container mx-auto p-4 space-y-4">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>Generate Enrollment Token</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelToken} data-testid="button-cancel-token">
+                  Cancel
+                </Button>
+                <Button onClick={handleTokenSubmit} disabled={createToken.isPending} data-testid="button-generate-token">
+                  {createToken.isPending ? "Generating..." : "Generate Token"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleTokenSubmit} className="space-y-6">
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="tokenName">Token Name *</Label>
+                  <Input
+                    id="tokenName"
+                    value={tokenFormData.name}
+                    onChange={(e) => setTokenFormData({ ...tokenFormData, name: e.target.value })}
+                    placeholder="New Store Devices"
+                    data-testid="input-token-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Device Type (Optional)</Label>
+                  <Select value={tokenFormData.deviceType || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v === "_any" ? "" : v })}>
+                    <SelectTrigger data-testid="select-token-device-type">
+                      <SelectValue placeholder="Any type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_any">Any type</SelectItem>
+                      {DEVICE_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxUses">Max Uses</Label>
+                  <Input
+                    id="maxUses"
+                    type="number"
+                    value={tokenFormData.maxUses}
+                    onChange={(e) => setTokenFormData({ ...tokenFormData, maxUses: e.target.value })}
+                    placeholder="Unlimited"
+                    data-testid="input-token-max-uses"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expiresInDays">Expires In (Days)</Label>
+                  <Input
+                    id="expiresInDays"
+                    type="number"
+                    value={tokenFormData.expiresInDays}
+                    onChange={(e) => setTokenFormData({ ...tokenFormData, expiresInDays: e.target.value })}
+                    placeholder="Never"
+                    data-testid="input-token-expires"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (detailOpen && selectedDevice) {
+    return (
+      <div className="container mx-auto p-4 space-y-4">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>Device Details</CardTitle>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleCancelDetail}>
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    setDetailOpen(false);
+                    openEditForm(selectedDevice);
+                  }}
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-muted rounded-lg">
+                {DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)?.icon && (
+                  (() => {
+                    const Icon = DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)!.icon;
+                    return <Icon className="w-8 h-8" />;
+                  })()
+                )}
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">{selectedDevice.name || selectedDevice.deviceId}</h3>
+                <p className="text-sm text-muted-foreground">{selectedDevice.deviceId}</p>
+              </div>
+              <Badge variant={STATUS_CONFIG[selectedDevice.status]?.variant || "outline"} className="ml-auto">
+                {STATUS_CONFIG[selectedDevice.status]?.label || selectedDevice.status}
+              </Badge>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Enterprise</span>
+                <p className="font-medium">{getEnterpriseName(selectedDevice.enterpriseId)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Property</span>
+                <p className="font-medium">{getPropertyName(selectedDevice.propertyId)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Device Type</span>
+                <p className="font-medium">{DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)?.label || selectedDevice.deviceType}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">OS</span>
+                <p className="font-medium">{selectedDevice.osType || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Hardware Model</span>
+                <p className="font-medium">{selectedDevice.hardwareModel || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Serial Number</span>
+                <p className="font-medium">{selectedDevice.serialNumber || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">IP Address</span>
+                <p className="font-medium">{selectedDevice.ipAddress || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">MAC Address</span>
+                <p className="font-medium">{selectedDevice.macAddress || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">App Version</span>
+                <p className="font-medium">{selectedDevice.currentAppVersion || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">OS Version</span>
+                <p className="font-medium">{selectedDevice.osVersion || "-"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Enrolled At</span>
+                <p className="font-medium">
+                  {selectedDevice.enrolledAt ? format(new Date(selectedDevice.enrolledAt), "MMM d, yyyy HH:mm") : "-"}
+                </p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Last Seen</span>
+                <p className="font-medium">
+                  {selectedDevice.lastSeenAt
+                    ? formatDistanceToNow(new Date(selectedDevice.lastSeenAt), { addSuffix: true })
+                    : "Never"}
+                </p>
+              </div>
+            </div>
+            {selectedDevice.status === "active" && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    Health Metrics
+                  </h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <Card className="p-3">
+                      <div className="flex items-center gap-2">
+                        <Cpu className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">CPU</span>
+                      </div>
+                      <p className="text-lg font-bold">--</p>
+                    </Card>
+                    <Card className="p-3">
+                      <div className="flex items-center gap-2">
+                        <Server className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Memory</span>
+                      </div>
+                      <p className="text-lg font-bold">--</p>
+                    </Card>
+                    <Card className="p-3">
+                      <div className="flex items-center gap-2">
+                        <Server className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Disk</span>
+                      </div>
+                      <p className="text-lg font-bold">--</p>
+                    </Card>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Health data available when devices send heartbeats</p>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (importOpen) {
+    return (
+      <div className="container mx-auto p-4 space-y-4">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>Import Devices from Property</CardTitle>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleCancelImport}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => importDevices.mutate(importPropertyId)}
+                  disabled={!importPropertyId || importDevices.isPending || !importPreview || importPreview.summary.toImport === 0}
+                  data-testid="button-confirm-import"
+                >
+                  {importDevices.isPending ? "Importing..." : `Import ${importPreview?.summary.toImport || 0} Device(s)`}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Import existing workstations and KDS devices from your property configuration into the device registry.
+            </p>
+            <div className="space-y-2">
+              <Label>Select Property</Label>
+              <Select 
+                value={importPropertyId || "_select"} 
+                onValueChange={(v) => setImportPropertyId(v === "_select" ? "" : v)}
+              >
+                <SelectTrigger data-testid="select-import-property">
+                  <SelectValue placeholder="Select a property" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_select">Select a property</SelectItem>
+                  {properties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {importPropertyId && (
+              <div className="space-y-3">
+                {importPreviewLoading ? (
+                  <div className="text-center py-4 text-muted-foreground">Loading preview...</div>
+                ) : importPreview ? (
+                  <>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Enterprise: </span>
+                        <span className="font-medium">{importPreview.enterprise?.name || "Unknown"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Property: </span>
+                        <span className="font-medium">{importPreview.property.name}</span>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 rounded-md bg-muted">
+                        <div className="text-2xl font-bold">{importPreview.summary.workstations}</div>
+                        <div className="text-xs text-muted-foreground">Workstations</div>
+                      </div>
+                      <div className="p-2 rounded-md bg-muted">
+                        <div className="text-2xl font-bold">{importPreview.summary.kdsDevices}</div>
+                        <div className="text-xs text-muted-foreground">KDS Devices</div>
+                      </div>
+                      <div className="p-2 rounded-md bg-muted">
+                        <div className="text-2xl font-bold">{importPreview.summary.toImport}</div>
+                        <div className="text-xs text-muted-foreground">To Import</div>
+                      </div>
+                    </div>
+                    {importPreview.summary.alreadyExists > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        {importPreview.summary.alreadyExists} device(s) already exist and will be skipped.
+                      </p>
+                    )}
+                    {importPreview.items.length > 0 && (
+                      <ScrollArea className="h-40 border rounded-md p-2">
+                        <div className="space-y-1">
+                          {importPreview.items.map((item) => {
+                            const typeConfig = DEVICE_TYPES.find((t) => t.value === item.deviceType);
+                            const TypeIcon = typeConfig?.icon || Monitor;
+                            return (
+                              <div
+                                key={item.sourceId}
+                                className={`flex items-center gap-2 p-2 rounded-md ${item.alreadyExists ? "opacity-50" : ""}`}
+                              >
+                                <TypeIcon className="w-4 h-4" />
+                                <span className="flex-1 text-sm">{item.name}</span>
+                                <Badge variant={item.alreadyExists ? "secondary" : "outline"} className="text-xs">
+                                  {item.alreadyExists ? "Exists" : item.sourceType === "workstation" ? "Workstation" : "KDS"}
+                                </Badge>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    )}
+                    {importPreview.summary.total === 0 && (
+                      <p className="text-center py-4 text-muted-foreground">
+                        No workstations or KDS devices configured for this property.
+                      </p>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 space-y-4">
@@ -584,431 +1046,6 @@ export default function DevicesPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{selectedDevice ? "Edit Device" : "Add Device"}</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="POS Terminal 1"
-                  data-testid="input-device-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="deviceId">Device ID *</Label>
-                <Input
-                  id="deviceId"
-                  value={formData.deviceId}
-                  onChange={(e) => setFormData({ ...formData, deviceId: e.target.value })}
-                  placeholder="POS-001"
-                  data-testid="input-device-id"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Device Type *</Label>
-                <Select value={formData.deviceType} onValueChange={(v) => setFormData({ ...formData, deviceType: v })}>
-                  <SelectTrigger data-testid="select-device-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEVICE_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="macAddress">MAC Address</Label>
-                <Input
-                  id="macAddress"
-                  value={formData.macAddress}
-                  onChange={(e) => setFormData({ ...formData, macAddress: e.target.value })}
-                  placeholder="00:1A:2B:3C:4D:5E"
-                  data-testid="input-device-mac"
-                />
-              </div>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="osType">OS Type</Label>
-                <Input
-                  id="osType"
-                  value={formData.osType}
-                  onChange={(e) => setFormData({ ...formData, osType: e.target.value })}
-                  placeholder="Windows 11"
-                  data-testid="input-device-os"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hardwareModel">Hardware Model</Label>
-                <Input
-                  id="hardwareModel"
-                  value={formData.hardwareModel}
-                  onChange={(e) => setFormData({ ...formData, hardwareModel: e.target.value })}
-                  placeholder="Dell OptiPlex 7010"
-                  data-testid="input-device-model"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="serialNumber">Serial Number</Label>
-                <Input
-                  id="serialNumber"
-                  value={formData.serialNumber}
-                  onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
-                  placeholder="SN12345678"
-                  data-testid="input-device-serial"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ipAddress">IP Address</Label>
-                <Input
-                  id="ipAddress"
-                  value={formData.ipAddress}
-                  onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
-                  placeholder="192.168.1.100"
-                  data-testid="input-device-ip"
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setFormOpen(false)} data-testid="button-cancel-device">
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} disabled={createDevice.isPending || updateDevice.isPending} data-testid="button-save-device">
-              {createDevice.isPending || updateDevice.isPending ? "Saving..." : selectedDevice ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={tokenFormOpen} onOpenChange={setTokenFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Generate Enrollment Token</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="tokenName">Token Name *</Label>
-                <Input
-                  id="tokenName"
-                  value={tokenFormData.name}
-                  onChange={(e) => setTokenFormData({ ...tokenFormData, name: e.target.value })}
-                  placeholder="New Store Devices"
-                  data-testid="input-token-name"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Device Type (Optional)</Label>
-                <Select value={tokenFormData.deviceType || "_any"} onValueChange={(v) => setTokenFormData({ ...tokenFormData, deviceType: v === "_any" ? "" : v })}>
-                  <SelectTrigger data-testid="select-token-device-type">
-                    <SelectValue placeholder="Any type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_any">Any type</SelectItem>
-                    {DEVICE_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="maxUses">Max Uses</Label>
-                <Input
-                  id="maxUses"
-                  type="number"
-                  value={tokenFormData.maxUses}
-                  onChange={(e) => setTokenFormData({ ...tokenFormData, maxUses: e.target.value })}
-                  placeholder="Unlimited"
-                  data-testid="input-token-max-uses"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="expiresInDays">Expires In (Days)</Label>
-                <Input
-                  id="expiresInDays"
-                  type="number"
-                  value={tokenFormData.expiresInDays}
-                  onChange={(e) => setTokenFormData({ ...tokenFormData, expiresInDays: e.target.value })}
-                  placeholder="Never"
-                  data-testid="input-token-expires"
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setTokenFormOpen(false)} data-testid="button-cancel-token">
-              Cancel
-            </Button>
-            <Button onClick={handleTokenSubmit} disabled={createToken.isPending} data-testid="button-generate-token">
-              {createToken.isPending ? "Generating..." : "Generate Token"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Device Details</DialogTitle>
-          </DialogHeader>
-          {selectedDevice && (
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-muted rounded-lg">
-                  {DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)?.icon && (
-                    (() => {
-                      const Icon = DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)!.icon;
-                      return <Icon className="w-8 h-8" />;
-                    })()
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg">{selectedDevice.name || selectedDevice.deviceId}</h3>
-                  <p className="text-sm text-muted-foreground">{selectedDevice.deviceId}</p>
-                </div>
-                <Badge variant={STATUS_CONFIG[selectedDevice.status]?.variant || "outline"} className="ml-auto">
-                  {STATUS_CONFIG[selectedDevice.status]?.label || selectedDevice.status}
-                </Badge>
-              </div>
-              <Separator />
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Enterprise</span>
-                  <p className="font-medium">{getEnterpriseName(selectedDevice.enterpriseId)}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Property</span>
-                  <p className="font-medium">{getPropertyName(selectedDevice.propertyId)}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Device Type</span>
-                  <p className="font-medium">{DEVICE_TYPES.find((t) => t.value === selectedDevice.deviceType)?.label || selectedDevice.deviceType}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">OS</span>
-                  <p className="font-medium">{selectedDevice.osType || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Hardware Model</span>
-                  <p className="font-medium">{selectedDevice.hardwareModel || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Serial Number</span>
-                  <p className="font-medium">{selectedDevice.serialNumber || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">IP Address</span>
-                  <p className="font-medium">{selectedDevice.ipAddress || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">MAC Address</span>
-                  <p className="font-medium">{selectedDevice.macAddress || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">App Version</span>
-                  <p className="font-medium">{selectedDevice.currentAppVersion || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">OS Version</span>
-                  <p className="font-medium">{selectedDevice.osVersion || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Enrolled At</span>
-                  <p className="font-medium">
-                    {selectedDevice.enrolledAt ? format(new Date(selectedDevice.enrolledAt), "MMM d, yyyy HH:mm") : "-"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Last Seen</span>
-                  <p className="font-medium">
-                    {selectedDevice.lastSeenAt
-                      ? formatDistanceToNow(new Date(selectedDevice.lastSeenAt), { addSuffix: true })
-                      : "Never"}
-                  </p>
-                </div>
-              </div>
-              {selectedDevice.status === "active" && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <h4 className="font-medium flex items-center gap-2">
-                      <Activity className="w-4 h-4" />
-                      Health Metrics
-                    </h4>
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Cpu className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">CPU</span>
-                        </div>
-                        <p className="text-lg font-bold">--</p>
-                      </Card>
-                      <Card className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Server className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Memory</span>
-                        </div>
-                        <p className="text-lg font-bold">--</p>
-                      </Card>
-                      <Card className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Server className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Disk</span>
-                        </div>
-                        <p className="text-lg font-bold">--</p>
-                      </Card>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Health data available when devices send heartbeats</p>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setDetailOpen(false)}>
-              Close
-            </Button>
-            <Button
-              onClick={() => {
-                setDetailOpen(false);
-                if (selectedDevice) openEditForm(selectedDevice);
-              }}
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Import Devices from Property</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <p className="text-sm text-muted-foreground">
-              Import existing workstations and KDS devices from your property configuration into the device registry.
-            </p>
-            <div className="space-y-2">
-              <Label>Select Property</Label>
-              <Select 
-                value={importPropertyId || "_select"} 
-                onValueChange={(v) => setImportPropertyId(v === "_select" ? "" : v)}
-              >
-                <SelectTrigger data-testid="select-import-property">
-                  <SelectValue placeholder="Select a property" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_select">Select a property</SelectItem>
-                  {properties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {importPropertyId && (
-              <div className="space-y-3">
-                {importPreviewLoading ? (
-                  <div className="text-center py-4 text-muted-foreground">Loading preview...</div>
-                ) : importPreview ? (
-                  <>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Enterprise: </span>
-                        <span className="font-medium">{importPreview.enterprise?.name || "Unknown"}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Property: </span>
-                        <span className="font-medium">{importPreview.property.name}</span>
-                      </div>
-                    </div>
-                    <Separator />
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="p-2 rounded-md bg-muted">
-                        <div className="text-2xl font-bold">{importPreview.summary.workstations}</div>
-                        <div className="text-xs text-muted-foreground">Workstations</div>
-                      </div>
-                      <div className="p-2 rounded-md bg-muted">
-                        <div className="text-2xl font-bold">{importPreview.summary.kdsDevices}</div>
-                        <div className="text-xs text-muted-foreground">KDS Devices</div>
-                      </div>
-                      <div className="p-2 rounded-md bg-muted">
-                        <div className="text-2xl font-bold">{importPreview.summary.toImport}</div>
-                        <div className="text-xs text-muted-foreground">To Import</div>
-                      </div>
-                    </div>
-                    {importPreview.summary.alreadyExists > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {importPreview.summary.alreadyExists} device(s) already exist and will be skipped.
-                      </p>
-                    )}
-                    {importPreview.items.length > 0 && (
-                      <ScrollArea className="h-40 border rounded-md p-2">
-                        <div className="space-y-1">
-                          {importPreview.items.map((item) => {
-                            const typeConfig = DEVICE_TYPES.find((t) => t.value === item.deviceType);
-                            const TypeIcon = typeConfig?.icon || Monitor;
-                            return (
-                              <div
-                                key={item.sourceId}
-                                className={`flex items-center gap-2 p-2 rounded-md ${item.alreadyExists ? "opacity-50" : ""}`}
-                              >
-                                <TypeIcon className="w-4 h-4" />
-                                <span className="flex-1 text-sm">{item.name}</span>
-                                <Badge variant={item.alreadyExists ? "secondary" : "outline"} className="text-xs">
-                                  {item.alreadyExists ? "Exists" : item.sourceType === "workstation" ? "Workstation" : "KDS"}
-                                </Badge>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </ScrollArea>
-                    )}
-                    {importPreview.summary.total === 0 && (
-                      <p className="text-center py-4 text-muted-foreground">
-                        No workstations or KDS devices configured for this property.
-                      </p>
-                    )}
-                  </>
-                ) : null}
-              </div>
-            )}
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => { setImportOpen(false); setImportPropertyId(""); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => importDevices.mutate(importPropertyId)}
-              disabled={!importPropertyId || importDevices.isPending || !importPreview || importPreview.summary.toImport === 0}
-              data-testid="button-confirm-import"
-            >
-              {importDevices.isPending ? "Importing..." : `Import ${importPreview?.summary.toImport || 0} Device(s)`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

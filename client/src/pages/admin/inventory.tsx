@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -186,6 +185,27 @@ export default function InventoryPage() {
     setShowTransactionDialog(false);
   };
 
+  const handleCancelItem = () => {
+    setShowItemDialog(false);
+    setEditingItem(null);
+    setItemName("");
+    setItemSku("");
+    setItemCategory("");
+    setItemUnitType("each");
+    setItemUnitCost("");
+    setItemParLevel("");
+    setItemReorderPoint("");
+    setItemTrackInventory(true);
+  };
+
+  const handleCancelTransaction = () => {
+    setShowTransactionDialog(false);
+    setTxItemId("");
+    setTxType("receive");
+    setTxQuantity("");
+    setTxNotes("");
+  };
+
   const openEditDialog = (item: InventoryItem) => {
     setEditingItem(item);
     setItemName(item.name);
@@ -199,7 +219,8 @@ export default function InventoryPage() {
     setShowItemDialog(true);
   };
 
-  const handleSaveItem = () => {
+  const handleSaveItem = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!itemName) return;
     
     const data = {
@@ -221,7 +242,8 @@ export default function InventoryPage() {
     }
   };
 
-  const handleSaveTransaction = () => {
+  const handleSaveTransaction = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!txItemId || !txQuantity) return;
     createTransactionMutation.mutate({
       inventoryItemId: txItemId,
@@ -248,6 +270,137 @@ export default function InventoryPage() {
     if (!value) return "-";
     return `$${parseFloat(value).toFixed(2)}`;
   };
+
+  if (showItemDialog) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingItem ? "Edit Item" : "Add Inventory Item"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelItem} data-testid="button-cancel-item">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveItem}
+                  disabled={!itemName || createItemMutation.isPending || updateItemMutation.isPending}
+                  data-testid="button-save-item"
+                >
+                  {(createItemMutation.isPending || updateItemMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {editingItem ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveItem} className="space-y-6">
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="e.g., Chicken Breast" data-testid="input-item-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>SKU</Label>
+                  <Input value={itemSku} onChange={(e) => setItemSku(e.target.value)} placeholder="Optional" data-testid="input-item-sku" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Input value={itemCategory} onChange={(e) => setItemCategory(e.target.value)} placeholder="e.g., Proteins" data-testid="input-item-category" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Unit Type</Label>
+                  <Select value={itemUnitType} onValueChange={setItemUnitType}>
+                    <SelectTrigger data-testid="select-unit-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {UNIT_TYPES.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Unit Cost</Label>
+                  <Input type="number" step="0.01" value={itemUnitCost} onChange={(e) => setItemUnitCost(e.target.value)} placeholder="0.00" data-testid="input-unit-cost" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Par Level</Label>
+                  <Input type="number" step="0.1" value={itemParLevel} onChange={(e) => setItemParLevel(e.target.value)} placeholder="0" data-testid="input-par-level" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reorder Point</Label>
+                  <Input type="number" step="0.1" value={itemReorderPoint} onChange={(e) => setItemReorderPoint(e.target.value)} placeholder="0" data-testid="input-reorder-point" />
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch checked={itemTrackInventory} onCheckedChange={setItemTrackInventory} data-testid="switch-track" />
+                  <Label>Track Inventory</Label>
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (showTransactionDialog) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Record Inventory Transaction</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelTransaction} data-testid="button-cancel-transaction">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveTransaction}
+                  disabled={!txItemId || !txQuantity || createTransactionMutation.isPending}
+                  data-testid="button-save-transaction"
+                >
+                  {createTransactionMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Record
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveTransaction} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Item</Label>
+                  <Select value={txItemId} onValueChange={setTxItemId}>
+                    <SelectTrigger data-testid="select-tx-item"><SelectValue placeholder="Select item..." /></SelectTrigger>
+                    <SelectContent>
+                      {inventoryItems.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Transaction Type</Label>
+                  <Select value={txType} onValueChange={setTxType}>
+                    <SelectTrigger data-testid="select-tx-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TRANSACTION_TYPES.map(t => <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Quantity</Label>
+                  <Input type="number" step="0.1" value={txQuantity} onChange={(e) => setTxQuantity(e.target.value)} placeholder="0" data-testid="input-tx-quantity" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea value={txNotes} onChange={(e) => setTxNotes(e.target.value)} placeholder="Optional notes..." data-testid="input-tx-notes" />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -441,111 +594,6 @@ export default function InventoryPage() {
           </TabsContent>
         </Tabs>
       )}
-
-      <Dialog open={showItemDialog} onOpenChange={(open) => { if (!open) resetItemDialog(); setShowItemDialog(open); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Item" : "Add Inventory Item"}</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="e.g., Chicken Breast" data-testid="input-item-name" />
-              </div>
-              <div className="space-y-2">
-                <Label>SKU</Label>
-                <Input value={itemSku} onChange={(e) => setItemSku(e.target.value)} placeholder="Optional" data-testid="input-item-sku" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Input value={itemCategory} onChange={(e) => setItemCategory(e.target.value)} placeholder="e.g., Proteins" data-testid="input-item-category" />
-              </div>
-              <div className="space-y-2">
-                <Label>Unit Type</Label>
-                <Select value={itemUnitType} onValueChange={setItemUnitType}>
-                  <SelectTrigger data-testid="select-unit-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {UNIT_TYPES.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Unit Cost</Label>
-                <Input type="number" step="0.01" value={itemUnitCost} onChange={(e) => setItemUnitCost(e.target.value)} placeholder="0.00" data-testid="input-unit-cost" />
-              </div>
-              <div className="space-y-2">
-                <Label>Par Level</Label>
-                <Input type="number" step="0.1" value={itemParLevel} onChange={(e) => setItemParLevel(e.target.value)} placeholder="0" data-testid="input-par-level" />
-              </div>
-              <div className="space-y-2">
-                <Label>Reorder Point</Label>
-                <Input type="number" step="0.1" value={itemReorderPoint} onChange={(e) => setItemReorderPoint(e.target.value)} placeholder="0" data-testid="input-reorder-point" />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={itemTrackInventory} onCheckedChange={setItemTrackInventory} data-testid="switch-track" />
-              <Label>Track Inventory</Label>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetItemDialog}>Cancel</Button>
-            <Button onClick={handleSaveItem} disabled={!itemName || createItemMutation.isPending || updateItemMutation.isPending} data-testid="button-save-item">
-              {(createItemMutation.isPending || updateItemMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editingItem ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showTransactionDialog} onOpenChange={(open) => { if (!open) resetTransactionDialog(); setShowTransactionDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Record Inventory Transaction</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Item</Label>
-                <Select value={txItemId} onValueChange={setTxItemId}>
-                  <SelectTrigger data-testid="select-tx-item"><SelectValue placeholder="Select item..." /></SelectTrigger>
-                  <SelectContent>
-                    {inventoryItems.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Transaction Type</Label>
-                <Select value={txType} onValueChange={setTxType}>
-                  <SelectTrigger data-testid="select-tx-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TRANSACTION_TYPES.map(t => <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input type="number" step="0.1" value={txQuantity} onChange={(e) => setTxQuantity(e.target.value)} placeholder="0" data-testid="input-tx-quantity" />
-            </div>
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea value={txNotes} onChange={(e) => setTxNotes(e.target.value)} placeholder="Optional notes..." data-testid="input-tx-notes" />
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetTransactionDialog}>Cancel</Button>
-            <Button onClick={handleSaveTransaction} disabled={!txItemId || !txQuantity || createTransactionMutation.isPending} data-testid="button-save-transaction">
-              {createTransactionMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Record
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

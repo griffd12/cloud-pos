@@ -25,14 +25,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   AlertCircle,
   AlertTriangle,
   Baby,
@@ -59,7 +51,7 @@ interface MinorEmployee {
 export default function MinorLaborPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<string>("");
   const [formData, setFormData] = useState({
     dateOfBirth: "",
@@ -117,7 +109,7 @@ export default function MinorLaborPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Minor status created." });
-      setShowAddDialog(false);
+      setFormOpen(false);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/employee-minor-status"] });
     },
@@ -156,7 +148,8 @@ export default function MinorLaborPage() {
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!selectedEmployee || !formData.dateOfBirth) {
       toast({ title: "Error", description: "Employee and date of birth are required.", variant: "destructive" });
       return;
@@ -167,6 +160,11 @@ export default function MinorLaborPage() {
       ...formData,
       ...scopePayload,
     });
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    resetForm();
   };
 
   const now = new Date();
@@ -204,10 +202,164 @@ export default function MinorLaborPage() {
     e => !minorStatuses.some(s => s.employeeId === e.id)
   );
 
-  // Auto-detect minors based on employee DOB (isMinor field from API)
   const detectedMinorsNeedingCompliance = employees.filter(
     e => (e as any).isMinor === true && !minorStatuses.some(s => s.employeeId === e.id)
   );
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>Add Minor Employee</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={createMutation.isPending}
+                  data-testid="button-save"
+                >
+                  Add Minor Employee
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Employee</Label>
+                  <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                    <SelectTrigger data-testid="select-employee">
+                      <SelectValue placeholder="Select employee..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employeesWithoutStatus.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.firstName} {e.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dob">Date of Birth</Label>
+                  <Input
+                    id="dob"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    data-testid="input-dob"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="permitNumber">Work Permit Number</Label>
+                  <Input
+                    id="permitNumber"
+                    value={formData.workPermitNumber}
+                    onChange={(e) => setFormData({ ...formData, workPermitNumber: e.target.value })}
+                    placeholder="WP-12345"
+                    data-testid="input-permit-number"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="permitExpiration">Permit Expiration</Label>
+                  <Input
+                    id="permitExpiration"
+                    type="date"
+                    value={formData.workPermitExpirationDate}
+                    onChange={(e) => setFormData({ ...formData, workPermitExpirationDate: e.target.value })}
+                    data-testid="input-permit-expiration"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="schoolName">School Name</Label>
+                  <Input
+                    id="schoolName"
+                    value={formData.schoolName}
+                    onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
+                    placeholder="Lincoln High School"
+                    data-testid="input-school"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="maxDaily">Max Daily Hours</Label>
+                  <Input
+                    id="maxDaily"
+                    type="number"
+                    value={formData.maxDailyHours}
+                    onChange={(e) => setFormData({ ...formData, maxDailyHours: e.target.value })}
+                    data-testid="input-max-daily"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxWeekly">Max Weekly Hours</Label>
+                  <Input
+                    id="maxWeekly"
+                    type="number"
+                    value={formData.maxWeeklyHours}
+                    onChange={(e) => setFormData({ ...formData, maxWeeklyHours: e.target.value })}
+                    data-testid="input-max-weekly"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="earliestStartTime">No Work Before</Label>
+                  <Input
+                    id="earliestStartTime"
+                    type="time"
+                    value={formData.earliestStartTime}
+                    onChange={(e) => setFormData({ ...formData, earliestStartTime: e.target.value })}
+                    data-testid="input-no-work-before"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="latestEndTime">No Work After</Label>
+                  <Input
+                    id="latestEndTime"
+                    type="time"
+                    value={formData.latestEndTime}
+                    onChange={(e) => setFormData({ ...formData, latestEndTime: e.target.value })}
+                    data-testid="input-no-work-after"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="parentName">Parent/Guardian Name</Label>
+                  <Input
+                    id="parentName"
+                    value={formData.parentGuardianName}
+                    onChange={(e) => setFormData({ ...formData, parentGuardianName: e.target.value })}
+                    data-testid="input-parent-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="parentPhone">Parent/Guardian Phone</Label>
+                  <Input
+                    id="parentPhone"
+                    type="tel"
+                    value={formData.parentGuardianPhone}
+                    onChange={(e) => setFormData({ ...formData, parentGuardianPhone: e.target.value })}
+                    data-testid="input-parent-phone"
+                  />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -232,7 +384,7 @@ export default function MinorLaborPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-end gap-4">
-            <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-minor">
+            <Button onClick={() => setFormOpen(true)} data-testid="button-add-minor">
               <Plus className="w-4 h-4 mr-2" />
               Add Minor Employee
             </Button>
@@ -315,7 +467,7 @@ export default function MinorLaborPage() {
                                 ...prev,
                                 dateOfBirth: (emp as any).dateOfBirth || "",
                               }));
-                              setShowAddDialog(true);
+                              setFormOpen(true);
                             }}
                             data-testid={`button-add-compliance-${emp.id}`}
                           >
@@ -472,164 +624,6 @@ export default function MinorLaborPage() {
           </div>
         </CardContent>
       </Card>
-
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Add Minor Employee</DialogTitle>
-            <DialogDescription>
-              Track work permit and hour restrictions for a minor employee.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <div className="space-y-2">
-                <Label>Employee</Label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger data-testid="select-employee">
-                    <SelectValue placeholder="Select employee..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employeesWithoutStatus.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.firstName} {e.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="dob">Date of Birth</Label>
-                  <Input
-                    id="dob"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                    data-testid="input-dob"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="permitNumber">Work Permit Number</Label>
-                  <Input
-                    id="permitNumber"
-                    value={formData.workPermitNumber}
-                    onChange={(e) => setFormData({ ...formData, workPermitNumber: e.target.value })}
-                    placeholder="WP-12345"
-                    data-testid="input-permit-number"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="permitExpiration">Permit Expiration</Label>
-                  <Input
-                    id="permitExpiration"
-                    type="date"
-                    value={formData.workPermitExpirationDate}
-                    onChange={(e) => setFormData({ ...formData, workPermitExpirationDate: e.target.value })}
-                    data-testid="input-permit-expiration"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="schoolName">School Name</Label>
-                  <Input
-                    id="schoolName"
-                    value={formData.schoolName}
-                    onChange={(e) => setFormData({ ...formData, schoolName: e.target.value })}
-                    placeholder="Lincoln High School"
-                    data-testid="input-school"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="maxDaily">Max Daily Hours</Label>
-                  <Input
-                    id="maxDaily"
-                    type="number"
-                    value={formData.maxDailyHours}
-                    onChange={(e) => setFormData({ ...formData, maxDailyHours: e.target.value })}
-                    data-testid="input-max-daily"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxWeekly">Max Weekly Hours</Label>
-                  <Input
-                    id="maxWeekly"
-                    type="number"
-                    value={formData.maxWeeklyHours}
-                    onChange={(e) => setFormData({ ...formData, maxWeeklyHours: e.target.value })}
-                    data-testid="input-max-weekly"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="earliestStartTime">No Work Before</Label>
-                  <Input
-                    id="earliestStartTime"
-                    type="time"
-                    value={formData.earliestStartTime}
-                    onChange={(e) => setFormData({ ...formData, earliestStartTime: e.target.value })}
-                    data-testid="input-no-work-before"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="latestEndTime">No Work After</Label>
-                  <Input
-                    id="latestEndTime"
-                    type="time"
-                    value={formData.latestEndTime}
-                    onChange={(e) => setFormData({ ...formData, latestEndTime: e.target.value })}
-                    data-testid="input-no-work-after"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="parentName">Parent/Guardian Name</Label>
-                  <Input
-                    id="parentName"
-                    value={formData.parentGuardianName}
-                    onChange={(e) => setFormData({ ...formData, parentGuardianName: e.target.value })}
-                    data-testid="input-parent-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="parentPhone">Parent/Guardian Phone</Label>
-                  <Input
-                    id="parentPhone"
-                    type="tel"
-                    value={formData.parentGuardianPhone}
-                    onChange={(e) => setFormData({ ...formData, parentGuardianPhone: e.target.value })}
-                    data-testid="input-parent-phone"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={createMutation.isPending}
-              data-testid="button-save"
-            >
-              Add Minor Employee
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

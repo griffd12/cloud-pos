@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -170,8 +169,8 @@ export default function RolesPage() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     
     if (!name || !code) {
       toast({ title: "Please fill all required fields", variant: "destructive" });
@@ -190,6 +189,12 @@ export default function RolesPage() {
     } else {
       createMutation.mutate({ role: { ...roleData, ...scopePayload }, privileges: selectedPrivileges });
     }
+  };
+
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingItem(null);
+    resetForm();
   };
 
   const togglePrivilege = (code: string) => {
@@ -241,37 +246,147 @@ export default function RolesPage() {
         </TabsList>
         
         <TabsContent value="roles" className="space-y-4">
-          <div className="flex gap-2 flex-wrap">
-            <Button 
-              variant="outline" 
-              onClick={() => seedRolesMutation.mutate()}
-              disabled={seedRolesMutation.isPending}
-              data-testid="button-seed-roles"
-            >
-              Seed Standard Roles
-            </Button>
-          </div>
-          
-          <DataTable
-            data={displayedRoles}
-            columns={columns}
-            title="Roles"
-            onAdd={() => {
-              setEditingItem(null);
-              resetForm();
-              setFormOpen(true);
-            }}
-            onEdit={(item) => {
-              setEditingItem(item);
-              setFormOpen(true);
-            }}
-            onDelete={(item) => deleteMutation.mutate(item.id)}
-            canDelete={canDeleteItem}
-            customActions={getOverrideActions()}
-            isLoading={isLoading}
-            searchPlaceholder="Search roles..."
-            emptyMessage="No roles configured"
-          />
+          {formOpen ? (
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>{editingItem ? "Edit Role" : "Add Role"}</CardTitle>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-role">
+                      Cancel
+                    </Button>
+                    <Button
+                      data-testid="button-submit-role"
+                      disabled={createMutation.isPending || updateMutation.isPending}
+                      onClick={handleSubmit}
+                    >
+                      {editingItem ? "Save Changes" : "Create Role"}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Role Name *</Label>
+                      <Input 
+                        id="name"
+                        data-testid="input-role-name"
+                        value={name} 
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g., Manager"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="code">Code *</Label>
+                      <Input 
+                        id="code"
+                        data-testid="input-role-code"
+                        value={code} 
+                        onChange={(e) => setCode(e.target.value.toUpperCase())}
+                        placeholder="e.g., MGR"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2 pt-6">
+                      <Switch 
+                        id="active"
+                        data-testid="switch-role-active"
+                        checked={active}
+                        onCheckedChange={setActive}
+                      />
+                      <Label htmlFor="active">Active</Label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Privileges</Label>
+                    <Accordion type="multiple" className="border rounded-md">
+                      {Object.entries(privilegesByDomain).map(([domain, privs]) => {
+                        const allDomainSelected = privs.every(p => selectedPrivileges.includes(p.code));
+                        
+                        return (
+                          <AccordionItem key={domain} value={domain}>
+                            <AccordionTrigger className="px-4 py-2 text-sm">
+                              {domainLabels[domain] || domain}
+                              <Badge variant="secondary" className="ml-2">
+                                {privs.filter(p => selectedPrivileges.includes(p.code)).length}/{privs.length}
+                              </Badge>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-3">
+                              <div className="mb-3 pb-2 border-b flex items-center space-x-2">
+                                <Checkbox 
+                                  id={`select-all-${domain}`}
+                                  data-testid={`checkbox-select-all-${domain}`}
+                                  checked={allDomainSelected}
+                                  onCheckedChange={() => toggleAllInDomain(domain, privs)}
+                                />
+                                <Label 
+                                  htmlFor={`select-all-${domain}`} 
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  Select All {domainLabels[domain] || domain}
+                                </Label>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                {privs.map((priv) => (
+                                  <div key={priv.id} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`priv-${priv.code}`}
+                                      data-testid={`checkbox-priv-${priv.code}`}
+                                      checked={selectedPrivileges.includes(priv.code)}
+                                      onCheckedChange={() => togglePrivilege(priv.code)}
+                                    />
+                                    <Label htmlFor={`priv-${priv.code}`} className="text-sm font-normal cursor-pointer">
+                                      {priv.name}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="flex gap-2 flex-wrap">
+                <Button 
+                  variant="outline" 
+                  onClick={() => seedRolesMutation.mutate()}
+                  disabled={seedRolesMutation.isPending}
+                  data-testid="button-seed-roles"
+                >
+                  Seed Standard Roles
+                </Button>
+              </div>
+              
+              <DataTable
+                data={displayedRoles}
+                columns={columns}
+                title="Roles"
+                onAdd={() => {
+                  setEditingItem(null);
+                  resetForm();
+                  setFormOpen(true);
+                }}
+                onEdit={(item) => {
+                  setEditingItem(item);
+                  setFormOpen(true);
+                }}
+                onDelete={(item) => deleteMutation.mutate(item.id)}
+                canDelete={canDeleteItem}
+                customActions={getOverrideActions()}
+                isLoading={isLoading}
+                searchPlaceholder="Search roles..."
+                emptyMessage="No roles configured"
+              />
+            </>
+          )}
         </TabsContent>
         
         <TabsContent value="privileges" className="space-y-4">
@@ -307,128 +422,6 @@ export default function RolesPage() {
           </div>
         </TabsContent>
       </Tabs>
-
-      <Dialog open={formOpen} onOpenChange={(open) => {
-        if (!open) {
-          setFormOpen(false);
-          setEditingItem(null);
-          resetForm();
-        }
-      }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Role" : "Add Role"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Role Name *</Label>
-                <Input 
-                  id="name"
-                  data-testid="input-role-name"
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Manager"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="code">Code *</Label>
-                <Input 
-                  id="code"
-                  data-testid="input-role-code"
-                  value={code} 
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="e.g., MGR"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Switch 
-                id="active"
-                data-testid="switch-role-active"
-                checked={active}
-                onCheckedChange={setActive}
-              />
-              <Label htmlFor="active">Active</Label>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Privileges</Label>
-              <Accordion type="multiple" className="border rounded-md">
-                {Object.entries(privilegesByDomain).map(([domain, privs]) => {
-                  const allDomainSelected = privs.every(p => selectedPrivileges.includes(p.code));
-                  
-                  return (
-                    <AccordionItem key={domain} value={domain}>
-                      <AccordionTrigger className="px-4 py-2 text-sm">
-                        {domainLabels[domain] || domain}
-                        <Badge variant="secondary" className="ml-2">
-                          {privs.filter(p => selectedPrivileges.includes(p.code)).length}/{privs.length}
-                        </Badge>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pb-3">
-                        <div className="mb-3 pb-2 border-b flex items-center space-x-2">
-                          <Checkbox 
-                            id={`select-all-${domain}`}
-                            data-testid={`checkbox-select-all-${domain}`}
-                            checked={allDomainSelected}
-                            onCheckedChange={() => toggleAllInDomain(domain, privs)}
-                          />
-                          <Label 
-                            htmlFor={`select-all-${domain}`} 
-                            className="text-sm font-medium cursor-pointer"
-                          >
-                            Select All {domainLabels[domain] || domain}
-                          </Label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {privs.map((priv) => (
-                            <div key={priv.id} className="flex items-center space-x-2">
-                              <Checkbox 
-                                id={`priv-${priv.code}`}
-                                data-testid={`checkbox-priv-${priv.code}`}
-                                checked={selectedPrivileges.includes(priv.code)}
-                                onCheckedChange={() => togglePrivilege(priv.code)}
-                              />
-                              <Label htmlFor={`priv-${priv.code}`} className="text-sm font-normal cursor-pointer">
-                                {priv.name}
-                              </Label>
-                            </div>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-            </div>
-
-            </div>
-            <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => {
-                  setFormOpen(false);
-                  setEditingItem(null);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                data-testid="button-submit-role"
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {editingItem ? "Save Changes" : "Create Role"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

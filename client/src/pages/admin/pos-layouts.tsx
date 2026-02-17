@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -471,7 +470,19 @@ export default function PosLayoutsPage() {
     setFormOpen(true);
   };
 
-  const handleSubmit = async () => {
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingLayout(null);
+    resetForm();
+  };
+
+  const handleCancelDesigner = () => {
+    setDesignerOpen(false);
+    setEditingLayout(null);
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const data = {
       name: layoutName,
       mode: layoutMode,
@@ -635,6 +646,360 @@ export default function PosLayoutsPage() {
     ? cells.find(c => c.rowIndex === selectedCell.row && c.colIndex === selectedCell.col)
     : null;
 
+  if (designerOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Screen Designer - {editingLayout?.name}</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">Drag cells to rearrange items</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleCancelDesigner} data-testid="button-close-designer">Close</Button>
+                <Button onClick={handleSaveDesign} disabled={saveCellsMutation.isPending} data-testid="button-save-design">
+                  <Save className="w-4 h-4 mr-2" />
+                  {saveCellsMutation.isPending ? "Saving..." : "Save Layout"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                  <div
+                    className="grid gap-2 p-4 bg-muted/30 rounded-lg"
+                    style={{
+                      gridTemplateColumns: `repeat(${gridCols}, minmax(80px, 1fr))`,
+                      gridTemplateRows: `repeat(${gridRows}, 80px)`,
+                    }}
+                  >
+                    {cells.map((cell) => {
+                      const menuItem = getMenuItem(cell.menuItemId);
+                      const isSelected = selectedCell?.row === cell.rowIndex && selectedCell?.col === cell.colIndex;
+                      const cellId = `${cell.rowIndex}-${cell.colIndex}`;
+                      return (
+                        <DraggableDroppableCell
+                          key={cellId}
+                          id={cellId}
+                          cell={cell}
+                          menuItem={menuItem}
+                          isSelected={isSelected}
+                          isDragging={activeDragId === cellId}
+                          onClick={() => handleCellClick(cell.rowIndex, cell.colIndex)}
+                        />
+                      );
+                    })}
+                  </div>
+                  <DragOverlay>
+                    {activeDragId ? (
+                      <DragOverlayCell cell={getActiveDragCell()} menuItem={getMenuItem(getActiveDragCell()?.menuItemId || null)} />
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              </div>
+              <div className="w-72 border-l pl-4">
+                <ScrollArea className="h-full">
+                  {selectedCellData ? (
+                    <div className="space-y-4">
+                      <h3 className="font-medium">Cell Properties</h3>
+                      <div className="space-y-2">
+                        <Label>Menu Item</Label>
+                        <Select
+                          value={selectedCellData.menuItemId || "__empty__"}
+                          onValueChange={(v) => updateCell(selectedCell!.row, selectedCell!.col, { menuItemId: v === "__empty__" ? null : v })}
+                        >
+                          <SelectTrigger data-testid="select-cell-menu-item">
+                            <SelectValue placeholder="Select item" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__empty__">Empty</SelectItem>
+                            {menuItems.filter(m => m.active).map(item => (
+                              <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Display Label (Optional)</Label>
+                        <Input
+                          value={selectedCellData.displayLabel || ""}
+                          onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { displayLabel: e.target.value || null })}
+                          placeholder="Override button text"
+                          data-testid="input-cell-label"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Background Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={selectedCellData.backgroundColor}
+                            onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { backgroundColor: e.target.value })}
+                            className="w-12 h-9 p-1"
+                            data-testid="input-cell-bg-color"
+                          />
+                          <Input
+                            value={selectedCellData.backgroundColor}
+                            onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { backgroundColor: e.target.value })}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Text Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={selectedCellData.textColor}
+                            onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { textColor: e.target.value })}
+                            className="w-12 h-9 p-1"
+                            data-testid="input-cell-text-color"
+                          />
+                          <Input
+                            value={selectedCellData.textColor}
+                            onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { textColor: e.target.value })}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                      <Separator />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => updateCell(selectedCell!.row, selectedCell!.col, { menuItemId: null, displayLabel: null })}
+                        data-testid="button-clear-cell"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Clear Cell
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-8">
+                      <Grid3X3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>Select a cell to edit</p>
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>{editingLayout ? "Edit Layout" : "Create Layout"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-layout">
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={!layoutName} data-testid="button-save-layout">
+                  {editingLayout ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Layout Name</Label>
+                  <Input
+                    value={layoutName}
+                    onChange={(e) => setLayoutName(e.target.value)}
+                    placeholder="e.g., Quick Service Layout"
+                    data-testid="input-layout-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Layout Mode</Label>
+                  <Select value={layoutMode} onValueChange={(v) => setLayoutMode(v as any)}>
+                    <SelectTrigger data-testid="select-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="slu_tabs">SLU Tabs (Category based)</SelectItem>
+                      <SelectItem value="custom_grid">Custom Grid (Designer)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Button Font Size</Label>
+                  <Select value={fontSize} onValueChange={(v) => setFontSize(v as any)}>
+                    <SelectTrigger data-testid="select-font-size">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="small">Small</SelectItem>
+                      <SelectItem value="medium">Medium (Default)</SelectItem>
+                      <SelectItem value="large">Large</SelectItem>
+                      <SelectItem value="xlarge">Extra Large</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {layoutMode === "custom_grid" && (
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Grid Rows</Label>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={10}
+                      value={gridRows}
+                      onChange={(e) => setGridRows(Number(e.target.value))}
+                      data-testid="input-grid-rows"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Grid Columns</Label>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={12}
+                      value={gridCols}
+                      onChange={(e) => setGridCols(Number(e.target.value))}
+                      data-testid="input-grid-cols"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <Switch
+                      checked={isDefault}
+                      onCheckedChange={setIsDefault}
+                      data-testid="switch-default"
+                    />
+                    <Label>Set as default layout</Label>
+                  </div>
+                </div>
+              )}
+
+              {layoutMode !== "custom_grid" && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={isDefault}
+                    onCheckedChange={setIsDefault}
+                    data-testid="switch-default"
+                  />
+                  <Label>Set as default layout</Label>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Revenue Centers</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select which locations will use this layout
+                </p>
+                <div className="border rounded-md max-h-48 overflow-y-auto">
+                  {properties.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No properties available</div>
+                  ) : (
+                    properties.map(property => {
+                      const propertyRvcs = rvcs.filter(r => r.propertyId === property.id);
+                      const isExpanded = expandedProperties.has(property.id);
+                      const isFullySelected = isPropertyFullySelected(property.id);
+                      const isPartiallySelected = isPropertyPartiallySelected(property.id);
+                      
+                      return (
+                        <div key={property.id} className="border-b last:border-b-0">
+                          <div className="flex items-center gap-2 p-2 hover-elevate">
+                            <button
+                              type="button"
+                              className="p-0.5"
+                              onClick={() => togglePropertyExpand(property.id)}
+                              data-testid={`button-expand-property-${property.id}`}
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </button>
+                            <Checkbox
+                              checked={isFullySelected}
+                              ref={(el) => {
+                                if (el) {
+                                  (el as any).indeterminate = isPartiallySelected;
+                                }
+                              }}
+                              onCheckedChange={() => toggleAllPropertyRvcs(property.id)}
+                              data-testid={`checkbox-property-${property.id}`}
+                            />
+                            <Building2 className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">{property.name}</span>
+                            {(isFullySelected || isPartiallySelected) && (
+                              <Badge variant="secondary" className="ml-auto text-xs">
+                                {selectedRvcAssignments.filter(a => a.propertyId === property.id).length}/{propertyRvcs.length}
+                              </Badge>
+                            )}
+                          </div>
+                          {isExpanded && propertyRvcs.length > 0 && (
+                            <div className="pl-10 pb-2 space-y-1">
+                              {propertyRvcs.map(rvc => {
+                                const assignment = selectedRvcAssignments.find(a => a.rvcId === rvc.id);
+                                const isAssigned = !!assignment;
+                                const isDefaultForRvc = assignment?.isDefault ?? false;
+                                
+                                return (
+                                  <div
+                                    key={rvc.id}
+                                    className="flex items-center gap-2 px-2 py-1 hover-elevate rounded"
+                                  >
+                                    <Checkbox
+                                      checked={isAssigned}
+                                      onCheckedChange={() => toggleRvcSelection(property.id, rvc.id)}
+                                      data-testid={`checkbox-rvc-${rvc.id}`}
+                                    />
+                                    <span className="text-sm flex-1">{rvc.name}</span>
+                                    {isAssigned && (
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className={`h-6 w-6 ${isDefaultForRvc ? "text-yellow-500" : "text-muted-foreground"}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleRvcDefault(rvc.id);
+                                        }}
+                                        title={isDefaultForRvc ? "Remove as default for this location" : "Set as default for this location"}
+                                        data-testid={`button-default-rvc-${rvc.id}`}
+                                      >
+                                        <Star className={`w-4 h-4 ${isDefaultForRvc ? "fill-current" : ""}`} />
+                                      </Button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                {selectedRvcAssignments.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedRvcAssignments.length} revenue center{selectedRvcAssignments.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-4 mb-6">
@@ -646,7 +1011,6 @@ export default function PosLayoutsPage() {
         </div>
       </div>
 
-      {/* Property Branding Section */}
       <PropertyBrandingSection properties={properties} toast={toast} />
 
       <Separator className="my-8" />
@@ -725,331 +1089,6 @@ export default function PosLayoutsPage() {
           ))}
         </div>
       )}
-
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{editingLayout ? "Edit Layout" : "Create Layout"}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Layout Name</Label>
-                <Input
-                  value={layoutName}
-                  onChange={(e) => setLayoutName(e.target.value)}
-                  placeholder="e.g., Quick Service Layout"
-                  data-testid="input-layout-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Layout Mode</Label>
-                <Select value={layoutMode} onValueChange={(v) => setLayoutMode(v as any)}>
-                  <SelectTrigger data-testid="select-mode">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="slu_tabs">SLU Tabs (Category based)</SelectItem>
-                    <SelectItem value="custom_grid">Custom Grid (Designer)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Revenue Centers</Label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Select which locations will use this layout
-              </p>
-              <div className="border rounded-md max-h-48 overflow-y-auto">
-                {properties.length === 0 ? (
-                  <div className="p-3 text-sm text-muted-foreground">No properties available</div>
-                ) : (
-                  properties.map(property => {
-                    const propertyRvcs = rvcs.filter(r => r.propertyId === property.id);
-                    const isExpanded = expandedProperties.has(property.id);
-                    const isFullySelected = isPropertyFullySelected(property.id);
-                    const isPartiallySelected = isPropertyPartiallySelected(property.id);
-                    
-                    return (
-                      <div key={property.id} className="border-b last:border-b-0">
-                        <div className="flex items-center gap-2 p-2 hover-elevate">
-                          <button
-                            type="button"
-                            className="p-0.5"
-                            onClick={() => togglePropertyExpand(property.id)}
-                            data-testid={`button-expand-property-${property.id}`}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
-                          </button>
-                          <Checkbox
-                            checked={isFullySelected}
-                            ref={(el) => {
-                              if (el) {
-                                (el as any).indeterminate = isPartiallySelected;
-                              }
-                            }}
-                            onCheckedChange={() => toggleAllPropertyRvcs(property.id)}
-                            data-testid={`checkbox-property-${property.id}`}
-                          />
-                          <Building2 className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">{property.name}</span>
-                          {(isFullySelected || isPartiallySelected) && (
-                            <Badge variant="secondary" className="ml-auto text-xs">
-                              {selectedRvcAssignments.filter(a => a.propertyId === property.id).length}/{propertyRvcs.length}
-                            </Badge>
-                          )}
-                        </div>
-                        {isExpanded && propertyRvcs.length > 0 && (
-                          <div className="pl-10 pb-2 space-y-1">
-                            {propertyRvcs.map(rvc => {
-                              const assignment = selectedRvcAssignments.find(a => a.rvcId === rvc.id);
-                              const isAssigned = !!assignment;
-                              const isDefaultForRvc = assignment?.isDefault ?? false;
-                              
-                              return (
-                                <div
-                                  key={rvc.id}
-                                  className="flex items-center gap-2 px-2 py-1 hover-elevate rounded"
-                                >
-                                  <Checkbox
-                                    checked={isAssigned}
-                                    onCheckedChange={() => toggleRvcSelection(property.id, rvc.id)}
-                                    data-testid={`checkbox-rvc-${rvc.id}`}
-                                  />
-                                  <span className="text-sm flex-1">{rvc.name}</span>
-                                  {isAssigned && (
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      className={`h-6 w-6 ${isDefaultForRvc ? "text-yellow-500" : "text-muted-foreground"}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleRvcDefault(rvc.id);
-                                      }}
-                                      title={isDefaultForRvc ? "Remove as default for this location" : "Set as default for this location"}
-                                      data-testid={`button-default-rvc-${rvc.id}`}
-                                    >
-                                      <Star className={`w-4 h-4 ${isDefaultForRvc ? "fill-current" : ""}`} />
-                                    </Button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {selectedRvcAssignments.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedRvcAssignments.length} revenue center{selectedRvcAssignments.length !== 1 ? 's' : ''} selected
-                </p>
-              )}
-            </div>
-            {layoutMode === "custom_grid" && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Grid Rows</Label>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={10}
-                    value={gridRows}
-                    onChange={(e) => setGridRows(Number(e.target.value))}
-                    data-testid="input-grid-rows"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Grid Columns</Label>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={12}
-                    value={gridCols}
-                    onChange={(e) => setGridCols(Number(e.target.value))}
-                    data-testid="input-grid-cols"
-                  />
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Button Font Size</Label>
-                <Select value={fontSize} onValueChange={(v) => setFontSize(v as any)}>
-                  <SelectTrigger data-testid="select-font-size">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="small">Small</SelectItem>
-                    <SelectItem value="medium">Medium (Default)</SelectItem>
-                    <SelectItem value="large">Large</SelectItem>
-                    <SelectItem value="xlarge">Extra Large</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2 pt-6">
-                <Switch
-                  checked={isDefault}
-                  onCheckedChange={setIsDefault}
-                  data-testid="switch-default"
-                />
-                <Label>Set as default layout</Label>
-              </div>
-            </div>
-          </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={!layoutName} data-testid="button-save-layout">
-              {editingLayout ? "Update" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={designerOpen} onOpenChange={setDesignerOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Screen Designer - {editingLayout?.name}</DialogTitle>
-            <p className="text-sm text-muted-foreground">Drag cells to rearrange items</p>
-          </DialogHeader>
-          <div className="flex-1 flex gap-4 overflow-hidden">
-            <div className="flex-1 overflow-auto">
-              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                <div
-                  className="grid gap-2 p-4 bg-muted/30 rounded-lg"
-                  style={{
-                    gridTemplateColumns: `repeat(${gridCols}, minmax(80px, 1fr))`,
-                    gridTemplateRows: `repeat(${gridRows}, 80px)`,
-                  }}
-                >
-                  {cells.map((cell) => {
-                    const menuItem = getMenuItem(cell.menuItemId);
-                    const isSelected = selectedCell?.row === cell.rowIndex && selectedCell?.col === cell.colIndex;
-                    const cellId = `${cell.rowIndex}-${cell.colIndex}`;
-                    return (
-                      <DraggableDroppableCell
-                        key={cellId}
-                        id={cellId}
-                        cell={cell}
-                        menuItem={menuItem}
-                        isSelected={isSelected}
-                        isDragging={activeDragId === cellId}
-                        onClick={() => handleCellClick(cell.rowIndex, cell.colIndex)}
-                      />
-                    );
-                  })}
-                </div>
-                <DragOverlay>
-                  {activeDragId ? (
-                    <DragOverlayCell cell={getActiveDragCell()} menuItem={getMenuItem(getActiveDragCell()?.menuItemId || null)} />
-                  ) : null}
-                </DragOverlay>
-              </DndContext>
-            </div>
-            <div className="w-72 border-l pl-4">
-              <ScrollArea className="h-full">
-                {selectedCellData ? (
-                  <div className="space-y-4">
-                    <h3 className="font-medium">Cell Properties</h3>
-                    <div className="space-y-2">
-                      <Label>Menu Item</Label>
-                      <Select
-                        value={selectedCellData.menuItemId || "__empty__"}
-                        onValueChange={(v) => updateCell(selectedCell!.row, selectedCell!.col, { menuItemId: v === "__empty__" ? null : v })}
-                      >
-                        <SelectTrigger data-testid="select-cell-menu-item">
-                          <SelectValue placeholder="Select item" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__empty__">Empty</SelectItem>
-                          {menuItems.filter(m => m.active).map(item => (
-                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Display Label (Optional)</Label>
-                      <Input
-                        value={selectedCellData.displayLabel || ""}
-                        onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { displayLabel: e.target.value || null })}
-                        placeholder="Override button text"
-                        data-testid="input-cell-label"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Background Color</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="color"
-                          value={selectedCellData.backgroundColor}
-                          onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { backgroundColor: e.target.value })}
-                          className="w-12 h-9 p-1"
-                          data-testid="input-cell-bg-color"
-                        />
-                        <Input
-                          value={selectedCellData.backgroundColor}
-                          onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { backgroundColor: e.target.value })}
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Text Color</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="color"
-                          value={selectedCellData.textColor}
-                          onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { textColor: e.target.value })}
-                          className="w-12 h-9 p-1"
-                          data-testid="input-cell-text-color"
-                        />
-                        <Input
-                          value={selectedCellData.textColor}
-                          onChange={(e) => updateCell(selectedCell!.row, selectedCell!.col, { textColor: e.target.value })}
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-                    <Separator />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => updateCell(selectedCell!.row, selectedCell!.col, { menuItemId: null, displayLabel: null })}
-                      data-testid="button-clear-cell"
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Clear Cell
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Grid3X3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>Select a cell to edit</p>
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDesignerOpen(false)} data-testid="button-close-designer">Close</Button>
-            <Button onClick={handleSaveDesign} disabled={saveCellsMutation.isPending} data-testid="button-save-design">
-              <Save className="w-4 h-4 mr-2" />
-              {saveCellsMutation.isPending ? "Saving..." : "Save Layout"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

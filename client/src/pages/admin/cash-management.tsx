@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,9 +29,9 @@ export default function CashManagementPage() {
       setSelectedPropertyId(contextPropertyId);
     }
   }, [contextPropertyId]);
-  const [showDrawerDialog, setShowDrawerDialog] = useState(false);
-  const [showTransactionDialog, setShowTransactionDialog] = useState(false);
-  const [showSafeCountDialog, setShowSafeCountDialog] = useState(false);
+  const [showDrawerForm, setShowDrawerForm] = useState(false);
+  const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showSafeCountForm, setShowSafeCountForm] = useState(false);
   const [editingDrawer, setEditingDrawer] = useState<CashDrawer | null>(null);
   const [transactionType, setTransactionType] = useState<string>("paid_in");
   const [transactionAmount, setTransactionAmount] = useState("");
@@ -109,7 +108,7 @@ export default function CashManagementPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cash-drawers", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
-      resetDrawerDialog();
+      handleCancelDrawer();
       toast({ title: "Drawer Created", description: "Cash drawer has been created." });
     },
     onError: (error: Error) => {
@@ -125,7 +124,7 @@ export default function CashManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cash-transactions", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
       queryClient.invalidateQueries({ queryKey: ["/api/cash-drawers", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
-      resetTransactionDialog();
+      handleCancelTransaction();
       toast({ title: "Transaction Recorded", description: "Cash transaction has been recorded." });
     },
     onError: (error: Error) => {
@@ -140,7 +139,7 @@ export default function CashManagementPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/safe-counts", { propertyId: selectedPropertyId, enterpriseId: selectedEnterpriseId }] });
-      resetSafeCountDialog();
+      handleCancelSafeCount();
       toast({ title: "Safe Count Recorded", description: "Safe count has been recorded." });
     },
     onError: (error: Error) => {
@@ -148,28 +147,42 @@ export default function CashManagementPage() {
     },
   });
 
-  const resetDrawerDialog = () => {
+  const resetDrawerForm = () => {
     setDrawerName("");
     setDrawerStartingBalance("");
     setEditingDrawer(null);
-    setShowDrawerDialog(false);
   };
 
-  const resetTransactionDialog = () => {
+  const resetTransactionForm = () => {
     setTransactionType("paid_in");
     setTransactionAmount("");
     setTransactionReason("");
     setSelectedDrawerId("");
-    setShowTransactionDialog(false);
   };
 
-  const resetSafeCountDialog = () => {
+  const resetSafeCountForm = () => {
     setSafeAmount("");
     setSafeNotes("");
-    setShowSafeCountDialog(false);
   };
 
-  const handleCreateDrawer = () => {
+  const handleCancelDrawer = () => {
+    setShowDrawerForm(false);
+    setEditingDrawer(null);
+    resetDrawerForm();
+  };
+
+  const handleCancelTransaction = () => {
+    setShowTransactionForm(false);
+    resetTransactionForm();
+  };
+
+  const handleCancelSafeCount = () => {
+    setShowSafeCountForm(false);
+    resetSafeCountForm();
+  };
+
+  const handleCreateDrawer = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!drawerName || !selectedPropertyId) return;
     createDrawerMutation.mutate({
       name: drawerName,
@@ -177,7 +190,8 @@ export default function CashManagementPage() {
     });
   };
 
-  const handleCreateTransaction = () => {
+  const handleCreateTransaction = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!selectedDrawerId || !transactionAmount || !transactionReason) return;
     createTransactionMutation.mutate({
       drawerId: selectedDrawerId,
@@ -188,7 +202,8 @@ export default function CashManagementPage() {
     });
   };
 
-  const handleCreateSafeCount = () => {
+  const handleCreateSafeCount = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!safeAmount || !selectedPropertyId) return;
     createSafeCountMutation.mutate({
       propertyId: selectedPropertyId,
@@ -210,6 +225,155 @@ export default function CashManagementPage() {
     { value: "drop", label: "Drop", icon: Lock },
     { value: "pickup", label: "Pickup", icon: Banknote },
   ];
+
+  if (showDrawerForm) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>Add Cash Drawer</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelDrawer} data-testid="button-cancel-drawer">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateDrawer}
+                  disabled={!drawerName || createDrawerMutation.isPending}
+                  data-testid="button-save-drawer"
+                >
+                  {createDrawerMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Create Drawer
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateDrawer} className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Drawer Name</Label>
+                  <Input value={drawerName} onChange={(e) => setDrawerName(e.target.value)} placeholder="e.g., Register 1" data-testid="input-drawer-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Starting Balance</Label>
+                  <Input type="number" step="0.01" value={drawerStartingBalance} onChange={(e) => setDrawerStartingBalance(e.target.value)} placeholder="0.00" data-testid="input-starting-balance" />
+                </div>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (showTransactionForm) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>Record Cash Transaction</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelTransaction} data-testid="button-cancel-transaction">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateTransaction}
+                  disabled={!selectedDrawerId || !transactionAmount || !transactionReason || createTransactionMutation.isPending}
+                  data-testid="button-save-tx"
+                >
+                  {createTransactionMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Record Transaction
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateTransaction} className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Drawer</Label>
+                  <Select value={selectedDrawerId} onValueChange={setSelectedDrawerId}>
+                    <SelectTrigger data-testid="select-drawer">
+                      <SelectValue placeholder="Select drawer..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cashDrawers.map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Transaction Type</Label>
+                  <Select value={transactionType} onValueChange={setTransactionType}>
+                    <SelectTrigger data-testid="select-tx-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {transactionTypes.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input type="number" step="0.01" value={transactionAmount} onChange={(e) => setTransactionAmount(e.target.value)} placeholder="0.00" data-testid="input-tx-amount" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Reason</Label>
+                <Textarea value={transactionReason} onChange={(e) => setTransactionReason(e.target.value)} placeholder="Reason for transaction..." data-testid="input-tx-reason" />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (showSafeCountForm) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>Record Safe Count</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancelSafeCount} data-testid="button-cancel-safe-count">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateSafeCount}
+                  disabled={!safeAmount || createSafeCountMutation.isPending}
+                  data-testid="button-save-safe-count"
+                >
+                  {createSafeCountMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Record Count
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateSafeCount} className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Counted Amount</Label>
+                  <Input type="number" step="0.01" value={safeAmount} onChange={(e) => setSafeAmount(e.target.value)} placeholder="0.00" data-testid="input-safe-amount" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (optional)</Label>
+                <Textarea value={safeNotes} onChange={(e) => setSafeNotes(e.target.value)} placeholder="Any notes..." data-testid="input-safe-notes" />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -248,7 +412,7 @@ export default function CashManagementPage() {
 
           <TabsContent value="drawers" className="space-y-4">
             <div className="flex justify-end">
-              <Button onClick={() => setShowDrawerDialog(true)} data-testid="button-add-drawer">
+              <Button onClick={() => setShowDrawerForm(true)} data-testid="button-add-drawer">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Drawer
               </Button>
@@ -287,7 +451,7 @@ export default function CashManagementPage() {
 
           <TabsContent value="transactions" className="space-y-4">
             <div className="flex justify-end">
-              <Button onClick={() => setShowTransactionDialog(true)} data-testid="button-add-transaction">
+              <Button onClick={() => setShowTransactionForm(true)} data-testid="button-add-transaction">
                 <Plus className="w-4 h-4 mr-2" />
                 Record Transaction
               </Button>
@@ -329,7 +493,7 @@ export default function CashManagementPage() {
 
           <TabsContent value="safe" className="space-y-4">
             <div className="flex justify-end">
-              <Button onClick={() => setShowSafeCountDialog(true)} data-testid="button-add-safe-count">
+              <Button onClick={() => setShowSafeCountForm(true)} data-testid="button-add-safe-count">
                 <Plus className="w-4 h-4 mr-2" />
                 Record Safe Count
               </Button>
@@ -364,111 +528,6 @@ export default function CashManagementPage() {
           </TabsContent>
         </Tabs>
       )}
-
-      <Dialog open={showDrawerDialog} onOpenChange={(open) => { if (!open) resetDrawerDialog(); setShowDrawerDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Add Cash Drawer</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Drawer Name</Label>
-                <Input value={drawerName} onChange={(e) => setDrawerName(e.target.value)} placeholder="e.g., Register 1" data-testid="input-drawer-name" />
-              </div>
-              <div className="space-y-2">
-                <Label>Starting Balance</Label>
-                <Input type="number" step="0.01" value={drawerStartingBalance} onChange={(e) => setDrawerStartingBalance(e.target.value)} placeholder="0.00" data-testid="input-starting-balance" />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetDrawerDialog}>Cancel</Button>
-            <Button onClick={handleCreateDrawer} disabled={!drawerName || createDrawerMutation.isPending} data-testid="button-save-drawer">
-              {createDrawerMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Create Drawer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showTransactionDialog} onOpenChange={(open) => { if (!open) resetTransactionDialog(); setShowTransactionDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Record Cash Transaction</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Drawer</Label>
-                <Select value={selectedDrawerId} onValueChange={setSelectedDrawerId}>
-                  <SelectTrigger data-testid="select-drawer">
-                    <SelectValue placeholder="Select drawer..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cashDrawers.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Transaction Type</Label>
-                <Select value={transactionType} onValueChange={setTransactionType}>
-                  <SelectTrigger data-testid="select-tx-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {transactionTypes.map(t => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input type="number" step="0.01" value={transactionAmount} onChange={(e) => setTransactionAmount(e.target.value)} placeholder="0.00" data-testid="input-tx-amount" />
-            </div>
-            <div className="space-y-2">
-              <Label>Reason</Label>
-              <Textarea value={transactionReason} onChange={(e) => setTransactionReason(e.target.value)} placeholder="Reason for transaction..." data-testid="input-tx-reason" />
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetTransactionDialog}>Cancel</Button>
-            <Button onClick={handleCreateTransaction} disabled={!selectedDrawerId || !transactionAmount || !transactionReason || createTransactionMutation.isPending} data-testid="button-save-tx">
-              {createTransactionMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Record Transaction
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showSafeCountDialog} onOpenChange={(open) => { if (!open) resetSafeCountDialog(); setShowSafeCountDialog(open); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Record Safe Count</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div className="space-y-2">
-              <Label>Counted Amount</Label>
-              <Input type="number" step="0.01" value={safeAmount} onChange={(e) => setSafeAmount(e.target.value)} placeholder="0.00" data-testid="input-safe-amount" />
-            </div>
-            <div className="space-y-2">
-              <Label>Notes (optional)</Label>
-              <Textarea value={safeNotes} onChange={(e) => setSafeNotes(e.target.value)} placeholder="Any notes..." data-testid="input-safe-notes" />
-            </div>
-          </div>
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={resetSafeCountDialog}>Cancel</Button>
-            <Button onClick={handleCreateSafeCount} disabled={!safeAmount || createSafeCountMutation.isPending} data-testid="button-save-safe-count">
-              {createSafeCountMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Record Count
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

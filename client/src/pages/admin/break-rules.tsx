@@ -13,14 +13,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -83,7 +75,7 @@ const DEFAULT_FORM = {
 export default function BreakRulesPage() {
   const { toast } = useToast();
   const { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId: contextPropertyId, scopePayload } = useEmcFilter();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<BreakRule | null>(null);
   const [ruleForm, setRuleForm] = useState(DEFAULT_FORM);
   const [activeTab, setActiveTab] = useState("meal");
@@ -112,7 +104,8 @@ export default function BreakRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Break rule created." });
-      setIsDialogOpen(false);
+      setFormOpen(false);
+      setEditingRule(null);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/break-rules"] });
     },
@@ -127,7 +120,7 @@ export default function BreakRulesPage() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Break rule updated." });
-      setIsDialogOpen(false);
+      setFormOpen(false);
       setEditingRule(null);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/break-rules"] });
@@ -158,7 +151,7 @@ export default function BreakRulesPage() {
 
   const openCreateDialog = () => {
     resetForm();
-    setIsDialogOpen(true);
+    setFormOpen(true);
   };
 
   const openEditDialog = (rule: BreakRule) => {
@@ -185,10 +178,11 @@ export default function BreakRulesPage() {
       alertMinutesBeforeDeadline: rule.alertMinutesBeforeDeadline || 15,
       active: rule.active !== false,
     });
-    setIsDialogOpen(true);
+    setFormOpen(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     const data = {
       ...ruleForm,
       ...scopePayload,
@@ -201,7 +195,360 @@ export default function BreakRulesPage() {
     }
   };
 
+  const handleCancel = () => {
+    setFormOpen(false);
+    setEditingRule(null);
+    resetForm();
+  };
+
   const activeRule = rules.find(r => r.active);
+
+  if (formOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>{editingRule ? "Edit Break Rule" : "Create Break Rule"}</CardTitle>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  data-testid="button-save"
+                >
+                  {editingRule ? "Save Changes" : "Create Rule"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="meal">Meal Breaks</TabsTrigger>
+                  <TabsTrigger value="rest">Rest Breaks</TabsTrigger>
+                  <TabsTrigger value="premium">Premium Pay</TabsTrigger>
+                  <TabsTrigger value="alerts">Alerts</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="meal" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Rule Name</Label>
+                      <Input
+                        id="name"
+                        value={ruleForm.name}
+                        onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
+                        placeholder="California Break Rules"
+                        data-testid="input-rule-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="stateCode">State</Label>
+                      <Select
+                        value={ruleForm.stateCode}
+                        onValueChange={(v) => setRuleForm({ ...ruleForm, stateCode: v })}
+                      >
+                        <SelectTrigger data-testid="select-state-code">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATE_CODES.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Meal Break Enforcement</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Track and enforce meal break requirements
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.enableMealBreakEnforcement}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableMealBreakEnforcement: v })}
+                      data-testid="switch-meal-enforcement"
+                    />
+                  </div>
+
+                  {ruleForm.enableMealBreakEnforcement && (
+                    <div className="grid grid-cols-3 gap-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label htmlFor="mealBreakMinutes">Meal Break Duration (minutes)</Label>
+                        <Input
+                          id="mealBreakMinutes"
+                          type="number"
+                          value={ruleForm.mealBreakMinutes}
+                          onChange={(e) => setRuleForm({ ...ruleForm, mealBreakMinutes: parseInt(e.target.value) || 30 })}
+                          data-testid="input-meal-duration"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="mealBreakThresholdHours">First Meal Break Threshold (hours)</Label>
+                        <Input
+                          id="mealBreakThresholdHours"
+                          value={ruleForm.mealBreakThresholdHours}
+                          onChange={(e) => setRuleForm({ ...ruleForm, mealBreakThresholdHours: e.target.value })}
+                          placeholder="5.00"
+                          data-testid="input-meal-threshold"
+                        />
+                        <p className="text-xs text-muted-foreground">Must take meal break before this many hours</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="secondMealBreakThresholdHours">Second Meal Break Threshold (hours)</Label>
+                        <Input
+                          id="secondMealBreakThresholdHours"
+                          value={ruleForm.secondMealBreakThresholdHours}
+                          onChange={(e) => setRuleForm({ ...ruleForm, secondMealBreakThresholdHours: e.target.value })}
+                          placeholder="10.00"
+                          data-testid="input-second-meal-threshold"
+                        />
+                        <p className="text-xs text-muted-foreground">Second meal break required after this many hours</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Allow Meal Break Waiver</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Allow employees to waive meal break for short shifts
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.allowMealBreakWaiver}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, allowMealBreakWaiver: v })}
+                      data-testid="switch-meal-waiver"
+                    />
+                  </div>
+
+                  {ruleForm.allowMealBreakWaiver && (
+                    <div className="pl-4 border-l-2 border-muted">
+                      <div className="space-y-2 max-w-xs">
+                        <Label htmlFor="mealWaiverMaxShiftHours">Max Shift Hours for Waiver</Label>
+                        <Input
+                          id="mealWaiverMaxShiftHours"
+                          value={ruleForm.mealWaiverMaxShiftHours}
+                          onChange={(e) => setRuleForm({ ...ruleForm, mealWaiverMaxShiftHours: e.target.value })}
+                          placeholder="6.00"
+                          data-testid="input-waiver-max-hours"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Employees can waive meal break only if shift is this many hours or less
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="rest" className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Rest Break Enforcement</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Track and enforce rest break requirements
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.enableRestBreakEnforcement}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableRestBreakEnforcement: v })}
+                      data-testid="switch-rest-enforcement"
+                    />
+                  </div>
+
+                  {ruleForm.enableRestBreakEnforcement && (
+                    <div className="grid grid-cols-3 gap-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label htmlFor="restBreakMinutes">Rest Break Duration (minutes)</Label>
+                        <Input
+                          id="restBreakMinutes"
+                          type="number"
+                          value={ruleForm.restBreakMinutes}
+                          onChange={(e) => setRuleForm({ ...ruleForm, restBreakMinutes: parseInt(e.target.value) || 10 })}
+                          data-testid="input-rest-duration"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="restBreakIntervalHours">Rest Break Interval (hours)</Label>
+                        <Input
+                          id="restBreakIntervalHours"
+                          value={ruleForm.restBreakIntervalHours}
+                          onChange={(e) => setRuleForm({ ...ruleForm, restBreakIntervalHours: e.target.value })}
+                          placeholder="4.00"
+                          data-testid="input-rest-interval"
+                        />
+                        <p className="text-xs text-muted-foreground">One rest break required per this many hours worked</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Rest Breaks are Paid</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Rest breaks count as paid work time (required in California)
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.restBreakIsPaid}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, restBreakIsPaid: v })}
+                      data-testid="switch-rest-paid"
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="premium" className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Premium Pay for Missed Breaks</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically calculate premium pay owed for break violations
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.enablePremiumPay}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, enablePremiumPay: v })}
+                      data-testid="switch-premium-pay"
+                    />
+                  </div>
+
+                  {ruleForm.enablePremiumPay && (
+                    <div className="grid grid-cols-3 gap-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label htmlFor="mealBreakPremiumHours">Meal Break Premium (hours)</Label>
+                        <Input
+                          id="mealBreakPremiumHours"
+                          value={ruleForm.mealBreakPremiumHours}
+                          onChange={(e) => setRuleForm({ ...ruleForm, mealBreakPremiumHours: e.target.value })}
+                          placeholder="1.00"
+                          data-testid="input-meal-premium"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Hours of pay owed for each missed meal break
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="restBreakPremiumHours">Rest Break Premium (hours)</Label>
+                        <Input
+                          id="restBreakPremiumHours"
+                          value={ruleForm.restBreakPremiumHours}
+                          onChange={(e) => setRuleForm({ ...ruleForm, restBreakPremiumHours: e.target.value })}
+                          placeholder="1.00"
+                          data-testid="input-rest-premium"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Hours of pay owed for each missed rest break
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Require Clock-Out Attestation</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Employees must confirm breaks were provided at clock-out
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.requireClockOutAttestation}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, requireClockOutAttestation: v })}
+                      data-testid="switch-attestation"
+                    />
+                  </div>
+
+                  {ruleForm.requireClockOutAttestation && (
+                    <div className="pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label htmlFor="attestationMessage">Attestation Message</Label>
+                        <Textarea
+                          id="attestationMessage"
+                          value={ruleForm.attestationMessage}
+                          onChange={(e) => setRuleForm({ ...ruleForm, attestationMessage: e.target.value })}
+                          rows={3}
+                          data-testid="textarea-attestation"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Message displayed to employees at clock-out
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="alerts" className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Break Alerts</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Send alerts when employees are approaching break deadlines
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.enableBreakAlerts}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableBreakAlerts: v })}
+                      data-testid="switch-break-alerts"
+                    />
+                  </div>
+
+                  {ruleForm.enableBreakAlerts && (
+                    <div className="pl-4 border-l-2 border-muted">
+                      <div className="space-y-2 max-w-xs">
+                        <Label htmlFor="alertMinutesBeforeDeadline">Alert Minutes Before Deadline</Label>
+                        <Input
+                          id="alertMinutesBeforeDeadline"
+                          type="number"
+                          value={ruleForm.alertMinutesBeforeDeadline}
+                          onChange={(e) => setRuleForm({ ...ruleForm, alertMinutesBeforeDeadline: parseInt(e.target.value) || 15 })}
+                          data-testid="input-alert-minutes"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Send alert this many minutes before break deadline
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Active</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Enable this break rule for the property
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ruleForm.active}
+                      onCheckedChange={(v) => setRuleForm({ ...ruleForm, active: v })}
+                      data-testid="switch-active"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -366,352 +713,6 @@ export default function BreakRulesPage() {
           </CardContent>
         </Card>
       )}
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>
-              {editingRule ? "Edit Break Rule" : "Create Break Rule"}
-            </DialogTitle>
-            <DialogDescription>
-              Configure meal and rest break enforcement settings for labor law compliance.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="meal">Meal Breaks</TabsTrigger>
-              <TabsTrigger value="rest">Rest Breaks</TabsTrigger>
-              <TabsTrigger value="premium">Premium Pay</TabsTrigger>
-              <TabsTrigger value="alerts">Alerts</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="meal" className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Rule Name</Label>
-                  <Input
-                    id="name"
-                    value={ruleForm.name}
-                    onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
-                    placeholder="California Break Rules"
-                    data-testid="input-rule-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stateCode">State</Label>
-                  <Select
-                    value={ruleForm.stateCode}
-                    onValueChange={(v) => setRuleForm({ ...ruleForm, stateCode: v })}
-                  >
-                    <SelectTrigger data-testid="select-state-code">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATE_CODES.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Enable Meal Break Enforcement</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Track and enforce meal break requirements
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.enableMealBreakEnforcement}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableMealBreakEnforcement: v })}
-                  data-testid="switch-meal-enforcement"
-                />
-              </div>
-
-              {ruleForm.enableMealBreakEnforcement && (
-                <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-muted">
-                  <div className="space-y-2">
-                    <Label htmlFor="mealBreakMinutes">Meal Break Duration (minutes)</Label>
-                    <Input
-                      id="mealBreakMinutes"
-                      type="number"
-                      value={ruleForm.mealBreakMinutes}
-                      onChange={(e) => setRuleForm({ ...ruleForm, mealBreakMinutes: parseInt(e.target.value) || 30 })}
-                      data-testid="input-meal-duration"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="mealBreakThresholdHours">First Meal Break Threshold (hours)</Label>
-                    <Input
-                      id="mealBreakThresholdHours"
-                      value={ruleForm.mealBreakThresholdHours}
-                      onChange={(e) => setRuleForm({ ...ruleForm, mealBreakThresholdHours: e.target.value })}
-                      placeholder="5.00"
-                      data-testid="input-meal-threshold"
-                    />
-                    <p className="text-xs text-muted-foreground">Must take meal break before this many hours</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="secondMealBreakThresholdHours">Second Meal Break Threshold (hours)</Label>
-                    <Input
-                      id="secondMealBreakThresholdHours"
-                      value={ruleForm.secondMealBreakThresholdHours}
-                      onChange={(e) => setRuleForm({ ...ruleForm, secondMealBreakThresholdHours: e.target.value })}
-                      placeholder="10.00"
-                      data-testid="input-second-meal-threshold"
-                    />
-                    <p className="text-xs text-muted-foreground">Second meal break required after this many hours</p>
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Allow Meal Break Waiver</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Allow employees to waive meal break for short shifts
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.allowMealBreakWaiver}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, allowMealBreakWaiver: v })}
-                  data-testid="switch-meal-waiver"
-                />
-              </div>
-
-              {ruleForm.allowMealBreakWaiver && (
-                <div className="pl-4 border-l-2 border-muted">
-                  <div className="space-y-2 max-w-xs">
-                    <Label htmlFor="mealWaiverMaxShiftHours">Max Shift Hours for Waiver</Label>
-                    <Input
-                      id="mealWaiverMaxShiftHours"
-                      value={ruleForm.mealWaiverMaxShiftHours}
-                      onChange={(e) => setRuleForm({ ...ruleForm, mealWaiverMaxShiftHours: e.target.value })}
-                      placeholder="6.00"
-                      data-testid="input-waiver-max-hours"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Employees can waive meal break only if shift is this many hours or less
-                    </p>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="rest" className="space-y-4 mt-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Enable Rest Break Enforcement</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Track and enforce rest break requirements
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.enableRestBreakEnforcement}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableRestBreakEnforcement: v })}
-                  data-testid="switch-rest-enforcement"
-                />
-              </div>
-
-              {ruleForm.enableRestBreakEnforcement && (
-                <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-muted">
-                  <div className="space-y-2">
-                    <Label htmlFor="restBreakMinutes">Rest Break Duration (minutes)</Label>
-                    <Input
-                      id="restBreakMinutes"
-                      type="number"
-                      value={ruleForm.restBreakMinutes}
-                      onChange={(e) => setRuleForm({ ...ruleForm, restBreakMinutes: parseInt(e.target.value) || 10 })}
-                      data-testid="input-rest-duration"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="restBreakIntervalHours">Rest Break Interval (hours)</Label>
-                    <Input
-                      id="restBreakIntervalHours"
-                      value={ruleForm.restBreakIntervalHours}
-                      onChange={(e) => setRuleForm({ ...ruleForm, restBreakIntervalHours: e.target.value })}
-                      placeholder="4.00"
-                      data-testid="input-rest-interval"
-                    />
-                    <p className="text-xs text-muted-foreground">One rest break required per this many hours worked</p>
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Rest Breaks are Paid</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Rest breaks count as paid work time (required in California)
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.restBreakIsPaid}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, restBreakIsPaid: v })}
-                  data-testid="switch-rest-paid"
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="premium" className="space-y-4 mt-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Enable Premium Pay for Missed Breaks</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically calculate premium pay owed for break violations
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.enablePremiumPay}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, enablePremiumPay: v })}
-                  data-testid="switch-premium-pay"
-                />
-              </div>
-
-              {ruleForm.enablePremiumPay && (
-                <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-muted">
-                  <div className="space-y-2">
-                    <Label htmlFor="mealBreakPremiumHours">Meal Break Premium (hours)</Label>
-                    <Input
-                      id="mealBreakPremiumHours"
-                      value={ruleForm.mealBreakPremiumHours}
-                      onChange={(e) => setRuleForm({ ...ruleForm, mealBreakPremiumHours: e.target.value })}
-                      placeholder="1.00"
-                      data-testid="input-meal-premium"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Hours of pay owed for each missed meal break
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="restBreakPremiumHours">Rest Break Premium (hours)</Label>
-                    <Input
-                      id="restBreakPremiumHours"
-                      value={ruleForm.restBreakPremiumHours}
-                      onChange={(e) => setRuleForm({ ...ruleForm, restBreakPremiumHours: e.target.value })}
-                      placeholder="1.00"
-                      data-testid="input-rest-premium"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Hours of pay owed for each missed rest break
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Require Clock-Out Attestation</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Employees must confirm breaks were provided at clock-out
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.requireClockOutAttestation}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, requireClockOutAttestation: v })}
-                  data-testid="switch-attestation"
-                />
-              </div>
-
-              {ruleForm.requireClockOutAttestation && (
-                <div className="pl-4 border-l-2 border-muted">
-                  <div className="space-y-2">
-                    <Label htmlFor="attestationMessage">Attestation Message</Label>
-                    <Textarea
-                      id="attestationMessage"
-                      value={ruleForm.attestationMessage}
-                      onChange={(e) => setRuleForm({ ...ruleForm, attestationMessage: e.target.value })}
-                      rows={3}
-                      data-testid="textarea-attestation"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Message displayed to employees at clock-out
-                    </p>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="alerts" className="space-y-4 mt-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Enable Break Alerts</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Send alerts when employees are approaching break deadlines
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.enableBreakAlerts}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, enableBreakAlerts: v })}
-                  data-testid="switch-break-alerts"
-                />
-              </div>
-
-              {ruleForm.enableBreakAlerts && (
-                <div className="pl-4 border-l-2 border-muted">
-                  <div className="space-y-2 max-w-xs">
-                    <Label htmlFor="alertMinutesBeforeDeadline">Alert Minutes Before Deadline</Label>
-                    <Input
-                      id="alertMinutesBeforeDeadline"
-                      type="number"
-                      value={ruleForm.alertMinutesBeforeDeadline}
-                      onChange={(e) => setRuleForm({ ...ruleForm, alertMinutesBeforeDeadline: parseInt(e.target.value) || 15 })}
-                      data-testid="input-alert-minutes"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Send alert this many minutes before break deadline
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Active</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Enable this break rule for the property
-                  </p>
-                </div>
-                <Switch
-                  checked={ruleForm.active}
-                  onCheckedChange={(v) => setRuleForm({ ...ruleForm, active: v })}
-                  data-testid="switch-active"
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
-          </div>
-
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0">
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} data-testid="button-cancel">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={createMutation.isPending || updateMutation.isPending}
-              data-testid="button-save"
-            >
-              {editingRule ? "Save Changes" : "Create Rule"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

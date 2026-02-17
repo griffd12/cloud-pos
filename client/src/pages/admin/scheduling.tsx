@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -572,6 +573,207 @@ export default function SchedulingPage() {
     return employeeJobCodesMap[shiftForm.employeeId] || [];
   }, [shiftForm.employeeId, employeeJobCodesMap]);
 
+  const handleCancel = () => {
+    closeDialog();
+  };
+
+  if (isAddingShift) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>{editingShift ? "Edit Shift" : "Add Shift"}</CardTitle>
+              <div className="flex gap-2">
+                {editingShift && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      deleteShiftMutation.mutate(editingShift.id);
+                      closeDialog();
+                    }}
+                    data-testid="button-delete-shift-inline"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                )}
+                <Button type="button" variant="outline" onClick={handleCancel} data-testid="button-cancel-shift">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveShift}
+                  disabled={createShiftMutation.isPending || updateShiftMutation.isPending || bulkCreateShiftsMutation.isPending}
+                  data-testid="button-save-shift"
+                >
+                  {bulkCreateShiftsMutation.isPending || createShiftMutation.isPending || updateShiftMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="space-y-0 divide-y">
+                <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Team member</span>
+                  <Select
+                    value={shiftForm.employeeId || "OPEN_SHIFT"}
+                    onValueChange={(v) => setShiftForm({ ...shiftForm, employeeId: v === "OPEN_SHIFT" ? "" : v, jobCodeId: "" })}
+                  >
+                    <SelectTrigger data-testid="select-employee">
+                      <SelectValue placeholder="Open Shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="OPEN_SHIFT">Open Shift</SelectItem>
+                      {propertyEmployees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.firstName} {emp.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {shiftForm.employeeId && (
+                  <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                    <span className="text-sm font-medium text-muted-foreground">Job</span>
+                    <Select
+                      value={shiftForm.jobCodeId || "NO_JOB"}
+                      onValueChange={(v) => setShiftForm({ ...shiftForm, jobCodeId: v === "NO_JOB" ? "" : v })}
+                    >
+                      <SelectTrigger data-testid="select-job">
+                        <SelectValue placeholder="Select job..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NO_JOB">Select job...</SelectItem>
+                        {selectedEmployeeJobCodes.filter((ejc) => ejc.jobCodeId).map((ejc) => (
+                          <SelectItem key={ejc.jobCodeId} value={ejc.jobCodeId}>
+                            {ejc.jobCode?.name || "Job"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
+                  <span className="text-sm font-medium text-muted-foreground">Location</span>
+                  <Select
+                    value={shiftForm.rvcId || "NO_RVC"}
+                    onValueChange={(v) => setShiftForm({ ...shiftForm, rvcId: v === "NO_RVC" ? "" : v })}
+                  >
+                    <SelectTrigger data-testid="select-rvc">
+                      <SelectValue placeholder="Select location..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NO_RVC">Select location...</SelectItem>
+                      {propertyRvcs.map((rvc) => (
+                        <SelectItem key={rvc.id} value={rvc.id}>
+                          {rvc.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="border-t pt-2">
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="py-3 space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Start Date</span>
+                    <div className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</div>
+                  </div>
+                  <div className="py-3 space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">End Date</span>
+                    <div className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</div>
+                  </div>
+                  <div className="py-3 space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Start Time</span>
+                    <Input
+                      type="time"
+                      value={shiftForm.startTime}
+                      onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
+                      data-testid="input-start-time"
+                    />
+                  </div>
+                  <div className="py-3 space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">End Time</span>
+                    <Input
+                      type="time"
+                      value={shiftForm.endTime}
+                      onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
+                      data-testid="input-end-time"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-0 divide-y border-t pt-2">
+                <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-start">
+                  <span className="text-sm font-medium text-muted-foreground">Notes</span>
+                  <Textarea
+                    value={shiftForm.notes}
+                    onChange={(e) => setShiftForm({ ...shiftForm, notes: e.target.value })}
+                    placeholder="Optional"
+                    className="min-h-[60px] resize-none"
+                    data-testid="input-notes"
+                  />
+                </div>
+
+                {!editingShift && (
+                  <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-start">
+                    <span className="text-sm font-medium text-muted-foreground pt-1">Repeat shift</span>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-3">
+                        {WEEKDAYS.map((wd) => (
+                          <label
+                            key={wd.key}
+                            className="flex items-center gap-2 cursor-pointer"
+                            data-testid={`repeat-day-${wd.label}`}
+                          >
+                            <Checkbox
+                              checked={shiftForm.repeatDays.includes(wd.key)}
+                              onCheckedChange={() => toggleRepeatDay(wd.key)}
+                            />
+                            <span className="text-sm">{wd.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {shiftForm.repeatDays.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Shift will be created for {shiftForm.repeatDays.length} day(s)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {shiftForm.employeeId && shiftForm.jobCodeId && (
+                <div className="p-3 bg-muted rounded-md text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span>Duration:</span>
+                    <span className="font-medium">{formatHours(calculateShiftHours(shiftForm.startTime, shiftForm.endTime))}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 mt-1">
+                    <span>Est. Cost{shiftForm.repeatDays.length > 1 ? ` (${shiftForm.repeatDays.length} days)` : ""}:</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        calculateShiftHours(shiftForm.startTime, shiftForm.endTime) * 
+                        getPayRateForShift(shiftForm.employeeId, shiftForm.jobCodeId) *
+                        Math.max(1, shiftForm.repeatDays.length)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -851,210 +1053,6 @@ export default function SchedulingPage() {
         </div>
         </DndContext>
       )}
-
-      <Dialog open={isAddingShift} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
-            <DialogTitle className="text-lg font-semibold">
-              {editingShift ? "Edit shift" : "Add shift"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-
-          <div className="space-y-0 divide-y">
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-              <span className="text-sm font-medium text-muted-foreground">Team member</span>
-              <Select
-                value={shiftForm.employeeId || "OPEN_SHIFT"}
-                onValueChange={(v) => setShiftForm({ ...shiftForm, employeeId: v === "OPEN_SHIFT" ? "" : v, jobCodeId: "" })}
-              >
-                <SelectTrigger data-testid="select-employee" className="border-0 p-0 h-auto shadow-none focus:ring-0">
-                  <SelectValue placeholder="Open Shift" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="OPEN_SHIFT">Open Shift</SelectItem>
-                  {propertyEmployees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {shiftForm.employeeId && (
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-                <span className="text-sm font-medium text-muted-foreground">Job</span>
-                <Select
-                  value={shiftForm.jobCodeId || "NO_JOB"}
-                  onValueChange={(v) => setShiftForm({ ...shiftForm, jobCodeId: v === "NO_JOB" ? "" : v })}
-                >
-                  <SelectTrigger data-testid="select-job" className="border-0 p-0 h-auto shadow-none focus:ring-0">
-                    <SelectValue placeholder="Select job..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NO_JOB">Select job...</SelectItem>
-                    {selectedEmployeeJobCodes.filter((ejc) => ejc.jobCodeId).map((ejc) => (
-                      <SelectItem key={ejc.jobCodeId} value={ejc.jobCodeId}>
-                        {ejc.jobCode?.name || "Job"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-              <span className="text-sm font-medium text-muted-foreground">Location</span>
-              <Select
-                value={shiftForm.rvcId || "NO_RVC"}
-                onValueChange={(v) => setShiftForm({ ...shiftForm, rvcId: v === "NO_RVC" ? "" : v })}
-              >
-                <SelectTrigger data-testid="select-rvc" className="border-0 p-0 h-auto shadow-none focus:ring-0">
-                  <SelectValue placeholder="Select location..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NO_RVC">Select location...</SelectItem>
-                  {propertyRvcs.map((rvc) => (
-                    <SelectItem key={rvc.id} value={rvc.id}>
-                      {rvc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="border-t mt-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-                <span className="text-sm font-medium text-muted-foreground">Start Date</span>
-                <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
-              </div>
-
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-                <span className="text-sm font-medium text-muted-foreground">End Date</span>
-                <span className="text-sm">{selectedDay && format(selectedDay, "EEEE, MMMM d, yyyy")}</span>
-              </div>
-
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-                <span className="text-sm font-medium text-muted-foreground">Start Time</span>
-                <Input
-                  type="time"
-                  value={shiftForm.startTime}
-                  onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })}
-                  className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
-                  data-testid="input-start-time"
-                />
-              </div>
-
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-center">
-                <span className="text-sm font-medium text-muted-foreground">End Time</span>
-                <Input
-                  type="time"
-                  value={shiftForm.endTime}
-                  onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })}
-                  className="border-0 p-0 h-auto shadow-none focus-visible:ring-0 w-auto"
-                  data-testid="input-end-time"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-0 divide-y border-t mt-4 pt-2">
-            <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-start">
-              <span className="text-sm font-medium text-muted-foreground">Notes</span>
-              <Textarea
-                value={shiftForm.notes}
-                onChange={(e) => setShiftForm({ ...shiftForm, notes: e.target.value })}
-                placeholder="Optional"
-                className="min-h-[60px] border-0 p-0 shadow-none focus-visible:ring-0 resize-none"
-                data-testid="input-notes"
-              />
-            </div>
-
-            {!editingShift && (
-              <div className="py-3 grid grid-cols-[120px_1fr] gap-4 items-start">
-                <span className="text-sm font-medium text-muted-foreground pt-1">Repeat shift</span>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-3">
-                    {WEEKDAYS.map((wd) => (
-                      <label
-                        key={wd.key}
-                        className="flex items-center gap-2 cursor-pointer"
-                        data-testid={`repeat-day-${wd.label}`}
-                      >
-                        <Checkbox
-                          checked={shiftForm.repeatDays.includes(wd.key)}
-                          onCheckedChange={() => toggleRepeatDay(wd.key)}
-                        />
-                        <span className="text-sm">{wd.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {shiftForm.repeatDays.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Shift will be created for {shiftForm.repeatDays.length} day(s)
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {shiftForm.employeeId && shiftForm.jobCodeId && (
-            <div className="p-3 bg-muted rounded-md text-sm mt-4">
-              <div className="flex justify-between gap-4">
-                <span>Duration:</span>
-                <span className="font-medium">{formatHours(calculateShiftHours(shiftForm.startTime, shiftForm.endTime))}</span>
-              </div>
-              <div className="flex justify-between gap-4 mt-1">
-                <span>Est. Cost{shiftForm.repeatDays.length > 1 ? ` (${shiftForm.repeatDays.length} days)` : ""}:</span>
-                <span className="font-medium">
-                  {formatCurrency(
-                    calculateShiftHours(shiftForm.startTime, shiftForm.endTime) * 
-                    getPayRateForShift(shiftForm.employeeId, shiftForm.jobCodeId) *
-                    Math.max(1, shiftForm.repeatDays.length)
-                  )}
-                </span>
-              </div>
-            </div>
-          )}
-
-          </div>
-          </div>
-
-          <DialogFooter className="pt-4 border-t mt-4 flex-shrink-0 flex justify-between gap-2">
-            {editingShift && (
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  deleteShiftMutation.mutate(editingShift.id);
-                  closeDialog();
-                }}
-                className="mr-auto"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
-            )}
-            <div className="flex gap-2 ml-auto">
-              <Button variant="outline" onClick={closeDialog}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveShift}
-                disabled={createShiftMutation.isPending || updateShiftMutation.isPending || bulkCreateShiftsMutation.isPending}
-                data-testid="button-save-shift"
-              >
-                {bulkCreateShiftsMutation.isPending || createShiftMutation.isPending || updateShiftMutation.isPending ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showPublishConfirm} onOpenChange={setShowPublishConfirm}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
