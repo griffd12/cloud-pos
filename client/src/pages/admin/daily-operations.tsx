@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,6 +127,12 @@ export default function DailyOperationsPage() {
   const selectedProperty = useMemo(() => {
     return properties?.find(p => p.id === effectivePropertyId);
   }, [properties, effectivePropertyId]);
+
+  useEffect(() => {
+    if (selectedProperty?.currentBusinessDate) {
+      setBusinessDate(selectedProperty.currentBusinessDate);
+    }
+  }, [selectedProperty?.id, selectedProperty?.currentBusinessDate]);
 
   const queryParams = `propertyId=${effectivePropertyId}&businessDate=${businessDate}`;
 
