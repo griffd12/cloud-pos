@@ -136,6 +136,7 @@ const menuGroupsTemplate = [
     label: "Reports",
     items: [
       { title: "Reports Dashboard", url: "/admin/reports", icon: LayoutGrid },
+      { title: "Daily Operations", url: "/admin/daily-operations", icon: FileText },
       { title: "Timecard Report", url: "/admin/timecard-report", icon: Timer },
       { title: "Tip Pooling", url: "/admin/tip-pooling", icon: Coins },
       { title: "Labor Analytics", url: "/admin/labor-analytics", icon: BarChart3 },

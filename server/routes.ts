@@ -13819,6 +13819,741 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ============================================================================
+  // FOH/BOH DAILY OPERATIONS REPORTS (Oracle Simphony-style)
+  // ============================================================================
+
+  // 1. Z REPORT - End-of-day comprehensive summary
+  app.get("/api/reports/z-report", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+
+      const property = await storage.getProperty(propertyId as string);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const allRvcs = await storage.getRvcs(propertyId as string);
+      const rvcIds = allRvcs.map(r => r.id);
+      const allChecks = await storage.getChecks();
+      const allPayments = await storage.getAllPayments();
+      const allCheckItems = await storage.getAllCheckItems();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItems = await storage.getAllRefundItems();
+      const employees = await storage.getEmployees();
+      const tenders = await storage.getTenders();
+
+      const checksInScope = allChecks.filter(c => rvcIds.includes(c.rvcId) && c.businessDate === businessDate);
+      const closedChecks = checksInScope.filter(c => c.status === "closed");
+      const openChecks = checksInScope.filter(c => c.status === "open");
+      const voidedChecks = checksInScope.filter(c => c.status === "voided");
+
+      const checkIds = new Set(checksInScope.map(c => c.id));
+      const closedCheckIds = new Set(closedChecks.map(c => c.id));
+      const itemsInScope = allCheckItems.filter(ci => checkIds.has(ci.checkId));
+
+      let grossSalesCents = 0;
+      let discountCents = 0;
+      let serviceChargeCents = 0;
+      let taxCents = 0;
+      let totalCents = 0;
+      let voidItemCount = 0;
+      let voidAmountCents = 0;
+
+      for (const c of closedChecks) {
+        const subtotal = Math.round(parseFloat(c.subtotal || "0") * 100);
+        const disc = Math.round(parseFloat(c.discountTotal || "0") * 100);
+        const sc = Math.round(parseFloat(c.serviceChargeTotal || "0") * 100);
+        const tx = Math.round(parseFloat(c.taxTotal || "0") * 100);
+        const tot = Math.round(parseFloat(c.total || "0") * 100);
+        grossSalesCents += subtotal + disc;
+        discountCents += disc;
+        serviceChargeCents += sc;
+        taxCents += tx;
+        totalCents += tot;
+      }
+
+      for (const c of openChecks) {
+        const subtotal = Math.round(parseFloat(c.subtotal || "0") * 100);
+        const disc = Math.round(parseFloat(c.discountTotal || "0") * 100);
+        const sc = Math.round(parseFloat(c.serviceChargeTotal || "0") * 100);
+        const tx = Math.round(parseFloat(c.taxTotal || "0") * 100);
+        const tot = Math.round(parseFloat(c.total || "0") * 100);
+        grossSalesCents += subtotal + disc;
+        discountCents += disc;
+        serviceChargeCents += sc;
+        taxCents += tx;
+        totalCents += tot;
+      }
+
+      const voidedItems = itemsInScope.filter(i => i.isVoided);
+      voidItemCount = voidedItems.length;
+      for (const vi of voidedItems) {
+        voidAmountCents += Math.round(parseFloat(vi.price || "0") * 100) * (vi.quantity || 1);
+      }
+
+      let refundCents = 0;
+      let refundCount = 0;
+      for (const ref of allRefunds) {
+        if (!checkIds.has(ref.originalCheckId)) continue;
+        refundCount++;
+        const refItems = allRefundItems.filter(ri => ri.refundId === ref.id);
+        for (const ri of refItems) {
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modUpcharge = (ri.modifiers as any[]).reduce((s: number, m: any) => s + parseFloat(m.priceDelta || "0"), 0);
+          }
+          refundCents += Math.round((unitPrice + modUpcharge) * (ri.quantity || 1) * 100) + Math.round(parseFloat(ri.taxAmount || "0") * 100);
+        }
+      }
+
+      const paymentsInScope = allPayments.filter(p =>
+        p.paymentStatus === "completed" && p.businessDate === (businessDate as string) && checkIds.has(p.checkId)
+      );
+
+      const tenderBreakdown: Record<string, { name: string; count: number; amountCents: number; tipsCents: number }> = {};
+      for (const p of paymentsInScope) {
+        const key = p.tenderId;
+        if (!tenderBreakdown[key]) {
+          tenderBreakdown[key] = { name: p.tenderName, count: 0, amountCents: 0, tipsCents: 0 };
+        }
+        tenderBreakdown[key].count++;
+        tenderBreakdown[key].amountCents += Math.round(parseFloat(p.amount || "0") * 100);
+        tenderBreakdown[key].tipsCents += Math.round(parseFloat(p.tipAmount || "0") * 100);
+      }
+
+      const netSalesCents = grossSalesCents - discountCents;
+      const totalTipsCents = Object.values(tenderBreakdown).reduce((s, t) => s + t.tipsCents, 0);
+      const totalPaymentsCents = Object.values(tenderBreakdown).reduce((s, t) => s + t.amountCents, 0);
+
+      const rvcBreakdown = allRvcs.map(rvc => {
+        const rvcChecks = checksInScope.filter(c => c.rvcId === rvc.id);
+        const rvcClosed = rvcChecks.filter(c => c.status === "closed");
+        let rvcNetCents = 0;
+        let rvcTaxCents = 0;
+        let rvcTotalCents = 0;
+        for (const c of [...rvcClosed, ...rvcChecks.filter(c => c.status === "open")]) {
+          rvcNetCents += Math.round(parseFloat(c.subtotal || "0") * 100);
+          rvcTaxCents += Math.round(parseFloat(c.taxTotal || "0") * 100);
+          rvcTotalCents += Math.round(parseFloat(c.total || "0") * 100);
+        }
+        return {
+          rvcId: rvc.id,
+          rvcName: rvc.name,
+          checkCount: rvcChecks.length,
+          closedCount: rvcClosed.length,
+          netSales: rvcNetCents / 100,
+          tax: rvcTaxCents / 100,
+          total: rvcTotalCents / 100,
+        };
+      });
+
+      res.json({
+        reportType: "Z Report",
+        propertyId,
+        propertyName: property.name,
+        businessDate,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          grossSales: grossSalesCents / 100,
+          discounts: discountCents / 100,
+          netSales: netSalesCents / 100,
+          serviceCharges: serviceChargeCents / 100,
+          tax: taxCents / 100,
+          total: totalCents / 100,
+          tips: totalTipsCents / 100,
+          totalPayments: totalPaymentsCents / 100,
+          refunds: refundCents / 100,
+          refundCount,
+          voidCount: voidItemCount,
+          voidAmount: voidAmountCents / 100,
+        },
+        checkMovement: {
+          checksStarted: checksInScope.length,
+          checksClosed: closedChecks.length,
+          checksOpen: openChecks.length,
+          checksVoided: voidedChecks.length,
+          avgCheckAmount: closedChecks.length > 0 ? (totalCents / closedChecks.length / 100) : 0,
+        },
+        tenderBreakdown: Object.entries(tenderBreakdown).map(([id, data]) => ({
+          tenderId: id,
+          tenderName: data.name,
+          count: data.count,
+          amount: data.amountCents / 100,
+          tips: data.tipsCents / 100,
+        })).sort((a, b) => b.amount - a.amount),
+        rvcBreakdown,
+      });
+    } catch (error) {
+      console.error("Z Report error:", error);
+      res.status(500).json({ message: "Failed to generate Z Report" });
+    }
+  });
+
+  // 2. CASH DRAWER REPORT
+  app.get("/api/reports/cash-drawer-report", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+
+      const property = await storage.getProperty(propertyId as string);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const assignments = await storage.getDrawerAssignments(propertyId as string, undefined, businessDate as string);
+      const transactions = await storage.getCashTransactions(propertyId as string, businessDate as string);
+      const employees = await storage.getEmployees();
+      const empMap = new Map(employees.map(e => [e.id, `${e.firstName} ${e.lastName}`]));
+
+      const drawers = await storage.getCashDrawers(propertyId as string);
+      const drawerMap = new Map(drawers.map(d => [d.id, d.name || `Drawer ${d.drawerNumber}`]));
+
+      const drawerDetails = assignments.map(a => {
+        const drawerTxns = transactions.filter(t => t.assignmentId === a.id);
+        const salesCents = drawerTxns.filter(t => t.transactionType === "sale").reduce((s, t) => s + Math.round(parseFloat(t.amount || "0") * 100), 0);
+        const refundsCents = drawerTxns.filter(t => t.transactionType === "refund").reduce((s, t) => s + Math.round(parseFloat(t.amount || "0") * 100), 0);
+        const paidInCents = drawerTxns.filter(t => t.transactionType === "paid_in").reduce((s, t) => s + Math.round(parseFloat(t.amount || "0") * 100), 0);
+        const paidOutCents = drawerTxns.filter(t => t.transactionType === "paid_out").reduce((s, t) => s + Math.round(parseFloat(t.amount || "0") * 100), 0);
+        const dropsCents = drawerTxns.filter(t => t.transactionType === "drop").reduce((s, t) => s + Math.round(parseFloat(t.amount || "0") * 100), 0);
+        const pickupsCents = drawerTxns.filter(t => t.transactionType === "pickup").reduce((s, t) => s + Math.round(parseFloat(t.amount || "0") * 100), 0);
+
+        const openingCents = Math.round(parseFloat(a.openingAmount || "0") * 100);
+        const expectedCents = openingCents + salesCents - refundsCents + paidInCents - paidOutCents - dropsCents + pickupsCents;
+        const actualCents = a.actualAmount ? Math.round(parseFloat(a.actualAmount) * 100) : null;
+        const varianceCents = actualCents !== null ? actualCents - expectedCents : null;
+
+        return {
+          assignmentId: a.id,
+          drawerId: a.drawerId,
+          drawerName: drawerMap.get(a.drawerId) || "Unknown",
+          employeeId: a.employeeId,
+          employeeName: empMap.get(a.employeeId) || "Unknown",
+          status: a.status,
+          openedAt: a.openedAt,
+          closedAt: a.closedAt,
+          openingAmount: openingCents / 100,
+          cashSales: salesCents / 100,
+          cashRefunds: refundsCents / 100,
+          paidIn: paidInCents / 100,
+          paidOut: paidOutCents / 100,
+          drops: dropsCents / 100,
+          pickups: pickupsCents / 100,
+          expectedAmount: expectedCents / 100,
+          actualAmount: actualCents !== null ? actualCents / 100 : null,
+          variance: varianceCents !== null ? varianceCents / 100 : null,
+          transactionCount: drawerTxns.length,
+        };
+      });
+
+      const totalExpectedCents = drawerDetails.reduce((s, d) => s + Math.round(d.expectedAmount * 100), 0);
+      const totalActualCents = drawerDetails.filter(d => d.actualAmount !== null).reduce((s, d) => s + Math.round((d.actualAmount || 0) * 100), 0);
+      const totalVarianceCents = drawerDetails.filter(d => d.variance !== null).reduce((s, d) => s + Math.round((d.variance || 0) * 100), 0);
+
+      res.json({
+        reportType: "Cash Drawer Report",
+        propertyId,
+        propertyName: property.name,
+        businessDate,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          totalDrawers: assignments.length,
+          openDrawers: drawerDetails.filter(d => d.status === "assigned").length,
+          closedDrawers: drawerDetails.filter(d => d.status !== "assigned").length,
+          totalExpected: totalExpectedCents / 100,
+          totalActual: totalActualCents / 100,
+          totalVariance: totalVarianceCents / 100,
+        },
+        drawers: drawerDetails,
+      });
+    } catch (error) {
+      console.error("Cash Drawer Report error:", error);
+      res.status(500).json({ message: "Failed to generate Cash Drawer Report" });
+    }
+  });
+
+  // 3. CASHIER REPORT
+  app.get("/api/reports/cashier-report", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+
+      const property = await storage.getProperty(propertyId as string);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const allRvcs = await storage.getRvcs(propertyId as string);
+      const rvcIds = allRvcs.map(r => r.id);
+      const allChecks = await storage.getChecks();
+      const allPayments = await storage.getAllPayments();
+      const allRefunds = await storage.getRefunds();
+      const allRefundItems = await storage.getAllRefundItems();
+      const employees = await storage.getEmployees();
+      const empMap = new Map(employees.map(e => [e.id, `${e.firstName} ${e.lastName}`]));
+
+      const checksInScope = allChecks.filter(c => rvcIds.includes(c.rvcId) && c.businessDate === businessDate);
+      const checkIds = new Set(checksInScope.map(c => c.id));
+
+      const employeeStats: Record<string, {
+        employeeId: string;
+        employeeName: string;
+        checksOpened: number;
+        checksClosed: number;
+        checksOpen: number;
+        grossSalesCents: number;
+        discountsCents: number;
+        netSalesCents: number;
+        taxCents: number;
+        totalCents: number;
+        tipsCents: number;
+        voidCountItems: number;
+        voidAmountCents: number;
+        refundCents: number;
+        tenders: Record<string, { name: string; count: number; amountCents: number }>;
+      }> = {};
+
+      for (const check of checksInScope) {
+        const empId = check.employeeId;
+        if (!employeeStats[empId]) {
+          employeeStats[empId] = {
+            employeeId: empId,
+            employeeName: empMap.get(empId) || "Unknown",
+            checksOpened: 0,
+            checksClosed: 0,
+            checksOpen: 0,
+            grossSalesCents: 0,
+            discountsCents: 0,
+            netSalesCents: 0,
+            taxCents: 0,
+            totalCents: 0,
+            tipsCents: 0,
+            voidCountItems: 0,
+            voidAmountCents: 0,
+            refundCents: 0,
+            tenders: {},
+          };
+        }
+        const stat = employeeStats[empId];
+        stat.checksOpened++;
+        if (check.status === "closed") stat.checksClosed++;
+        if (check.status === "open") stat.checksOpen++;
+
+        const subtotalCents = Math.round(parseFloat(check.subtotal || "0") * 100);
+        const discCents = Math.round(parseFloat(check.discountTotal || "0") * 100);
+        const txCents = Math.round(parseFloat(check.taxTotal || "0") * 100);
+        const totCents = Math.round(parseFloat(check.total || "0") * 100);
+
+        stat.grossSalesCents += subtotalCents + discCents;
+        stat.discountsCents += discCents;
+        stat.netSalesCents += subtotalCents;
+        stat.taxCents += txCents;
+        stat.totalCents += totCents;
+      }
+
+      for (const p of allPayments) {
+        if (p.paymentStatus !== "completed") continue;
+        if (p.businessDate !== businessDate) continue;
+        if (!checkIds.has(p.checkId)) continue;
+        const check = checksInScope.find(c => c.id === p.checkId);
+        if (!check) continue;
+        const empId = check.employeeId;
+        const stat = employeeStats[empId];
+        if (!stat) continue;
+
+        stat.tipsCents += Math.round(parseFloat(p.tipAmount || "0") * 100);
+
+        if (!stat.tenders[p.tenderId]) {
+          stat.tenders[p.tenderId] = { name: p.tenderName, count: 0, amountCents: 0 };
+        }
+        stat.tenders[p.tenderId].count++;
+        stat.tenders[p.tenderId].amountCents += Math.round(parseFloat(p.amount || "0") * 100);
+      }
+
+      for (const ref of allRefunds) {
+        if (!checkIds.has(ref.originalCheckId)) continue;
+        const check = checksInScope.find(c => c.id === ref.originalCheckId);
+        if (!check) continue;
+        const empId = check.employeeId;
+        const stat = employeeStats[empId];
+        if (!stat) continue;
+        const refItems = allRefundItems.filter(ri => ri.refundId === ref.id);
+        for (const ri of refItems) {
+          const unitPrice = parseFloat(ri.unitPrice || "0");
+          let modUpcharge = 0;
+          if (ri.modifiers && Array.isArray(ri.modifiers)) {
+            modUpcharge = (ri.modifiers as any[]).reduce((s: number, m: any) => s + parseFloat(m.priceDelta || "0"), 0);
+          }
+          stat.refundCents += Math.round((unitPrice + modUpcharge) * (ri.quantity || 1) * 100) + Math.round(parseFloat(ri.taxAmount || "0") * 100);
+        }
+      }
+
+      const cashiers = Object.values(employeeStats).map(s => ({
+        employeeId: s.employeeId,
+        employeeName: s.employeeName,
+        checksOpened: s.checksOpened,
+        checksClosed: s.checksClosed,
+        checksOpen: s.checksOpen,
+        grossSales: s.grossSalesCents / 100,
+        discounts: s.discountsCents / 100,
+        netSales: s.netSalesCents / 100,
+        tax: s.taxCents / 100,
+        total: s.totalCents / 100,
+        tips: s.tipsCents / 100,
+        refunds: s.refundCents / 100,
+        tenderBreakdown: Object.entries(s.tenders).map(([id, t]) => ({
+          tenderId: id,
+          tenderName: t.name,
+          count: t.count,
+          amount: t.amountCents / 100,
+        })),
+      })).sort((a, b) => b.total - a.total);
+
+      res.json({
+        reportType: "Cashier Report",
+        propertyId,
+        propertyName: property.name,
+        businessDate,
+        generatedAt: new Date().toISOString(),
+        cashierCount: cashiers.length,
+        totals: {
+          grossSales: cashiers.reduce((s, c) => s + c.grossSales, 0),
+          discounts: cashiers.reduce((s, c) => s + c.discounts, 0),
+          netSales: cashiers.reduce((s, c) => s + c.netSales, 0),
+          tax: cashiers.reduce((s, c) => s + c.tax, 0),
+          total: cashiers.reduce((s, c) => s + c.total, 0),
+          tips: cashiers.reduce((s, c) => s + c.tips, 0),
+          refunds: cashiers.reduce((s, c) => s + c.refunds, 0),
+        },
+        cashiers,
+      });
+    } catch (error) {
+      console.error("Cashier Report error:", error);
+      res.status(500).json({ message: "Failed to generate Cashier Report" });
+    }
+  });
+
+  // 4. DAILY SALES SUMMARY
+  app.get("/api/reports/daily-sales-summary", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+
+      const property = await storage.getProperty(propertyId as string);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const allRvcs = await storage.getRvcs(propertyId as string);
+      const rvcIds = allRvcs.map(r => r.id);
+      const allChecks = await storage.getChecks();
+      const allCheckItems = await storage.getAllCheckItems();
+      const menuItems = await storage.getMenuItems();
+      const menuItemMap = new Map(menuItems.map(mi => [mi.id, mi]));
+
+      const checksInScope = allChecks.filter(c => rvcIds.includes(c.rvcId) && c.businessDate === businessDate);
+      const checkIds = new Set(checksInScope.map(c => c.id));
+      const itemsInScope = allCheckItems.filter(ci => checkIds.has(ci.checkId) && !ci.isVoided);
+
+      const categorySales: Record<string, { name: string; quantity: number; salesCents: number }> = {};
+      for (const item of itemsInScope) {
+        const mi = item.menuItemId ? menuItemMap.get(item.menuItemId) : null;
+        const catName = mi?.category || "Uncategorized";
+        if (!categorySales[catName]) {
+          categorySales[catName] = { name: catName, quantity: 0, salesCents: 0 };
+        }
+        categorySales[catName].quantity += item.quantity || 1;
+        categorySales[catName].salesCents += Math.round(parseFloat(item.price || "0") * 100) * (item.quantity || 1);
+      }
+
+      const hourlyData: Record<number, { hour: number; checkCount: number; salesCents: number }> = {};
+      for (const check of checksInScope) {
+        if (!check.openedAt) continue;
+        const hour = new Date(check.openedAt).getHours();
+        if (!hourlyData[hour]) {
+          hourlyData[hour] = { hour, checkCount: 0, salesCents: 0 };
+        }
+        hourlyData[hour].checkCount++;
+        hourlyData[hour].salesCents += Math.round(parseFloat(check.total || "0") * 100);
+      }
+
+      let totalGuestCount = 0;
+      for (const c of checksInScope) {
+        totalGuestCount += (c as any).guestCount || 1;
+      }
+
+      let netSalesCents = 0;
+      let discountCents = 0;
+      let taxCents = 0;
+      let totalCents = 0;
+      let serviceChargeCents = 0;
+      for (const c of checksInScope) {
+        netSalesCents += Math.round(parseFloat(c.subtotal || "0") * 100);
+        discountCents += Math.round(parseFloat(c.discountTotal || "0") * 100);
+        taxCents += Math.round(parseFloat(c.taxTotal || "0") * 100);
+        totalCents += Math.round(parseFloat(c.total || "0") * 100);
+        serviceChargeCents += Math.round(parseFloat(c.serviceChargeTotal || "0") * 100);
+      }
+
+      const grossSalesCents = netSalesCents + discountCents;
+
+      res.json({
+        reportType: "Daily Sales Summary",
+        propertyId,
+        propertyName: property.name,
+        businessDate,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          totalChecks: checksInScope.length,
+          closedChecks: checksInScope.filter(c => c.status === "closed").length,
+          openChecks: checksInScope.filter(c => c.status === "open").length,
+          totalGuests: totalGuestCount,
+          totalItems: itemsInScope.reduce((s, i) => s + (i.quantity || 1), 0),
+          grossSales: grossSalesCents / 100,
+          discounts: discountCents / 100,
+          netSales: netSalesCents / 100,
+          serviceCharges: serviceChargeCents / 100,
+          tax: taxCents / 100,
+          total: totalCents / 100,
+          avgCheckAmount: checksInScope.length > 0 ? totalCents / checksInScope.length / 100 : 0,
+          avgPerGuest: totalGuestCount > 0 ? totalCents / totalGuestCount / 100 : 0,
+        },
+        categorySales: Object.values(categorySales).map(c => ({
+          ...c,
+          sales: c.salesCents / 100,
+        })).sort((a, b) => b.sales - a.sales),
+        hourlySales: Object.values(hourlyData).map(h => ({
+          hour: h.hour,
+          label: `${h.hour.toString().padStart(2, '0')}:00`,
+          checkCount: h.checkCount,
+          sales: h.salesCents / 100,
+        })).sort((a, b) => a.hour - b.hour),
+        rvcBreakdown: allRvcs.map(rvc => {
+          const rvcChecks = checksInScope.filter(c => c.rvcId === rvc.id);
+          let rvcTotalCents = 0;
+          for (const c of rvcChecks) {
+            rvcTotalCents += Math.round(parseFloat(c.total || "0") * 100);
+          }
+          return {
+            rvcId: rvc.id,
+            rvcName: rvc.name,
+            checkCount: rvcChecks.length,
+            total: rvcTotalCents / 100,
+          };
+        }),
+      });
+    } catch (error) {
+      console.error("Daily Sales Summary error:", error);
+      res.status(500).json({ message: "Failed to generate Daily Sales Summary" });
+    }
+  });
+
+  // 5. LABOR SUMMARY REPORT
+  app.get("/api/reports/labor-summary", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+
+      const property = await storage.getProperty(propertyId as string);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const timecardData = await storage.getTimecards({ propertyId: propertyId as string, businessDate: businessDate as string });
+      const employees = await storage.getEmployees();
+      const empMap = new Map(employees.map(e => [e.id, `${e.firstName} ${e.lastName}`]));
+      const jobCodes = await storage.getJobCodes();
+      const jobCodeMap = new Map(jobCodes.map(j => [j.id, j]));
+
+      const allRvcs = await storage.getRvcs(propertyId as string);
+      const rvcIds = allRvcs.map(r => r.id);
+      const allChecks = await storage.getChecks();
+      const salesChecks = allChecks.filter(c => rvcIds.includes(c.rvcId) && c.businessDate === businessDate);
+      let totalSalesCents = 0;
+      for (const c of salesChecks) {
+        totalSalesCents += Math.round(parseFloat(c.total || "0") * 100);
+      }
+
+      let totalRegularHours = 0;
+      let totalOvertimeHours = 0;
+      let totalDoubleTimeHours = 0;
+      let totalRegularPayCents = 0;
+      let totalOvertimePayCents = 0;
+      let totalPayCents = 0;
+      let totalBreakMinutes = 0;
+
+      const laborByEmployee = timecardData.map(tc => {
+        const regularHours = parseFloat(tc.regularHours || "0");
+        const overtimeHours = parseFloat(tc.overtimeHours || "0");
+        const doubleTimeHours = parseFloat(tc.doubleTimeHours || "0");
+        const regularPay = parseFloat(tc.regularPay || "0");
+        const overtimePay = parseFloat(tc.overtimePay || "0");
+        const totalPay = parseFloat(tc.totalPay || "0");
+        const breakMins = tc.breakMinutes || 0;
+
+        totalRegularHours += regularHours;
+        totalOvertimeHours += overtimeHours;
+        totalDoubleTimeHours += doubleTimeHours;
+        totalRegularPayCents += Math.round(regularPay * 100);
+        totalOvertimePayCents += Math.round(overtimePay * 100);
+        totalPayCents += Math.round(totalPay * 100);
+        totalBreakMinutes += breakMins;
+
+        const jc = tc.jobCodeId ? jobCodeMap.get(tc.jobCodeId) : null;
+
+        return {
+          employeeId: tc.employeeId,
+          employeeName: empMap.get(tc.employeeId) || "Unknown",
+          jobCode: jc?.name || "N/A",
+          clockIn: tc.clockInTime,
+          clockOut: tc.clockOutTime,
+          status: tc.status,
+          regularHours,
+          overtimeHours,
+          doubleTimeHours,
+          totalHours: parseFloat(tc.totalHours || "0"),
+          breakMinutes: breakMins,
+          payRate: parseFloat(tc.payRate || "0"),
+          regularPay,
+          overtimePay,
+          totalPay,
+        };
+      });
+
+      const jobCodeBreakdown: Record<string, { name: string; headcount: number; totalHours: number; totalPayCents: number }> = {};
+      for (const tc of timecardData) {
+        const jcName = tc.jobCodeId ? (jobCodeMap.get(tc.jobCodeId)?.name || "Unknown") : "Unassigned";
+        if (!jobCodeBreakdown[jcName]) {
+          jobCodeBreakdown[jcName] = { name: jcName, headcount: 0, totalHours: 0, totalPayCents: 0 };
+        }
+        jobCodeBreakdown[jcName].headcount++;
+        jobCodeBreakdown[jcName].totalHours += parseFloat(tc.totalHours || "0");
+        jobCodeBreakdown[jcName].totalPayCents += Math.round(parseFloat(tc.totalPay || "0") * 100);
+      }
+
+      const totalSales = totalSalesCents / 100;
+      const totalLabor = totalPayCents / 100;
+      const laborPercent = totalSales > 0 ? (totalLabor / totalSales) * 100 : 0;
+
+      res.json({
+        reportType: "Labor Summary",
+        propertyId,
+        propertyName: property.name,
+        businessDate,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          totalEmployees: timecardData.length,
+          totalRegularHours,
+          totalOvertimeHours,
+          totalDoubleTimeHours,
+          totalHours: totalRegularHours + totalOvertimeHours + totalDoubleTimeHours,
+          totalBreakMinutes,
+          regularPay: totalRegularPayCents / 100,
+          overtimePay: totalOvertimePayCents / 100,
+          totalPay: totalLabor,
+          totalSales,
+          laborCostPercent: Math.round(laborPercent * 100) / 100,
+        },
+        employees: laborByEmployee.sort((a, b) => b.totalPay - a.totalPay),
+        jobCodeBreakdown: Object.values(jobCodeBreakdown).map(j => ({
+          ...j,
+          totalPay: j.totalPayCents / 100,
+        })).sort((a, b) => b.totalPay - a.totalPay),
+      });
+    } catch (error) {
+      console.error("Labor Summary error:", error);
+      res.status(500).json({ message: "Failed to generate Labor Summary" });
+    }
+  });
+
+  // 6. TIP POOL SUMMARY
+  app.get("/api/reports/tip-pool-summary", async (req, res) => {
+    try {
+      const { propertyId, businessDate } = req.query;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "Property ID and business date are required" });
+      }
+
+      const property = await storage.getProperty(propertyId as string);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const runs = await storage.getTipPoolRuns({ propertyId: propertyId as string, businessDate: businessDate as string });
+      const employees = await storage.getEmployees();
+      const empMap = new Map(employees.map(e => [e.id, `${e.firstName} ${e.lastName}`]));
+      const policies = await storage.getTipPoolPolicies(propertyId as string);
+      const policyMap = new Map(policies.map(p => [p.id, p]));
+
+      let totalTipsCents = 0;
+      let totalParticipants = 0;
+
+      const runDetails = await Promise.all(runs.map(async (run) => {
+        const allocations = await storage.getTipAllocations(run.id);
+        const totalRunTips = parseFloat(run.totalTips || "0");
+        totalTipsCents += Math.round(totalRunTips * 100);
+        totalParticipants += allocations.length;
+
+        const policy = run.policyId ? policyMap.get(run.policyId) : null;
+
+        return {
+          runId: run.id,
+          policyName: policy?.name || "Ad-hoc Pool",
+          distributionMethod: policy?.distributionMethod || "equal",
+          status: run.status,
+          totalTips: totalRunTips,
+          totalHours: parseFloat(run.totalHours || "0"),
+          participantCount: allocations.length,
+          runAt: run.runAt,
+          runBy: run.runById ? empMap.get(run.runById) || "Unknown" : "System",
+          allocations: allocations.map(a => ({
+            employeeId: a.employeeId,
+            employeeName: empMap.get(a.employeeId) || "Unknown",
+            hoursWorked: parseFloat(a.hoursWorked || "0"),
+            sharePercentage: parseFloat(a.sharePercentage || "0"),
+            directTips: parseFloat(a.directTips || "0"),
+            pooledTips: parseFloat(a.allocatedAmount || "0"),
+            totalTips: parseFloat(a.totalTips || "0"),
+          })).sort((a, b) => b.totalTips - a.totalTips),
+        };
+      }));
+
+      const employeeTotals: Record<string, { name: string; directTips: number; pooledTips: number; totalTips: number }> = {};
+      for (const run of runDetails) {
+        for (const alloc of run.allocations) {
+          if (!employeeTotals[alloc.employeeId]) {
+            employeeTotals[alloc.employeeId] = { name: alloc.employeeName, directTips: 0, pooledTips: 0, totalTips: 0 };
+          }
+          employeeTotals[alloc.employeeId].directTips += alloc.directTips;
+          employeeTotals[alloc.employeeId].pooledTips += alloc.pooledTips;
+          employeeTotals[alloc.employeeId].totalTips += alloc.totalTips;
+        }
+      }
+
+      res.json({
+        reportType: "Tip Pool Summary",
+        propertyId,
+        propertyName: property.name,
+        businessDate,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          totalPools: runs.length,
+          totalTips: totalTipsCents / 100,
+          totalParticipants,
+          avgTipPerParticipant: totalParticipants > 0 ? (totalTipsCents / totalParticipants / 100) : 0,
+        },
+        pools: runDetails,
+        employeeTotals: Object.entries(employeeTotals).map(([id, data]) => ({
+          employeeId: id,
+          ...data,
+        })).sort((a, b) => b.totalTips - a.totalTips),
+      });
+    } catch (error) {
+      console.error("Tip Pool Summary error:", error);
+      res.status(500).json({ message: "Failed to generate Tip Pool Summary" });
+    }
+  });
+
+  // ============================================================================
   // OVERTIME RULES - Property-specific labor law configuration
   // ============================================================================
 

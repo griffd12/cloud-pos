@@ -5408,6 +5408,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getCashTransactions(propertyId?: string, businessDate?: string, assignmentId?: string): Promise<CashTransaction[]> {
+    const conditions = [];
+    if (propertyId) conditions.push(eq(cashTransactions.propertyId, propertyId));
+    if (businessDate) conditions.push(eq(cashTransactions.businessDate, businessDate));
+    if (assignmentId) conditions.push(eq(cashTransactions.assignmentId, assignmentId));
+    return db.select().from(cashTransactions).where(conditions.length > 0 ? and(...conditions) : undefined);
+  }
+
   async getSafeCounts(propertyId: string, businessDate?: string): Promise<SafeCount[]> {
     const conditions = [eq(safeCounts.propertyId, propertyId)];
     if (businessDate) conditions.push(eq(safeCounts.businessDate, businessDate));

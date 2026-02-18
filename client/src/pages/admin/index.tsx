@@ -70,6 +70,7 @@ import ForecastingPage from "./forecasting";
 import ManagerAlertsPage from "./manager-alerts";
 import ItemAvailabilityPage from "./item-availability";
 import AccountingExportPage from "./accounting-export";
+import DailyOperationsPage from "./daily-operations";
 
 function AdminDashboard() {
   const { data: stats } = useQuery<{
@@ -291,6 +292,7 @@ export default function AdminLayout() {
               <Route path="/admin/family-groups" component={FamilyGroupsPage} />
               <Route path="/admin/utilities" component={UtilitiesPage} />
               <Route path="/admin/reports" component={ReportsPage} />
+              <Route path="/admin/daily-operations" component={DailyOperationsPage} />
               <Route path="/admin/devices" component={DevicesPage} />
               <Route path="/admin/timecards" component={TimecardsPage} />
               <Route path="/admin/scheduling" component={SchedulingPage} />
