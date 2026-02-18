@@ -1,6 +1,6 @@
 # Cloud POS v1.3.9 Release Notes
 
-**Release Date:** February 17, 2026
+**Release Date:** February 18, 2026
 
 ---
 
@@ -12,6 +12,11 @@
 - Concurrency-safe check numbering prevents duplicate check numbers under high load
 - Idempotency and offline hardening across critical operations
 - Canonical Reporting DAL with 7 query functions and 6 report endpoints
+- Cash drawer kick integrated directly into receipt printing for reliable drawer opens on cash payments
+- KDS alert system simplified to 2-stage alerts (yellow/red) with forced color validation
+- KDS ticket modifier text styling improved for readability
+- EMC device management pages converted to inline horizontal editing layout
+- Electron Windows installer bumped to v1.3.9
 
 ---
 
@@ -128,6 +133,64 @@ Five new fields added to the service charge configuration:
 
 ---
 
+## Cash Drawer Integration
+
+### Embedded Drawer Kick in Receipt Printing
+Previously, the cash drawer kick was sent as a separate TCP connection to the receipt printer after payment. This was unreliable because it required a second network connection that could fail independently. The drawer kick ESC/POS command is now **embedded directly into the receipt print data** so it fires as part of the same print job -- matching how Oracle Simphony and other commercial POS systems handle drawer opens.
+
+**How It Works:**
+- When a cash payment closes a check, the server appends `ESC p` (0x1B 0x70) drawer kick bytes to the end of the receipt ESC/POS data
+- The kick command executes as part of the same TCP stream that prints the receipt -- no separate connection needed
+- Only triggers when the workstation has `cashDrawerEnabled` and `cashDrawerAutoOpenOnCash` both set to true
+- Respects per-workstation pin selection (pin 2 or pin 5) and pulse duration settings
+
+### Critical Fix: Drawer Open Failure
+- Fixed a bug where the cash drawer kick endpoint called a non-existent storage function (`getPrintAgentsByProperty`), causing all drawer open attempts to fail silently
+- Corrected to use the existing `getPrintAgents(propertyId)` method
+- Verified working with checks #53 and #54
+
+### Print Agent Improvements (Electron)
+- `ESC @` (printer initialize) command now sent before `ESC p` (drawer kick) to reset the printer's command buffer
+- Default pulse duration increased from 100ms to 200ms across all code paths for better solenoid activation
+- Diagnostic logging added to track kick command bytes, pin selection, and pulse timing
+- Standalone drawer kick (via "Open Drawer" button) still works as a separate command for no-sale opens
+
+### Workstation Cash Drawer Configuration
+- Cash drawer settings configurable per workstation in EMC: enable/disable, printer assignment, kick pin, pulse duration
+- Auto-open on cash payment and auto-open on cash drop toggles
+- Pin selection: pin 2 (standard for most Epson-compatible drawers) or pin 5
+
+---
+
+## KDS (Kitchen Display System) Improvements
+
+### 2-Stage Alert System
+The KDS alert system has been simplified from 3 stages to 2 stages to match standard kitchen operations:
+- **Stage 1 (Yellow)** -- Order has been waiting beyond the first alert threshold
+- **Stage 2 (Red)** -- Order has been waiting beyond the second alert threshold
+- Alert stage 3 has been removed from the configuration UI and is disabled in the database
+- Forced color validation ensures alert 1 is always yellow (#F59E0B) and alert 2 is always red (#EF4444)
+
+### Ticket Readability
+- Modifier text on KDS tickets now uses improved styling for better visibility at a distance
+- Modifier names display more clearly with consistent font sizing and spacing
+
+### Device Settings Refresh
+- KDS screen now properly refreshes device-specific settings (font scaling, alert thresholds) when configuration changes are saved in EMC
+- Alert threshold changes apply in real-time without requiring a KDS page reload
+
+---
+
+## EMC Device Management (Inline Editing)
+
+### Horizontal Embedded Layout
+All "Devices & Routing" configuration pages in EMC now use a Simphony-style horizontal embedded layout with inline editing, replacing the previous modal dialog approach:
+- **KDS Devices** -- Card-based editing with grouped sections for device settings, alert thresholds, and display options
+- **Order Devices** -- Inline configuration with server-side validation for KDS device assignments
+- **Workstations** -- Inline cash drawer configuration section with printer assignment and kick settings
+
+---
+
 ## EMC & Admin UI
 
 ### Form Standardization
@@ -158,10 +221,12 @@ Five new fields added to the service charge configuration:
 | Station Type | Action Required |
 |---|---|
 | **Cloud / Web POS** | Republish the server -- all fixes apply immediately |
-| **Windows Electron** | Version not yet bumped -- Electron installer update will follow in a future release |
+| **Windows Electron** | Download and install **Cloud-POS-1.3.9-Setup.exe** from GitHub Releases. Auto-update will prompt if configured. |
 
 - No breaking changes
 - Database schema changes applied automatically via Drizzle ORM push
 - Existing checks and payments are unaffected -- the refund fix applies to new terminal payments going forward
 - Legacy terminal payments without `payment_transaction_id` use the new fallback lookup for refund processing
+- Cash drawer kick improvements require the updated Electron print agent (included in 1.3.9 installer)
+- KDS alert stage 3 is automatically disabled for existing configurations
 - Fully backward compatible with v1.3.8
