@@ -5650,10 +5650,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         broadcastPaymentUpdate(checkId);
         
         // Auto-print receipt on check close (skip for stress test checks)
+        // Include cash drawer kick bytes in the receipt if this was a cash payment
+        const hasCashPayment = tender?.type === "cash";
         let autoPrintStatus: { success: boolean; message?: string } = { success: false };
         if (!check?.testMode) {
           try {
-            const printResult = await printCheckReceipt(checkId, check?.rvcId);
+            const printResult = await printCheckReceipt(checkId, check?.rvcId, {
+              workstationId: workstationId || undefined,
+              isCashPayment: hasCashPayment,
+            });
             if (printResult) {
               autoPrintStatus = { success: true };
             } else {
@@ -5862,7 +5867,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Helper function to print check receipt - routes through print agents for local network printing
-  async function printCheckReceipt(checkId: string, rvcId?: string | null) {
+  async function printCheckReceipt(checkId: string, rvcId?: string | null, options?: { workstationId?: string; isCashPayment?: boolean }) {
     // Get RVC to find property
     const rvc = rvcId ? await storage.getRvc(rvcId) : null;
     if (!rvc?.propertyId) {
@@ -5885,7 +5890,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // Build receipt ESC/POS data
     const builder = await buildCheckReceipt(checkId, printer.characterWidth || 42);
-    const buffer = builder.cut().build();
+    let buffer = builder.cut().build();
+
+    // Append cash drawer kick command to receipt data if workstation has drawer enabled
+    // and payment is cash - this is more reliable than a separate kick command
+    if (options?.workstationId && options?.isCashPayment) {
+      try {
+        const ws = await storage.getWorkstation(options.workstationId);
+        if (ws?.cashDrawerEnabled && ws?.cashDrawerAutoOpenOnCash) {
+          const pin = ws.cashDrawerKickPin === "pin5" ? 0x01 : 0x00;
+          const pulseDuration = Math.max(50, Math.min(500, ws.cashDrawerPulseDuration || 200));
+          const pulseOn = Math.max(1, Math.min(255, Math.round(pulseDuration / 2)));
+          const kickBytes = Buffer.from([0x1B, 0x70, pin, pulseOn, pulseOn]);
+          buffer = Buffer.concat([buffer, kickBytes]);
+          console.log(`Embedded cash drawer kick in receipt: pin=${ws.cashDrawerKickPin}, pulse=${pulseDuration}ms`);
+        }
+      } catch (e) {
+        console.error("Failed to append drawer kick to receipt:", e);
+      }
+    }
+
     const escPosBase64 = buffer.toString("base64");
 
     // Create print job in database
@@ -19463,7 +19487,7 @@ connect();
       }
 
       const pin = workstation.cashDrawerKickPin === "pin5" ? "pin5" : "pin2";
-      const pulseDuration = Math.max(50, Math.min(500, workstation.cashDrawerPulseDuration || 100));
+      const pulseDuration = Math.max(50, Math.min(500, workstation.cashDrawerPulseDuration || 200));
 
       const agents = await storage.getPrintAgents(workstation.propertyId);
       const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;

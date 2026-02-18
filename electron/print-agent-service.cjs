@@ -349,10 +349,17 @@ class PrintAgentService {
   }
 
   buildDrawerKickCommand(pin, pulseDurationMs) {
-    const pulseOn = Math.max(1, Math.min(255, Math.round((pulseDurationMs || 100) / 2)));
+    const duration = pulseDurationMs || 200;
+    const pulseOn = Math.max(1, Math.min(255, Math.round(duration / 2)));
     const pulseOff = pulseOn;
     const pinByte = pin === 'pin5' ? 0x01 : 0x00;
-    return Buffer.from([0x1B, 0x70, pinByte, pulseOn, pulseOff]);
+
+    printLogger.info('DrawerKick', `Building ESC/POS command: pin=${pin} (byte=0x${pinByte.toString(16).padStart(2,'0')}), pulseOn=${pulseOn}, pulseOff=${pulseOff}, duration=${duration}ms`);
+
+    return Buffer.concat([
+      Buffer.from([0x1B, 0x40]),
+      Buffer.from([0x1B, 0x70, pinByte, pulseOn, pulseOff]),
+    ]);
   }
 
   async handleDrawerKick(msg) {
@@ -361,7 +368,7 @@ class PrintAgentService {
     const printerPort = msg.printerPort || 9100;
     const printerId = msg.printerId;
     const pin = msg.pin || 'pin2';
-    const pulseDuration = msg.pulseDuration || 100;
+    const pulseDuration = msg.pulseDuration || 200;
 
     printLogger.info('DrawerKick', `Received drawer kick ${kickId}`, { printer: printerIp || printerId || 'default', pin });
 
@@ -417,7 +424,7 @@ class PrintAgentService {
 
   async kickDrawerLocal(options = {}) {
     const pin = options.pin || 'pin2';
-    const pulseDuration = options.pulseDuration || 100;
+    const pulseDuration = options.pulseDuration || 200;
     const printerId = options.printerId;
 
     let targetIp = options.printerIp;
