@@ -48,6 +48,67 @@ function formatLocalDate(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function getDatePreset(preset: string, currentBusinessDate?: string): string {
+  const base = currentBusinessDate ? new Date(currentBusinessDate + "T12:00:00") : new Date();
+  const d = new Date(base);
+
+  switch (preset) {
+    case "today":
+      return formatLocalDate(d);
+    case "yesterday":
+      d.setDate(d.getDate() - 1);
+      return formatLocalDate(d);
+    case "this-week-start": {
+      const day = d.getDay();
+      d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+      return formatLocalDate(d);
+    }
+    case "last-week-start": {
+      const day = d.getDay();
+      d.setDate(d.getDate() - (day === 0 ? 6 : day - 1) - 7);
+      return formatLocalDate(d);
+    }
+    case "this-month-start":
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    case "last-month-start": {
+      d.setMonth(d.getMonth() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    }
+    case "this-qtr-start": {
+      const qMonth = Math.floor(d.getMonth() / 3) * 3;
+      return `${d.getFullYear()}-${String(qMonth + 1).padStart(2, "0")}-01`;
+    }
+    case "last-qtr-start": {
+      let qMonth = Math.floor(d.getMonth() / 3) * 3 - 3;
+      let year = d.getFullYear();
+      if (qMonth < 0) { qMonth += 12; year--; }
+      return `${year}-${String(qMonth + 1).padStart(2, "0")}-01`;
+    }
+    case "this-year-start":
+      return `${d.getFullYear()}-01-01`;
+    case "last-year-start":
+      return `${d.getFullYear() - 1}-01-01`;
+    case "ytd-start":
+      return `${d.getFullYear()}-01-01`;
+    default:
+      return formatLocalDate(d);
+  }
+}
+
+const DATE_PRESETS = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "this-week-start", label: "This Week" },
+  { value: "last-week-start", label: "Last Week" },
+  { value: "this-month-start", label: "This Month" },
+  { value: "last-month-start", label: "Last Month" },
+  { value: "this-qtr-start", label: "This Quarter" },
+  { value: "last-qtr-start", label: "Last Quarter" },
+  { value: "this-year-start", label: "This Year" },
+  { value: "last-year-start", label: "Last Year" },
+  { value: "ytd-start", label: "YTD" },
+];
+
 function ReportSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
@@ -313,6 +374,26 @@ export default function DailyOperationsPage() {
                 <SelectContent>
                   {properties.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Quick Select</Label>
+              <Select
+                value=""
+                onValueChange={(preset) => {
+                  const date = getDatePreset(preset, selectedProperty?.currentBusinessDate || undefined);
+                  setBusinessDate(date);
+                }}
+              >
+                <SelectTrigger className="w-[160px]" data-testid="select-date-preset">
+                  <SelectValue placeholder="Choose period" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATE_PRESETS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
