@@ -526,7 +526,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         amount: round2(amount),
       }));
 
-      const productMixMap = new Map<string, { itemName: string; quantity: number; grossSales: number; netSales: number }>();
+      const productMixMap = new Map<string, { itemName: string; majorGroup: string; quantity: number; grossSales: number; netSales: number }>();
       for (const l of salesLines) {
         const key = l.itemName;
         const existing = productMixMap.get(key);
@@ -537,6 +537,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         } else {
           productMixMap.set(key, {
             itemName: l.itemName,
+            majorGroup: l.majorGroupName || "Uncategorized",
             quantity: num(l.quantity),
             grossSales: num(l.grossLine),
             netSales: num(l.netLine),

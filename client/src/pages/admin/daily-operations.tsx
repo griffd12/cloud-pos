@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useEmcFilter } from "@/lib/emc-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   FileText, DollarSign, Users, Banknote, Clock, Printer, Coins,
-  CheckCircle2, AlertTriangle, ShieldCheck, Activity, Info
+  CheckCircle2, AlertTriangle, ShieldCheck, Activity, Info, ChevronRight, ChevronDown
 } from "lucide-react";
 import type { Property } from "@shared/schema";
 
@@ -95,6 +95,106 @@ function ReconciliationStatus({ customerTotal, totalPayments, delta: propDelta, 
       <Separator className="my-1" />
       <SummaryRow label="Difference" value={formatCurrency(delta)} bold negative={!balanced} />
     </div>
+  );
+}
+
+interface ProductMixItem {
+  itemName: string;
+  majorGroup: string;
+  quantity: number;
+  grossSales: number;
+  netSales: number;
+}
+
+function ProductMixByCategory({ items }: { items: ProductMixItem[] }) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { items: ProductMixItem[]; totalQty: number; totalGross: number; totalNet: number }>();
+    for (const item of items) {
+      const group = item.majorGroup || "Uncategorized";
+      const existing = map.get(group);
+      if (existing) {
+        existing.items.push(item);
+        existing.totalQty += item.quantity;
+        existing.totalGross += item.grossSales;
+        existing.totalNet += item.netSales;
+      } else {
+        map.set(group, {
+          items: [item],
+          totalQty: item.quantity,
+          totalGross: item.grossSales,
+          totalNet: item.netSales,
+        });
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="py-3">
+        <CardTitle className="text-sm">Product Mix</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="w-full">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Category / Item</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right">Gross</TableHead>
+                <TableHead className="text-right">Net</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {grouped.map(([groupName, group]) => {
+                const isExpanded = expandedGroups.has(groupName);
+                return (
+                  <Fragment key={groupName}>
+                    <TableRow
+                      className="cursor-pointer hover-elevate"
+                      onClick={() => toggleGroup(groupName)}
+                      data-testid={`row-pmix-group-${groupName}`}
+                    >
+                      <TableCell className="font-semibold">
+                        <span className="flex items-center gap-1">
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          {groupName}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">{group.totalQty}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(group.totalGross)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(group.totalNet)}</TableCell>
+                    </TableRow>
+                    {isExpanded && group.items.map((p, i) => (
+                      <TableRow key={`${groupName}-${i}`} data-testid={`row-pmix-${groupName}-${i}`}>
+                        <TableCell className="pl-10 text-muted-foreground">{p.itemName}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{p.quantity}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(p.grossSales)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(p.netSales)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -687,35 +787,7 @@ export default function DailyOperationsPage() {
                 </div>
 
                 {dailySales.productMix?.length > 0 && (
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Product Mix</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ScrollArea className="w-full">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Item</TableHead>
-                              <TableHead className="text-right">Qty</TableHead>
-                              <TableHead className="text-right">Gross</TableHead>
-                              <TableHead className="text-right">Net</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {dailySales.productMix.map((p: any, i: number) => (
-                              <TableRow key={i} data-testid={`row-pmix-${i}`}>
-                                <TableCell className="font-medium">{p.itemName}</TableCell>
-                                <TableCell className="text-right tabular-nums">{p.quantity}</TableCell>
-                                <TableCell className="text-right tabular-nums">{formatCurrency(p.grossSales)}</TableCell>
-                                <TableCell className="text-right tabular-nums">{formatCurrency(p.netSales)}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
-                    </CardContent>
-                  </Card>
+                  <ProductMixByCategory items={dailySales.productMix} />
                 )}
 
                 {dailySales.discountDetail?.length > 0 && (

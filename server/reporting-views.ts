@@ -29,6 +29,7 @@ export interface SalesLine {
   taxableAmount: string;
   businessDate: string;
   rvcId: string;
+  majorGroupName: string | null;
 }
 
 export interface CheckDiscountLine {
@@ -146,10 +147,13 @@ export async function getSalesLines(filters: ReportFilters): Promise<SalesLine[]
       COALESCE(ci.tax_amount, 0) AS "taxAmount",
       COALESCE(ci.taxable_amount, 0) AS "taxableAmount",
       c.business_date AS "businessDate",
-      c.rvc_id AS "rvcId"
+      c.rvc_id AS "rvcId",
+      mg.name AS "majorGroupName"
     FROM check_items ci
     JOIN checks c ON c.id = ci.check_id
     JOIN rvcs r ON r.id = c.rvc_id
+    LEFT JOIN menu_items mi ON mi.id = ci.menu_item_id
+    LEFT JOIN major_groups mg ON mg.id = mi.major_group_id
     WHERE c.business_date = ${filters.businessDate}
       AND r.property_id = ${filters.propertyId}
       AND (ci.voided = false OR ci.voided IS NULL)
