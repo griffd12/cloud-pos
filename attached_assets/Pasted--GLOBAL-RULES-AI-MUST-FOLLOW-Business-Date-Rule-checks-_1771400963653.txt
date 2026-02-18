@@ -1,0 +1,263 @@
+🔒 GLOBAL RULES (AI MUST FOLLOW)
+Business Date Rule
+
+checks.businessDate is assigned at check OPEN.
+
+It never changes.
+
+All sales, tax, service charges, tips, and payments belong to the check’s businessDate.
+
+Do NOT derive business date from payment timestamp.
+
+Model A Rule (LOCKED)
+
+check_payments.amount includes tip.
+
+Therefore:
+
+Total Collected = SUM(check_payments.amount)
+
+DO NOT add tips again.
+
+Closed Check Definition
+
+A check is closed when:
+
+checks.status = 'CLOSED'
+
+Only closed checks belong in financial close report.
+
+📘 REPORT 1: DAILY FINANCIAL CLOSE REPORT
+
+(Purpose: Must Balance)
+
+Scope:
+
+checks.businessDate = :selectedDate
+AND checks.status = 'CLOSED'
+AND checks.testMode = false
+SECTION A — SALES
+Gross Sales
+
+From: check_items
+
+SUM(quantity * price)
+WHERE voided = false
+AND check_id IN (closed checks for date)
+Item Discounts
+
+From: check_items
+
+SUM(discount_amount)
+WHERE voided = false
+Check Discounts
+
+From: check_discounts
+
+SUM(amount)
+WHERE check_id IN (closed checks)
+Total Discounts
+Item Discounts + Check Discounts
+Net Sales
+Gross Sales - Total Discounts
+SECTION B — ADDITIONS
+Tax
+
+From: check_items
+
+SUM(tax_amount)
+WHERE voided = false
+
+PLUS
+
+From: check_service_charges
+
+SUM(tax_amount)
+Service Charges
+
+From: check_service_charges
+
+SUM(amount)
+Total Revenue
+Net Sales + Tax + Service Charges
+
+(Tips NOT included here)
+
+SECTION C — TIPS (Liability)
+Card Tips
+
+From: check_payments
+
+SUM(tipAmount)
+WHERE tender.isCard = true
+Cash Tips (Declared)
+
+From: timecards
+
+SUM(timecards.tips)
+WHERE businessDate = selectedDate
+
+(Informational only. Not part of reconciliation.)
+
+Customer Total
+Net Sales + Tax + Service Charges + Card Tips
+SECTION D — PAYMENTS
+
+From: check_payments
+
+SUM(amount)
+GROUP BY tender type
+Total Payments
+SUM(check_payments.amount)
+SECTION E — RECONCILIATION
+Difference = Total Payments - Customer Total
+
+This must equal 0.00 (± rounding tolerance).
+
+If not → FAIL.
+
+📗 REPORT 2: BUSINESS DAY ACTIVITY REPORT
+
+(Purpose: Operational Flow)
+
+Scope:
+
+checks.businessDate = :selectedDate
+
+All statuses.
+
+SECTION A — CHECK FLOW
+Carried In
+COUNT(checks)
+WHERE businessDate < selectedDate
+AND status != CLOSED
+
+(If implementing carryover tracking explicitly.)
+
+Checks Started
+COUNT(checks)
+WHERE businessDate = selectedDate
+Started Sales Total
+SUM(check.total_due_snapshot)
+
+(If no snapshot, sum line items for all checks started.)
+
+Checks Closed
+COUNT(checks)
+WHERE businessDate = selectedDate
+AND status = CLOSED
+Closed Sales Total
+
+Same formula as Financial Close (but limited to those closed).
+
+Checks Outstanding End of Day
+COUNT(checks)
+WHERE businessDate = selectedDate
+AND status != CLOSED
+Outstanding Amount
+SUM(check.total_due_remaining)
+
+This report does NOT need to balance to payments.
+
+📙 REPORT 3: CASH DRAWER REPORT
+
+(Purpose: Physical Cash Reconciliation)
+
+Scope:
+
+cash_drawer_assignments.assignmentDate = selectedDate
+Opening Amount
+
+From: drawer_assignments.openingAmount
+
+Cash Sales
+
+From: cash_transactions
+
+SUM(amount)
+WHERE type = 'sale'
+Cash Refunds
+SUM(amount)
+WHERE type = 'refund'
+Paid Outs
+SUM(amount)
+WHERE type = 'paid_out'
+Paid Ins
+SUM(amount)
+WHERE type = 'paid_in'
+Drops / Pickups
+
+As recorded.
+
+Expected Cash
+Opening
++ Cash Sales
+- Cash Refunds
+- Paid Outs
++ Paid Ins
+- Drops
++ Pickups
+Actual Cash
+
+Manual entry at close.
+
+Variance
+Actual - Expected
+📕 REPORT 4: LABOR SUMMARY
+
+Scope:
+
+timecards.businessDate = selectedDate
+Regular Hours
+
+SUM(timecards.regularHours)
+
+OT Hours
+
+SUM(timecards.overtimeHours)
+
+Total Hours
+
+SUM(all hours)
+
+Total Wages
+
+SUM(timecards.totalPay)
+
+Labor %
+Total Wages / Net Sales (from Financial Close)
+Sales Per Labor Hour
+Net Sales / Total Hours
+📔 REPORT 5: TIP POOL SUMMARY (CC ONLY)
+
+Scope:
+Closed checks for businessDate.
+
+Poolable Tips
+SUM(check_payments.tipAmount)
+WHERE tender.isCard = true
+Eligible Employees
+
+Employees with hours worked AND jobCode.tipEligible = true.
+
+Allocation Formula
+
+For each employee:
+
+(employee_hours * jobCode.tipPoolWeight)
+/ SUM(all eligible weighted hours)
+* Poolable Tips
+
+Total Allocations must equal Poolable Tips exactly.
+
+🧪 VALIDATION ENDPOINT MUST CHECK
+
+Financial Close balances to zero
+
+Every cash payment has matching cash_transaction
+
+Service charge totals match ledger
+
+No payment > check balance
+
+No open checks included in Financial Close
