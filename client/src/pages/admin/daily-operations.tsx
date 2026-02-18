@@ -202,7 +202,7 @@ export default function DailyOperationsPage() {
   const emcFilter = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [businessDate, setBusinessDate] = useState<string>(formatLocalDate(new Date()));
-  const [activeTab, setActiveTab] = useState("financial-close");
+  const [activeTab, setActiveTab] = useState("daily-sales");
 
   const { data: allProperties } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -340,21 +340,17 @@ export default function DailyOperationsPage() {
       <div className="print:hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-daily-ops">
-            <TabsTrigger value="financial-close" data-testid="tab-financial-close">
-              <FileText className="h-4 w-4 mr-2" />
-              Financial Close
-            </TabsTrigger>
-            <TabsTrigger value="activity" data-testid="tab-activity">
-              <Activity className="h-4 w-4 mr-2" />
-              Activity
+            <TabsTrigger value="daily-sales" data-testid="tab-daily-sales">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Daily Sales
             </TabsTrigger>
             <TabsTrigger value="cashier" data-testid="tab-cashier">
               <Users className="h-4 w-4 mr-2" />
               Cashier
             </TabsTrigger>
-            <TabsTrigger value="daily-sales" data-testid="tab-daily-sales">
-              <DollarSign className="h-4 w-4 mr-2" />
-              Daily Sales
+            <TabsTrigger value="activity" data-testid="tab-activity">
+              <Activity className="h-4 w-4 mr-2" />
+              Activity
             </TabsTrigger>
             <TabsTrigger value="labor" data-testid="tab-labor">
               <Clock className="h-4 w-4 mr-2" />
@@ -363,6 +359,10 @@ export default function DailyOperationsPage() {
             <TabsTrigger value="tip-pool" data-testid="tab-tip-pool">
               <Coins className="h-4 w-4 mr-2" />
               Tip Pool
+            </TabsTrigger>
+            <TabsTrigger value="financial-close" data-testid="tab-financial-close">
+              <FileText className="h-4 w-4 mr-2" />
+              Financial Close
             </TabsTrigger>
             <TabsTrigger value="validation" data-testid="tab-validation">
               <ShieldCheck className="h-4 w-4 mr-2" />
