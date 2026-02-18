@@ -460,21 +460,27 @@ export function registerReportingRoutes(app: Express, storage: any) {
         getTimecardLines(timecardFilters),
         db.execute(sql`
           SELECT
-            -- Carried over: checks from prior business dates that are still open OR were closed today (via closedAt)
+            -- Carried over: checks from prior business dates that are still open OR were paid during this business date
             COALESCE(SUM(CASE WHEN c.business_date < ${businessDate}
-              AND (c.status = 'open' OR (c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)))
+              AND (c.status = 'open' OR (c.status = 'closed' AND EXISTS (
+                SELECT 1 FROM check_payments cp WHERE cp.check_id = c.id AND cp.business_date = ${businessDate} AND cp.payment_status = 'completed'
+              )))
               THEN 1 ELSE 0 END), 0) AS "carriedOverQty",
             COALESCE(SUM(CASE WHEN c.business_date < ${businessDate}
-              AND (c.status = 'open' OR (c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)))
+              AND (c.status = 'open' OR (c.status = 'closed' AND EXISTS (
+                SELECT 1 FROM check_payments cp WHERE cp.check_id = c.id AND cp.business_date = ${businessDate} AND cp.payment_status = 'completed'
+              )))
               THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "carriedOverAmt",
             -- Begun: new checks opened on this business date
             COALESCE(SUM(CASE WHEN c.business_date = ${businessDate} THEN 1 ELSE 0 END), 0) AS "begunQty",
             COALESCE(SUM(CASE WHEN c.business_date = ${businessDate} THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "begunAmt",
-            -- Paid: all checks closed today (closedAt date = businessDate), regardless of original business_date
-            COALESCE(SUM(CASE WHEN c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)
-              THEN 1 ELSE 0 END), 0) AS "paidQty",
-            COALESCE(SUM(CASE WHEN c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)
-              THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "paidAmt",
+            -- Paid: checks with completed payments on this business date (uses payment business_date, not closedAt clock time)
+            COALESCE(SUM(CASE WHEN c.status = 'closed' AND EXISTS (
+              SELECT 1 FROM check_payments cp WHERE cp.check_id = c.id AND cp.business_date = ${businessDate} AND cp.payment_status = 'completed'
+            ) THEN 1 ELSE 0 END), 0) AS "paidQty",
+            COALESCE(SUM(CASE WHEN c.status = 'closed' AND EXISTS (
+              SELECT 1 FROM check_payments cp WHERE cp.check_id = c.id AND cp.business_date = ${businessDate} AND cp.payment_status = 'completed'
+            ) THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "paidAmt",
             -- Outstanding: checks still open up to and including this business date
             COALESCE(SUM(CASE WHEN c.status = 'open' AND c.business_date <= ${businessDate} THEN 1 ELSE 0 END), 0) AS "outstandingQty",
             COALESCE(SUM(CASE WHEN c.status = 'open' AND c.business_date <= ${businessDate} THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "outstandingAmt"
