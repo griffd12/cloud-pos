@@ -445,17 +445,54 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      const filters: ReportFilters = { propertyId, businessDate, rvcId, closedOnly: true };
+      const allFilters: ReportFilters = { propertyId, businessDate, rvcId, closedOnly: false };
+      const closedFilters: ReportFilters = { propertyId, businessDate, rvcId, closedOnly: true };
       const timecardFilters: ReportFilters = { propertyId, businessDate };
 
-      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines, timecardLines] = await Promise.all([
-        getSalesLines(filters),
-        getCheckDiscounts(filters),
-        getServiceChargeLines(filters),
-        getPaymentLines(filters),
-        getVoidLines(filters),
+      const rvcFilter = rvcId ? sql`AND c.rvc_id = ${rvcId}` : sql``;
+
+      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines, timecardLines, operationalResult] = await Promise.all([
+        getSalesLines(allFilters),
+        getCheckDiscounts(allFilters),
+        getServiceChargeLines(allFilters),
+        getPaymentLines(closedFilters),
+        getVoidLines(allFilters),
         getTimecardLines(timecardFilters),
+        db.execute(sql`
+          SELECT
+            -- Carried over: checks from prior business dates that are still open OR were closed today (via closedAt)
+            COALESCE(SUM(CASE WHEN c.business_date < ${businessDate}
+              AND (c.status = 'open' OR (c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)))
+              THEN 1 ELSE 0 END), 0) AS "carriedOverQty",
+            COALESCE(SUM(CASE WHEN c.business_date < ${businessDate}
+              AND (c.status = 'open' OR (c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)))
+              THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "carriedOverAmt",
+            -- Begun: new checks opened on this business date
+            COALESCE(SUM(CASE WHEN c.business_date = ${businessDate} THEN 1 ELSE 0 END), 0) AS "begunQty",
+            COALESCE(SUM(CASE WHEN c.business_date = ${businessDate} THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "begunAmt",
+            -- Paid: all checks closed today (closedAt date = businessDate), regardless of original business_date
+            COALESCE(SUM(CASE WHEN c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)
+              THEN 1 ELSE 0 END), 0) AS "paidQty",
+            COALESCE(SUM(CASE WHEN c.status = 'closed' AND CAST(c.closed_at AS date) = CAST(${businessDate} AS date)
+              THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "paidAmt",
+            -- Outstanding: checks still open up to and including this business date
+            COALESCE(SUM(CASE WHEN c.status = 'open' AND c.business_date <= ${businessDate} THEN 1 ELSE 0 END), 0) AS "outstandingQty",
+            COALESCE(SUM(CASE WHEN c.status = 'open' AND c.business_date <= ${businessDate} THEN CAST(c.total AS numeric) ELSE 0 END), 0) AS "outstandingAmt"
+          FROM checks c
+          JOIN rvcs r ON r.id = c.rvc_id
+          WHERE r.property_id = ${propertyId}
+            AND (c.test_mode = false OR c.test_mode IS NULL)
+            AND c.business_date <= ${businessDate}
+            ${rvcFilter}
+        `),
       ]);
+
+      const opsRow = operationalResult.rows[0] as any;
+
+      const carriedOver = { qty: num(opsRow?.carriedOverQty), amt: round2(num(opsRow?.carriedOverAmt)) };
+      const begun = { qty: num(opsRow?.begunQty), amt: round2(num(opsRow?.begunAmt)) };
+      const checksPaid = { qty: num(opsRow?.paidQty), amt: round2(num(opsRow?.paidAmt)) };
+      const outstanding = { qty: num(opsRow?.outstandingQty), amt: round2(num(opsRow?.outstandingAmt)) };
 
       const grossSales = round2(salesLines.reduce((s, l) => s + num(l.grossLine), 0));
       const itemDiscounts = round2(salesLines.reduce((s, l) => s + num(l.discountAmount), 0));
@@ -614,6 +651,12 @@ export function registerReportingRoutes(app: Express, storage: any) {
         productMix,
         discountDetail,
         serviceChargeDetail,
+        operationalMetrics: {
+          carriedOver,
+          begun,
+          checksPaid,
+          outstanding,
+        },
       });
     } catch (err: any) {
       console.error("Daily sales summary error:", err);

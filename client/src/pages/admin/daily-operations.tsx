@@ -588,7 +588,7 @@ export default function DailyOperationsPage() {
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <CardTitle className="text-lg">Daily Sales Summary</CardTitle>
                         <div className="text-sm text-muted-foreground">
-                          {selectedProperty?.name} - {dailySales.businessDate} (closed checks)
+                          {selectedProperty?.name} - {dailySales.businessDate}
                         </div>
                       </div>
                     </CardHeader>
@@ -645,8 +645,29 @@ export default function DailyOperationsPage() {
                       <CardHeader className="py-3">
                         <CardTitle className="text-sm">Operational Metrics</CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-1">
-                        <SummaryRow label="Closed Checks" value={String(dailySales.checkCount || 0)} />
+                      <CardContent className="space-y-2">
+                        <div className="space-y-1">
+                          <SummaryRow
+                            label="Checks Carried Over"
+                            value={`${dailySales.operationalMetrics?.carriedOver?.qty || 0} (${formatCurrency(dailySales.operationalMetrics?.carriedOver?.amt || 0)})`}
+                          />
+                          <SummaryRow
+                            label="Checks Begun"
+                            value={`${dailySales.operationalMetrics?.begun?.qty || 0} (${formatCurrency(dailySales.operationalMetrics?.begun?.amt || 0)})`}
+                          />
+                          <SummaryRow
+                            label="Checks Paid"
+                            value={`${dailySales.operationalMetrics?.checksPaid?.qty || 0} (${formatCurrency(dailySales.operationalMetrics?.checksPaid?.amt || 0)})`}
+                            bold
+                          />
+                          <SummaryRow
+                            label="Checks O/S"
+                            value={`${dailySales.operationalMetrics?.outstanding?.qty || 0} (${formatCurrency(dailySales.operationalMetrics?.outstanding?.amt || 0)})`}
+                            highlight={(dailySales.operationalMetrics?.outstanding?.qty || 0) > 0}
+                          />
+                        </div>
+                        <Separator className="my-1" />
+                        <SummaryRow label="Total Checks (Sales)" value={String(dailySales.checkCount || 0)} />
                         <SummaryRow label="Voids" value={`${dailySales.voidCount || 0} items (${formatCurrency(dailySales.voidAmount)})`} />
                         {(dailySales.checkCount || 0) > 0 && (
                           <SummaryRow
