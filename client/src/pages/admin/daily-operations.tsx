@@ -68,8 +68,9 @@ function SummaryRow({ label, value, bold, negative, highlight, indent, muted }: 
   );
 }
 
-function ReconciliationStatus({ customerTotal, totalPayments, delta: propDelta }: { customerTotal: number; totalPayments: number; delta?: number }) {
-  const delta = propDelta !== undefined ? propDelta : Math.round((totalPayments - customerTotal) * 100) / 100;
+function ReconciliationStatus({ customerTotal, totalPayments, delta: propDelta, changeDue, netCollected }: { customerTotal: number; totalPayments: number; delta?: number; changeDue?: number; netCollected?: number }) {
+  const effectiveNet = netCollected !== undefined ? netCollected : totalPayments;
+  const delta = propDelta !== undefined ? propDelta : Math.round((effectiveNet - customerTotal) * 100) / 100;
   const balanced = Math.abs(delta) <= 0.02;
   return (
     <div className={`border rounded-md p-3 ${balanced ? "border-green-500/30 bg-green-500/5" : "border-destructive/30 bg-destructive/5"}`}>
@@ -84,7 +85,13 @@ function ReconciliationStatus({ customerTotal, totalPayments, delta: propDelta }
         </span>
       </div>
       <SummaryRow label="Customer Total" value={formatCurrency(customerTotal)} bold />
-      <SummaryRow label="Total Payments" value={formatCurrency(totalPayments)} bold />
+      <SummaryRow label="Total Payments (Tendered)" value={formatCurrency(totalPayments)} bold />
+      {(changeDue !== undefined && changeDue > 0) && (
+        <SummaryRow label="Less: Change Due" value={formatCurrency(-changeDue)} muted />
+      )}
+      {netCollected !== undefined && (changeDue !== undefined && changeDue > 0) && (
+        <SummaryRow label="Net Collected" value={formatCurrency(netCollected)} bold highlight />
+      )}
       <Separator className="my-1" />
       <SummaryRow label="Difference" value={formatCurrency(delta)} bold negative={!balanced} />
     </div>
@@ -315,7 +322,13 @@ export default function DailyOperationsPage() {
                         <SummaryRow key={i} label={t.tenderName} value={formatCurrency(t.amount)} />
                       ))}
                       <Separator className="my-1" />
-                      <SummaryRow label="Total Payments" value={formatCurrency(zReport.totalCollected)} bold highlight />
+                      <SummaryRow label="Total Tendered" value={formatCurrency(zReport.totalCollected)} bold />
+                      {(zReport.changeDue > 0) && (
+                        <>
+                          <SummaryRow label="Less: Change Due" value={formatCurrency(-zReport.changeDue)} muted />
+                          <SummaryRow label="Net Collected" value={formatCurrency(zReport.netCollected)} bold highlight />
+                        </>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -327,6 +340,8 @@ export default function DailyOperationsPage() {
                       <ReconciliationStatus
                         customerTotal={zReport.customerTotal || 0}
                         totalPayments={zReport.totalCollected || 0}
+                        changeDue={zReport.changeDue || 0}
+                        netCollected={zReport.netCollected}
                         delta={zReport.reconciliationDelta}
                       />
                     </CardContent>
@@ -605,6 +620,8 @@ export default function DailyOperationsPage() {
                       <ReconciliationStatus
                         customerTotal={dailySales.customerTotal || 0}
                         totalPayments={dailySales.totalCollected || 0}
+                        changeDue={dailySales.changeDue || 0}
+                        netCollected={dailySales.netCollected}
                         delta={dailySales.reconciliationDelta}
                       />
                     </CardContent>

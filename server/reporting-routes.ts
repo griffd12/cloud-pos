@@ -84,7 +84,38 @@ export function registerReportingRoutes(app: Express, storage: any) {
         amount: round2(amount),
       }));
 
-      const reconciliationDelta = round2(totalCollected - customerTotal);
+      const changeDueResult = await db.execute(sql`
+        SELECT
+          COALESCE(SUM(
+            CASE WHEN pmt.pmt_total > c.total AND pmt.pmt_total > 0
+              THEN pmt.pmt_total - c.total ELSE 0 END
+          ), 0) AS "changeDue",
+          COALESCE(SUM(c.total), 0) AS "checkTotals"
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        LEFT JOIN (
+          SELECT cp.check_id, SUM(cp.amount) AS pmt_total
+          FROM check_payments cp
+          JOIN tenders t ON t.id = cp.tender_id
+          WHERE t.type = 'cash' AND cp.payment_status = 'completed'
+          GROUP BY cp.check_id
+        ) pmt ON pmt.check_id = c.id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND c.status = 'closed'
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+          ${rvcId ? sql`AND c.rvc_id = ${rvcId}` : sql``}
+      `);
+      const changeDue = round2(num((changeDueResult.rows[0] as any)?.changeDue));
+      const checkTotals = round2(num((changeDueResult.rows[0] as any)?.checkTotals));
+
+      const cashTendered = round2(
+        paymentLines.filter(l => l.tenderType === "cash").reduce((s, l) => s + num(l.amount), 0)
+      );
+      const netCashCollected = round2(cashTendered - changeDue);
+
+      const netCollected = round2(totalCollected - changeDue);
+      const reconciliationDelta = round2(netCollected - checkTotals);
       const balanced = Math.abs(reconciliationDelta) <= 0.02;
 
       res.json({
@@ -105,7 +136,11 @@ export function registerReportingRoutes(app: Express, storage: any) {
         cardTips,
         declaredCashTips,
         customerTotal,
+        cashTendered,
+        changeDue,
+        netCashCollected,
         totalCollected,
+        netCollected,
         tenderBreakdown,
         reconciliationDelta,
         balanced,
@@ -263,6 +298,8 @@ export function registerReportingRoutes(app: Express, storage: any) {
       const expectedCash = num(summary.expectedCash);
       const variance = assignment?.variance != null ? num(assignment.variance) : round2(actualCash - expectedCash);
 
+      const tipsPaid = round2(num(summary.tipsPaid));
+
       res.json({
         reportName: "Cash Drawer",
         assignmentId,
@@ -272,10 +309,12 @@ export function registerReportingRoutes(app: Express, storage: any) {
         paidOuts: round2(num(summary.paidOuts)),
         drops: round2(num(summary.drops)),
         pickups: round2(num(summary.pickups)),
+        tipsPaid,
         cashRefunds: round2(num(summary.cashRefunds)),
         expectedCash: round2(expectedCash),
         actualCash: round2(actualCash),
         variance: round2(variance),
+        formula: "Beginning Bank + Cash Sales + Paid In - Paid Out - Tips Paid - Drops = Cash Due",
         transactions,
       });
     } catch (err: any) {
@@ -354,7 +393,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         );
         const declaredCashTips = round2(empTimecards.reduce((s, l) => s + num(l.declaredCashTips), 0));
 
-        const cashCollected = round2(
+        const cashTendered = round2(
           empPayments.filter(l => l.tenderType === "cash").reduce((s, l) => s + num(l.amount), 0)
         );
         const cardCollected = round2(
@@ -378,7 +417,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
           voidAmount,
           cardTips,
           declaredCashTips,
-          cashCollected,
+          cashTendered,
           cardCollected,
           totalCollected,
           customerTotal,
@@ -509,7 +548,38 @@ export function registerReportingRoutes(app: Express, storage: any) {
       const declaredCashTips = round2(timecardLines.reduce((s, l) => s + num(l.declaredCashTips), 0));
 
       const customerTotal = round2(netSales + totalTax + serviceChargesAmt + cardTips);
-      const reconciliationDelta = round2(totalCollected - customerTotal);
+
+      const changeDueResult = await db.execute(sql`
+        SELECT
+          COALESCE(SUM(
+            CASE WHEN pmt.pmt_total > c.total AND pmt.pmt_total > 0
+              THEN pmt.pmt_total - c.total ELSE 0 END
+          ), 0) AS "changeDue",
+          COALESCE(SUM(c.total), 0) AS "checkTotals"
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        LEFT JOIN (
+          SELECT cp.check_id, SUM(cp.amount) AS pmt_total
+          FROM check_payments cp
+          JOIN tenders t ON t.id = cp.tender_id
+          WHERE t.type = 'cash' AND cp.payment_status = 'completed'
+          GROUP BY cp.check_id
+        ) pmt ON pmt.check_id = c.id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND c.status = 'closed'
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+          ${rvcId ? sql`AND c.rvc_id = ${rvcId}` : sql``}
+      `);
+      const changeDue = round2(num((changeDueResult.rows[0] as any)?.changeDue));
+      const checkTotals = round2(num((changeDueResult.rows[0] as any)?.checkTotals));
+
+      const cashTendered = round2(
+        paymentLines.filter(l => l.tenderType === "cash").reduce((s, l) => s + num(l.amount), 0)
+      );
+      const netCashCollected = round2(cashTendered - changeDue);
+      const netCollected = round2(totalCollected - changeDue);
+      const reconciliationDelta = round2(netCollected - checkTotals);
       const balanced = Math.abs(reconciliationDelta) <= 0.02;
 
       res.json({
@@ -530,7 +600,11 @@ export function registerReportingRoutes(app: Express, storage: any) {
         cardTips,
         declaredCashTips,
         customerTotal,
+        cashTendered,
+        changeDue,
+        netCashCollected,
         totalCollected,
+        netCollected,
         reconciliationDelta,
         balanced,
         voidCount,
@@ -905,8 +979,41 @@ export function registerReportingRoutes(app: Express, storage: any) {
       );
       const reconTotalPayments = round2(pmtLines.reduce((s, l) => s + num(l.amount), 0));
 
+      const reconChangeDueResult = await db.execute(sql`
+        SELECT COALESCE(SUM(
+          CASE WHEN pmt.pmt_total > c.total AND pmt.pmt_total > 0
+            THEN pmt.pmt_total - c.total ELSE 0 END
+        ), 0) AS "changeDue"
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        LEFT JOIN (
+          SELECT cp.check_id, SUM(cp.amount) AS pmt_total
+          FROM check_payments cp
+          JOIN tenders t ON t.id = cp.tender_id
+          WHERE t.type = 'cash' AND cp.payment_status = 'completed'
+          GROUP BY cp.check_id
+        ) pmt ON pmt.check_id = c.id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND c.status = 'closed'
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+      `);
+      const reconChangeDue = round2(num((reconChangeDueResult.rows[0] as any)?.changeDue));
+
+      const reconCheckTotalsResult = await db.execute(sql`
+        SELECT COALESCE(SUM(c.total), 0) AS "checkTotals"
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND c.status = 'closed'
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+      `);
+      const reconCheckTotals = round2(num((reconCheckTotalsResult.rows[0] as any)?.checkTotals));
+
       const customerTotal = round2(reconNetSales + reconTotalTax + reconServiceCharges + reconCardTips);
-      const paymentDelta = round2(reconTotalPayments - customerTotal);
+      const reconNetCollected = round2(reconTotalPayments - reconChangeDue);
+      const paymentDelta = round2(reconNetCollected - reconCheckTotals);
       const toleranceMet = Math.abs(paymentDelta) <= 0.02;
 
       const paymentReconciliation = {
@@ -917,21 +1024,26 @@ export function registerReportingRoutes(app: Express, storage: any) {
           serviceCharges: reconServiceCharges,
           cardTips: reconCardTips,
           customerTotal,
+          checkTotals: reconCheckTotals,
           totalPayments: reconTotalPayments,
+          changeDue: reconChangeDue,
+          netCollected: reconNetCollected,
           delta: paymentDelta,
         },
         message: toleranceMet
-          ? "Payments balance with Customer Total (Net Sales + Tax + Service Charges + Card Tips) within rounding tolerance."
-          : `Payment mismatch: Total Payments (${reconTotalPayments}) ≠ Customer Total (${customerTotal}). Delta: ${paymentDelta}`,
+          ? "Payments balance: Net Collected (Tendered - Change Due) matches Check Totals within rounding tolerance."
+          : `Payment mismatch: Net Collected (${reconNetCollected}) ≠ Check Totals (${reconCheckTotals}). Delta: ${paymentDelta}. Change Due: ${reconChangeDue}`,
       };
 
-      // CHECK 6: No payment > check balance
+      // CHECK 6: Cash overpayments = change due (INFO), non-cash overpayments = error (FAIL)
       const overpaymentResult = await db.execute(sql`
         SELECT
           c.id AS "checkId",
           c.check_number AS "checkNumber",
           COALESCE(c.total, 0) AS "checkTotal",
-          COALESCE(pmt.pmt_total, 0) AS "paymentTotal"
+          COALESCE(pmt.pmt_total, 0) AS "paymentTotal",
+          COALESCE(cash_pmt.cash_total, 0) AS "cashTotal",
+          COALESCE(pmt.pmt_total, 0) - COALESCE(c.total, 0) AS "overpayment"
         FROM checks c
         JOIN rvcs r ON r.id = c.rvc_id
         LEFT JOIN (
@@ -940,27 +1052,51 @@ export function registerReportingRoutes(app: Express, storage: any) {
           WHERE payment_status = 'completed'
           GROUP BY check_id
         ) pmt ON pmt.check_id = c.id
+        LEFT JOIN (
+          SELECT cp.check_id, SUM(cp.amount) AS cash_total
+          FROM check_payments cp
+          JOIN tenders t ON t.id = cp.tender_id
+          WHERE t.type = 'cash' AND cp.payment_status = 'completed'
+          GROUP BY cp.check_id
+        ) cash_pmt ON cash_pmt.check_id = c.id
         WHERE c.business_date = ${businessDate}
           AND r.property_id = ${propertyId}
           AND (c.test_mode = false OR c.test_mode IS NULL)
           AND COALESCE(pmt.pmt_total, 0) > COALESCE(c.total, 0) + 0.02
       `);
 
-      const overpaidChecks = (overpaymentResult.rows as any[]).map(r => ({
-        checkId: r.checkId,
-        checkNumber: r.checkNumber,
-        checkTotal: round2(num(r.checkTotal)),
-        paymentTotal: round2(num(r.paymentTotal)),
-        overpayment: round2(num(r.paymentTotal) - num(r.checkTotal)),
-      }));
+      const overpaymentRows = overpaymentResult.rows as any[];
+      const cashChangeDue: any[] = [];
+      const nonCashOverpayments: any[] = [];
+      for (const r of overpaymentRows) {
+        const overpayment = round2(num(r.overpayment));
+        const cashTotal = num(r.cashTotal);
+        const entry = {
+          checkId: r.checkId,
+          checkNumber: r.checkNumber,
+          checkTotal: round2(num(r.checkTotal)),
+          paymentTotal: round2(num(r.paymentTotal)),
+          overpayment,
+        };
+        if (cashTotal > 0 && overpayment <= cashTotal) {
+          cashChangeDue.push({ ...entry, type: "change_due" });
+        } else {
+          nonCashOverpayments.push({ ...entry, type: "error" });
+        }
+      }
 
       const overpaymentCheck = {
-        status: overpaidChecks.length === 0 ? "PASS" : "FAIL",
-        count: overpaidChecks.length,
-        details: overpaidChecks,
-        message: overpaidChecks.length === 0
-          ? "No payments exceed check balance."
-          : `${overpaidChecks.length} check(s) have payments exceeding the check total.`,
+        status: nonCashOverpayments.length === 0 ? "PASS" : "FAIL",
+        totalChangeDue: round2(cashChangeDue.reduce((s, c) => s + c.overpayment, 0)),
+        cashChangeDueCount: cashChangeDue.length,
+        cashChangeDueDetails: cashChangeDue,
+        nonCashOverpaymentCount: nonCashOverpayments.length,
+        nonCashOverpaymentDetails: nonCashOverpayments,
+        message: nonCashOverpayments.length === 0
+          ? (cashChangeDue.length > 0
+            ? `${cashChangeDue.length} cash overpayment(s) detected = change due ($${round2(cashChangeDue.reduce((s, c) => s + c.overpayment, 0))}). This is normal cash handling.`
+            : "No overpayments detected.")
+          : `${nonCashOverpayments.length} non-cash overpayment(s) detected. These require investigation.`,
       };
 
       // CHECK 7: No open checks in Financial Close

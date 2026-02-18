@@ -119,6 +119,7 @@ export interface DrawerSummary {
   paidOuts: string;
   drops: string;
   pickups: string;
+  tipsPaid: string;
   expectedCash: string;
 }
 
@@ -350,6 +351,7 @@ export async function getDrawerSummary(assignmentId: string): Promise<DrawerSumm
       COALESCE(SUM(CASE WHEN ct.transaction_type = 'paid_out' THEN ct.amount ELSE 0 END), 0) AS "paidOuts",
       COALESCE(SUM(CASE WHEN ct.transaction_type = 'drop' THEN ct.amount ELSE 0 END), 0) AS "drops",
       COALESCE(SUM(CASE WHEN ct.transaction_type = 'pickup' THEN ct.amount ELSE 0 END), 0) AS "pickups",
+      COALESCE(SUM(CASE WHEN ct.transaction_type = 'tips_paid' THEN ct.amount ELSE 0 END), 0) AS "tipsPaid",
       (
         COALESCE(da.opening_amount, 0)
         + COALESCE(SUM(CASE WHEN ct.transaction_type = 'sale' THEN ct.amount ELSE 0 END), 0)
@@ -357,6 +359,7 @@ export async function getDrawerSummary(assignmentId: string): Promise<DrawerSumm
         + COALESCE(SUM(CASE WHEN ct.transaction_type = 'paid_in' THEN ct.amount ELSE 0 END), 0)
         - COALESCE(SUM(CASE WHEN ct.transaction_type = 'paid_out' THEN ct.amount ELSE 0 END), 0)
         - COALESCE(SUM(CASE WHEN ct.transaction_type = 'drop' THEN ct.amount ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN ct.transaction_type = 'tips_paid' THEN ct.amount ELSE 0 END), 0)
       ) AS "expectedCash"
     FROM drawer_assignments da
     LEFT JOIN cash_transactions ct ON ct.assignment_id = da.id
@@ -373,6 +376,7 @@ export async function getDrawerSummary(assignmentId: string): Promise<DrawerSumm
       paidOuts: "0",
       drops: "0",
       pickups: "0",
+      tipsPaid: "0",
       expectedCash: "0",
     };
   }
