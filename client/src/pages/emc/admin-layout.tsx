@@ -105,6 +105,7 @@ import PrintAgentsPage from "../admin/print-agents";
 import DescriptorsPage from "../admin/descriptors";
 import TipRulesPage from "../admin/tip-rules";
 import TimecardReportPage from "../admin/timecard-report";
+import DailyOperationsPage from "../admin/daily-operations";
 import BreakRulesPage from "../admin/break-rules";
 import BreakMonitoringPage from "../admin/break-monitoring";
 import BreakViolationsPage from "../admin/break-violations";
@@ -204,6 +205,7 @@ const navGroups: NavGroup[] = [
     label: "Reports",
     items: [
       { title: "Reports Dashboard", url: "/emc/reports", icon: LayoutGrid },
+      { title: "Daily Operations", url: "/emc/daily-operations", icon: FileText },
       { title: "Timecard Report", url: "/emc/timecard-report", icon: Timer },
       { title: "Tip Pooling", url: "/emc/tip-pooling", icon: Coins },
       { title: "Labor Analytics", url: "/emc/labor-analytics", icon: BarChart3 },
@@ -642,6 +644,7 @@ export default function EmcAdminLayout() {
                 <Route path="/emc/overtime-rules" component={OvertimeRulesPage} />
                 <Route path="/emc/tip-rules" component={TipRulesPage} />
                 <Route path="/emc/timecard-report" component={TimecardReportPage} />
+                <Route path="/emc/daily-operations" component={DailyOperationsPage} />
                 <Route path="/emc/break-rules" component={BreakRulesPage} />
                 <Route path="/emc/break-monitoring" component={BreakMonitoringPage} />
                 <Route path="/emc/break-violations" component={BreakViolationsPage} />
