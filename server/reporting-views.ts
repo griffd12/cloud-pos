@@ -11,6 +11,7 @@ export interface ReportFilters {
   businessDate: string;
   rvcId?: string;
   enterpriseId?: string;
+  closedOnly?: boolean;
 }
 
 export interface SalesLine {
@@ -125,6 +126,9 @@ export async function getSalesLines(filters: ReportFilters): Promise<SalesLine[]
   const rvcFilter = filters.rvcId
     ? sql`AND c.rvc_id = ${filters.rvcId}`
     : sql``;
+  const closedFilter = filters.closedOnly
+    ? sql`AND c.status = 'closed'`
+    : sql``;
 
   const result = await db.execute(sql`
     SELECT
@@ -149,6 +153,7 @@ export async function getSalesLines(filters: ReportFilters): Promise<SalesLine[]
       AND r.property_id = ${filters.propertyId}
       AND (ci.voided = false OR ci.voided IS NULL)
       AND (c.test_mode = false OR c.test_mode IS NULL)
+      ${closedFilter}
       ${rvcFilter}
     ORDER BY c.id, ci.id
   `);
@@ -159,6 +164,9 @@ export async function getSalesLines(filters: ReportFilters): Promise<SalesLine[]
 export async function getCheckDiscounts(filters: ReportFilters): Promise<CheckDiscountLine[]> {
   const rvcFilter = filters.rvcId
     ? sql`AND c.rvc_id = ${filters.rvcId}`
+    : sql``;
+  const closedFilter = filters.closedOnly
+    ? sql`AND c.status = 'closed'`
     : sql``;
 
   const result = await db.execute(sql`
@@ -176,6 +184,7 @@ export async function getCheckDiscounts(filters: ReportFilters): Promise<CheckDi
     JOIN discounts d ON d.id = cd.discount_id
     WHERE c.business_date = ${filters.businessDate}
       AND r.property_id = ${filters.propertyId}
+      ${closedFilter}
       ${rvcFilter}
     ORDER BY cd.check_id, cd.id
   `);
@@ -186,6 +195,9 @@ export async function getCheckDiscounts(filters: ReportFilters): Promise<CheckDi
 export async function getServiceChargeLines(filters: ReportFilters): Promise<ServiceChargeLine[]> {
   const rvcFilter = filters.rvcId
     ? sql`AND csc.rvc_id = ${filters.rvcId}`
+    : sql``;
+  const closedFilter = filters.closedOnly
+    ? sql`AND EXISTS (SELECT 1 FROM checks c2 WHERE c2.id = csc.check_id AND c2.status = 'closed')`
     : sql``;
 
   const result = await db.execute(sql`
@@ -205,6 +217,7 @@ export async function getServiceChargeLines(filters: ReportFilters): Promise<Ser
     WHERE csc.business_date = ${filters.businessDate}
       AND csc.property_id = ${filters.propertyId}
       AND csc.voided = false
+      ${closedFilter}
       ${rvcFilter}
     ORDER BY csc.check_id, csc.id
   `);
@@ -215,6 +228,9 @@ export async function getServiceChargeLines(filters: ReportFilters): Promise<Ser
 export async function getPaymentLines(filters: ReportFilters): Promise<PaymentLine[]> {
   const rvcFilter = filters.rvcId
     ? sql`AND c.rvc_id = ${filters.rvcId}`
+    : sql``;
+  const closedFilter = filters.closedOnly
+    ? sql`AND c.status = 'closed'`
     : sql``;
 
   const result = await db.execute(sql`
@@ -236,6 +252,7 @@ export async function getPaymentLines(filters: ReportFilters): Promise<PaymentLi
       AND (c.test_mode = false OR c.test_mode IS NULL)
       AND COALESCE(cp.business_date, c.business_date) = ${filters.businessDate}
       AND r.property_id = ${filters.propertyId}
+      ${closedFilter}
       ${rvcFilter}
     ORDER BY cp.check_id, cp.id
   `);

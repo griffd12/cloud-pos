@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   FileText, DollarSign, Users, Banknote, Clock, Printer, Coins,
-  CheckCircle2, AlertTriangle, ShieldCheck
+  CheckCircle2, AlertTriangle, ShieldCheck, Activity, Info
 } from "lucide-react";
 import type { Property } from "@shared/schema";
 
@@ -57,19 +57,19 @@ function ReportSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function SummaryRow({ label, value, bold, negative, highlight, indent }: {
-  label: string; value: string; bold?: boolean; negative?: boolean; highlight?: boolean; indent?: boolean;
+function SummaryRow({ label, value, bold, negative, highlight, indent, muted }: {
+  label: string; value: string; bold?: boolean; negative?: boolean; highlight?: boolean; indent?: boolean; muted?: boolean;
 }) {
   return (
     <div className={`flex items-center justify-between gap-2 py-0.5 ${bold ? "font-semibold" : ""} ${highlight ? "bg-muted/50 -mx-2 px-2 rounded" : ""}`}>
-      <span className={`text-sm ${indent ? "pl-4" : ""}`}>{label}</span>
-      <span className={`text-sm tabular-nums ${negative ? "text-destructive" : ""}`}>{value}</span>
+      <span className={`text-sm ${indent ? "pl-4" : ""} ${muted ? "text-muted-foreground italic" : ""}`}>{label}</span>
+      <span className={`text-sm tabular-nums ${negative ? "text-destructive" : ""} ${muted ? "text-muted-foreground italic" : ""}`}>{value}</span>
     </div>
   );
 }
 
-function ReconciliationStatus({ customerTotal, totalPayments }: { customerTotal: number; totalPayments: number }) {
-  const delta = Math.round((totalPayments - customerTotal) * 100) / 100;
+function ReconciliationStatus({ customerTotal, totalPayments, delta: propDelta }: { customerTotal: number; totalPayments: number; delta?: number }) {
+  const delta = propDelta !== undefined ? propDelta : Math.round((totalPayments - customerTotal) * 100) / 100;
   const balanced = Math.abs(delta) <= 0.02;
   return (
     <div className={`border rounded-md p-3 ${balanced ? "border-green-500/30 bg-green-500/5" : "border-destructive/30 bg-destructive/5"}`}>
@@ -95,7 +95,7 @@ export default function DailyOperationsPage() {
   const emcFilter = useEmcFilter();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [businessDate, setBusinessDate] = useState<string>(formatLocalDate(new Date()));
-  const [activeTab, setActiveTab] = useState("z-report");
+  const [activeTab, setActiveTab] = useState("financial-close");
 
   const { data: allProperties } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -126,7 +126,13 @@ export default function DailyOperationsPage() {
   const { data: zReport, isLoading: zLoading } = useQuery({
     queryKey: ["/api/reports/z-report", effectivePropertyId, businessDate],
     queryFn: () => authFetch(`/api/reports/z-report?${queryParams}`).then(r => r.json()),
-    enabled: !!effectivePropertyId && activeTab === "z-report",
+    enabled: !!effectivePropertyId && activeTab === "financial-close",
+  });
+
+  const { data: activityReport, isLoading: activityLoading } = useQuery({
+    queryKey: ["/api/reports/business-day-activity", effectivePropertyId, businessDate],
+    queryFn: () => authFetch(`/api/reports/business-day-activity?${queryParams}`).then(r => r.json()),
+    enabled: !!effectivePropertyId && activeTab === "activity",
   });
 
   const { data: cashierReport, isLoading: cashierLoading } = useQuery({
@@ -169,16 +175,12 @@ export default function DailyOperationsPage() {
     );
   }
 
-  const zCustomerTotal = zReport
-    ? Math.round(((zReport.netSales || 0) + (zReport.totalTax || 0) + (zReport.serviceCharges || 0) + (zReport.cardTips || 0) + (zReport.cashTips || 0)) * 100) / 100
-    : 0;
-
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-daily-ops-title">Daily Operations Reports</h1>
-          <p className="text-muted-foreground text-sm">Oracle Simphony-style FOH/BOH reports with enterprise reconciliation</p>
+          <p className="text-muted-foreground text-sm">Oracle Simphony-compliant FOH/BOH reports with enterprise reconciliation</p>
         </div>
         <Button variant="outline" onClick={handlePrint} data-testid="button-print-report">
           <Printer className="h-4 w-4 mr-2" />
@@ -225,9 +227,13 @@ export default function DailyOperationsPage() {
       <div className="print:hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-daily-ops">
-            <TabsTrigger value="z-report" data-testid="tab-z-report">
+            <TabsTrigger value="financial-close" data-testid="tab-financial-close">
               <FileText className="h-4 w-4 mr-2" />
-              Z Report
+              Financial Close
+            </TabsTrigger>
+            <TabsTrigger value="activity" data-testid="tab-activity">
+              <Activity className="h-4 w-4 mr-2" />
+              Activity
             </TabsTrigger>
             <TabsTrigger value="cashier" data-testid="tab-cashier">
               <Users className="h-4 w-4 mr-2" />
@@ -251,23 +257,24 @@ export default function DailyOperationsPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ========== Z REPORT ========== */}
-          <TabsContent value="z-report">
+          {/* ========== FINANCIAL CLOSE (Report 1) ========== */}
+          <TabsContent value="financial-close">
             {zLoading ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Loading Z Report...</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">Loading Financial Close...</CardContent></Card>
             ) : zReport ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle className="text-lg">Z Report - Daily Close</CardTitle>
+                      <CardTitle className="text-lg">Daily Financial Close</CardTitle>
                       <div className="text-sm text-muted-foreground">
                         {selectedProperty?.name} - {zReport.businessDate}
                       </div>
                     </div>
+                    <p className="text-xs text-muted-foreground">Closed checks only (status = closed)</p>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <ReportSection title="Sales">
+                    <ReportSection title="Section A - Sales">
                       <SummaryRow label="Gross Sales" value={formatCurrency(zReport.grossSales)} />
                       <SummaryRow label="Item Discounts" value={`(${formatCurrency(zReport.itemDiscounts)})`} negative indent />
                       <SummaryRow label="Check Discounts" value={`(${formatCurrency(zReport.checkDiscounts)})`} negative indent />
@@ -276,32 +283,32 @@ export default function DailyOperationsPage() {
                       <SummaryRow label="Net Sales" value={formatCurrency(zReport.netSales)} bold highlight />
                     </ReportSection>
 
-                    <ReportSection title="Additions">
+                    <ReportSection title="Section B - Additions">
                       <SummaryRow label="Tax (Item)" value={formatCurrency(zReport.itemTax)} indent />
                       <SummaryRow label="Tax (Service Charge)" value={formatCurrency(zReport.serviceChargeTax)} indent />
                       <SummaryRow label="Total Tax" value={formatCurrency(zReport.totalTax)} />
                       <SummaryRow label="Service Charges" value={formatCurrency(zReport.serviceCharges)} />
                       <Separator className="my-1" />
                       <SummaryRow label="Total Revenue" value={formatCurrency(zReport.totalRevenue)} bold />
+                      <p className="text-xs text-muted-foreground">Net Sales + Tax + Service Charges (tips NOT included)</p>
                     </ReportSection>
 
-                    <ReportSection title="Tips">
-                      <SummaryRow label="Card Tips" value={formatCurrency(zReport.cardTips)} indent />
-                      <SummaryRow label="Cash Tips" value={formatCurrency(zReport.cashTips)} indent />
-                      <Separator className="my-1" />
-                      <SummaryRow label="Total Tips" value={formatCurrency((zReport.cardTips || 0) + (zReport.cashTips || 0))} />
+                    <ReportSection title="Section C - Tips (Liability)">
+                      <SummaryRow label="Card Tips" value={formatCurrency(zReport.cardTips)} />
+                      <SummaryRow label="Declared Cash Tips (informational)" value={formatCurrency(zReport.declaredCashTips)} muted indent />
+                      <p className="text-xs text-muted-foreground">Cash tips from timecards - not part of reconciliation</p>
                     </ReportSection>
 
                     <Separator />
-                    <SummaryRow label="Customer Total" value={formatCurrency(zCustomerTotal)} bold highlight />
-                    <p className="text-xs text-muted-foreground">Net Sales + Tax + Service Charges + Tips</p>
+                    <SummaryRow label="Customer Total" value={formatCurrency(zReport.customerTotal)} bold highlight />
+                    <p className="text-xs text-muted-foreground">Net Sales + Tax + Service Charges + Card Tips</p>
                   </CardContent>
                 </Card>
 
                 <div className="space-y-4">
                   <Card>
                     <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Payments</CardTitle>
+                      <CardTitle className="text-sm">Section D - Payments</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       {zReport.tenderBreakdown?.map((t: any, i: number) => (
@@ -312,17 +319,25 @@ export default function DailyOperationsPage() {
                     </CardContent>
                   </Card>
 
-                  <ReconciliationStatus
-                    customerTotal={zCustomerTotal}
-                    totalPayments={zReport.totalCollected || 0}
-                  />
+                  <Card>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">Section E - Reconciliation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ReconciliationStatus
+                        customerTotal={zReport.customerTotal || 0}
+                        totalPayments={zReport.totalCollected || 0}
+                        delta={zReport.reconciliationDelta}
+                      />
+                    </CardContent>
+                  </Card>
 
                   <Card>
                     <CardHeader className="py-3">
                       <CardTitle className="text-sm">Operational Metrics</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-1">
-                      <SummaryRow label="Total Checks" value={String(zReport.checkCount || 0)} />
+                      <SummaryRow label="Closed Checks" value={String(zReport.checkCount || 0)} />
                       <SummaryRow label="Voids" value={`${zReport.voidCount || 0} items`} />
                       <SummaryRow label="Void Amount" value={formatCurrency(zReport.voidAmount)} negative={!!zReport.voidAmount} />
                       {(zReport.checkCount || 0) > 0 && (
@@ -336,7 +351,122 @@ export default function DailyOperationsPage() {
                 </div>
               </div>
             ) : (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Select a property and date to generate Z Report</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">Select a property and date to generate Financial Close</CardContent></Card>
+            )}
+          </TabsContent>
+
+          {/* ========== BUSINESS DAY ACTIVITY (Report 2) ========== */}
+          <TabsContent value="activity">
+            {activityLoading ? (
+              <Card><CardContent className="py-8 text-center text-muted-foreground">Loading Activity Report...</CardContent></Card>
+            ) : activityReport ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="py-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <CardTitle className="text-lg">Business Day Activity</CardTitle>
+                      <div className="text-sm text-muted-foreground">
+                        {selectedProperty?.name} - {activityReport.businessDate}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">All check statuses - operational flow (does not need to balance)</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="border rounded-md p-3 space-y-1">
+                        <p className="text-xs text-muted-foreground uppercase">Carried In</p>
+                        <p className="text-2xl font-bold tabular-nums" data-testid="text-activity-carried-in">{activityReport.carriedIn?.count || 0}</p>
+                        <p className="text-sm text-muted-foreground">{formatCurrency(activityReport.carriedIn?.amount)}</p>
+                      </div>
+                      <div className="border rounded-md p-3 space-y-1">
+                        <p className="text-xs text-muted-foreground uppercase">Started</p>
+                        <p className="text-2xl font-bold tabular-nums" data-testid="text-activity-started">{activityReport.checksStarted?.count || 0}</p>
+                        <p className="text-sm text-muted-foreground">{formatCurrency(activityReport.checksStarted?.amount)}</p>
+                      </div>
+                      <div className="border rounded-md p-3 space-y-1 border-green-500/30">
+                        <p className="text-xs text-muted-foreground uppercase">Closed</p>
+                        <p className="text-2xl font-bold tabular-nums text-green-600" data-testid="text-activity-closed">{activityReport.checksClosed?.count || 0}</p>
+                        <p className="text-sm text-muted-foreground">{formatCurrency(activityReport.checksClosed?.amount)}</p>
+                      </div>
+                      <div className={`border rounded-md p-3 space-y-1 ${(activityReport.checksOutstanding?.count || 0) > 0 ? "border-amber-500/30" : ""}`}>
+                        <p className="text-xs text-muted-foreground uppercase">Outstanding</p>
+                        <p className={`text-2xl font-bold tabular-nums ${(activityReport.checksOutstanding?.count || 0) > 0 ? "text-amber-600" : ""}`} data-testid="text-activity-outstanding">{activityReport.checksOutstanding?.count || 0}</p>
+                        <p className="text-sm text-muted-foreground">{formatCurrency(activityReport.checksOutstanding?.amount)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {(activityReport.checksOutstanding?.checks?.length || 0) > 0 && (
+                  <Card>
+                    <CardHeader className="py-3">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <CardTitle className="text-sm">Outstanding Checks</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Check #</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activityReport.checksOutstanding.checks.map((c: any, i: number) => (
+                            <TableRow key={i} data-testid={`row-outstanding-${i}`}>
+                              <TableCell className="font-medium">#{c.checkNumber}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{c.status}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(c.amount)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {(activityReport.carriedIn?.checks?.length || 0) > 0 && (
+                  <Card>
+                    <CardHeader className="py-3">
+                      <div className="flex items-center gap-2">
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm">Carried-In Checks (from prior business dates)</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Check #</TableHead>
+                            <TableHead>Original Date</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activityReport.carriedIn.checks.map((c: any, i: number) => (
+                            <TableRow key={i} data-testid={`row-carried-in-${i}`}>
+                              <TableCell className="font-medium">#{c.checkNumber}</TableCell>
+                              <TableCell>{c.businessDate}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{c.status}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(c.amount)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            ) : (
+              <Card><CardContent className="py-8 text-center text-muted-foreground">Select a property and date</CardContent></Card>
             )}
           </TabsContent>
 
@@ -351,7 +481,7 @@ export default function DailyOperationsPage() {
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <CardTitle className="text-lg">Cashier Report</CardTitle>
                       <div className="text-sm text-muted-foreground">
-                        {selectedProperty?.name} - {businessDate}
+                        {selectedProperty?.name} - {businessDate} (closed checks)
                       </div>
                     </div>
                   </CardHeader>
@@ -443,7 +573,7 @@ export default function DailyOperationsPage() {
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <CardTitle className="text-lg">Daily Sales Summary</CardTitle>
                         <div className="text-sm text-muted-foreground">
-                          {selectedProperty?.name} - {dailySales.businessDate}
+                          {selectedProperty?.name} - {dailySales.businessDate} (closed checks)
                         </div>
                       </div>
                     </CardHeader>
@@ -465,20 +595,18 @@ export default function DailyOperationsPage() {
                       </ReportSection>
 
                       <ReportSection title="Tips">
-                        <SummaryRow label="Card Tips" value={formatCurrency(dailySales.cardTips)} indent />
-                        <SummaryRow label="Cash Tips" value={formatCurrency(dailySales.cashTips)} indent />
+                        <SummaryRow label="Card Tips" value={formatCurrency(dailySales.cardTips)} />
+                        <SummaryRow label="Declared Cash Tips (informational)" value={formatCurrency(dailySales.declaredCashTips)} muted indent />
                       </ReportSection>
 
                       <Separator />
-                      {(() => {
-                        const custTotal = Math.round(((dailySales.netSales || 0) + (dailySales.totalTax || 0) + (dailySales.serviceCharges || 0) + (dailySales.cardTips || 0) + (dailySales.cashTips || 0)) * 100) / 100;
-                        return (
-                          <>
-                            <SummaryRow label="Customer Total" value={formatCurrency(custTotal)} bold highlight />
-                            <ReconciliationStatus customerTotal={custTotal} totalPayments={dailySales.totalCollected || 0} />
-                          </>
-                        );
-                      })()}
+                      <SummaryRow label="Customer Total" value={formatCurrency(dailySales.customerTotal)} bold highlight />
+                      <p className="text-xs text-muted-foreground">Net Sales + Tax + Service Charges + Card Tips</p>
+                      <ReconciliationStatus
+                        customerTotal={dailySales.customerTotal || 0}
+                        totalPayments={dailySales.totalCollected || 0}
+                        delta={dailySales.reconciliationDelta}
+                      />
                     </CardContent>
                   </Card>
 
@@ -501,7 +629,7 @@ export default function DailyOperationsPage() {
                         <CardTitle className="text-sm">Operational Metrics</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
-                        <SummaryRow label="Total Checks" value={String(dailySales.checkCount || 0)} />
+                        <SummaryRow label="Closed Checks" value={String(dailySales.checkCount || 0)} />
                         <SummaryRow label="Voids" value={`${dailySales.voidCount || 0} items (${formatCurrency(dailySales.voidAmount)})`} />
                         {(dailySales.checkCount || 0) > 0 && (
                           <SummaryRow
@@ -563,7 +691,7 @@ export default function DailyOperationsPage() {
                         <TableBody>
                           {dailySales.discountDetail.map((d: any, i: number) => (
                             <TableRow key={i}>
-                              <TableCell className="font-medium">{d.name}</TableCell>
+                              <TableCell>{d.name}</TableCell>
                               <TableCell className="text-right tabular-nums">{d.count}</TableCell>
                               <TableCell className="text-right tabular-nums">{formatCurrency(d.amount)}</TableCell>
                             </TableRow>
@@ -592,7 +720,7 @@ export default function DailyOperationsPage() {
                         <TableBody>
                           {dailySales.serviceChargeDetail.map((sc: any, i: number) => (
                             <TableRow key={i}>
-                              <TableCell className="font-medium">{sc.name}</TableCell>
+                              <TableCell>{sc.name}</TableCell>
                               <TableCell className="text-right tabular-nums">{sc.count}</TableCell>
                               <TableCell className="text-right tabular-nums">{formatCurrency(sc.amount)}</TableCell>
                               <TableCell className="text-right tabular-nums">{formatCurrency(sc.taxAmount)}</TableCell>
@@ -620,52 +748,45 @@ export default function DailyOperationsPage() {
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <CardTitle className="text-lg">Labor Summary</CardTitle>
                       <div className="text-sm text-muted-foreground">
-                        {selectedProperty?.name} - {businessDate}
+                        {selectedProperty?.name} - {laborSummary.businessDate}
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div className="space-y-0.5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="space-y-0.5 text-sm">
                         <p className="text-muted-foreground">Employees</p>
-                        <p className="font-medium text-lg" data-testid="text-labor-emp-count">{laborSummary.employeeCount}</p>
+                        <p className="font-medium text-lg">{laborSummary.employeeCount || 0}</p>
                       </div>
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 text-sm">
                         <p className="text-muted-foreground">Total Hours</p>
-                        <p className="font-medium text-lg" data-testid="text-labor-hours">{(laborSummary.totalHours || 0).toFixed(1)}</p>
+                        <p className="font-medium text-lg">{laborSummary.totalHours || 0}</p>
                       </div>
-                      <div className="space-y-0.5">
-                        <p className="text-muted-foreground">Total Pay</p>
-                        <p className="font-medium text-lg" data-testid="text-labor-pay">{formatCurrency(laborSummary.totalPay)}</p>
+                      <div className="space-y-0.5 text-sm">
+                        <p className="text-muted-foreground">Total Wages</p>
+                        <p className="font-medium text-lg">{formatCurrency(laborSummary.totalPay)}</p>
                       </div>
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 text-sm">
                         <p className="text-muted-foreground">Labor %</p>
-                        <p className="font-medium text-lg" data-testid="text-labor-pct">{formatPercent(laborSummary.laborPercent)}</p>
+                        <p className="font-medium text-lg">{formatPercent(laborSummary.laborPercent)}</p>
                       </div>
                     </div>
 
                     <Separator />
 
-                    <ReportSection title="Hours Breakdown">
-                      <SummaryRow label="Regular Hours" value={(laborSummary.totalRegularHours || 0).toFixed(1)} />
-                      <SummaryRow label="Overtime Hours" value={(laborSummary.totalOvertimeHours || 0).toFixed(1)} />
-                      <SummaryRow label="Double-Time Hours" value={(laborSummary.totalDoubleTimeHours || 0).toFixed(1)} />
+                    <ReportSection title="Summary">
+                      <SummaryRow label="Regular Hours" value={String(laborSummary.totalRegularHours || 0)} />
+                      <SummaryRow label="Overtime Hours" value={String(laborSummary.totalOvertimeHours || 0)} />
+                      <SummaryRow label="Total Hours" value={String(laborSummary.totalHours || 0)} bold />
                       <Separator className="my-1" />
-                      <SummaryRow label="Total Hours" value={(laborSummary.totalHours || 0).toFixed(1)} bold />
-                    </ReportSection>
-
-                    <ReportSection title="Pay Breakdown">
                       <SummaryRow label="Regular Pay" value={formatCurrency(laborSummary.totalRegularPay)} />
                       <SummaryRow label="Overtime Pay" value={formatCurrency(laborSummary.totalOvertimePay)} />
+                      <SummaryRow label="Total Wages" value={formatCurrency(laborSummary.totalPay)} bold />
                       <Separator className="my-1" />
-                      <SummaryRow label="Total Pay" value={formatCurrency(laborSummary.totalPay)} bold />
-                    </ReportSection>
-
-                    <ReportSection title="Efficiency">
-                      <SummaryRow label="Net Sales" value={formatCurrency(laborSummary.netSales)} />
-                      <SummaryRow label="Sales per Labor Hour" value={formatCurrency(laborSummary.salesPerLaborHour)} />
-                      <SummaryRow label="Labor Cost %" value={formatPercent(laborSummary.laborPercent)} />
                       <SummaryRow label="Declared Cash Tips" value={formatCurrency(laborSummary.totalDeclaredCashTips)} />
+                      <SummaryRow label="Net Sales (closed)" value={formatCurrency(laborSummary.netSales)} />
+                      <SummaryRow label="Labor %" value={formatPercent(laborSummary.laborPercent)} bold highlight />
+                      <SummaryRow label="Sales Per Labor Hour" value={formatCurrency(laborSummary.salesPerLaborHour)} />
                     </ReportSection>
                   </CardContent>
                 </Card>
@@ -684,21 +805,19 @@ export default function DailyOperationsPage() {
                               <TableHead className="text-right">Reg Hrs</TableHead>
                               <TableHead className="text-right">OT Hrs</TableHead>
                               <TableHead className="text-right">Total Hrs</TableHead>
-                              <TableHead className="text-right">Reg Pay</TableHead>
-                              <TableHead className="text-right">OT Pay</TableHead>
-                              <TableHead className="text-right">Total Pay</TableHead>
+                              <TableHead className="text-right">Pay</TableHead>
+                              <TableHead className="text-right">Cash Tips</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {laborSummary.byEmployee.map((e: any, i: number) => (
                               <TableRow key={i} data-testid={`row-labor-${i}`}>
                                 <TableCell className="font-medium">{e.employeeId?.substring(0, 8)}</TableCell>
-                                <TableCell className="text-right tabular-nums">{(e.regularHours || 0).toFixed(1)}</TableCell>
-                                <TableCell className="text-right tabular-nums">{(e.overtimeHours || 0).toFixed(1)}</TableCell>
-                                <TableCell className="text-right tabular-nums">{(e.totalHours || 0).toFixed(1)}</TableCell>
-                                <TableCell className="text-right tabular-nums">{formatCurrency(e.regularPay)}</TableCell>
-                                <TableCell className="text-right tabular-nums">{formatCurrency(e.overtimePay)}</TableCell>
-                                <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.totalPay)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{e.regularHours}</TableCell>
+                                <TableCell className="text-right tabular-nums">{e.overtimeHours}</TableCell>
+                                <TableCell className="text-right tabular-nums">{e.totalHours}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(e.totalPay)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(e.declaredCashTips)}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -713,7 +832,7 @@ export default function DailyOperationsPage() {
             )}
           </TabsContent>
 
-          {/* ========== TIP POOL ========== */}
+          {/* ========== TIP POOL SUMMARY ========== */}
           <TabsContent value="tip-pool">
             {tipLoading ? (
               <Card><CardContent className="py-8 text-center text-muted-foreground">Loading Tip Pool Summary...</CardContent></Card>
@@ -722,59 +841,56 @@ export default function DailyOperationsPage() {
                 <Card>
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle className="text-lg">Tip Pool Summary</CardTitle>
+                      <CardTitle className="text-lg">Tip Pool Summary (CC Only)</CardTitle>
                       <div className="text-sm text-muted-foreground">
-                        {selectedProperty?.name} - {businessDate}
+                        {selectedProperty?.name} - {tipPoolSummary.businessDate}
                       </div>
                     </div>
+                    <p className="text-xs text-muted-foreground">Closed checks only - card tips pooled by hours worked</p>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-3 gap-3 text-sm">
-                      <div className="space-y-0.5">
-                        <p className="text-muted-foreground">Total Poolable Tips</p>
-                        <p className="font-medium text-lg" data-testid="text-tip-pool-total">{formatCurrency(tipPoolSummary.totalPoolableTips)}</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-0.5 text-sm">
+                        <p className="text-muted-foreground">Poolable Tips</p>
+                        <p className="font-medium text-lg">{formatCurrency(tipPoolSummary.totalPoolableTips)}</p>
                       </div>
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 text-sm">
                         <p className="text-muted-foreground">Participants</p>
-                        <p className="font-medium text-lg" data-testid="text-tip-pool-participants">{tipPoolSummary.participantCount}</p>
+                        <p className="font-medium text-lg">{tipPoolSummary.participantCount || 0}</p>
                       </div>
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 text-sm">
                         <p className="text-muted-foreground">Total Hours</p>
-                        <p className="font-medium text-lg">{(tipPoolSummary.totalHoursWorked || 0).toFixed(1)}</p>
+                        <p className="font-medium text-lg">{tipPoolSummary.totalHoursWorked || 0}</p>
                       </div>
                     </div>
+
+                    {tipPoolSummary.participants?.length > 0 && (
+                      <>
+                        <Separator />
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Employee</TableHead>
+                              <TableHead className="text-right">Hours</TableHead>
+                              <TableHead className="text-right">Share %</TableHead>
+                              <TableHead className="text-right">Allocation</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {tipPoolSummary.participants.map((p: any, i: number) => (
+                              <TableRow key={i} data-testid={`row-tippool-${i}`}>
+                                <TableCell className="font-medium">{p.employeeId?.substring(0, 8)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{p.hoursWorked}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatPercent(p.sharePercentage)}</TableCell>
+                                <TableCell className="text-right tabular-nums font-medium">{formatCurrency(p.allocatedAmount)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
-
-                {tipPoolSummary.participants?.length > 0 && (
-                  <Card>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Tip Allocation</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Employee</TableHead>
-                            <TableHead className="text-right">Hours</TableHead>
-                            <TableHead className="text-right">Share %</TableHead>
-                            <TableHead className="text-right">Allocated</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {tipPoolSummary.participants.map((p: any, i: number) => (
-                            <TableRow key={i} data-testid={`row-tip-${i}`}>
-                              <TableCell className="font-medium">{p.employeeId?.substring(0, 8)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{(p.hoursWorked || 0).toFixed(1)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatPercent(p.sharePercentage)}</TableCell>
-                              <TableCell className="text-right tabular-nums font-medium">{formatCurrency(p.allocatedAmount)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             ) : (
               <Card><CardContent className="py-8 text-center text-muted-foreground">Select a property and date</CardContent></Card>
@@ -784,63 +900,81 @@ export default function DailyOperationsPage() {
           {/* ========== VALIDATION ========== */}
           <TabsContent value="validation">
             {validLoading ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Running validation checks...</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">Loading Validation...</CardContent></Card>
             ) : validation ? (
               <div className="space-y-4">
                 <Card>
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle className="text-lg">Data Validation</CardTitle>
-                      <Badge variant={validation.overall === "PASS" ? "default" : "destructive"} data-testid="badge-validation-overall">
-                        {validation.overall === "PASS" ? (
-                          <><CheckCircle2 className="h-3.5 w-3.5 mr-1" />ALL PASS</>
-                        ) : (
-                          <><AlertTriangle className="h-3.5 w-3.5 mr-1" />FAILURES DETECTED</>
-                        )}
+                      <CardTitle className="text-lg">Validation Checks</CardTitle>
+                      <Badge
+                        variant={validation.overall === "PASS" ? "default" : validation.overall === "WARN" ? "secondary" : "destructive"}
+                        data-testid="badge-validation-overall"
+                      >
+                        {validation.overall}
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {validation.checks && Object.entries(validation.checks).map(([key, check]: [string, any]) => (
-                      <div key={key} className={`border rounded-md p-3 ${check.status === "PASS" ? "border-green-500/20" : "border-destructive/30 bg-destructive/5"}`}>
+                      <div key={key} className={`border rounded-md p-3 ${
+                        check.status === "PASS" ? "border-green-500/30 bg-green-500/5" :
+                        check.status === "WARN" ? "border-amber-500/30 bg-amber-500/5" :
+                        "border-destructive/30 bg-destructive/5"
+                      }`}>
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
                             {check.status === "PASS" ? (
                               <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : check.status === "WARN" ? (
+                              <AlertTriangle className="h-4 w-4 text-amber-600" />
                             ) : (
                               <AlertTriangle className="h-4 w-4 text-destructive" />
                             )}
                             <span className="text-sm font-medium">
                               {key === "serviceChargeReconciliation" && "Service Charge Reconciliation"}
-                              {key === "tipDoubleCountCheck" && "Tip Double-Count Check"}
+                              {key === "tipDoubleCountCheck" && "Model A Tip Verification"}
                               {key === "cashDrawerLinkage" && "Cash Drawer Linkage"}
-                              {key === "salesRebuild" && "Sales Rebuild Verification"}
+                              {key === "salesRebuild" && "Sales Rebuild"}
                               {key === "paymentReconciliation" && "Payment Reconciliation"}
+                              {key === "overpaymentCheck" && "Overpayment Check"}
+                              {key === "openCheckWarning" && "Open Checks Warning"}
                             </span>
                           </div>
-                          <Badge variant={check.status === "PASS" ? "secondary" : "destructive"}>
+                          <Badge
+                            variant={check.status === "PASS" ? "default" : check.status === "WARN" ? "secondary" : "destructive"}
+                          >
                             {check.status}
                           </Badge>
                         </div>
                         {check.message && (
                           <p className="text-xs text-muted-foreground mt-1">{check.message}</p>
                         )}
-                        {key === "paymentReconciliation" && check.breakdown && (
-                          <div className="mt-2 space-y-0.5 text-xs">
-                            <SummaryRow label="Net Sales" value={formatCurrency(check.breakdown.netSales)} />
-                            <SummaryRow label="Tax" value={formatCurrency(check.breakdown.tax)} />
-                            <SummaryRow label="Service Charges" value={formatCurrency(check.breakdown.serviceCharges)} />
-                            <SummaryRow label="Card Tips" value={formatCurrency(check.breakdown.cardTips)} />
-                            <SummaryRow label="Cash Tips" value={formatCurrency(check.breakdown.cashTips)} />
+                        {check.breakdown && (
+                          <div className="mt-2 text-xs space-y-0.5">
+                            <div className="flex justify-between gap-2"><span>Net Sales</span><span className="tabular-nums">{formatCurrency(check.breakdown.netSales)}</span></div>
+                            <div className="flex justify-between gap-2"><span>Tax</span><span className="tabular-nums">{formatCurrency(check.breakdown.tax)}</span></div>
+                            <div className="flex justify-between gap-2"><span>Service Charges</span><span className="tabular-nums">{formatCurrency(check.breakdown.serviceCharges)}</span></div>
+                            <div className="flex justify-between gap-2"><span>Card Tips</span><span className="tabular-nums">{formatCurrency(check.breakdown.cardTips)}</span></div>
                             <Separator className="my-1" />
-                            <SummaryRow label="Customer Total" value={formatCurrency(check.breakdown.customerTotal)} bold />
-                            <SummaryRow label="Total Payments" value={formatCurrency(check.breakdown.totalPayments)} bold />
-                            <SummaryRow label="Delta" value={formatCurrency(check.breakdown.delta)} bold negative={check.status !== "PASS"} />
+                            <div className="flex justify-between gap-2 font-medium"><span>Customer Total</span><span className="tabular-nums">{formatCurrency(check.breakdown.customerTotal)}</span></div>
+                            <div className="flex justify-between gap-2 font-medium"><span>Total Payments</span><span className="tabular-nums">{formatCurrency(check.breakdown.totalPayments)}</span></div>
+                            <div className="flex justify-between gap-2 font-medium"><span>Delta</span><span className={`tabular-nums ${Math.abs(check.breakdown.delta) > 0.02 ? "text-destructive" : "text-green-600"}`}>{formatCurrency(check.breakdown.delta)}</span></div>
                           </div>
                         )}
-                        {check.details?.length > 0 && (
-                          <div className="mt-2 text-xs text-destructive">
-                            {check.details.length} issue(s) found
+                        {check.details && check.details.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium mb-1">{check.details.length} issue(s):</p>
+                            <div className="max-h-32 overflow-y-auto text-xs space-y-0.5">
+                              {check.details.slice(0, 10).map((d: any, i: number) => (
+                                <div key={i} className="flex gap-2 text-muted-foreground">
+                                  <span>#{d.checkNumber || d.paymentId?.substring(0, 8) || i}</span>
+                                  {d.overpayment !== undefined && <span>Overpaid: {formatCurrency(d.overpayment)}</span>}
+                                  {d.difference !== undefined && <span>Diff: {formatCurrency(d.difference)}</span>}
+                                  {d.amount !== undefined && d.status !== undefined && <span>{d.status}: {formatCurrency(d.amount)}</span>}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -849,7 +983,7 @@ export default function DailyOperationsPage() {
                 </Card>
               </div>
             ) : (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Select a property and date to run validation</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">Select a property and date</CardContent></Card>
             )}
           </TabsContent>
         </Tabs>

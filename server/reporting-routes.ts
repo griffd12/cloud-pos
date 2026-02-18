@@ -19,7 +19,10 @@ function num(val: any): number {
 export function registerReportingRoutes(app: Express, storage: any) {
 
   // =========================================================================
-  // FOH 1 – Z Report (Daily Close)
+  // REPORT 1 – Daily Financial Close Report (formerly Z Report)
+  // Scope: closedOnly=true, checks.status='closed'
+  // Customer Total = Net Sales + Tax + Service Charges + Card Tips
+  // Cash Tips from timecards (informational only, NOT in reconciliation)
   // =========================================================================
   app.get("/api/reports/z-report", async (req: Request, res: Response) => {
     try {
@@ -28,14 +31,16 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      const filters: ReportFilters = { propertyId, businessDate, rvcId };
+      const filters: ReportFilters = { propertyId, businessDate, rvcId, closedOnly: true };
+      const timecardFilters: ReportFilters = { propertyId, businessDate };
 
-      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines] = await Promise.all([
+      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines, timecardLines] = await Promise.all([
         getSalesLines(filters),
         getCheckDiscounts(filters),
         getServiceChargeLines(filters),
         getPaymentLines(filters),
         getVoidLines(filters),
+        getTimecardLines(timecardFilters),
       ]);
 
       const grossSales = round2(salesLines.reduce((s, l) => s + num(l.grossLine), 0));
@@ -58,11 +63,10 @@ export function registerReportingRoutes(app: Express, storage: any) {
           .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
           .reduce((s, l) => s + num(l.tipAmount), 0)
       );
-      const cashTips = round2(
-        paymentLines
-          .filter(l => l.tenderType === "cash")
-          .reduce((s, l) => s + num(l.tipAmount), 0)
-      );
+
+      const declaredCashTips = round2(timecardLines.reduce((s, l) => s + num(l.declaredCashTips), 0));
+
+      const customerTotal = round2(netSales + totalTax + serviceCharges + cardTips);
 
       const voidCount = voidLines.length;
       const voidAmount = round2(voidLines.reduce((s, l) => s + num(l.voidAmount), 0));
@@ -80,7 +84,11 @@ export function registerReportingRoutes(app: Express, storage: any) {
         amount: round2(amount),
       }));
 
+      const reconciliationDelta = round2(totalCollected - customerTotal);
+      const balanced = Math.abs(reconciliationDelta) <= 0.02;
+
       res.json({
+        reportName: "Daily Financial Close",
         propertyId,
         businessDate,
         rvcId: rvcId || null,
@@ -94,22 +102,129 @@ export function registerReportingRoutes(app: Express, storage: any) {
         totalTax,
         serviceCharges,
         totalRevenue,
-        totalCollected,
         cardTips,
-        cashTips,
+        declaredCashTips,
+        customerTotal,
+        totalCollected,
+        tenderBreakdown,
+        reconciliationDelta,
+        balanced,
         voidCount,
         voidAmount,
         checkCount,
-        tenderBreakdown,
       });
     } catch (err: any) {
-      console.error("Z-report error:", err);
-      res.status(500).json({ message: "Failed to generate Z report", error: err.message });
+      console.error("Financial close report error:", err);
+      res.status(500).json({ message: "Failed to generate financial close report", error: err.message });
     }
   });
 
   // =========================================================================
-  // FOH 2 – Cash Drawer Report
+  // REPORT 2 – Business Day Activity Report
+  // Scope: ALL statuses for businessDate. Does NOT need to balance.
+  // Shows check flow: carried-in, started, closed, outstanding
+  // =========================================================================
+  app.get("/api/reports/business-day-activity", async (req: Request, res: Response) => {
+    try {
+      const { propertyId, businessDate } = req.query as Record<string, string | undefined>;
+      if (!propertyId || !businessDate) {
+        return res.status(400).json({ message: "propertyId and businessDate are required" });
+      }
+
+      const checksResult = await db.execute(sql`
+        SELECT
+          c.id,
+          c.check_number AS "checkNumber",
+          c.status,
+          c.business_date AS "businessDate",
+          COALESCE(c.subtotal, 0) AS subtotal,
+          COALESCE(c.tax_total, 0) AS "taxTotal",
+          COALESCE(c.total, 0) AS total,
+          COALESCE(c.service_charge_total, 0) AS "serviceChargeTotal",
+          COALESCE(c.discount_total, 0) AS "discountTotal",
+          c.employee_id AS "employeeId",
+          c.opened_at AS "openedAt"
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+        ORDER BY c.check_number
+      `);
+      const allChecks = checksResult.rows as any[];
+
+      const carriedInResult = await db.execute(sql`
+        SELECT
+          c.id,
+          c.check_number AS "checkNumber",
+          c.status,
+          c.business_date AS "businessDate",
+          COALESCE(c.total, 0) AS total
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        WHERE c.business_date < ${businessDate}
+          AND c.status != 'closed'
+          AND r.property_id = ${propertyId}
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+        ORDER BY c.check_number
+      `);
+      const carriedIn = carriedInResult.rows as any[];
+
+      const checksStarted = allChecks.length;
+      const startedSalesTotal = round2(allChecks.reduce((s, c) => s + num(c.total), 0));
+
+      const closedChecks = allChecks.filter(c => c.status === 'closed');
+      const checksClosed = closedChecks.length;
+      const closedSalesTotal = round2(closedChecks.reduce((s, c) => s + num(c.total), 0));
+
+      const outstandingChecks = allChecks.filter(c => c.status !== 'closed');
+      const checksOutstanding = outstandingChecks.length;
+      const outstandingAmount = round2(outstandingChecks.reduce((s, c) => s + num(c.total), 0));
+
+      const carriedInCount = carriedIn.length;
+      const carriedInAmount = round2(carriedIn.reduce((s, c) => s + num(c.total), 0));
+
+      res.json({
+        reportName: "Business Day Activity",
+        propertyId,
+        businessDate,
+        carriedIn: {
+          count: carriedInCount,
+          amount: carriedInAmount,
+          checks: carriedIn.map(c => ({
+            checkNumber: c.checkNumber,
+            businessDate: c.businessDate,
+            status: c.status,
+            amount: round2(num(c.total)),
+          })),
+        },
+        checksStarted: {
+          count: checksStarted,
+          amount: startedSalesTotal,
+        },
+        checksClosed: {
+          count: checksClosed,
+          amount: closedSalesTotal,
+        },
+        checksOutstanding: {
+          count: checksOutstanding,
+          amount: outstandingAmount,
+          checks: outstandingChecks.map(c => ({
+            checkNumber: c.checkNumber,
+            status: c.status,
+            amount: round2(num(c.total)),
+            employeeId: c.employeeId,
+          })),
+        },
+      });
+    } catch (err: any) {
+      console.error("Business day activity error:", err);
+      res.status(500).json({ message: "Failed to generate business day activity report", error: err.message });
+    }
+  });
+
+  // =========================================================================
+  // REPORT 3 – Cash Drawer Report
   // =========================================================================
   app.get("/api/reports/cash-drawer", async (req: Request, res: Response) => {
     try {
@@ -149,6 +264,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
       const variance = assignment?.variance != null ? num(assignment.variance) : round2(actualCash - expectedCash);
 
       res.json({
+        reportName: "Cash Drawer",
         assignmentId,
         opening: round2(num(summary.opening)),
         cashSales: round2(num(summary.cashSales)),
@@ -169,7 +285,9 @@ export function registerReportingRoutes(app: Express, storage: any) {
   });
 
   // =========================================================================
-  // FOH 3 – Cashier Report (Employee Shift Report)
+  // REPORT 4 (Cashier) – Cashier Report (Employee Shift Report)
+  // closedOnly=true for financial reports
+  // Customer Total = Net Sales + Tax + Service Charges + Card Tips (no cash tips)
   // =========================================================================
   app.get("/api/reports/cashier-report", async (req: Request, res: Response) => {
     try {
@@ -178,7 +296,8 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      const filters: ReportFilters = { propertyId, businessDate, rvcId };
+      const filters: ReportFilters = { propertyId, businessDate, rvcId, closedOnly: true };
+      const timecardFilters: ReportFilters = { propertyId, businessDate };
 
       const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines, timecardLines] = await Promise.all([
         getSalesLines(filters),
@@ -186,7 +305,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         getServiceChargeLines(filters),
         getPaymentLines(filters),
         getVoidLines(filters),
-        getTimecardLines(filters),
+        getTimecardLines(timecardFilters),
       ]);
 
       const checkToEmployee = new Map<string, string>();
@@ -233,11 +352,6 @@ export function registerReportingRoutes(app: Express, storage: any) {
             .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
             .reduce((s, l) => s + num(l.tipAmount), 0)
         );
-        const cashTips = round2(
-          empPayments
-            .filter(l => l.tenderType === "cash")
-            .reduce((s, l) => s + num(l.tipAmount), 0)
-        );
         const declaredCashTips = round2(empTimecards.reduce((s, l) => s + num(l.declaredCashTips), 0));
 
         const cashCollected = round2(
@@ -250,7 +364,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         );
         const totalCollected = round2(empPayments.reduce((s, l) => s + num(l.amount), 0));
 
-        const customerTotal = round2(netSales + tax + serviceCharges + cardTips + cashTips);
+        const customerTotal = round2(netSales + tax + serviceCharges + cardTips);
 
         reports.push({
           employeeId: empId,
@@ -263,7 +377,6 @@ export function registerReportingRoutes(app: Express, storage: any) {
           voidCount,
           voidAmount,
           cardTips,
-          cashTips,
           declaredCashTips,
           cashCollected,
           cardCollected,
@@ -282,7 +395,9 @@ export function registerReportingRoutes(app: Express, storage: any) {
   });
 
   // =========================================================================
-  // BOH 4 – Daily Sales Summary
+  // REPORT 5 – Daily Sales Summary
+  // closedOnly=true for financial reports
+  // Customer Total = Net Sales + Tax + Service Charges + Card Tips (no cash tips)
   // =========================================================================
   app.get("/api/reports/daily-sales-summary", async (req: Request, res: Response) => {
     try {
@@ -291,14 +406,16 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      const filters: ReportFilters = { propertyId, businessDate, rvcId };
+      const filters: ReportFilters = { propertyId, businessDate, rvcId, closedOnly: true };
+      const timecardFilters: ReportFilters = { propertyId, businessDate };
 
-      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines] = await Promise.all([
+      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines, timecardLines] = await Promise.all([
         getSalesLines(filters),
         getCheckDiscounts(filters),
         getServiceChargeLines(filters),
         getPaymentLines(filters),
         getVoidLines(filters),
+        getTimecardLines(timecardFilters),
       ]);
 
       const grossSales = round2(salesLines.reduce((s, l) => s + num(l.grossLine), 0));
@@ -389,13 +506,14 @@ export function registerReportingRoutes(app: Express, storage: any) {
           .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
           .reduce((s, l) => s + num(l.tipAmount), 0)
       );
-      const cashTips = round2(
-        paymentLines
-          .filter(l => l.tenderType === "cash")
-          .reduce((s, l) => s + num(l.tipAmount), 0)
-      );
+      const declaredCashTips = round2(timecardLines.reduce((s, l) => s + num(l.declaredCashTips), 0));
+
+      const customerTotal = round2(netSales + totalTax + serviceChargesAmt + cardTips);
+      const reconciliationDelta = round2(totalCollected - customerTotal);
+      const balanced = Math.abs(reconciliationDelta) <= 0.02;
 
       res.json({
+        reportName: "Daily Sales Summary",
         propertyId,
         businessDate,
         rvcId: rvcId || null,
@@ -409,9 +527,12 @@ export function registerReportingRoutes(app: Express, storage: any) {
         totalTax,
         serviceCharges: serviceChargesAmt,
         totalRevenue,
-        totalCollected,
         cardTips,
-        cashTips,
+        declaredCashTips,
+        customerTotal,
+        totalCollected,
+        reconciliationDelta,
+        balanced,
         voidCount,
         voidAmount,
         checkCount,
@@ -427,7 +548,8 @@ export function registerReportingRoutes(app: Express, storage: any) {
   });
 
   // =========================================================================
-  // BOH 5 – Labor Summary
+  // REPORT 6 – Labor Summary
+  // Net Sales from Financial Close (closed checks only) for labor % calc
   // =========================================================================
   app.get("/api/reports/labor-summary", async (req: Request, res: Response) => {
     try {
@@ -436,12 +558,13 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      const filters: ReportFilters = { propertyId, businessDate };
+      const closedFilters: ReportFilters = { propertyId, businessDate, closedOnly: true };
+      const timecardFilters: ReportFilters = { propertyId, businessDate };
 
       const [timecardLines, salesLines, checkDiscountLines] = await Promise.all([
-        getTimecardLines(filters),
-        getSalesLines(filters),
-        getCheckDiscounts(filters),
+        getTimecardLines(timecardFilters),
+        getSalesLines(closedFilters),
+        getCheckDiscounts(closedFilters),
       ]);
 
       const grossSales = salesLines.reduce((s, l) => s + num(l.grossLine), 0);
@@ -508,6 +631,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
       const salesPerLaborHour = totalHours > 0 ? round2(netSales / totalHours) : 0;
 
       res.json({
+        reportName: "Labor Summary",
         propertyId,
         businessDate,
         totalRegularHours: round2(totalRegularHours),
@@ -531,7 +655,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
   });
 
   // =========================================================================
-  // BOH 6 – Tip Pool Summary (CC Tips Only)
+  // REPORT 7 – Tip Pool Summary (CC Tips Only, closed checks only)
   // =========================================================================
   app.get("/api/reports/tip-pool-summary", async (req: Request, res: Response) => {
     try {
@@ -540,11 +664,12 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      const filters: ReportFilters = { propertyId, businessDate };
+      const closedFilters: ReportFilters = { propertyId, businessDate, closedOnly: true };
+      const timecardFilters: ReportFilters = { propertyId, businessDate };
 
       const [paymentLines, timecardLines] = await Promise.all([
-        getPaymentLines(filters),
-        getTimecardLines(filters),
+        getPaymentLines(closedFilters),
+        getTimecardLines(timecardFilters),
       ]);
 
       const totalPoolableTips = round2(
@@ -574,6 +699,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
       });
 
       res.json({
+        reportName: "Tip Pool Summary",
         propertyId,
         businessDate,
         totalPoolableTips,
@@ -588,7 +714,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
   });
 
   // =========================================================================
-  // 7 – Validation Endpoint
+  // VALIDATION ENDPOINT – 7 checks per spec
   // =========================================================================
   app.get("/api/reports/validate", async (req: Request, res: Response) => {
     try {
@@ -597,7 +723,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         return res.status(400).json({ message: "propertyId and businessDate are required" });
       }
 
-      // a) Service charge reconciliation
+      // CHECK 1: Service charge reconciliation
       const scReconResult = await db.execute(sql`
         SELECT
           c.id AS "checkId",
@@ -640,7 +766,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         details: scMismatches,
       };
 
-      // b) Tip double-counting check (Model A verification)
+      // CHECK 2: Model A tip verification
       const tipCheckResult = await db.execute(sql`
         SELECT
           COALESCE(SUM(cp.amount), 0) AS "totalCollected",
@@ -649,6 +775,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         JOIN checks c ON c.id = cp.check_id
         JOIN rvcs r ON r.id = c.rvc_id
         WHERE cp.payment_status = 'completed'
+          AND c.status = 'closed'
           AND (c.test_mode = false OR c.test_mode IS NULL)
           AND COALESCE(cp.business_date, c.business_date) = ${businessDate}
           AND r.property_id = ${propertyId}
@@ -665,7 +792,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         message: "Model A: payment.amount already includes tips. No double counting detected.",
       };
 
-      // c) Cash drawer linkage
+      // CHECK 3: Cash drawer linkage
       const cashPaymentsResult = await db.execute(sql`
         SELECT
           cp.id AS "paymentId",
@@ -711,7 +838,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
         details: orphanedPayments,
       };
 
-      // d) Sales rebuild
+      // CHECK 4: Sales rebuild (closed checks only)
       const rebuildResult = await db.execute(sql`
         SELECT
           c.id AS "checkId",
@@ -752,13 +879,15 @@ export function registerReportingRoutes(app: Express, storage: any) {
         details: rebuildMismatches,
       };
 
-      // e) Payment reconciliation: SUM(payments.amount) = Net Sales + Tax + Service Charges + Card Tips + Cash Tips
-      const filters: ReportFilters = { propertyId, businessDate };
+      // CHECK 5: Payment reconciliation (CLOSED checks only)
+      // Customer Total = Net Sales + Tax + Service Charges + Card Tips
+      // Cash tips are informational, NOT in reconciliation
+      const closedFilters: ReportFilters = { propertyId, businessDate, closedOnly: true };
       const [salesLines, checkDiscLines, scLines, pmtLines] = await Promise.all([
-        getSalesLines(filters),
-        getCheckDiscounts(filters),
-        getServiceChargeLines(filters),
-        getPaymentLines(filters),
+        getSalesLines(closedFilters),
+        getCheckDiscounts(closedFilters),
+        getServiceChargeLines(closedFilters),
+        getPaymentLines(closedFilters),
       ]);
 
       const reconGross = round2(salesLines.reduce((s, l) => s + num(l.grossLine), 0));
@@ -774,14 +903,9 @@ export function registerReportingRoutes(app: Express, storage: any) {
           .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
           .reduce((s, l) => s + num(l.tipAmount), 0)
       );
-      const reconCashTips = round2(
-        pmtLines
-          .filter(l => l.tenderType === "cash")
-          .reduce((s, l) => s + num(l.tipAmount), 0)
-      );
       const reconTotalPayments = round2(pmtLines.reduce((s, l) => s + num(l.amount), 0));
 
-      const customerTotal = round2(reconNetSales + reconTotalTax + reconServiceCharges + reconCardTips + reconCashTips);
+      const customerTotal = round2(reconNetSales + reconTotalTax + reconServiceCharges + reconCardTips);
       const paymentDelta = round2(reconTotalPayments - customerTotal);
       const toleranceMet = Math.abs(paymentDelta) <= 0.02;
 
@@ -792,14 +916,83 @@ export function registerReportingRoutes(app: Express, storage: any) {
           tax: reconTotalTax,
           serviceCharges: reconServiceCharges,
           cardTips: reconCardTips,
-          cashTips: reconCashTips,
           customerTotal,
           totalPayments: reconTotalPayments,
           delta: paymentDelta,
         },
         message: toleranceMet
-          ? "Payments balance with revenue + tips within rounding tolerance."
+          ? "Payments balance with Customer Total (Net Sales + Tax + Service Charges + Card Tips) within rounding tolerance."
           : `Payment mismatch: Total Payments (${reconTotalPayments}) ≠ Customer Total (${customerTotal}). Delta: ${paymentDelta}`,
+      };
+
+      // CHECK 6: No payment > check balance
+      const overpaymentResult = await db.execute(sql`
+        SELECT
+          c.id AS "checkId",
+          c.check_number AS "checkNumber",
+          COALESCE(c.total, 0) AS "checkTotal",
+          COALESCE(pmt.pmt_total, 0) AS "paymentTotal"
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        LEFT JOIN (
+          SELECT check_id, SUM(amount) AS pmt_total
+          FROM check_payments
+          WHERE payment_status = 'completed'
+          GROUP BY check_id
+        ) pmt ON pmt.check_id = c.id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+          AND COALESCE(pmt.pmt_total, 0) > COALESCE(c.total, 0) + 0.02
+      `);
+
+      const overpaidChecks = (overpaymentResult.rows as any[]).map(r => ({
+        checkId: r.checkId,
+        checkNumber: r.checkNumber,
+        checkTotal: round2(num(r.checkTotal)),
+        paymentTotal: round2(num(r.paymentTotal)),
+        overpayment: round2(num(r.paymentTotal) - num(r.checkTotal)),
+      }));
+
+      const overpaymentCheck = {
+        status: overpaidChecks.length === 0 ? "PASS" : "FAIL",
+        count: overpaidChecks.length,
+        details: overpaidChecks,
+        message: overpaidChecks.length === 0
+          ? "No payments exceed check balance."
+          : `${overpaidChecks.length} check(s) have payments exceeding the check total.`,
+      };
+
+      // CHECK 7: No open checks in Financial Close
+      const openChecksResult = await db.execute(sql`
+        SELECT
+          c.id AS "checkId",
+          c.check_number AS "checkNumber",
+          c.status,
+          COALESCE(c.total, 0) AS total
+        FROM checks c
+        JOIN rvcs r ON r.id = c.rvc_id
+        WHERE c.business_date = ${businessDate}
+          AND r.property_id = ${propertyId}
+          AND c.status != 'closed'
+          AND (c.test_mode = false OR c.test_mode IS NULL)
+      `);
+
+      const openChecks = (openChecksResult.rows as any[]).map(r => ({
+        checkId: r.checkId,
+        checkNumber: r.checkNumber,
+        status: r.status,
+        amount: round2(num(r.total)),
+      }));
+
+      const openCheckWarning = {
+        status: openChecks.length === 0 ? "PASS" : "WARN",
+        count: openChecks.length,
+        totalAmount: round2(openChecks.reduce((s, c) => s + c.amount, 0)),
+        details: openChecks,
+        message: openChecks.length === 0
+          ? "All checks for this business date are closed."
+          : `${openChecks.length} open check(s) found for this date. These are excluded from the Financial Close but represent outstanding obligations.`,
       };
 
       const overall =
@@ -807,8 +1000,9 @@ export function registerReportingRoutes(app: Express, storage: any) {
         tipDoubleCountCheck.status === "PASS" &&
         cashDrawerLinkage.status === "PASS" &&
         salesRebuild.status === "PASS" &&
-        paymentReconciliation.status === "PASS"
-          ? "PASS"
+        paymentReconciliation.status === "PASS" &&
+        overpaymentCheck.status === "PASS"
+          ? (openCheckWarning.status === "WARN" ? "WARN" : "PASS")
           : "FAIL";
 
       res.json({
@@ -821,6 +1015,8 @@ export function registerReportingRoutes(app: Express, storage: any) {
           cashDrawerLinkage,
           salesRebuild,
           paymentReconciliation,
+          overpaymentCheck,
+          openCheckWarning,
         },
       });
     } catch (err: any) {
