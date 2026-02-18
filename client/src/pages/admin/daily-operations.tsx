@@ -79,11 +79,25 @@ export default function DailyOperationsPage() {
   const [businessDate, setBusinessDate] = useState<string>(formatLocalDate(new Date()));
   const [activeTab, setActiveTab] = useState("z-report");
 
-  const { data: properties } = useQuery<Property[]>({
+  const { data: allProperties } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
 
-  const effectivePropertyId = selectedPropertyId || emcFilter?.selectedPropertyId || (properties?.[0]?.id ?? "");
+  const properties = useMemo(() => {
+    if (!allProperties) return [];
+    if (emcFilter?.selectedEnterpriseId) {
+      return allProperties.filter(p => p.enterpriseId === emcFilter.selectedEnterpriseId);
+    }
+    return allProperties;
+  }, [allProperties, emcFilter?.selectedEnterpriseId]);
+
+  const effectivePropertyId = useMemo(() => {
+    const candidate = selectedPropertyId || emcFilter?.selectedPropertyId || "";
+    if (candidate && properties.some(p => p.id === candidate)) {
+      return candidate;
+    }
+    return properties[0]?.id ?? "";
+  }, [selectedPropertyId, emcFilter?.selectedPropertyId, properties]);
 
   const selectedProperty = useMemo(() => {
     return properties?.find(p => p.id === effectivePropertyId);
