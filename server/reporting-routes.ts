@@ -180,13 +180,19 @@ export function registerReportingRoutes(app: Express, storage: any) {
 
       const filters: ReportFilters = { propertyId, businessDate, rvcId };
 
-      const [salesLines, checkDiscountLines, paymentLines, voidLines, timecardLines] = await Promise.all([
+      const [salesLines, checkDiscountLines, serviceChargeLines, paymentLines, voidLines, timecardLines] = await Promise.all([
         getSalesLines(filters),
         getCheckDiscounts(filters),
+        getServiceChargeLines(filters),
         getPaymentLines(filters),
         getVoidLines(filters),
         getTimecardLines(filters),
       ]);
+
+      const checkToEmployee = new Map<string, string>();
+      for (const l of salesLines) {
+        if (l.checkId && l.employeeId) checkToEmployee.set(l.checkId, l.employeeId);
+      }
 
       const employeeIds = new Set<string>();
       for (const l of salesLines) if (l.employeeId) employeeIds.add(l.employeeId);
@@ -199,16 +205,25 @@ export function registerReportingRoutes(app: Express, storage: any) {
 
         const empSales = salesLines.filter(l => l.employeeId === empId);
         const empCheckDiscounts = checkDiscountLines.filter(l => l.employeeId === empId);
+        const empCheckIds = new Set(empSales.map(l => l.checkId));
+        const empServiceCharges = serviceChargeLines.filter(l => {
+          const owner = checkToEmployee.get(l.checkId);
+          return owner === empId;
+        });
         const empPayments = paymentLines.filter(l => l.employeeId === empId);
         const empVoids = voidLines.filter(l => l.voidedByEmployeeId === empId);
         const empTimecards = timecardLines.filter(l => l.employeeId === empId);
 
-        const checksOpened = new Set(empSales.map(l => l.checkId)).size;
+        const checksOpened = empCheckIds.size;
         const grossSales = round2(empSales.reduce((s, l) => s + num(l.grossLine), 0));
         const itemDiscounts = round2(empSales.reduce((s, l) => s + num(l.discountAmount), 0));
         const checkDiscountsAmt = round2(empCheckDiscounts.reduce((s, l) => s + num(l.amount), 0));
         const discounts = round2(itemDiscounts + checkDiscountsAmt);
         const netSales = round2(grossSales - discounts);
+        const itemTax = round2(empSales.reduce((s, l) => s + num(l.taxAmount), 0));
+        const scTax = round2(empServiceCharges.reduce((s, l) => s + num(l.taxAmount), 0));
+        const tax = round2(itemTax + scTax);
+        const serviceCharges = round2(empServiceCharges.reduce((s, l) => s + num(l.amount), 0));
 
         const voidCount = empVoids.length;
         const voidAmount = round2(empVoids.reduce((s, l) => s + num(l.voidAmount), 0));
@@ -216,6 +231,11 @@ export function registerReportingRoutes(app: Express, storage: any) {
         const cardTips = round2(
           empPayments
             .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
+            .reduce((s, l) => s + num(l.tipAmount), 0)
+        );
+        const cashTips = round2(
+          empPayments
+            .filter(l => l.tenderType === "cash")
             .reduce((s, l) => s + num(l.tipAmount), 0)
         );
         const declaredCashTips = round2(empTimecards.reduce((s, l) => s + num(l.declaredCashTips), 0));
@@ -230,19 +250,25 @@ export function registerReportingRoutes(app: Express, storage: any) {
         );
         const totalCollected = round2(empPayments.reduce((s, l) => s + num(l.amount), 0));
 
+        const customerTotal = round2(netSales + tax + serviceCharges + cardTips + cashTips);
+
         reports.push({
           employeeId: empId,
           checksOpened,
           grossSales,
           discounts,
           netSales,
+          tax,
+          serviceCharges,
           voidCount,
           voidAmount,
           cardTips,
+          cashTips,
           declaredCashTips,
           cashCollected,
           cardCollected,
           totalCollected,
+          customerTotal,
         });
       }
 
@@ -358,6 +384,17 @@ export function registerReportingRoutes(app: Express, storage: any) {
         taxAmount: round2(sc.taxAmount),
       }));
 
+      const cardTips = round2(
+        paymentLines
+          .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
+          .reduce((s, l) => s + num(l.tipAmount), 0)
+      );
+      const cashTips = round2(
+        paymentLines
+          .filter(l => l.tenderType === "cash")
+          .reduce((s, l) => s + num(l.tipAmount), 0)
+      );
+
       res.json({
         propertyId,
         businessDate,
@@ -373,6 +410,8 @@ export function registerReportingRoutes(app: Express, storage: any) {
         serviceCharges: serviceChargesAmt,
         totalRevenue,
         totalCollected,
+        cardTips,
+        cashTips,
         voidCount,
         voidAmount,
         checkCount,
@@ -713,11 +752,62 @@ export function registerReportingRoutes(app: Express, storage: any) {
         details: rebuildMismatches,
       };
 
+      // e) Payment reconciliation: SUM(payments.amount) = Net Sales + Tax + Service Charges + Card Tips + Cash Tips
+      const filters: ReportFilters = { propertyId, businessDate };
+      const [salesLines, checkDiscLines, scLines, pmtLines] = await Promise.all([
+        getSalesLines(filters),
+        getCheckDiscounts(filters),
+        getServiceChargeLines(filters),
+        getPaymentLines(filters),
+      ]);
+
+      const reconGross = round2(salesLines.reduce((s, l) => s + num(l.grossLine), 0));
+      const reconItemDisc = round2(salesLines.reduce((s, l) => s + num(l.discountAmount), 0));
+      const reconCheckDisc = round2(checkDiscLines.reduce((s, l) => s + num(l.amount), 0));
+      const reconNetSales = round2(reconGross - reconItemDisc - reconCheckDisc);
+      const reconItemTax = round2(salesLines.reduce((s, l) => s + num(l.taxAmount), 0));
+      const reconScTax = round2(scLines.reduce((s, l) => s + num(l.taxAmount), 0));
+      const reconTotalTax = round2(reconItemTax + reconScTax);
+      const reconServiceCharges = round2(scLines.reduce((s, l) => s + num(l.amount), 0));
+      const reconCardTips = round2(
+        pmtLines
+          .filter(l => l.tenderType === "credit" || l.tenderType === "debit")
+          .reduce((s, l) => s + num(l.tipAmount), 0)
+      );
+      const reconCashTips = round2(
+        pmtLines
+          .filter(l => l.tenderType === "cash")
+          .reduce((s, l) => s + num(l.tipAmount), 0)
+      );
+      const reconTotalPayments = round2(pmtLines.reduce((s, l) => s + num(l.amount), 0));
+
+      const customerTotal = round2(reconNetSales + reconTotalTax + reconServiceCharges + reconCardTips + reconCashTips);
+      const paymentDelta = round2(reconTotalPayments - customerTotal);
+      const toleranceMet = Math.abs(paymentDelta) <= 0.02;
+
+      const paymentReconciliation = {
+        status: toleranceMet ? "PASS" : "FAIL",
+        breakdown: {
+          netSales: reconNetSales,
+          tax: reconTotalTax,
+          serviceCharges: reconServiceCharges,
+          cardTips: reconCardTips,
+          cashTips: reconCashTips,
+          customerTotal,
+          totalPayments: reconTotalPayments,
+          delta: paymentDelta,
+        },
+        message: toleranceMet
+          ? "Payments balance with revenue + tips within rounding tolerance."
+          : `Payment mismatch: Total Payments (${reconTotalPayments}) ≠ Customer Total (${customerTotal}). Delta: ${paymentDelta}`,
+      };
+
       const overall =
         serviceChargeReconciliation.status === "PASS" &&
         tipDoubleCountCheck.status === "PASS" &&
         cashDrawerLinkage.status === "PASS" &&
-        salesRebuild.status === "PASS"
+        salesRebuild.status === "PASS" &&
+        paymentReconciliation.status === "PASS"
           ? "PASS"
           : "FAIL";
 
@@ -730,6 +820,7 @@ export function registerReportingRoutes(app: Express, storage: any) {
           tipDoubleCountCheck,
           cashDrawerLinkage,
           salesRebuild,
+          paymentReconciliation,
         },
       });
     } catch (err: any) {
