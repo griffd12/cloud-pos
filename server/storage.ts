@@ -3388,7 +3388,14 @@ export class DatabaseStorage implements IStorage {
         await tx.delete(refunds).where(inArray(refunds.id, refundIds));
       }
 
-      // 2d. Delete payment_transactions (references check_payments via checkPaymentId FK)
+      // 2d. Delete terminal_sessions FIRST (references paymentTransactions and checks)
+      let terminalSessionsResult = { rowCount: 0 };
+      if (checkIds.length > 0) {
+        terminalSessionsResult = await tx.delete(terminalSessions).where(inArray(terminalSessions.checkId, checkIds));
+      }
+      console.log('[clearSalesData] Terminal sessions deleted:', terminalSessionsResult.rowCount);
+
+      // 2e. Delete payment_transactions (references check_payments via checkPaymentId FK)
       if (checkIds.length > 0) {
         const checkPaymentRecords = await tx.select({ id: checkPayments.id }).from(checkPayments).where(inArray(checkPayments.checkId, checkIds));
         const checkPaymentIds = checkPaymentRecords.map(cp => cp.id);
@@ -3445,17 +3452,10 @@ export class DatabaseStorage implements IStorage {
       const additionalGiftCardTrans = await tx.delete(giftCardTransactions).where(eq(giftCardTransactions.propertyId, propertyId));
       giftCardTransResult = { rowCount: (giftCardTransResult.rowCount || 0) + (additionalGiftCardTrans.rowCount || 0) };
 
-      // 6. Delete terminal sessions, print jobs, audit logs and checks
-      console.log('[clearSalesData] Deleting terminal sessions, print jobs, audit logs and checks for rvcIds:', rvcIds.length);
+      // 6. Delete print jobs, audit logs and checks
+      console.log('[clearSalesData] Deleting print jobs, audit logs and checks for rvcIds:', rvcIds.length);
       
-      // 6a. Delete terminal sessions first (they reference checks)
-      let terminalSessionsResult = { rowCount: 0 };
-      if (checkIds.length > 0) {
-        terminalSessionsResult = await tx.delete(terminalSessions).where(inArray(terminalSessions.checkId, checkIds));
-      }
-      console.log('[clearSalesData] Terminal sessions deleted:', terminalSessionsResult.rowCount);
-      
-      // 6a2. Delete check locks (they reference checks)
+      // 6a. Delete check locks (they reference checks)
       let checkLocksResult = { rowCount: 0 };
       if (checkIds.length > 0) {
         checkLocksResult = await tx.delete(checkLocks).where(inArray(checkLocks.checkId, checkIds));
