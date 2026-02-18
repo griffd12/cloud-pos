@@ -19465,7 +19465,7 @@ connect();
       const pin = workstation.cashDrawerKickPin === "pin5" ? "pin5" : "pin2";
       const pulseDuration = Math.max(50, Math.min(500, workstation.cashDrawerPulseDuration || 100));
 
-      const agents = await storage.getPrintAgentsByProperty(workstation.propertyId);
+      const agents = await storage.getPrintAgents(workstation.propertyId);
       const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
       let sent = false;
 
