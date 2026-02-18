@@ -489,8 +489,6 @@ export default function DailyOperationsPage() {
 
                     <ReportSection title="Section C - Tips (Liability)">
                       <SummaryRow label="Card Tips" value={formatCurrency(zReport.cardTips)} />
-                      <SummaryRow label="Declared Cash Tips (informational)" value={formatCurrency(zReport.declaredCashTips)} muted indent />
-                      <p className="text-xs text-muted-foreground">Cash tips from timecards - not part of reconciliation</p>
                     </ReportSection>
 
                     <Separator />
@@ -798,7 +796,6 @@ export default function DailyOperationsPage() {
 
                       <ReportSection title="Tips">
                         <SummaryRow label="Card Tips" value={formatCurrency(dailySales.cardTips)} />
-                        <SummaryRow label="Declared Cash Tips (informational)" value={formatCurrency(dailySales.declaredCashTips)} muted indent />
                       </ReportSection>
 
                       <Separator />
