@@ -1,0 +1,35 @@
+Ordered And Available Terminals
+Order a test terminal
+Order a test terminal
+Test real-world transactions with custom-built software on your own payment device.
+
+Get Started
+AVAILABLE TERMINALS
+alt
+PAX D135 Test Terminal is designed to work with an integration to the PAX Mobile SDK and process test payments in the EPX Sandbox environment.
+alt
+Gateway PAX A920 Pro Test Terminal is designed to work with an integration to the Gateway SI Cloud API and process test payments in the Gateway Sandbox environment.
+alt
+PAX A920 Pro Test Terminal is designed to work with an integration to the PAX Semi-Integrated SDK and process test payments in the EPX Sandbox environment.
+alt
+Gateway PAX A80 Test Terminal is designed to work with an integration to the Gateway SI Cloud API and process test payments in the Gateway Sandbox environment.
+alt
+PAX A80 Test Terminal is designed to work with an integration to the PAX Semi-Integrated SDK and process test payments in the EPX Sandbox environment.
+alt
+Ingenico LINK 2500 Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+Ingenico LANE 7000 Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+Ingenico MOVE 5000 Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+Ingenico DESK 2600 (without WiFi) Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+Ingenico DESK 2600 (WiFi) Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+Ingenico LANE 5000 Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+Ingenico LANE 3000 Test Terminal is designed to work with an integration to the Ingenico Semi-Integrated API and process test payments in the EPX Sandbox environment.
+alt
+PAX A35 Test Terminal is designed to work with an integration to the PAX Semi-Integrated SDK and process test payments in the EPX Sandbox environment.
+alt
+PAX S300 Test Terminal is designed to work with an integration to the PAX Semi-Integrated SDK and process test payments in the EPX Sandbox environment.
