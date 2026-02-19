@@ -37,6 +37,7 @@ const GATEWAY_TYPES = [
   { value: "elavon_converge", label: "Elavon Converge", emv: true, description: "EMV terminal integration" },
   { value: "elavon_fusebox", label: "Elavon Fusebox", emv: true, description: "EMV terminal with multi-processor support" },
   { value: "heartland", label: "Heartland (Global Payments)", emv: true, description: "EMV terminal + online payments via Portico gateway" },
+  { value: "north_ingenico", label: "North (Ingenico SI)", emv: true, description: "Ingenico semi-integrated terminals via Cloud WebSocket API" },
   { value: "shift4", label: "Shift4 (Coming Soon)", emv: true, description: "EMV terminal integration" },
   { value: "freedompay", label: "FreedomPay (Coming Soon)", emv: true, description: "EMV terminal integration" },
   { value: "eigen", label: "Eigen (Coming Soon)", emv: true, description: "EMV terminal integration" },
@@ -254,6 +255,8 @@ export default function PaymentProcessorsPage() {
         return "Secrets needed: {PREFIX}_SITE_ID, {PREFIX}_CHAIN_CODE, {PREFIX}_LOCATION_ID. Example: If prefix is 'ELAVON_FB', you need ELAVON_FB_SITE_ID, ELAVON_FB_CHAIN_CODE, ELAVON_FB_LOCATION_ID in Replit Secrets.";
       case "heartland":
         return "For card-present: {PREFIX}_SITE_ID, {PREFIX}_LICENSE_ID, {PREFIX}_DEVICE_ID, {PREFIX}_USERNAME, {PREFIX}_PASSWORD, {PREFIX}_DEVELOPER_ID, {PREFIX}_VERSION_NUMBER. For card-not-present: {PREFIX}_SECRET_API_KEY, {PREFIX}_DEVELOPER_ID, {PREFIX}_VERSION_NUMBER.";
+      case "north_ingenico":
+        return "Secrets needed: {PREFIX}_FOUR_PART_KEY (format: CUST_NBR-MERCH_NBR-DBA_NBR-TERMINAL_NBR), {PREFIX}_MAC_TIC. Example: If prefix is 'NORTH', you need NORTH_FOUR_PART_KEY and NORTH_MAC_TIC in Replit Secrets.";
       default:
         return "Set the prefix used to look up API credentials from Replit Secrets.";
     }
@@ -318,7 +321,7 @@ export default function PaymentProcessorsPage() {
                               <SelectItem 
                                 key={type.value} 
                                 value={type.value}
-                                disabled={!["stripe", "elavon_converge", "elavon_fusebox", "heartland"].includes(type.value)}
+                                disabled={!["stripe", "elavon_converge", "elavon_fusebox", "heartland", "north_ingenico"].includes(type.value)}
                               >
                                 <div className="flex flex-col">
                                   <span>{type.label}</span>

@@ -97,6 +97,7 @@ export function getRequiredCredentialKeys(gatewayType: string): string[] {
     'heartland': ['SECRET_API_KEY', 'DEVELOPER_ID', 'VERSION_NUMBER'],
     'freedompay': ['STORE_ID', 'TERMINAL_ID', 'API_KEY'],
     'eigen': ['API_KEY', 'MERCHANT_ID'],
+    'north_ingenico': ['FOUR_PART_KEY', 'MAC_TIC'],
   };
   
   return keyMap[gatewayType] || [];

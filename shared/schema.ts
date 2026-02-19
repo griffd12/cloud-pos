@@ -655,6 +655,8 @@ export const TERMINAL_MODELS = [
   "verifone_t650c", "verifone_t650p", "verifone_p630",
   // Existing Ingenico models
   "ingenico_lane_3000", "ingenico_lane_5000",
+  // North Ingenico SI terminals (ADDITIVE)
+  "ingenico_lane_7000", "ingenico_move_5000", "ingenico_desk_2600", "ingenico_link_2500",
   // Heartland OPI Ingenico models (new)
   "ingenico_ipp350", "ingenico_isc_touch_250",
   // Existing Stripe/other models

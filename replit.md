@@ -73,3 +73,4 @@ Preferred communication style: Simple, everyday language.
 - Elavon Converge (EMV terminal integration)
 - Elavon Fusebox (EMV terminal with multi-processor support)
 - Heartland / Global Payments (EMV terminal + online via Portico gateway)
+- North / Ingenico SI (semi-integrated EMV terminals via Cloud WebSocket API)

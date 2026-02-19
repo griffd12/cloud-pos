@@ -23,3 +23,4 @@ import './adapters/stripe';
 import './adapters/elavon';
 import './adapters/square';
 import './adapters/heartland';
+import './adapters/north';

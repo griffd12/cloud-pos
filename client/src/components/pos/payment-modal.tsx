@@ -222,9 +222,12 @@ export function PaymentModal({
   const isHeartlandOPI = paymentProcessor?.gateway_type === "heartland_opi";
   const isHeartlandPortico = paymentProcessor?.gateway_type === "heartland_portico";
   
+  // North Ingenico SI terminal support (Cloud WebSocket API)
+  const isNorthIngenico = paymentProcessor?.gateway_type === "north_ingenico";
+  
   // Processor requires EMV terminal (no manual keyed entry for card-present)
-  // Heartland Pay App and OPI are semi-integrated and must use physical terminals
-  const isTerminalOnlyProcessor = isHeartlandPayApp || isHeartlandOPI;
+  // Heartland Pay App, OPI, and North Ingenico SI are semi-integrated and must use physical terminals
+  const isTerminalOnlyProcessor = isHeartlandPayApp || isHeartlandOPI || isNorthIngenico;
   
   // Filter to active terminals (show all active, not just online - display status indicator)
   const availableTerminals = terminalDevices.filter(
