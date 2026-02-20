@@ -1,0 +1,21 @@
+C:\OnPoint-PosV2>npx electron-builder --config electron/electron-builder.json
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=C:\OnPoint-PosV2\electron\electron-builder.json
+  • writing effective config  file=electron-dist\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=40.2.1 arch=x64 buildFromSource=false workspaceRoot=C:\OnPoint-PosV2 projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • preparing       moduleName=@serialport/bindings-cpp arch=x64
+  ⨯ (node:8140) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Error: Could not find any Python installation to use
+    at PythonFinder.fail (C:\Users\DG\AppData\Local\npm-cache\_npx\009083ec26dc578f\node_modules\node-gyp\lib\find-python.js:306:11)
+    at PythonFinder.findPython (C:\Users\DG\AppData\Local\npm-cache\_npx\009083ec26dc578f\node_modules\node-gyp\lib\find-python.js:164:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async configure (C:\Users\DG\AppData\Local\npm-cache\_npx\009083ec26dc578f\node_modules\node-gyp\lib\configure.js:27:18)
+    at async process.<anonymous> (file:///C:/Users/DG/AppData/Local/npm-cache/_npx/009083ec26dc578f/node_modules/@electron/rebuild/lib/module-type/node-gyp/worker.js:22:13)
+
+
+  ⨯ node-gyp failed to rebuild 'C:\OnPoint-PosV2\node_modules\@serialport\bindings-cpp'  failedTask=build stackTrace=Error: node-gyp failed to rebuild 'C:\OnPoint-PosV2\node_modules\@serialport\bindings-cpp'
+    at ChildProcess.<anonymous> (file:///C:/Users/DG/AppData/Local/npm-cache/_npx/009083ec26dc578f/node_modules/@electron/rebuild/lib/module-type/node-gyp/node-gyp.js:114:24)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
