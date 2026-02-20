@@ -5949,9 +5949,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return null;
     }
     const isNetworkPrinter = printer.connectionType === "network" && printer.ipAddress;
-    const isSerialPrinter = printer.connectionType === "serial" && printer.comPort;
+    const isSerialPrinter = (printer.connectionType === "serial" || printer.connectionType === "usb") && printer.comPort;
     if (!isNetworkPrinter && !isSerialPrinter) {
-      console.log("Printer has no valid connection (need network IP or serial COM port)");
+      console.log("Printer has no valid connection (need network IP or serial/USB COM port)");
       return null;
     }
 
