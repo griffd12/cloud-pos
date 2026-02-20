@@ -20411,6 +20411,9 @@ connect();
             printerId: drawerPrinterId,
             printerIp: (printer as any).ipAddress || (printer as any).ip_address,
             printerPort: (printer as any).port || 9100,
+            connectionType: (printer as any).connectionType || 'network',
+            comPort: (printer as any).comPort || null,
+            baudRate: (printer as any).baudRate || null,
             pin,
             pulseDuration,
           }));
