@@ -762,13 +762,13 @@ async function recalculateCheckTotals(checkId: string): Promise<void> {
 
 // Helper for dynamic order mode - adds item to a preview ticket for real-time KDS display
 // Items remain unsent (sent=false) until explicit Send or Pay action
-// All items for a check are consolidated onto a single preview ticket
+// Items are routed to the correct KDS device via print class routing (one preview ticket per KDS device)
 // Respects DOM send modes: fire_on_fly (immediate), fire_on_next (next item triggers), fire_on_tender (payment triggers)
 async function addItemToPreviewTicket(
   checkId: string,
   item: any,
   rvc: any,
-  options?: { triggerSendOfPrevious?: boolean }
+  options?: { triggerSendOfPrevious?: boolean; workstationId?: string }
 ): Promise<any> {
   const check = await storage.getCheck(checkId);
   if (!check) return item;
@@ -777,56 +777,101 @@ async function addItemToPreviewTicket(
 
   // Fire on Tender mode - don't add to KDS preview, items only appear on payment
   if (sendMode === "fire_on_tender") {
-    // Items stay in check only, will be sent when payment is made
     return item;
   }
 
-  // Get or create preview ticket for this check
-  let previewTicket = await storage.getPreviewTicket(checkId);
-  if (!previewTicket) {
-    previewTicket = await storage.createKdsTicket({
-      checkId,
-      rvcId: check.rvcId,
-      status: "active",
-      isPreview: true,
-      paid: false,
-    });
-  }
-
-  // Fire on Fly mode - add item immediately to KDS preview
+  // Fire on Fly mode - add item immediately to KDS preview, routed by KDS device
   if (sendMode === "fire_on_fly") {
-    await storage.createKdsTicketItem(previewTicket.id, item.id);
+    await addItemToRoutedPreviewTicket(checkId, item, rvc, options?.workstationId);
     broadcastKdsUpdate(check.rvcId || undefined);
     return item;
   }
 
   // Fire on Next mode - this item triggers sending the PREVIOUS item(s) that were queued
   if (sendMode === "fire_on_next") {
-    // Get all check items that are NOT yet in KDS preview
     const allItems = await storage.getCheckItems(checkId);
-    const ticketItems = await storage.getKdsTicketItems(previewTicket.id);
-    const ticketItemCheckIds = new Set(ticketItems.map(ti => ti.checkItemId));
-    
-    // Find items that are in check but not yet in KDS (excluding voided and the current new item)
-    const pendingItems = allItems.filter(ci => 
-      !ticketItemCheckIds.has(ci.id) && 
-      !ci.voided && 
-      ci.id !== item.id // Don't send the current item - it waits for the NEXT item
-    );
-    
-    // Add all pending items (previous items) to KDS preview
-    for (const pendingItem of pendingItems) {
-      await storage.createKdsTicketItem(previewTicket.id, pendingItem.id);
+    const previewTickets = await storage.getPreviewTickets(checkId);
+    const allTicketItems = new Set<string>();
+    for (const pt of previewTickets) {
+      const ticketItems = await storage.getKdsTicketItems(pt.id);
+      ticketItems.forEach(ti => allTicketItems.add(ti.checkItemId));
     }
     
-    // The current item is NOT added yet - it will be added when the NEXT item is rung
-    // We store it in check but don't add to KDS preview
+    // Find items not yet in KDS (excluding voided and the current new item)
+    const pendingItems = allItems.filter(ci => 
+      !allTicketItems.has(ci.id) && 
+      !ci.voided && 
+      ci.id !== item.id
+    );
+    
+    // Add all pending items (previous items) to routed preview tickets
+    for (const pendingItem of pendingItems) {
+      await addItemToRoutedPreviewTicket(checkId, pendingItem, rvc, options?.workstationId);
+    }
     
     broadcastKdsUpdate(check.rvcId || undefined);
     return item;
   }
 
   return item;
+}
+
+// Routes a single item to the correct KDS device preview ticket
+// Creates separate preview tickets per KDS device for proper routing
+async function addItemToRoutedPreviewTicket(
+  checkId: string,
+  item: any,
+  rvc: any,
+  workstationId?: string
+): Promise<void> {
+  const check = await storage.getCheck(checkId);
+  if (!check) return;
+
+  // Resolve KDS routing targets for this item
+  let targets: { kdsDeviceId: string; stationType: string; orderDeviceId: string }[] = [];
+  if (item.menuItemId) {
+    targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined, workstationId);
+  }
+
+  if (targets.length > 0) {
+    // Route item to each target KDS device's preview ticket
+    for (const target of targets) {
+      const previewTicket = await getOrCreateRoutedPreviewTicket(checkId, check.rvcId, target.kdsDeviceId, target.stationType, target.orderDeviceId);
+      await storage.createKdsTicketItem(previewTicket.id, item.id);
+    }
+  } else {
+    // Unrouted item - put in a fallback preview ticket (no kdsDeviceId)
+    const previewTicket = await getOrCreateRoutedPreviewTicket(checkId, check.rvcId, null, null, null);
+    await storage.createKdsTicketItem(previewTicket.id, item.id);
+  }
+}
+
+// Gets or creates a preview ticket for a specific KDS device (or fallback with null)
+async function getOrCreateRoutedPreviewTicket(
+  checkId: string,
+  rvcId: string,
+  kdsDeviceId: string | null,
+  stationType: string | null,
+  orderDeviceId: string | null
+): Promise<any> {
+  // Find existing preview ticket for this check + KDS device combo
+  const previewTickets = await storage.getPreviewTickets(checkId);
+  const existing = previewTickets.find(t => 
+    (t.kdsDeviceId || null) === kdsDeviceId
+  );
+  if (existing) return existing;
+
+  // Create new routed preview ticket
+  return storage.createKdsTicket({
+    checkId,
+    rvcId,
+    kdsDeviceId: kdsDeviceId,
+    orderDeviceId: orderDeviceId,
+    stationType: stationType,
+    status: "active",
+    isPreview: true,
+    paid: false,
+  });
 }
 
 // Helper to send any pending Fire on Next items when check is finalized
@@ -837,21 +882,24 @@ async function sendPendingFireOnNextItems(checkId: string): Promise<void> {
   const rvc = await storage.getRvc(check.rvcId);
   if (!rvc || rvc.domSendMode !== "fire_on_next") return;
 
-  const previewTicket = await storage.getPreviewTicket(checkId);
-  if (!previewTicket) return;
+  const previewTickets = await storage.getPreviewTickets(checkId);
+  if (previewTickets.length === 0) return;
 
   const allItems = await storage.getCheckItems(checkId);
-  const ticketItems = await storage.getKdsTicketItems(previewTicket.id);
-  const ticketItemCheckIds = new Set(ticketItems.map(ti => ti.checkItemId));
+  const allTicketItems = new Set<string>();
+  for (const pt of previewTickets) {
+    const ticketItems = await storage.getKdsTicketItems(pt.id);
+    ticketItems.forEach(ti => allTicketItems.add(ti.checkItemId));
+  }
 
   // Find items that haven't been added to KDS yet
   const pendingItems = allItems.filter(ci => 
-    !ticketItemCheckIds.has(ci.id) && !ci.voided
+    !allTicketItems.has(ci.id) && !ci.voided
   );
 
-  // Add remaining items to KDS preview
+  // Add remaining items to routed preview tickets
   for (const pendingItem of pendingItems) {
-    await storage.createKdsTicketItem(previewTicket.id, pendingItem.id);
+    await addItemToRoutedPreviewTicket(checkId, pendingItem, rvc);
   }
 
   if (pendingItems.length > 0) {
@@ -881,9 +929,9 @@ async function recallBumpedTicketsOnModification(checkId: string): Promise<boole
   return recalled;
 }
 
-// Helper to convert preview ticket to final when Send is pressed
+// Helper to convert preview tickets to final when Send is pressed
 // This creates a proper round, marks items as sent, and removes preview flag
-// Also handles DOM send modes properly
+// Handles multiple routed preview tickets (one per KDS device)
 async function finalizePreviewTicket(
   checkId: string,
   employeeId: string
@@ -899,38 +947,28 @@ async function finalizePreviewTicket(
     await sendPendingFireOnNextItems(checkId);
   }
 
-  // For fire_on_tender mode, all items need to be sent now
-  // Create preview ticket with all items if it doesn't exist
-  let previewTicket = await storage.getPreviewTicket(checkId);
-  
+  // For fire_on_tender mode, all items need to be sent now via routing
   if (rvc.dynamicOrderMode && rvc.domSendMode === "fire_on_tender") {
-    // Create or update preview ticket with all unsent items
-    if (!previewTicket) {
-      previewTicket = await storage.createKdsTicket({
-        checkId,
-        rvcId: check.rvcId,
-        status: "active",
-        isPreview: true,
-        paid: false,
-      });
-    }
-    
     const items = await storage.getCheckItems(checkId);
     const unsentItems = items.filter(i => !i.sent && !i.voided);
     for (const item of unsentItems) {
-      await storage.createKdsTicketItem(previewTicket.id, item.id);
+      await addItemToRoutedPreviewTicket(checkId, item, rvc);
     }
   }
 
-  if (!previewTicket) return null;
+  // Get ALL preview tickets for this check (may be multiple, one per KDS device)
+  const previewTickets = await storage.getPreviewTickets(checkId);
+  if (previewTickets.length === 0) return null;
 
-  // Get items linked to preview ticket
+  // Get items linked to preview tickets
   const items = await storage.getCheckItems(checkId);
   const unsentItems = items.filter(i => !i.sent && !i.voided);
   
   if (unsentItems.length === 0) {
     // No items to send, just remove preview status
-    await storage.updateKdsTicket(previewTicket.id, { isPreview: false });
+    for (const pt of previewTickets) {
+      await storage.updateKdsTicket(pt.id, { isPreview: false });
+    }
     return null;
   }
 
@@ -954,11 +992,13 @@ async function finalizePreviewTicket(
     if (updated) updatedItems.push(updated);
   }
 
-  // Update preview ticket to be a regular ticket with round linkage
-  await storage.updateKdsTicket(previewTicket.id, {
-    isPreview: false,
-    roundId: round.id,
-  });
+  // Update all preview tickets to be regular tickets with round linkage
+  for (const pt of previewTickets) {
+    await storage.updateKdsTicket(pt.id, {
+      isPreview: false,
+      roundId: round.id,
+    });
+  }
 
   // Create audit log
   await storage.createAuditLog({
@@ -4835,8 +4875,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (check && menuItemId) {
           const bgTasks: Promise<any>[] = [];
           if (rvc && rvc.dynamicOrderMode) {
+            const wsId = req.headers['x-workstation-id'] as string | undefined;
             bgTasks.push(
-              addItemToPreviewTicket(checkId, item, rvc).catch(e =>
+              addItemToPreviewTicket(checkId, item, rvc, { workstationId: wsId }).catch(e =>
                 console.error("Dynamic order preview error:", e)
               )
             );

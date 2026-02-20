@@ -528,6 +528,7 @@ export interface IStorage {
   markKdsItemReady(ticketItemId: string): Promise<void>;
   unmarkKdsItemReady(ticketItemId: string): Promise<void>;
   getPreviewTicket(checkId: string): Promise<KdsTicket | undefined>;
+  getPreviewTickets(checkId: string): Promise<KdsTicket[]>;
   getKdsTicketsByCheck(checkId: string): Promise<KdsTicket[]>;
   markKdsTicketsPaid(checkId: string): Promise<void>;
 
@@ -2969,6 +2970,11 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select().from(kdsTickets)
       .where(and(eq(kdsTickets.checkId, checkId), eq(kdsTickets.isPreview, true)));
     return result;
+  }
+
+  async getPreviewTickets(checkId: string): Promise<KdsTicket[]> {
+    return db.select().from(kdsTickets)
+      .where(and(eq(kdsTickets.checkId, checkId), eq(kdsTickets.isPreview, true)));
   }
 
   async getKdsTicketsByCheck(checkId: string): Promise<KdsTicket[]> {
