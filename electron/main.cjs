@@ -131,10 +131,12 @@ function getServerUrl() {
 
 function parseArgs() {
   const args = process.argv.slice(1);
+  let cliMode = null;
+  let cliKiosk = false;
   args.forEach(arg => {
-    if (arg === '--pos') appMode = 'pos';
-    if (arg === '--kds') appMode = 'kds';
-    if (arg === '--kiosk') isKiosk = true;
+    if (arg === '--pos' || arg === '--mode=pos') cliMode = 'pos';
+    if (arg === '--kds' || arg === '--mode=kds') cliMode = 'kds';
+    if (arg === '--kiosk') cliKiosk = true;
     if (arg.startsWith('--server=')) {
       const url = arg.split('=')[1];
       if (url) {
@@ -145,9 +147,19 @@ function parseArgs() {
     }
   });
 
-  const config = loadConfig();
-  if (config.mode) appMode = config.mode;
-  if (config.kiosk) isKiosk = config.kiosk;
+  // Command-line args take priority over saved config
+  if (cliMode) {
+    appMode = cliMode;
+  } else {
+    const config = loadConfig();
+    if (config.mode) appMode = config.mode;
+  }
+  if (cliKiosk) {
+    isKiosk = true;
+  } else {
+    const config = loadConfig();
+    if (config.kiosk) isKiosk = config.kiosk;
+  }
 }
 
 function initOfflineDatabase() {
@@ -1977,6 +1989,20 @@ async function initAllServices() {
 
   servicesInitialized = true;
   appLogger.info('App', 'All services initialized successfully');
+}
+
+// Ensure only one instance of the app runs at a time
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine) => {
+    // When a second instance is launched, focus the existing window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
 }
 
 app.whenReady().then(async () => {

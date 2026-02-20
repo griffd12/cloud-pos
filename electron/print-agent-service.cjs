@@ -73,6 +73,9 @@ class PrintAgentService {
               port: p.port || 9100,
               printerId: p.printerId,
               type: p.type || 'network',
+              connectionType: p.connectionType || p.type || 'network',
+              comPort: p.comPort || null,
+              baudRate: p.baudRate || 9600,
             });
           });
         }
@@ -289,12 +292,30 @@ class PrintAgentService {
     const printerPort = msg.printerPort || 9100;
     const printData = msg.data;
     const printerId = msg.printerId;
+    const connectionType = msg.connectionType || 'network';
+    const comPort = msg.comPort;
+    const baudRate = msg.baudRate || 9600;
 
-    printLogger.info('Job', `Received job ${jobId}`, { printer: printerIp || printerId || 'default' });
+    printLogger.info('Job', `Received job ${jobId}`, { printer: printerIp || comPort || printerId || 'default', connectionType });
 
     try {
       this.ws.send(JSON.stringify({ type: 'ACK', jobId }));
     } catch (e) {}
+
+    if (connectionType === 'serial' && comPort) {
+      try {
+        const buffer = Buffer.from(printData, 'base64');
+        await this.sendToSerialPrinter(comPort, baudRate, buffer);
+        this.sendJobResult(jobId, true);
+        this.emit('jobCompleted', { jobId, printer: comPort });
+        printLogger.info('Job', `Job ${jobId} printed successfully via serial`, { port: comPort, baudRate });
+      } catch (err) {
+        this.sendJobResult(jobId, false, err.message);
+        this.emit('jobFailed', { jobId, printer: comPort, error: err.message });
+        printLogger.error('Job', `Job ${jobId} serial print failed: ${err.message}`);
+      }
+      return;
+    }
 
     let targetIp = printerIp;
     let targetPort = printerPort;
@@ -302,6 +323,20 @@ class PrintAgentService {
     if (!targetIp && printerId) {
       const printer = this.printerMap.get(printerId);
       if (printer) {
+        if (printer.connectionType === 'serial' && printer.comPort) {
+          try {
+            const buffer = Buffer.from(printData, 'base64');
+            await this.sendToSerialPrinter(printer.comPort, printer.baudRate || 9600, buffer);
+            this.sendJobResult(jobId, true);
+            this.emit('jobCompleted', { jobId, printer: printer.comPort });
+            printLogger.info('Job', `Job ${jobId} printed via serial (mapped)`, { port: printer.comPort });
+          } catch (err) {
+            this.sendJobResult(jobId, false, err.message);
+            this.emit('jobFailed', { jobId, printer: printer.comPort, error: err.message });
+            printLogger.error('Job', `Job ${jobId} serial print failed: ${err.message}`);
+          }
+          return;
+        }
         targetIp = printer.ipAddress;
         targetPort = printer.port || 9100;
       }
@@ -366,8 +401,25 @@ class PrintAgentService {
     const printerId = msg.printerId;
     const pin = msg.pin || 'pin2';
     const pulseDuration = msg.pulseDuration || 200;
+    const connectionType = msg.connectionType || 'network';
+    const comPort = msg.comPort;
+    const baudRate = msg.baudRate || 9600;
 
-    printLogger.info('DrawerKick', `Received drawer kick ${kickId}`, { printer: printerIp || printerId || 'default', pin });
+    printLogger.info('DrawerKick', `Received drawer kick ${kickId}`, { printer: printerIp || comPort || printerId || 'default', pin, connectionType });
+
+    const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
+
+    if (connectionType === 'serial' && comPort) {
+      try {
+        await this.sendToSerialPrinter(comPort, baudRate, kickCommand);
+        this.sendKickResult(kickId, true);
+        printLogger.info('DrawerKick', `Drawer kick ${kickId} sent via serial`, { port: comPort, pin });
+      } catch (err) {
+        this.sendKickResult(kickId, false, err.message);
+        printLogger.error('DrawerKick', `Drawer kick ${kickId} serial failed: ${err.message}`);
+      }
+      return;
+    }
 
     let targetIp = printerIp;
     let targetPort = printerPort;
@@ -375,6 +427,17 @@ class PrintAgentService {
     if (!targetIp && printerId) {
       const printer = this.printerMap.get(printerId);
       if (printer) {
+        if (printer.connectionType === 'serial' && printer.comPort) {
+          try {
+            await this.sendToSerialPrinter(printer.comPort, printer.baudRate || 9600, kickCommand);
+            this.sendKickResult(kickId, true);
+            printLogger.info('DrawerKick', `Drawer kick ${kickId} sent via serial (mapped)`, { port: printer.comPort, pin });
+          } catch (err) {
+            this.sendKickResult(kickId, false, err.message);
+            printLogger.error('DrawerKick', `Drawer kick ${kickId} serial failed: ${err.message}`);
+          }
+          return;
+        }
         targetIp = printer.ipAddress;
         targetPort = printer.port || 9100;
       }
@@ -395,7 +458,6 @@ class PrintAgentService {
     }
 
     try {
-      const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
       await this.sendToPrinter(targetIp, targetPort, kickCommand);
       this.sendKickResult(kickId, true);
       printLogger.info('DrawerKick', `Drawer kick ${kickId} sent successfully`, { printer: `${targetIp}:${targetPort}`, pin });
@@ -490,6 +552,66 @@ class PrintAgentService {
         cleanup();
         reject(err);
       });
+    });
+  }
+
+  sendToSerialPrinter(comPort, baudRate, data) {
+    return new Promise((resolve, reject) => {
+      try {
+        const { SerialPort } = require('serialport');
+        const port = new SerialPort({
+          path: comPort,
+          baudRate: baudRate || 9600,
+          dataBits: 8,
+          stopBits: 1,
+          parity: 'none',
+          autoOpen: false,
+        });
+
+        const timeout = setTimeout(() => {
+          port.close(() => {});
+          reject(new Error(`Serial printer timeout on ${comPort}`));
+        }, 10000);
+
+        port.open((err) => {
+          if (err) {
+            clearTimeout(timeout);
+            reject(new Error(`Failed to open ${comPort}: ${err.message}`));
+            return;
+          }
+
+          port.write(data, (writeErr) => {
+            if (writeErr) {
+              clearTimeout(timeout);
+              port.close(() => {});
+              reject(writeErr);
+              return;
+            }
+
+            port.drain((drainErr) => {
+              clearTimeout(timeout);
+              port.close(() => {});
+              if (drainErr) {
+                reject(drainErr);
+              } else {
+                resolve({ success: true });
+              }
+            });
+          });
+        });
+
+        port.on('error', (err) => {
+          clearTimeout(timeout);
+          port.close(() => {});
+          reject(err);
+        });
+      } catch (err) {
+        if (err.code === 'MODULE_NOT_FOUND') {
+          reject(new Error(`Serial port support not available - 'serialport' module not installed. Install with: npm install serialport`));
+        } else {
+          reject(err);
+        }
+      }
     });
   }
 

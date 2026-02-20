@@ -68,7 +68,7 @@
   "nsis": {
     "oneClick": true,
     "allowToChangeInstallationDirectory": false,
-    "createDesktopShortcut": true,
+    "createDesktopShortcut": false,
     "createStartMenuShortcut": true,
     "shortcutName": "Cloud POS",
     "include": "electron/installer.nsh",

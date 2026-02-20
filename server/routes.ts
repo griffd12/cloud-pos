@@ -144,15 +144,18 @@ async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
   }
   
   try {
-    const message = {
+    const message: any = {
       type: "JOB",
       jobId: job.id,
       printerIp: job.printerIp,
       printerPort: job.printerPort || 9100,
-      data: job.escPosData, // Base64 encoded ESC/POS data
+      data: job.escPosData,
       jobType: job.jobType,
     };
-    console.log(`Sending job ${job.id} to agent ${agentId}: printer=${job.printerIp}:${job.printerPort || 9100}, dataLen=${job.escPosData?.length || 0}`);
+    if (job.connectionType) message.connectionType = job.connectionType;
+    if (job.comPort) message.comPort = job.comPort;
+    if (job.baudRate) message.baudRate = job.baudRate;
+    console.log(`Sending job ${job.id} to agent ${agentId}: printer=${job.connectionType === 'serial' ? job.comPort : job.printerIp + ':' + (job.printerPort || 9100)}, dataLen=${job.escPosData?.length || 0}`);
     agentWs.send(JSON.stringify(message));
     return true;
   } catch (e) {
@@ -5983,6 +5986,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       printerIp: printer.ipAddress,
       printerPort: printer.port || 9100,
       printerName: printer.name,
+      connectionType: printer.connectionType || 'network',
+      comPort: printer.comPort || null,
+      baudRate: printer.baudRate || null,
       attempts: 0,
       maxAttempts: 3,
     });
@@ -7095,17 +7101,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Bump all tickets for a station/RVC/property
+  // Bump all tickets for a station/RVC/property/device
   app.post("/api/kds-tickets/bump-all", async (req, res) => {
     try {
       // Accept either rvcId (POS mode) or propertyId (dedicated KDS mode)
-      const { employeeId, deviceId, rvcId, propertyId, stationType } = req.body;
+      const { employeeId, deviceId, rvcId, propertyId, stationType, kdsDeviceId } = req.body;
 
-      // Build filter based on what's provided
-      const filters: { rvcId?: string; propertyId?: string; stationType?: string } = {};
+      // Build filter based on what's provided - kdsDeviceId scopes to a specific device
+      const filters: { rvcId?: string; propertyId?: string; stationType?: string; kdsDeviceId?: string } = {};
+      if (kdsDeviceId) filters.kdsDeviceId = kdsDeviceId;
       if (rvcId) filters.rvcId = rvcId;
-      if (propertyId) filters.propertyId = propertyId;
-      if (stationType) filters.stationType = stationType;
+      if (propertyId && !kdsDeviceId) filters.propertyId = propertyId;
+      if (stationType && !kdsDeviceId) filters.stationType = stationType;
 
       const tickets = await storage.getKdsTickets(filters);
       const activeTickets = tickets.filter((t: any) => t.status === "active");
@@ -18298,9 +18305,12 @@ connect();
         return res.status(404).json({ message: "Print agent not found" });
       }
 
-      const { printerIp, printerPort = 9100 } = req.body;
-      if (!printerIp) {
-        return res.status(400).json({ message: "Printer IP address is required" });
+      const { printerIp, printerPort = 9100, connectionType, comPort, baudRate } = req.body;
+      if (!printerIp && connectionType !== 'serial') {
+        return res.status(400).json({ message: "Printer IP address is required for network printers" });
+      }
+      if (connectionType === 'serial' && !comPort) {
+        return res.status(400).json({ message: "COM port is required for serial printers" });
       }
 
       // Check if agent is connected
@@ -18326,7 +18336,7 @@ connect();
         ESC, 0x61, 0x00,     // Left align
         ...Buffer.from("Agent: " + agent.name + "\n"),
         ...Buffer.from("Property: " + (agent.propertyId || "Global") + "\n"),
-        ...Buffer.from("Target: " + printerIp + ":" + printerPort + "\n"),
+        ...Buffer.from("Target: " + (connectionType === 'serial' ? comPort + " @ " + (baudRate || 9600) + " baud" : printerIp + ":" + printerPort) + "\n"),
         ...Buffer.from("Time: " + new Date().toLocaleString() + "\n"),
         ...Buffer.from("=".repeat(32) + "\n"),
         ESC, 0x61, 0x01,     // Center align
@@ -18348,14 +18358,16 @@ connect();
         plainTextData: "TEST PRINT - Agent: " + agent.name,
       });
 
-      // Send job to agent via WebSocket
       const sendJobToAgent = (app as any).sendPrintJobToAgent;
       const sent = await sendJobToAgent(agent.id, {
         id: job.id,
         printerIp,
         printerPort,
-        data: testCommands.toString("base64"),
+        escPosData: testCommands.toString("base64"),
         jobType: "test_print",
+        connectionType: connectionType || 'network',
+        comPort: comPort || null,
+        baudRate: baudRate || null,
       });
 
       if (sent) {
@@ -18364,7 +18376,7 @@ connect();
           message: "Test print sent to agent",
           jobId: job.id,
           agentName: agent.name,
-          targetPrinter: `${printerIp}:${printerPort}`
+          targetPrinter: connectionType === 'serial' ? `${comPort} (serial)` : `${printerIp}:${printerPort}`
         });
       } else {
         await storage.updatePrintJob(job.id, { status: "failed" });

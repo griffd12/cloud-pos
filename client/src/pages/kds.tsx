@@ -221,9 +221,11 @@ export default function KdsPage() {
     colorAlert3Color: settingsSource.colorAlert3Color,
   } : undefined;
 
-  // Build query params - for dedicated KDS, use propertyId; for POS mode, use rvcId
+  // Build query params - for dedicated KDS, filter by device ID; for POS mode, use rvcId
   const queryParams = new URLSearchParams();
-  if (isDedicatedKds && propertyId) {
+  if (isDedicatedKds && linkedDeviceId) {
+    queryParams.set("kdsDeviceId", linkedDeviceId);
+  } else if (isDedicatedKds && propertyId) {
     queryParams.set("propertyId", propertyId);
   } else if (currentRvc?.id) {
     queryParams.set("rvcId", currentRvc.id);
@@ -354,13 +356,14 @@ export default function KdsPage() {
 
   const bumpAllMutation = useMutation({
     mutationFn: async () => {
-      // Use propertyId/deviceId for dedicated KDS devices, rvcId/employeeId for POS mode
+      // Use kdsDeviceId for dedicated KDS devices to scope clear to this device only
       const payload: Record<string, any> = {
         stationType: selectedStation !== "all" ? selectedStation : undefined,
       };
       if (isDedicatedKds) {
         payload.propertyId = propertyId;
         payload.deviceId = linkedDeviceId;
+        if (linkedDeviceId) payload.kdsDeviceId = linkedDeviceId;
       } else {
         payload.employeeId = currentEmployee?.id;
         payload.rvcId = currentRvc?.id;

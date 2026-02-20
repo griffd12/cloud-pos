@@ -285,6 +285,8 @@ export const printers = pgTable("printers", {
   ipAddress: text("ip_address"),
   subnetMask: text("subnet_mask").default("255.255.255.0"),
   port: integer("port").default(9100),
+  comPort: text("com_port"), // e.g., COM1, COM2, COM3 (for serial connection_type)
+  baudRate: integer("baud_rate").default(9600), // 9600, 19200, 38400, 57600, 115200
   driverProtocol: text("driver_protocol").default("epson"), // epson, star
   model: text("model"), // e.g., TM-T88V, TM-T20III, TSP143IV, mC-Print3
   characterWidth: integer("character_width").default(42), // 42, 48, 56

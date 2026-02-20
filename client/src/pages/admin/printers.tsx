@@ -171,6 +171,8 @@ export default function PrintersPage() {
       ipAddress: "",
       subnetMask: "255.255.255.0",
       port: 9100,
+      comPort: "",
+      baudRate: 9600,
       driverProtocol: "epson",
       model: "TM-T88VII",
       characterWidth: 42,
@@ -187,6 +189,7 @@ export default function PrintersPage() {
   });
 
   const selectedBrand = form.watch("driverProtocol");
+  const watchedConnectionType = form.watch("connectionType");
   const modelOptions = selectedBrand === "star" ? STAR_MODELS : EPSON_MODELS;
 
   useEffect(() => {
@@ -200,6 +203,8 @@ export default function PrintersPage() {
           ipAddress: editingItem.ipAddress || "",
           subnetMask: editingItem.subnetMask || "255.255.255.0",
           port: editingItem.port ?? 9100,
+          comPort: editingItem.comPort || "",
+          baudRate: editingItem.baudRate ?? 9600,
           driverProtocol: editingItem.driverProtocol || "epson",
           model: editingItem.model || "TM-T88VII",
           characterWidth: editingItem.characterWidth ?? 42,
@@ -223,6 +228,8 @@ export default function PrintersPage() {
           ipAddress: "",
           subnetMask: "255.255.255.0",
           port: 9100,
+          comPort: "",
+          baudRate: 9600,
           driverProtocol: "epson",
           model: "TM-T88VII",
           characterWidth: 42,
@@ -431,6 +438,62 @@ export default function PrintersPage() {
                   />
                 </div>
 
+                {watchedConnectionType === "serial" ? (
+                <div className="grid grid-cols-4 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="comPort"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>COM Port</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-comPort">
+                              <SelectValue placeholder="Select COM port" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="COM1">COM1</SelectItem>
+                            <SelectItem value="COM2">COM2</SelectItem>
+                            <SelectItem value="COM3">COM3</SelectItem>
+                            <SelectItem value="COM4">COM4</SelectItem>
+                            <SelectItem value="COM5">COM5</SelectItem>
+                            <SelectItem value="COM6">COM6</SelectItem>
+                            <SelectItem value="COM7">COM7</SelectItem>
+                            <SelectItem value="COM8">COM8</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="baudRate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Baud Rate</FormLabel>
+                        <Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value || 9600)}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-baudRate">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="9600">9600</SelectItem>
+                            <SelectItem value="19200">19200</SelectItem>
+                            <SelectItem value="38400">38400</SelectItem>
+                            <SelectItem value="57600">57600</SelectItem>
+                            <SelectItem value="115200">115200</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                ) : (
                 <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
@@ -479,7 +542,10 @@ export default function PrintersPage() {
                       </FormItem>
                     )}
                   />
+                </div>
+                )}
 
+                <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
                     name="driverProtocol"
