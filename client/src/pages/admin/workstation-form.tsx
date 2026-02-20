@@ -69,21 +69,35 @@ interface OrderDeviceRoutingProps {
 const OrderDeviceRouting = forwardRef<OrderDeviceRoutingHandle, OrderDeviceRoutingProps>(
   function OrderDeviceRouting({ editingItem, orderDevices, properties }, ref) {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const loadedForId = useRef<string | null>(null);
 
     useImperativeHandle(ref, () => ({
       getSelectedIds: () => selectedIds,
     }), [selectedIds]);
 
     useEffect(() => {
-      if (editingItem) {
+      const wsId = editingItem?.id ?? null;
+      if (!wsId) {
+        loadedForId.current = null;
+        return;
+      }
+      if (wsId !== loadedForId.current) {
+        loadedForId.current = wsId;
         let cancelled = false;
-        fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
+        fetch(`/api/workstations/${wsId}/order-devices`, { headers: getAuthHeaders() })
           .then(res => res.ok ? res.json() : [])
           .then((data) => {
-            const ids = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
-            if (!cancelled) setSelectedIds(ids);
+            const ids: string[] = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
+            if (!cancelled) {
+              setSelectedIds(prev => {
+                const sorted = [...ids].sort();
+                const prevSorted = [...prev].sort();
+                if (sorted.length === prevSorted.length && sorted.every((v, i) => v === prevSorted[i])) return prev;
+                return ids;
+              });
+            }
           })
-          .catch(() => { if (!cancelled) setSelectedIds([]); });
+          .catch(() => { if (!cancelled) setSelectedIds(prev => prev.length === 0 ? prev : []); });
         return () => { cancelled = true; };
       }
     }, [editingItem?.id]);
@@ -124,7 +138,9 @@ const OrderDeviceRouting = forwardRef<OrderDeviceRoutingHandle, OrderDeviceRouti
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={(checked) => {
-                      toggleDevice(device.id, checked === true);
+                      if (typeof checked === 'boolean') {
+                        toggleDevice(device.id, checked);
+                      }
                     }}
                     onClick={(e) => e.stopPropagation()}
                     data-testid={`checkbox-ws-orderdevice-${device.id}`}
