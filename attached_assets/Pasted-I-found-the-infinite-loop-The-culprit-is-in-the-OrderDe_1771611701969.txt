@@ -1,0 +1,59 @@
+I found the infinite loop! The culprit is in the OrderDeviceRouting component, specifically within the div that wraps each device row.
+The Bug
+In your OrderDeviceRouting component, you have an onClick on a div that triggers a state update, and inside that div, you have a Checkbox that also triggers the same state update.
+javascript
+// ❌ THIS CAUSES THE LOOP
+<div
+  key={device.id}
+  className="..."
+  onClick={() => toggleDevice(device.id, !isSelected)} // <--- Update 1
+>
+  <Checkbox
+    checked={isSelected}
+    onCheckedChange={(checked) => { // <--- Update 2 (Bubbles up to Update 1)
+      if (typeof checked === 'boolean') {
+        toggleDevice(device.id, checked);
+      }
+    }}
+    onClick={(e) => e.stopPropagation()} // This tries to stop it, but often fails with Checkboxes
+  />
+  ...
+</div>
+Use code with caution.
+
+When you click the checkbox, onCheckedChange fires. Because of how some UI libraries (like Radix/Shadcn) handle events, the click event can still bubble or trigger a re-render cycle that hits the parent div's onClick, creating a rapid-fire sequence of state updates that React interprets as an infinite loop.
+The Fix
+The safest way to handle this in React is to only put the click handler on the container and let the checkbox be "controlled" without its own independent click logic, or move the logic entirely to the checkbox.
+Recommended Fix:
+Change the Checkbox onCheckedChange to do nothing (since the div handles it) or remove the onClick from the div and rely only on the Checkbox/Label.
+Revised OrderDeviceRouting snippet:
+javascript
+<div
+  key={device.id}
+  className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
+  // Keep the click on the row for better UX, but simplify:
+  onClick={() => toggleDevice(device.id, !isSelected)}
+>
+  <Checkbox
+    checked={isSelected}
+    // Remove onCheckedChange here if the div handles the toggle, 
+    // or just let it pass through.
+    readOnly 
+  />
+  <div className="flex-1">
+    ...
+  </div>
+</div>
+Use code with caution.
+
+One more check: useEffect Dependency
+In OrderDeviceRouting, your useEffect depends on editingItem?.id.
+javascript
+useEffect(() => {
+  // ... fetch logic ...
+}, [editingItem?.id]);
+Use code with caution.
+
+If the parent WorkstationsPage is re-rendering and creating a new object for editingItem (even if the ID is the same), this could trigger. However, since you are checking wsId !== loadedForId.current, this part is actually mostly safe, but it's good practice to ensure the parent isn't redefining editingItem on every render.
+Try removing the onClick from the div first to see if the crash stops.
+Does the error disappear if you only use the Checkbox to toggle the state?
