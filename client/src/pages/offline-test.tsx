@@ -22,6 +22,7 @@ import { getIsOfflineMode, onOfflineModeChange, fetchWithTimeout } from "@/lib/q
 import { offlineStorage } from "@/lib/offline-storage";
 import type { CachedConfig } from "@/lib/offline-storage";
 import { useLocation } from "wouter";
+import { useDeviceContext } from "@/lib/device-context";
 
 interface FetchLogEntry {
   id: number;
@@ -51,6 +52,8 @@ const TEST_ENDPOINTS = [
 
 export default function OfflineTestPage() {
   const [, setLocation] = useLocation();
+  const { deviceType } = useDeviceContext();
+  const backPath = deviceType === "kds" ? "/kds" : "/";
   const [isOffline, setIsOffline] = useState(getIsOfflineMode());
   const [simulatedOffline, setSimulatedOffline] = useState(false);
   const [fetchLog, setFetchLog] = useState<FetchLogEntry[]>([]);
@@ -274,7 +277,7 @@ export default function OfflineTestPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation(backPath)}
           data-testid="button-back"
         >
           <ArrowLeft />

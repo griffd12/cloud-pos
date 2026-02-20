@@ -12,7 +12,13 @@ import { useDeviceHeartbeat } from "@/hooks/use-device-heartbeat";
 import { useDeviceReload } from "@/hooks/use-device-reload";
 import { useConfigSync } from "@/hooks/use-config-sync";
 import { DeviceEnrollmentGuard } from "@/components/device-enrollment-guard";
-import { ArrowLeft, Wifi, WifiOff, Maximize, Minimize, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, Wifi, WifiOff, Maximize, Minimize, UtensilsCrossed, Settings, Activity } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Property, Enterprise } from "@shared/schema";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { useDocumentFontScale } from "@/hooks/use-font-scale";
@@ -486,6 +492,19 @@ export default function KdsPage() {
               {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" title="Settings" data-testid="button-kds-settings">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => navigate("/offline-test")} data-testid="menu-kds-system-diagnostics">
+                <Activity className="w-4 h-4 mr-2" />
+                System Diagnostics
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ThemeToggle />
         </div>
       </header>
