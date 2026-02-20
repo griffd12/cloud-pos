@@ -157,7 +157,10 @@ export function WorkstationForm({
       let cancelled = false;
       fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
         .then(res => res.ok ? res.json() : [])
-        .then(ids => { if (!cancelled) setSelectedOrderDeviceIds(ids); })
+        .then((data) => {
+          const ids = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
+          if (!cancelled) setSelectedOrderDeviceIds(ids);
+        })
         .catch(() => { if (!cancelled) setSelectedOrderDeviceIds([]); });
       return () => { cancelled = true; };
     }
@@ -865,23 +868,29 @@ export function WorkstationForm({
                   <div className="space-y-2">
                     {orderDevices.map((device) => {
                       const isSelected = selectedOrderDeviceIds.includes(device.id);
+
+                      const setSelected = (nextChecked: boolean) => {
+                        setSelectedOrderDeviceIds((prev) => {
+                          const has = prev.includes(device.id);
+                          if (nextChecked && !has) return [...prev, device.id];
+                          if (!nextChecked && has) return prev.filter((id) => id !== device.id);
+                          return prev;
+                        });
+                      };
+
                       return (
                         <div
                           key={device.id}
                           className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
-                          onClick={() => {
-                            setSelectedOrderDeviceIds(prev =>
-                              prev.includes(device.id)
-                                ? prev.filter(id => id !== device.id)
-                                : [...prev, device.id]
-                            );
-                          }}
+                          onClick={() => setSelected(!isSelected)}
                           data-testid={`row-ws-orderdevice-${device.id}`}
                         >
                           <Checkbox
                             checked={isSelected}
-                            className="pointer-events-none"
-                            tabIndex={-1}
+                            onCheckedChange={(checked) => {
+                              setSelected(checked === true);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
                             data-testid={`checkbox-ws-orderdevice-${device.id}`}
                           />
                           <div className="flex-1">

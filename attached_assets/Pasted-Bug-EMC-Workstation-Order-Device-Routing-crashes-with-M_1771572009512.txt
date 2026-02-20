@@ -1,0 +1,61 @@
+Bug: EMC Workstation “Order Device Routing” crashes with Maximum update depth exceeded after adding checkbox multi-select. Root cause is Radix/shadcn <Checkbox> (button) firing onCheckedChange during controlled updates and our handler toggles state (not idempotent), plus row onClick also toggles → repeated nested updates.
+
+Required Fix (must be implemented exactly)
+1) Replace toggle-based handlers with idempotent “setSelected(checked)” logic
+
+In WorkstationForm orderDevices map, REMOVE toggle() usage inside onCheckedChange. Use this pattern:
+
+{orderDevices.map((device) => {
+  const isSelected = selectedOrderDeviceIds.includes(device.id);
+
+  const setSelected = (nextChecked: boolean) => {
+    setSelectedOrderDeviceIds((prev) => {
+      const has = prev.includes(device.id);
+      if (nextChecked && !has) return [...prev, device.id];
+      if (!nextChecked && has) return prev.filter((id) => id !== device.id);
+      return prev; // no-op guard prevents loops
+    });
+  };
+
+  return (
+    <div
+      key={device.id}
+      className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
+      onClick={() => setSelected(!isSelected)} // optional row click
+    >
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={(checked) => {
+          // Radix can pass boolean | "indeterminate"
+          setSelected(checked === true);
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      ...
+    </div>
+  );
+})}
+
+Important: onCheckedChange must set based on checked === true, not toggle.
+
+2) Harden the fetch response shape for selected order device IDs
+
+Current code assumes the API returns an array. Make it safe:
+
+.then((data) => {
+  const ids = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
+  if (!cancelled) setSelectedOrderDeviceIds(ids);
+})
+3) Do NOT call setState/setValue in render
+
+Confirm no setSelectedOrderDeviceIds(...) or form.setValue(...) is called during render or inside .map() except inside event handlers.
+
+4) Verify after fix
+
+Open WorkstationForm (edit mode) repeatedly → no crash
+
+Click row and checkbox → selection updates correctly
+
+No infinite loops / maximum update depth errors
+
+That’s the fix. If AI does anything else (new local state syncing effects, etc.), tell it to stop and implement the above verbatim.
