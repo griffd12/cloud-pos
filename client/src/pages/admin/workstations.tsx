@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer } from "@shared/schema";
+import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Rvc, type Printer, type OrderDevice } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -84,6 +85,17 @@ export default function WorkstationsPage() {
       return res.json();
     },
   });
+
+  const { data: orderDevices = [] } = useQuery<OrderDevice[]>({
+    queryKey: ["/api/order-devices", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/order-devices${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch order devices");
+      return res.json();
+    },
+  });
+
+  const [selectedOrderDeviceIds, setSelectedOrderDeviceIds] = useState<string[]>([]);
 
   const columns: Column<Workstation>[] = [
     { key: "name", header: "Name", sortable: true },
@@ -189,6 +201,10 @@ export default function WorkstationsPage() {
   useEffect(() => {
     if (formOpen) {
       if (editingItem) {
+        fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
+          .then(res => res.ok ? res.json() : [])
+          .then(ids => setSelectedOrderDeviceIds(ids))
+          .catch(() => setSelectedOrderDeviceIds([]));
         form.reset({
           name: editingItem.name,
           deviceType: editingItem.deviceType,
@@ -221,6 +237,7 @@ export default function WorkstationsPage() {
           cashDrawerAutoOpenOnDrop: editingItem.cashDrawerAutoOpenOnDrop ?? true,
         });
       } else {
+        setSelectedOrderDeviceIds([]);
         const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
         form.reset({
           name: "",
@@ -285,10 +302,16 @@ export default function WorkstationsPage() {
     });
   };
 
+  const saveOrderDeviceAssignments = async (workstationId: string) => {
+    await apiRequest("PUT", `/api/workstations/${workstationId}/order-devices`, { orderDeviceIds: selectedOrderDeviceIds });
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: InsertWorkstation) => {
       const response = await apiRequest("POST", "/api/workstations", data);
-      return response.json();
+      const ws = await response.json();
+      await saveOrderDeviceAssignments(ws.id);
+      return ws;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
@@ -309,7 +332,9 @@ export default function WorkstationsPage() {
         const errorText = await response.text();
         throw new Error(errorText);
       }
-      return response.json();
+      const ws = await response.json();
+      await saveOrderDeviceAssignments(data.id);
+      return ws;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workstations", filterKeys] });
@@ -870,6 +895,69 @@ export default function WorkstationsPage() {
                         />
                       </div>
                     </>
+                  )}
+                </div>
+
+                <div className="border rounded-md p-4 space-y-3">
+                  <div>
+                    <h4 className="font-medium text-sm">Order Device Routing</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Select which Order Devices this workstation is allowed to send orders to. If none are selected, the workstation will send to all devices based on the menu item's Print Class.
+                    </p>
+                  </div>
+
+                  {orderDevices.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No order devices configured. Please create order devices first.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {orderDevices.map((device) => (
+                        <div
+                          key={device.id}
+                          className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
+                          onClick={() => {
+                            setSelectedOrderDeviceIds(prev =>
+                              prev.includes(device.id)
+                                ? prev.filter(id => id !== device.id)
+                                : [...prev, device.id]
+                            );
+                          }}
+                          data-testid={`row-ws-orderdevice-${device.id}`}
+                        >
+                          <Checkbox
+                            checked={selectedOrderDeviceIds.includes(device.id)}
+                            onCheckedChange={() => {}}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedOrderDeviceIds(prev =>
+                                prev.includes(device.id)
+                                  ? prev.filter(id => id !== device.id)
+                                  : [...prev, device.id]
+                              );
+                            }}
+                            data-testid={`checkbox-ws-orderdevice-${device.id}`}
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{device.name}</span>
+                              <Badge variant="outline" className="text-xs">{device.code}</Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {properties.find(p => p.id === device.propertyId)?.name || "Unknown Property"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedOrderDeviceIds.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs text-muted-foreground">
+                        Selected: {selectedOrderDeviceIds.length} device(s) — orders will only route to these devices
+                      </p>
+                    </div>
                   )}
                 </div>
 

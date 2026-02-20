@@ -368,6 +368,15 @@ export const orderDeviceKds = pgTable("order_device_kds", {
   displayOrder: integer("display_order").default(0),
 });
 
+// Workstation to Order Device routing filter
+// Controls which Order Devices a workstation is allowed to send to.
+// If no rows exist for a workstation, it defaults to sending to ALL order devices (backward compatible).
+export const workstationOrderDevices = pgTable("workstation_order_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workstationId: varchar("workstation_id").notNull().references(() => workstations.id),
+  orderDeviceId: varchar("order_device_id").notNull().references(() => orderDevices.id),
+});
+
 // Print Class to Order Device routing (resolved per Property/RVC)
 export const printClassRouting = pgTable("print_class_routing", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1260,6 +1269,7 @@ export const insertKdsDeviceSchema = createInsertSchema(kdsDevices).omit({ id: t
 export const insertOrderDeviceSchema = createInsertSchema(orderDevices).omit({ id: true });
 export const insertOrderDevicePrinterSchema = createInsertSchema(orderDevicePrinters).omit({ id: true });
 export const insertOrderDeviceKdsSchema = createInsertSchema(orderDeviceKds).omit({ id: true });
+export const insertWorkstationOrderDeviceSchema = createInsertSchema(workstationOrderDevices).omit({ id: true });
 export const insertPrintClassRoutingSchema = createInsertSchema(printClassRouting).omit({ id: true });
 export const insertMenuItemSchema = createInsertSchema(menuItems).omit({ id: true });
 export const insertModifierGroupSchema = createInsertSchema(modifierGroups).omit({ id: true });
@@ -1348,6 +1358,8 @@ export type OrderDevicePrinter = typeof orderDevicePrinters.$inferSelect;
 export type InsertOrderDevicePrinter = z.infer<typeof insertOrderDevicePrinterSchema>;
 export type OrderDeviceKds = typeof orderDeviceKds.$inferSelect;
 export type InsertOrderDeviceKds = z.infer<typeof insertOrderDeviceKdsSchema>;
+export type WorkstationOrderDevice = typeof workstationOrderDevices.$inferSelect;
+export type InsertWorkstationOrderDevice = z.infer<typeof insertWorkstationOrderDeviceSchema>;
 export type PrintClassRouting = typeof printClassRouting.$inferSelect;
 export type InsertPrintClassRouting = z.infer<typeof insertPrintClassRoutingSchema>;
 export type MenuItemSlu = typeof menuItemSlus.$inferSelect;

@@ -10,7 +10,7 @@ import {
   rvcCounters,
   checks, rounds, checkItems, checkPayments, checkDiscounts, checkLocks, auditLogs, kdsTickets, kdsTicketItems,
   paymentProcessors, paymentTransactions, terminalDevices, terminalSessions,
-  workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, printClassRouting,
+  workstations, printers, kdsDevices, orderDevicePrinters, orderDeviceKds, workstationOrderDevices, printClassRouting,
   posLayouts, posLayoutCells, posLayoutRvcAssignments,
   devices, deviceEnrollmentTokens, deviceHeartbeats,
   refunds, refundItems, refundPayments,
@@ -38,7 +38,7 @@ import {
   type Slu, type InsertSlu,
   type TaxGroup, type InsertTaxGroup,
   type PrintClass, type InsertPrintClass,
-  type Workstation, type InsertWorkstation,
+  type Workstation, type InsertWorkstation, type WorkstationOrderDevice,
   type Printer, type InsertPrinter,
   type KdsDevice, type InsertKdsDevice,
   type OrderDevice, type InsertOrderDevice,
@@ -264,6 +264,10 @@ export interface IStorage {
   createWorkstation(data: InsertWorkstation): Promise<Workstation>;
   updateWorkstation(id: string, data: Partial<InsertWorkstation>): Promise<Workstation | undefined>;
   deleteWorkstation(id: string): Promise<boolean>;
+
+  // Workstation Order Device routing
+  getWorkstationOrderDevices(workstationId: string): Promise<WorkstationOrderDevice[]>;
+  setWorkstationOrderDevices(workstationId: string, orderDeviceIds: string[]): Promise<WorkstationOrderDevice[]>;
 
   // Printers
   getPrinters(propertyId?: string): Promise<Printer[]>;
@@ -1379,8 +1383,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteWorkstation(id: string): Promise<boolean> {
+    await db.delete(workstationOrderDevices).where(eq(workstationOrderDevices.workstationId, id));
     const result = await db.delete(workstations).where(eq(workstations.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getWorkstationOrderDevices(workstationId: string): Promise<WorkstationOrderDevice[]> {
+    return db.select().from(workstationOrderDevices).where(eq(workstationOrderDevices.workstationId, workstationId));
+  }
+
+  async setWorkstationOrderDevices(workstationId: string, orderDeviceIds: string[]): Promise<WorkstationOrderDevice[]> {
+    await db.delete(workstationOrderDevices).where(eq(workstationOrderDevices.workstationId, workstationId));
+    if (orderDeviceIds.length === 0) return [];
+    const rows = orderDeviceIds.map(orderDeviceId => ({ workstationId, orderDeviceId }));
+    return db.insert(workstationOrderDevices).values(rows).returning();
   }
 
   // Printers

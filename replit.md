@@ -54,6 +54,7 @@ Preferred communication style: Simple, everyday language.
 - **Cash Drawer Enforcement**: Cash tenders require `drawerAssignmentId`; `cash_transactions` rows are auto-created for sales/refunds.
 - **Customer Onboarding Data Import**: Excel-based bulk data import system covering all database entities with dependency ordering and cross-sheet validation.
 - **Delivery Platform Integration APIs**: Direct API integrations with Uber Eats, DoorDash, and Grubhub for order parsing, acceptance, menu sync, and store status management.
+- **Workstation Order Device Routing**: Per-workstation control over which order devices can receive orders, via `workstation_order_devices` junction table. When configured, the KDS routing engine intersects the menu item's Print Class devices with the workstation's allowed devices. Defaults to all devices when no assignments exist (backward compatible).
 
 ## External Dependencies
 

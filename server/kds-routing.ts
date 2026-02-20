@@ -2,6 +2,7 @@ import { db } from "./db";
 import { eq, and, isNull, or } from "drizzle-orm";
 import {
   menuItems, printClasses, printClassRouting, orderDevices, orderDeviceKds, kdsDevices,
+  workstationOrderDevices,
   type MenuItem, type KdsDevice, type OrderDevice
 } from "@shared/schema";
 
@@ -13,133 +14,106 @@ export interface KdsRoutingTarget {
   orderDeviceName: string;
 }
 
-export async function resolveKdsTargetsForMenuItem(
-  menuItemId: string,
-  propertyId: string,
-  rvcId?: string
-): Promise<KdsRoutingTarget[]> {
-  const [item] = await db.select().from(menuItems).where(eq(menuItems.id, menuItemId));
-  if (!item || !item.printClassId) {
-    return [];
-  }
+async function getWorkstationAllowedDeviceIds(workstationId?: string): Promise<Set<string> | null> {
+  if (!workstationId || workstationId === 'default') return null;
+  const assignments = await db.select().from(workstationOrderDevices)
+    .where(eq(workstationOrderDevices.workstationId, workstationId));
+  if (assignments.length === 0) return null;
+  return new Set(assignments.map(a => a.orderDeviceId));
+}
 
-  const printClassId = item.printClassId;
-
-  let routing;
+async function resolveRoutedOrderDeviceIds(printClassId: string, propertyId: string, rvcId?: string): Promise<string[]> {
+  let routings;
   if (rvcId) {
-    [routing] = await db.select().from(printClassRouting)
+    routings = await db.select().from(printClassRouting)
       .where(and(
         eq(printClassRouting.printClassId, printClassId),
         eq(printClassRouting.rvcId, rvcId)
       ));
   }
-  if (!routing) {
-    [routing] = await db.select().from(printClassRouting)
+  if (!routings || routings.length === 0) {
+    routings = await db.select().from(printClassRouting)
       .where(and(
         eq(printClassRouting.printClassId, printClassId),
         eq(printClassRouting.propertyId, propertyId),
         isNull(printClassRouting.rvcId)
       ));
   }
-  if (!routing) {
-    [routing] = await db.select().from(printClassRouting)
+  if (!routings || routings.length === 0) {
+    routings = await db.select().from(printClassRouting)
       .where(and(
         eq(printClassRouting.printClassId, printClassId),
         isNull(printClassRouting.propertyId),
         isNull(printClassRouting.rvcId)
       ));
   }
+  if (!routings || routings.length === 0) return [];
+  return routings.map(r => r.orderDeviceId);
+}
 
-  if (!routing) {
-    return [];
-  }
-
-  const [orderDevice] = await db.select().from(orderDevices)
-    .where(eq(orderDevices.id, routing.orderDeviceId));
-  if (!orderDevice) {
-    return [];
-  }
-
-  const kdsLinks = await db.select().from(orderDeviceKds)
-    .where(eq(orderDeviceKds.orderDeviceId, orderDevice.id));
-
+async function buildKdsTargetsFromOrderDeviceIds(
+  orderDeviceIds: string[],
+  allowedDeviceIds: Set<string> | null
+): Promise<KdsRoutingTarget[]> {
   const targets: KdsRoutingTarget[] = [];
-  for (const link of kdsLinks) {
-    const [kdsDevice] = await db.select().from(kdsDevices)
-      .where(eq(kdsDevices.id, link.kdsDeviceId));
-    if (kdsDevice && kdsDevice.active) {
-      targets.push({
-        kdsDeviceId: kdsDevice.id,
-        kdsDeviceName: kdsDevice.name,
-        stationType: kdsDevice.stationType || "hot",
-        orderDeviceId: orderDevice.id,
-        orderDeviceName: orderDevice.name,
-      });
+
+  for (const odId of orderDeviceIds) {
+    if (allowedDeviceIds && !allowedDeviceIds.has(odId)) continue;
+
+    const [orderDevice] = await db.select().from(orderDevices)
+      .where(eq(orderDevices.id, odId));
+    if (!orderDevice) continue;
+
+    const kdsLinks = await db.select().from(orderDeviceKds)
+      .where(eq(orderDeviceKds.orderDeviceId, orderDevice.id));
+
+    for (const link of kdsLinks) {
+      const [kdsDevice] = await db.select().from(kdsDevices)
+        .where(eq(kdsDevices.id, link.kdsDeviceId));
+      if (kdsDevice && kdsDevice.active) {
+        targets.push({
+          kdsDeviceId: kdsDevice.id,
+          kdsDeviceName: kdsDevice.name,
+          stationType: kdsDevice.stationType || "hot",
+          orderDeviceId: orderDevice.id,
+          orderDeviceName: orderDevice.name,
+        });
+      }
     }
   }
 
   return targets;
 }
 
+export async function resolveKdsTargetsForMenuItem(
+  menuItemId: string,
+  propertyId: string,
+  rvcId?: string,
+  workstationId?: string
+): Promise<KdsRoutingTarget[]> {
+  const [item] = await db.select().from(menuItems).where(eq(menuItems.id, menuItemId));
+  if (!item || !item.printClassId) {
+    return [];
+  }
+
+  const orderDeviceIds = await resolveRoutedOrderDeviceIds(item.printClassId, propertyId, rvcId);
+  if (orderDeviceIds.length === 0) return [];
+
+  const allowedDeviceIds = await getWorkstationAllowedDeviceIds(workstationId);
+  return buildKdsTargetsFromOrderDeviceIds(orderDeviceIds, allowedDeviceIds);
+}
+
 export async function resolveKdsTargetsForPrintClass(
   printClassId: string,
   propertyId: string,
-  rvcId?: string
+  rvcId?: string,
+  workstationId?: string
 ): Promise<KdsRoutingTarget[]> {
-  let routing;
-  if (rvcId) {
-    [routing] = await db.select().from(printClassRouting)
-      .where(and(
-        eq(printClassRouting.printClassId, printClassId),
-        eq(printClassRouting.rvcId, rvcId)
-      ));
-  }
-  if (!routing) {
-    [routing] = await db.select().from(printClassRouting)
-      .where(and(
-        eq(printClassRouting.printClassId, printClassId),
-        eq(printClassRouting.propertyId, propertyId),
-        isNull(printClassRouting.rvcId)
-      ));
-  }
-  if (!routing) {
-    [routing] = await db.select().from(printClassRouting)
-      .where(and(
-        eq(printClassRouting.printClassId, printClassId),
-        isNull(printClassRouting.propertyId),
-        isNull(printClassRouting.rvcId)
-      ));
-  }
+  const orderDeviceIds = await resolveRoutedOrderDeviceIds(printClassId, propertyId, rvcId);
+  if (orderDeviceIds.length === 0) return [];
 
-  if (!routing) {
-    return [];
-  }
-
-  const [orderDevice] = await db.select().from(orderDevices)
-    .where(eq(orderDevices.id, routing.orderDeviceId));
-  if (!orderDevice) {
-    return [];
-  }
-
-  const kdsLinks = await db.select().from(orderDeviceKds)
-    .where(eq(orderDeviceKds.orderDeviceId, orderDevice.id));
-
-  const targets: KdsRoutingTarget[] = [];
-  for (const link of kdsLinks) {
-    const [kdsDevice] = await db.select().from(kdsDevices)
-      .where(eq(kdsDevices.id, link.kdsDeviceId));
-    if (kdsDevice && kdsDevice.active) {
-      targets.push({
-        kdsDeviceId: kdsDevice.id,
-        kdsDeviceName: kdsDevice.name,
-        stationType: kdsDevice.stationType || "hot",
-        orderDeviceId: orderDevice.id,
-        orderDeviceName: orderDevice.name,
-      });
-    }
-  }
-
-  return targets;
+  const allowedDeviceIds = await getWorkstationAllowedDeviceIds(workstationId);
+  return buildKdsTargetsFromOrderDeviceIds(orderDeviceIds, allowedDeviceIds);
 }
 
 export async function getActiveKdsDevices(propertyId?: string): Promise<KdsDevice[]> {

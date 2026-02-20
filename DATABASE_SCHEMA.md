@@ -1445,6 +1445,23 @@ Logical order routing devices that determine where items are sent (kitchen, bar,
 
 ---
 
+### `workstation_order_devices`
+
+Controls which Order Devices a workstation is allowed to send orders to. If no rows exist for a workstation, it defaults to sending to ALL order devices (backward compatible). This enables workstation-level KDS routing where each workstation can be restricted to specific expo/specialty stations.
+
+| Column | Data Type | Nullable | Default |
+|--------|-----------|----------|---------|
+| id | varchar (UUID) | NO | `gen_random_uuid()` |
+| workstation_id | varchar | NO | — |
+| order_device_id | varchar | NO | — |
+
+- **Primary Key:** `id`
+- **Foreign Keys:**
+  - `workstation_id` → `workstations.id`
+  - `order_device_id` → `order_devices.id`
+
+---
+
 ### `order_device_kds`
 
 Links order devices to KDS displays for routing.

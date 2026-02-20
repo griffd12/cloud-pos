@@ -572,7 +572,7 @@ async function sendItemsToKds(
   checkId: string,
   employeeId: string,
   itemsToSend: any[],
-  options: { auditAction?: string } = {}
+  options: { auditAction?: string; workstationId?: string } = {}
 ): Promise<{ round: any; updatedItems: any[] }> {
   const check = await storage.getCheck(checkId);
   if (!check) throw new Error("Check not found");
@@ -606,7 +606,7 @@ async function sendItemsToKds(
 
   for (const item of updatedItems) {
     if (item.menuItemId) {
-      const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined);
+      const targets = await resolveKdsTargetsForMenuItem(item.menuItemId, rvc.propertyId, check.rvcId || undefined, options.workstationId);
       if (targets.length > 0) {
         for (const target of targets) {
           if (!itemsByKdsDevice.has(target.kdsDeviceId)) {
@@ -3509,6 +3509,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  // Workstation Order Device routing
+  app.get("/api/workstations/:id/order-devices", async (req, res) => {
+    const assignments = await storage.getWorkstationOrderDevices(req.params.id);
+    res.json(assignments.map(a => a.orderDeviceId));
+  });
+
+  app.put("/api/workstations/:id/order-devices", async (req, res) => {
+    const { orderDeviceIds } = req.body;
+    if (!Array.isArray(orderDeviceIds)) {
+      return res.status(400).json({ message: "orderDeviceIds must be an array" });
+    }
+    await storage.setWorkstationOrderDevices(req.params.id, orderDeviceIds);
+    res.json({ success: true });
+  });
+
   // ============================================================================
   // PRINTER ROUTES
   // ============================================================================
@@ -4911,7 +4926,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         // Use shared helper for consistent send behavior
-        const { round, updatedItems } = await sendItemsToKds(checkId, employeeId, unsentItems);
+        const { round, updatedItems } = await sendItemsToKds(checkId, employeeId, unsentItems, { workstationId });
         
         const allItems = await storage.getCheckItems(checkId);
         const responseData = { round, updatedItems: allItems };
@@ -5466,6 +5481,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             try {
               await sendItemsToKds(checkId, employeeId, unsentItems, {
                 auditAction: "payment_auto_send",
+                workstationId,
               });
             } catch (e) {
               console.error("Payment auto-send error:", e);
