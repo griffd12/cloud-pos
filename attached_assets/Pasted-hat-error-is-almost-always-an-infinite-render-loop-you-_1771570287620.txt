@@ -1,0 +1,144 @@
+hat error is almost always an infinite render loop you introduced when wiring the new checkbox list into workstation state.
+
+What it means in plain English:
+Some code is doing setState(...) (or form.setValue(...)) in a way that triggers a re-render… which triggers the same setState(...) again… forever. React stops it and throws “Maximum update depth exceeded.”
+
+Since it started right after adding “select order devices” checkboxes, here are the most common exact causes and the fixes.
+
+The usual culprits (ranked)
+1) You’re calling setState (or setValue) during render
+
+Example patterns that cause this:
+
+inside the component body (not inside a handler/effect)
+
+inside map() while rendering checkboxes
+
+inside a renderCheckbox() helper that runs during render
+
+Fix: only set state in:
+
+event handlers (onChange)
+
+useEffect with tight deps + guards
+
+form initialization (defaultValues)
+
+2) A useEffect is “syncing” selected devices → form state, but it depends on what it sets
+
+This is the #1 real-world cause.
+
+Example:
+
+useEffect(() => {
+  form.setValue("orderDeviceIds", selectedIds);
+}, [selectedIds, form.watch("orderDeviceIds")]); // <- loop
+
+or:
+
+useEffect(() => {
+  setSelectedIds(form.getValues("orderDeviceIds"));
+}, [selectedIds]); // <- loop
+
+Fix: Make it one-directional, and don’t depend on the thing you set.
+
+3) You’re rebuilding arrays/objects every render and using them as dependencies
+
+If you do:
+
+const selected = ws.orderDeviceIds ?? [];
+useEffect(() => setSelected(selected), [selected]);
+
+selected is a new array each render → effect runs every render → setState → rerender → loop.
+
+Fix: use useMemo or compare before setting.
+
+4) Checkbox “checked” is derived from state that is mutated/normalized in an effect each render
+
+Common with “ensure array exists” logic.
+
+Example:
+
+render sees undefined → effect sets [] → rerender → effect runs again due to deps → loop
+
+Fix: handle defaults once (defaultValues) or guard in effect.
+
+The correct implementation pattern (use this)
+
+You want the workstation to store:
+orderDeviceIds: string[]
+
+Option A (best): Treat it as a controlled form field (react-hook-form)
+
+No extra local state. No syncing effect.
+
+const { control, setValue, getValues } = form;
+const selectedIds = form.watch("orderDeviceIds") ?? [];
+
+function toggle(id: string) {
+  const current = getValues("orderDeviceIds") ?? [];
+  const next = current.includes(id)
+    ? current.filter(x => x !== id)
+    : [...current, id];
+  setValue("orderDeviceIds", next, { shouldDirty: true });
+}
+
+Checkbox:
+
+<input
+  type="checkbox"
+  checked={(selectedIds ?? []).includes(device.id)}
+  onChange={() => toggle(device.id)}
+/>
+
+Key rule: No useEffect that sets this field.
+
+Option B: If you must “initialize from workstation”
+
+Only do it when the workstation changes, and guard it.
+
+useEffect(() => {
+  if (!workstation) return;
+
+  const incoming = workstation.orderDeviceIds ?? [];
+  const current = form.getValues("orderDeviceIds") ?? [];
+
+  // Guard: only set if different
+  const same =
+    incoming.length === current.length &&
+    incoming.every(x => current.includes(x));
+
+  if (!same) {
+    form.setValue("orderDeviceIds", incoming, { shouldDirty: false });
+  }
+}, [workstation?.id]); // ONLY when switching workstations
+
+Do not include selectedIds or watch(...) in deps.
+
+Fast way to find the exact loop in your page
+
+Search the workstation page for:
+
+setState(
+
+setValue(
+
+useEffect(
+
+watch(
+
+Look for any effect that:
+
+reads from watch() or state
+
+then calls setValue() / setState()
+
+That’s almost always the loop.
+
+If you see any of these patterns, it’s guilty:
+
+useEffect(..., [watch("field")])
+
+useEffect(..., [someArray]) where someArray is created inline
+
+setValue(...) inside render
