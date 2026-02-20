@@ -14,18 +14,14 @@
   FileWrite $0 "================================================================================$\r$\n"
   FileClose $0
 
-  ; Create POS Mode shortcut on desktop
-  CreateShortCut "$DESKTOP\Cloud POS.lnk" "$INSTDIR\Cloud POS.exe" "--pos" "$INSTDIR\Cloud POS.exe" 0
+  ; Remove legacy Cloud KDS desktop shortcut from previous versions (v1.4.0 and earlier)
+  Delete "$DESKTOP\Cloud KDS.lnk"
+
+  ; Create single desktop shortcut (no mode flag - defaults to POS, switchable via app menu)
+  CreateShortCut "$DESKTOP\Cloud POS.lnk" "$INSTDIR\Cloud POS.exe" "" "$INSTDIR\Cloud POS.exe" 0
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
   FileSeek $0 0 END
-  FileWrite $0 "[OK] Desktop shortcut created: Cloud POS.lnk$\r$\n"
-  FileClose $0
-  
-  ; Create KDS Mode shortcut on desktop
-  CreateShortCut "$DESKTOP\Cloud KDS.lnk" "$INSTDIR\Cloud POS.exe" "--kds" "$INSTDIR\Cloud POS.exe" 0
-  FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
-  FileSeek $0 0 END
-  FileWrite $0 "[OK] Desktop shortcut created: Cloud KDS.lnk$\r$\n"
+  FileWrite $0 "[OK] Desktop shortcut created: Cloud POS.lnk (legacy Cloud KDS shortcut removed)$\r$\n"
   FileClose $0
   
   ; Create Start Menu shortcuts
@@ -47,8 +43,8 @@
   FileWrite $0 "[OK] Data directories created: config, data, logs$\r$\n"
   FileClose $0
   
-  ; Set auto-launch in Windows registry for the current user (HKCU stays in current context)
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CloudPOS" '"$INSTDIR\Cloud POS.exe" --pos'
+  ; Set auto-launch in Windows registry for the current user (no mode flag - defaults to POS, switchable in-app)
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CloudPOS" '"$INSTDIR\Cloud POS.exe"'
   FileOpen $0 "$LOCALAPPDATA\Cloud POS\logs\installer.log" a
   FileSeek $0 0 END
   FileWrite $0 "[OK] Auto-launch registry entry set (HKCU\Run\CloudPOS)$\r$\n"
@@ -102,7 +98,7 @@
   FileWrite $0 "================================================================================$\r$\n"
   FileClose $0
 
-  ; Remove desktop shortcuts
+  ; Remove desktop shortcut (also clean up legacy Cloud KDS shortcut from older versions)
   Delete "$DESKTOP\Cloud POS.lnk"
   Delete "$DESKTOP\Cloud KDS.lnk"
   

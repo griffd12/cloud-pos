@@ -1528,10 +1528,17 @@ Physical printer configurations.
 | active | boolean | YES | `true` |
 | model | text | YES | — |
 | subnet_mask | text | YES | `'255.255.255.0'` |
+| com_port | text | YES | — |
+| baud_rate | integer | YES | `9600` |
 
 - **Primary Key:** `id`
 - **Foreign Keys:**
   - `property_id` → `properties.id`
+- **Notes:**
+  - `connection_type` can be `'network'` (default) or `'serial'`
+  - For serial printers: `com_port` (e.g., COM1-COM8) and `baud_rate` are required; `ip_address`/`port` should be null
+  - For network printers: `ip_address`/`port` are required; `com_port`/`baud_rate` should be null
+  - Serial port printing only works from the Electron desktop app (browsers cannot access serial ports)
 
 ---
 
