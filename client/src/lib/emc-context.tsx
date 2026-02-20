@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 
 interface EmcUser {
   id: string;
@@ -218,21 +218,30 @@ export function useEmc() {
 export function useEmcFilter() {
   const { selectedEnterpriseId, selectedPropertyId, selectedRvcId } = useEmc();
 
-  const filterParam = (() => {
+  const filterParam = useMemo(() => {
     const params = new URLSearchParams();
     if (selectedEnterpriseId) params.set("enterpriseId", selectedEnterpriseId);
     if (selectedPropertyId) params.set("propertyId", selectedPropertyId);
     if (selectedRvcId) params.set("rvcId", selectedRvcId);
     const str = params.toString();
     return str ? `?${str}` : "";
-  })();
+  }, [selectedEnterpriseId, selectedPropertyId, selectedRvcId]);
 
-  const filterKeys = { enterpriseId: selectedEnterpriseId, propertyId: selectedPropertyId, rvcId: selectedRvcId };
+  const filterKeys = useMemo(() => ({
+    enterpriseId: selectedEnterpriseId,
+    propertyId: selectedPropertyId,
+    rvcId: selectedRvcId,
+  }), [selectedEnterpriseId, selectedPropertyId, selectedRvcId]);
 
-  const scopePayload: Record<string, string> = {};
-  if (selectedEnterpriseId) scopePayload.enterpriseId = selectedEnterpriseId;
-  if (selectedPropertyId) scopePayload.propertyId = selectedPropertyId;
-  if (selectedRvcId) scopePayload.rvcId = selectedRvcId;
+  const scopePayload = useMemo(() => {
+    const payload: Record<string, string> = {};
+    if (selectedEnterpriseId) payload.enterpriseId = selectedEnterpriseId;
+    if (selectedPropertyId) payload.propertyId = selectedPropertyId;
+    if (selectedRvcId) payload.rvcId = selectedRvcId;
+    return payload;
+  }, [selectedEnterpriseId, selectedPropertyId, selectedRvcId]);
 
-  return { filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload };
+  return useMemo(() => ({
+    filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload,
+  }), [filterParam, filterKeys, selectedEnterpriseId, selectedPropertyId, selectedRvcId, scopePayload]);
 }
