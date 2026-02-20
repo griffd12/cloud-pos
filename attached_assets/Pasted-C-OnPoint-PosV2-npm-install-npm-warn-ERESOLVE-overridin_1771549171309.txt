@@ -1,0 +1,109 @@
+C:\OnPoint-PosV2>npm install
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: vite@7.3.1
+npm warn Found: @types/node@20.16.11
+npm warn node_modules/@types/node
+npm warn   dev @types/node@"20.16.11" from the root project
+npm warn   18 more (@types/fs-extra, stripe, @types/body-parser, ...)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.3.1
+npm warn node_modules/vitest/node_modules/vite
+npm warn   vite@"^6.0.0 || ^7.0.0" from vitest@4.0.17
+npm warn   node_modules/vitest
+npm warn   1 more (@vitest/mocker)
+npm warn
+npm warn Conflicting peer dependency: @types/node@25.3.0
+npm warn node_modules/@types/node
+npm warn   peerOptional @types/node@"^20.19.0 || >=22.12.0" from vite@7.3.1
+npm warn   node_modules/vitest/node_modules/vite
+npm warn     vite@"^6.0.0 || ^7.0.0" from vitest@4.0.17
+npm warn     node_modules/vitest
+npm warn     1 more (@vitest/mocker)
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+npm warn deprecated lodash.isequal@4.5.0: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
+npm warn deprecated rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+npm warn deprecated fstream@1.0.12: This package is no longer supported.
+
+added 939 packages, and audited 940 packages in 50s
+
+126 packages are looking for funding
+  run `npm fund` for details
+
+25 vulnerabilities (7 moderate, 18 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm notice
+npm notice New minor version of npm available! 11.6.2 -> 11.10.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.10.1
+npm notice To update run: npm install -g npm@11.10.1
+npm notice
+
+C:\OnPoint-PosV2>npm run build --win
+npm warn Unknown cli config "--win". This will stop working in the next major version of npm.
+
+> cloud-pos@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v5.4.20 building for production...
+transforming (4) src\App.tsx
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+✓ 3627 modules transformed.
+../dist/public/index.html                            2.24 kB │ gzip:   0.89 kB
+../dist/public/assets/index-DOZTUHTq.css           105.40 kB │ gzip:  16.84 kB
+../dist/public/assets/offline-queue-eN96lbJU.js      2.07 kB │ gzip:   0.82 kB
+../dist/public/assets/index-djkAsAGX.js          2,405.87 kB │ gzip: 585.78 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 19.90s
+building server...
+
+  dist\index.cjs  2.0mb
+
+Done in 4484ms
+
+C:\OnPoint-PosV2>npx electron-builder --config electron/electron-builder.json
+Need to install the following packages:
+electron-builder@26.8.1
+Ok to proceed? (y) y
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=C:\OnPoint-PosV2\electron\electron-builder.json
+  • writing effective config  file=electron-dist\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=40.2.1 arch=x64 buildFromSource=false workspaceRoot=C:\OnPoint-PosV2 projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • preparing       moduleName=better-sqlite3 arch=x64
+  • finished        moduleName=better-sqlite3 arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=40.2.1 appOutDir=electron-dist\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\OnPoint-PosV2
+(node:6692) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • collector stderr output  dependencies=["npm error code ELSPROBLEMS\nnpm error extraneous: node-gyp-build@4.8.3 C:\\OnPoint-PosV2\\node_modules\\node-gyp-build\nnpm error invalid: @types/node@20.16.11 C:\\OnPoint-PosV2\\node_modules\\@types\\node\nnpm error A complete log of this run can be found in: C:\\Users\\DG\\AppData\\Local\\npm-cache\\_logs\\2026-02-20T00_56_09_407Z-debug-0.log\n"]
+  • duplicate dependency references  dependencies=["@capacitor/core@8.0.2","jszip@3.10.1","@capacitor/core@8.0.2","@ionic/utils-terminal@2.3.5","debug@4.4.3","debug@4.4.3","@types/node@20.16.11","debug@4.4.3","jsonfile@6.2.0","debug@4.4.3","@ionic/utils-terminal@2.3.5","debug@4.4.3","debug@4.4.3","@ionic/utils-terminal@2.3.5","debug@4.4.3","debug@4.4.3","strip-ansi@6.0.1","ansi-styles@4.3.0","string-width@4.2.3","strip-ansi@6.0.1","@ionic/utils-fs@3.1.7","@ionic/utils-terminal@2.3.5","debug@4.4.3","plist@3.1.0","string_decoder@1.3.0","react@18.3.1","@dnd-kit/utilities@3.2.2","react-dom@18.3.1","react@18.3.1","@dnd-kit/core@6.3.1","@dnd-kit/utilities@3.2.2","react@18.3.1","react@18.3.1","@radix-ui/react-collapsible@1.1.4","@radix-ui/react-primitive@2.0.3","@radix-ui/react-slot@1.2.0","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react@18.3.1","@radix-ui/react-slot@1.2.0","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-dialog@1.1.7","@radix-ui/react-primitive@2.0.3","@radix-ui/react-slot@1.2.0","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-id@1.1.1","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-collection@1.1.3","@radix-ui/react-dismissable-layer@1.1.6","@radix-ui/react-focus-scope@1.1.3","@radix-ui/react-id@1.1.1","@radix-ui/react-popper@1.2.3","@radix-ui/react-portal@1.1.5","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-roving-focus@1.1.3","@radix-ui/react-slot@1.2.0","@types/react-dom@18.3.1","@types/react@18.3.12","aria-hidden@1.2.4","react-dom@18.3.1","react-remove-scroll@2.6.3","react@18.3.1","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react@18.3.12","react@18.3.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@types/react@18.3.12","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-id@1.1.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-slot@1.2.0","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","@types/react@18.3.12","@types/react@18.3.12","react-style-singleton@2.2.3","react@18.3.1","@types/react@18.3.12","react@18.3.1","react@18.3.1","@types/react@18.3.12","react@18.3.1","@types/react@18.3.12","react@18.3.1","react@18.3.1","@radix-ui/react-id@1.1.1","@radix-ui/react-menu@2.1.7","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-dismissable-layer@1.1.6","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react@18.3.12","react@18.3.1","@radix-ui/react-use-size@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-portal@1.1.5","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-collection@1.1.3","@radix-ui/react-id@1.1.1","@radix-ui/react-menu@2.1.7","@radix-ui/react-primitive@2.0.3","@radix-ui/react-collection@1.1.3","@radix-ui/react-id@1.1.1","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-collection@1.1.3","@radix-ui/react-dismissable-layer@1.1.6","@radix-ui/react-id@1.1.1","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-dismissable-layer@1.1.6","@radix-ui/react-focus-scope@1.1.3","@radix-ui/react-id@1.1.1","@radix-ui/react-popper@1.2.3","@radix-ui/react-portal@1.1.5","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-slot@1.2.0","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","aria-hidden@1.2.4","react-dom@18.3.1","react-remove-scroll@2.6.3","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-roving-focus@1.1.3","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-use-size@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-collection@1.1.3","@radix-ui/react-dismissable-layer@1.1.6","@radix-ui/react-focus-scope@1.1.3","@radix-ui/react-id@1.1.1","@radix-ui/react-popper@1.2.3","@radix-ui/react-portal@1.1.5","@radix-ui/react-primitive@2.0.3","@radix-ui/react-slot@1.2.0","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-visually-hidden@1.1.3","@types/react-dom@18.3.1","@types/react@18.3.12","aria-hidden@1.2.4","react-dom@18.3.1","react-remove-scroll@2.6.3","react@18.3.1","@radix-ui/react-primitive@2.0.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-collection@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-use-size@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@types/react@18.3.12","react@18.3.1","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-use-size@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-id@1.1.1","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-roving-focus@1.1.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-collection@1.1.3","@radix-ui/react-dismissable-layer@1.1.6","@radix-ui/react-portal@1.1.5","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-visually-hidden@1.1.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@radix-ui/react-roving-focus@1.1.3","@radix-ui/react-toggle@1.1.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-primitive@2.0.3","@radix-ui/react-use-controllable-state@1.1.1","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","@radix-ui/react-dismissable-layer@1.1.6","@radix-ui/react-id@1.1.1","@radix-ui/react-popper@1.2.3","@radix-ui/react-portal@1.1.5","@radix-ui/react-presence@1.1.3","@radix-ui/react-primitive@2.0.3","@radix-ui/react-slot@1.2.0","@radix-ui/react-use-controllable-state@1.1.1","@radix-ui/react-visually-hidden@1.1.3","@types/react-dom@18.3.1","@types/react@18.3.12","react-dom@18.3.1","react@18.3.1","loose-envify@1.4.0","react-dom@18.3.1","react@18.3.1","@types/node@20.16.11","qs@6.13.0","react@18.3.1","@types/node@20.16.11","cross-spawn@7.0.6","strip-ansi@7.1.0","color-convert@2.0.1","strip-ansi@6.0.1","string-width@5.1.2","strip-ansi@7.1.0","brace-expansion@2.0.2","readable-stream@4.7.0","archiver-utils@5.0.2","readable-stream@4.7.0","readable-stream@4.7.0","readable-stream@4.7.0","once@1.4.0","once@1.4.0","pump@3.0.3","bl@4.1.0","end-of-stream@1.4.5","string_decoder@1.3.0","@radix-ui/react-dialog@1.1.7","@radix-ui/react-id@1.1.1","@radix-ui/react-primitive@2.0.3","react-dom@18.3.1","react@18.3.1","pg@8.16.3","@types/node@20.16.11","better-sqlite3@12.6.2","pg@8.16.3","debug@4.4.3","jsonfile@6.2.0","react@18.3.1","once@1.4.0","once@1.4.0","lazystream@1.0.1","string_decoder@1.1.1","readable-stream@3.6.2","readdir-glob@1.1.3","string_decoder@1.3.0","end-of-stream@1.4.5","readable-stream@3.6.2","glob@7.2.3","lazystream@1.0.1","readable-stream@3.6.2","readable-stream@3.6.2","readable-stream@3.6.2","readable-stream@3.6.2","inflight@1.0.6","once@1.4.0","http-errors@2.0.0","on-finished@2.4.1","qs@6.13.0","http-errors@2.0.0","iconv-lite@0.4.24","type-is@1.6.18","on-finished@2.4.1","get-intrinsic@1.3.0","get-intrinsic@1.3.0","call-bind-apply-helpers@1.0.2","es-object-atoms@1.1.1","hasown@2.0.2","http-errors@2.0.0","on-finished@2.4.1","send@0.19.0","mime-types@2.1.35","react-dom@18.3.1","react@18.3.1","eslint@9.39.2","debug@4.4.3","@eslint/core@0.17.0","ajv@6.12.6","debug@4.4.3","espree@10.4.0","js-yaml@4.1.1","@eslint/core@0.17.0","type-check@0.4.0","color-convert@2.0.1","cross-spawn@7.0.6","debug@4.4.3","glob-parent@6.0.2","is-glob@4.0.3","levn@0.4.1","qs@6.13.0","react-dom@18.3.1","react@18.3.1","react@18.3.1","debug@4.4.3","react-dom@18.3.1","react@18.3.1","pg@8.16.3","react@18.3.1","react@18.3.1","loose-envify@1.4.0","react@18.3.1","react@18.3.1","react-dom@18.3.1","react@18.3.1","loose-envify@1.4.0","react-dom@18.3.1","prop-types@15.8.1","react-dom@18.3.1","@babel/runtime@7.27.0","loose-envify@1.4.0","prop-types@15.8.1","react-dom@18.3.1","react@18.3.1","react@18.3.1","react@18.3.1","d3-array@3.2.4","d3-interpolate@3.0.1","d3-time@3.1.0","d3-time@3.1.0","d3-array@3.2.4","get-intrinsic@1.3.0","hasown@2.0.2","mime-types@2.1.35","readable-stream@4.7.0","@apimatic/file-wrapper@0.3.9","@apimatic/core-interfaces@0.2.14","@apimatic/file-wrapper@0.3.9","@apimatic/core-interfaces@0.2.14","@apimatic/http-headers@0.3.8","@apimatic/http-query@0.3.9","debug@4.4.3","debug@4.4.3","form-data@4.0.5","form-data@4.0.5","@apimatic/convert-to-stream@0.1.9","@apimatic/core-interfaces@0.2.14","@apimatic/file-wrapper@0.3.9","@apimatic/http-headers@0.3.8","@apimatic/http-query@0.3.9","@apimatic/schema@0.7.21","form-data@4.0.5","@types/node@20.16.11","qs@6.13.0","is-glob@4.0.3","is-glob@4.0.3","is-glob@4.0.3","micromatch@4.0.8","is-glob@4.0.3","braces@3.0.3","postcss@8.5.6","resolve@1.22.8","postcss@8.5.6","postcss@8.5.6","postcss-selector-parser@6.1.2","postcss@8.5.6","hasown@2.0.2","@jridgewell/trace-mapping@0.3.31","glob@10.5.0","@radix-ui/react-dialog@1.1.7","react-dom@18.3.1","react@18.3.1","@types/node@20.16.11","@vitest/utils@4.0.17","magic-string@0.30.21","vite@7.3.1","@vitest/utils@4.0.17","@vitest/pretty-format@4.0.17","magic-string@0.30.21","@vitest/pretty-format@4.0.17","@types/node@20.16.11","postcss@8.5.6","tinyglobby@0.2.15","react@18.3.1","react@18.3.1"]
+  • updating asar integrity executable resource  executablePath=electron-dist\win-unpacked\Cloud POS.exe
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=electron-dist\win-unpacked\Cloud POS.exe
+  • signing with signtool.exe  path=electron-dist\win-unpacked\resources\app.asar.unpacked\node_modules\@esbuild\win32-x64\esbuild.exe
+  • building        target=nsis file=electron-dist\Cloud-POS-1.4.0-Setup.exe archs=x64 oneClick=true perMachine=true
+  • signing with signtool.exe  path=electron-dist\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=electron-dist\Cloud-POS-1.4.0-Setup.__uninstaller.exe
+  • signing with signtool.exe  path=electron-dist\Cloud-POS-1.4.0-Setup.exe
+  • building block map  blockMapFile=electron-dist\Cloud-POS-1.4.0-Setup.exe.blockmap
+
+C:\OnPoint-PosV2>
