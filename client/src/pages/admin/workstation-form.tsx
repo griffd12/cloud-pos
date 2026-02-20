@@ -865,26 +865,23 @@ export function WorkstationForm({
                   <div className="space-y-2">
                     {orderDevices.map((device) => {
                       const isSelected = selectedOrderDeviceIds.includes(device.id);
-                      const toggle = () => {
-                        setSelectedOrderDeviceIds(prev =>
-                          prev.includes(device.id)
-                            ? prev.filter(id => id !== device.id)
-                            : [...prev, device.id]
-                        );
-                      };
                       return (
                         <div
                           key={device.id}
                           className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
-                          onClick={toggle}
+                          onClick={() => {
+                            setSelectedOrderDeviceIds(prev =>
+                              prev.includes(device.id)
+                                ? prev.filter(id => id !== device.id)
+                                : [...prev, device.id]
+                            );
+                          }}
                           data-testid={`row-ws-orderdevice-${device.id}`}
                         >
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={(checked) => {
-                              if (checked !== isSelected) toggle();
-                            }}
-                            onClick={(e) => e.stopPropagation()}
+                            className="pointer-events-none"
+                            tabIndex={-1}
                             data-testid={`checkbox-ws-orderdevice-${device.id}`}
                           />
                           <div className="flex-1">
