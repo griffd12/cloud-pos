@@ -486,21 +486,41 @@ class PrintAgentService {
     const pin = options.pin || 'pin2';
     const pulseDuration = options.pulseDuration || 200;
     const printerId = options.printerId;
+    const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
+
+    if (printerId) {
+      const printer = this.printerMap.get(printerId);
+      if (printer) {
+        if ((printer.connectionType === 'serial' || printer.connectionType === 'usb') && printer.comPort) {
+          await this.enqueueSerialJob(printer.comPort, printer.baudRate || 9600, kickCommand);
+          printLogger.info('DrawerKick', 'Local drawer kick sent via serial', { port: printer.comPort, pin });
+          return { success: true, printer: printer.comPort };
+        }
+        if (printer.ipAddress) {
+          await this.sendToPrinter(printer.ipAddress, printer.port || 9100, kickCommand);
+          printLogger.info('DrawerKick', 'Local drawer kick sent via network', { printer: `${printer.ipAddress}:${printer.port || 9100}`, pin });
+          return { success: true, printer: printer.ipAddress };
+        }
+      }
+    }
+
+    if (options.comPort) {
+      await this.enqueueSerialJob(options.comPort, options.baudRate || 9600, kickCommand);
+      printLogger.info('DrawerKick', 'Local drawer kick sent via serial (direct)', { port: options.comPort, pin });
+      return { success: true, printer: options.comPort };
+    }
 
     let targetIp = options.printerIp;
     let targetPort = options.printerPort || 9100;
 
-    if (!targetIp && printerId) {
-      const printer = this.printerMap.get(printerId);
-      if (printer) {
-        targetIp = printer.ipAddress;
-        targetPort = printer.port || 9100;
-      }
-    }
-
     if (!targetIp) {
       const firstPrinter = this.printerMap.values().next().value;
       if (firstPrinter) {
+        if ((firstPrinter.connectionType === 'serial' || firstPrinter.connectionType === 'usb') && firstPrinter.comPort) {
+          await this.enqueueSerialJob(firstPrinter.comPort, firstPrinter.baudRate || 9600, kickCommand);
+          printLogger.info('DrawerKick', 'Local drawer kick sent via serial (fallback)', { port: firstPrinter.comPort, pin });
+          return { success: true, printer: firstPrinter.comPort };
+        }
         targetIp = firstPrinter.ipAddress;
         targetPort = firstPrinter.port || 9100;
       }
@@ -510,9 +530,8 @@ class PrintAgentService {
       throw new Error('No printer configured for cash drawer kick');
     }
 
-    const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
     await this.sendToPrinter(targetIp, targetPort, kickCommand);
-    printLogger.info('DrawerKick', 'Local drawer kick sent', { printer: `${targetIp}:${targetPort}`, pin });
+    printLogger.info('DrawerKick', 'Local drawer kick sent via network', { printer: `${targetIp}:${targetPort}`, pin });
     return { success: true, printer: targetIp };
   }
 
