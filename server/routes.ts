@@ -4785,6 +4785,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return res.status(404).json({ message: `Employee not found: ${employeeId}` });
         }
         
+        const originDeviceId = workstationId !== 'default' ? workstationId : undefined;
         const check = await storage.createCheckAtomic(rvcId, {
           rvcId,
           employeeId,
@@ -4793,6 +4794,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           originBusinessDate: businessDate,
           businessDate,
           testMode: testMode || false,
+          originDeviceId: originDeviceId || null,
         });
         
         // Broadcast real-time update for new check

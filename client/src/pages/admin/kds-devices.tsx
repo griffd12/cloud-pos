@@ -203,7 +203,7 @@ export default function KdsDevicesPage() {
         });
       }
     }
-  }, [formOpen, editingItem, properties, form]);
+  }, [formOpen, editingItem, properties]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertKdsDevice) => {

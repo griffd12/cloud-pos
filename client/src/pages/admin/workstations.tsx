@@ -290,7 +290,7 @@ export default function WorkstationsPage() {
         });
       }
     }
-  }, [formOpen, editingItem, properties, form]);
+  }, [formOpen, editingItem, properties]);
 
   const cleanPrinterId = (value: string | null | undefined): string | null => {
     if (!value || value === "__none__") return null;

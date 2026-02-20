@@ -567,11 +567,14 @@ export default function PosPage() {
 
   const createCheckMutation = useMutation({
     mutationFn: async (orderType: OrderType) => {
+      const createHeaders: Record<string, string> = { "Idempotency-Key": crypto.randomUUID() };
+      if (workstationId) createHeaders["x-workstation-id"] = workstationId;
+      logToElectron("DEBUG", "POS", "CreateCheck", `Creating check with workstationId: ${workstationId || 'NONE'}`);
       const response = await apiRequest("POST", "/api/checks", {
         rvcId: currentRvc?.id,
         employeeId: currentEmployee?.id,
         orderType,
-      }, { "Idempotency-Key": crypto.randomUUID() });
+      }, createHeaders);
       return response.json();
     },
     onSuccess: (check: Check) => {
@@ -610,6 +613,7 @@ export default function PosPage() {
 
       const wsHeaders: Record<string, string> = {};
       if (workstationId) wsHeaders["x-workstation-id"] = workstationId;
+      logToElectron("DEBUG", "POS", "AddItem", `Sending item with workstationId: ${workstationId || 'NONE'}`);
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/items", {
         menuItemId: data.menuItem.id,
         menuItemName: data.menuItem.name,
@@ -640,6 +644,7 @@ export default function PosPage() {
     mutationFn: async () => {
       const sendHeaders: Record<string, string> = { "Idempotency-Key": crypto.randomUUID() };
       if (workstationId) sendHeaders["x-workstation-id"] = workstationId;
+      logToElectron("DEBUG", "POS", "SendCheck", `Sending check with workstationId: ${workstationId || 'NONE'}`);
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/send", {
         employeeId: currentEmployee?.id,
       }, sendHeaders);

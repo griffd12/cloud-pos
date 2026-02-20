@@ -346,45 +346,46 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         if (appInfo && appInfo.setupComplete && appInfo.serverUrl) {
           const storedUrl = localStorage.getItem(SERVER_URL_KEY);
           const storedEntId = localStorage.getItem(ENTERPRISE_ID_KEY);
-          const storedDeviceType = localStorage.getItem(DEVICE_TYPE_KEY);
 
-          if (!storedUrl || storedUrl !== appInfo.serverUrl || !storedEntId || !storedDeviceType) {
-            const entId = String(appInfo.enterpriseId || '');
-            const entName = String(appInfo.enterpriseName || '');
+          const entId = String(appInfo.enterpriseId || '');
+          const entName = String(appInfo.enterpriseName || '');
+          if (!storedUrl || storedUrl !== appInfo.serverUrl || !storedEntId) {
             localStorage.setItem(SERVER_URL_KEY, appInfo.serverUrl);
             localStorage.setItem(ENTERPRISE_CODE_KEY, entName);
             localStorage.setItem(ENTERPRISE_ID_KEY, entId);
             setServerUrl(appInfo.serverUrl);
             setEnterpriseCode(entName);
             setEnterpriseId(entId);
+          }
 
-            const mode = appInfo.mode === 'kds' ? 'kds' : 'pos';
-            localStorage.setItem(DEVICE_TYPE_KEY, mode);
-            localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, 'true');
-            setDeviceType(mode);
-            setHasExplicitDeviceType(true);
+          const mode = appInfo.mode === 'kds' ? 'kds' : 'pos';
+          localStorage.setItem(DEVICE_TYPE_KEY, mode);
+          localStorage.setItem(DEVICE_TYPE_EXPLICIT_KEY, 'true');
+          setDeviceType(mode);
+          setHasExplicitDeviceType(true);
 
-            if (appInfo.deviceId) {
-              localStorage.setItem(DEVICE_ID_KEY, String(appInfo.deviceId));
-              localStorage.setItem(DEVICE_NAME_KEY, String(appInfo.deviceName || ''));
-              setLinkedDeviceId(String(appInfo.deviceId));
-              setDeviceName(String(appInfo.deviceName || ''));
-              if (mode === 'pos') {
-                localStorage.setItem('pos_workstation_id', String(appInfo.deviceId));
-              }
+          if (appInfo.deviceId) {
+            const deviceIdStr = String(appInfo.deviceId);
+            const deviceNameStr = String(appInfo.deviceName || '');
+            localStorage.setItem(DEVICE_ID_KEY, deviceIdStr);
+            localStorage.setItem(DEVICE_NAME_KEY, deviceNameStr);
+            setLinkedDeviceId(deviceIdStr);
+            setDeviceName(deviceNameStr);
+            if (mode === 'pos') {
+              localStorage.setItem('pos_workstation_id', deviceIdStr);
             }
+          }
 
-            if (appInfo.propertyId) {
-              localStorage.setItem(DEVICE_PROPERTY_ID_KEY, String(appInfo.propertyId));
-              setPropertyId(String(appInfo.propertyId));
-            }
+          if (appInfo.propertyId) {
+            localStorage.setItem(DEVICE_PROPERTY_ID_KEY, String(appInfo.propertyId));
+            setPropertyId(String(appInfo.propertyId));
+          }
 
-            if (appInfo.rvcId) {
-              try {
-                const rvcObj = { id: Number(appInfo.rvcId), name: String(appInfo.rvcName || ''), propertyId: Number(appInfo.propertyId || 0) };
-                localStorage.setItem('pos_selected_rvc', JSON.stringify(rvcObj));
-              } catch (e) {}
-            }
+          if (appInfo.rvcId) {
+            try {
+              const rvcObj = { id: Number(appInfo.rvcId), name: String(appInfo.rvcName || ''), propertyId: Number(appInfo.propertyId || 0) };
+              localStorage.setItem('pos_selected_rvc', JSON.stringify(rvcObj));
+            } catch (e) {}
           }
         }
       }).catch(() => {}).finally(() => {

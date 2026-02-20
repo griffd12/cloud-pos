@@ -169,7 +169,7 @@ export default function OrderDevicesPage() {
         });
       }
     }
-  }, [formOpen, editingItem, properties, form]);
+  }, [formOpen, editingItem, properties]);
 
   const cleanKdsDeviceId = (value: string | null | undefined): string | null => {
     if (!value || value === "__none__") return null;
