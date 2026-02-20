@@ -1369,6 +1369,8 @@ export default function PosPage() {
         setShowModifierModal(true);
         
         if (currentRvc?.dynamicOrderMode) {
+          const wsHdrs: Record<string, string> = {};
+          if (workstationId) wsHdrs["x-workstation-id"] = workstationId;
           apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
             menuItemId: item.id,
             menuItemName: item.name,
@@ -1376,7 +1378,7 @@ export default function PosPage() {
             modifiers: [],
             quantity: 1,
             itemStatus: "pending",
-          }).then(async (response) => {
+          }, wsHdrs).then(async (response) => {
             const pendingCheckItem = await response.json();
             setCheckItems((prev) => [...prev, pendingCheckItem]);
             setEditingItem(pendingCheckItem);
@@ -1404,13 +1406,15 @@ export default function PosPage() {
         decrementQuantity(item.id);
 
         try {
+          const wsHdrs2: Record<string, string> = {};
+          if (workstationId) wsHdrs2["x-workstation-id"] = workstationId;
           const response = await apiRequest("POST", "/api/checks/" + checkToUse.id + "/items", {
             menuItemId: item.id,
             menuItemName: item.name,
             unitPrice: item.price,
             modifiers: [],
             quantity: 1,
-          });
+          }, wsHdrs2);
           const newItem = await response.json();
           setCheckItems((prev) => prev.map(ci => ci.id === optimisticId ? newItem : ci));
           queryClient.invalidateQueries({ queryKey: ["/api/checks", checkToUse.id] });
@@ -2535,6 +2539,8 @@ export default function PosPage() {
               }
             }
             
+            const repeatHdrs: Record<string, string> = {};
+            if (workstationId) repeatHdrs["x-workstation-id"] = workstationId;
             for (const item of items) {
               await apiRequest("POST", `/api/checks/${checkToUse?.id}/items`, {
                 menuItemId: item.menuItemId,
@@ -2542,7 +2548,7 @@ export default function PosPage() {
                 unitPrice: item.unitPrice,
                 quantity: item.quantity,
                 modifiers: item.modifiers || [],
-              });
+              }, repeatHdrs);
             }
             
             const refreshRes = await fetchWithTimeout(`/api/checks/${checkToUse?.id}`, { credentials: "include", headers: getAuthHeaders() });

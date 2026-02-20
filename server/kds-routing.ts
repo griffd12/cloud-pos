@@ -90,14 +90,19 @@ export async function resolveKdsTargetsForMenuItem(
 ): Promise<KdsRoutingTarget[]> {
   const [item] = await db.select().from(menuItems).where(eq(menuItems.id, menuItemId));
   if (!item || !item.printClassId) {
+    console.log(`[KDS-ROUTING] Item ${menuItemId} has no print class, skipping`);
     return [];
   }
 
   const orderDeviceIds = await resolveRoutedOrderDeviceIds(item.printClassId, propertyId, rvcId);
+  console.log(`[KDS-ROUTING] Item "${item.name}" (printClass=${item.printClassId}) -> orderDeviceIds=[${orderDeviceIds.join(',')}]`);
   if (orderDeviceIds.length === 0) return [];
 
   const allowedDeviceIds = await getWorkstationAllowedDeviceIds(workstationId);
-  return buildKdsTargetsFromOrderDeviceIds(orderDeviceIds, allowedDeviceIds);
+  console.log(`[KDS-ROUTING] workstationId=${workstationId || 'NONE'}, allowedDeviceIds=${allowedDeviceIds ? `[${Array.from(allowedDeviceIds).join(',')}]` : 'NULL (no filter)'}`);
+  const targets = await buildKdsTargetsFromOrderDeviceIds(orderDeviceIds, allowedDeviceIds);
+  console.log(`[KDS-ROUTING] Final targets: ${targets.map(t => `${t.kdsDeviceName}(${t.orderDeviceName})`).join(', ') || 'NONE'}`);
+  return targets;
 }
 
 export async function resolveKdsTargetsForPrintClass(

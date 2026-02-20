@@ -878,7 +878,7 @@ async function getOrCreateRoutedPreviewTicket(
 }
 
 // Helper to send any pending Fire on Next items when check is finalized
-async function sendPendingFireOnNextItems(checkId: string): Promise<void> {
+async function sendPendingFireOnNextItems(checkId: string, workstationId?: string): Promise<void> {
   const check = await storage.getCheck(checkId);
   if (!check) return;
 
@@ -902,7 +902,7 @@ async function sendPendingFireOnNextItems(checkId: string): Promise<void> {
 
   // Add remaining items to routed preview tickets
   for (const pendingItem of pendingItems) {
-    await addItemToRoutedPreviewTicket(checkId, pendingItem, rvc);
+    await addItemToRoutedPreviewTicket(checkId, pendingItem, rvc, workstationId);
   }
 
   if (pendingItems.length > 0) {
@@ -937,7 +937,8 @@ async function recallBumpedTicketsOnModification(checkId: string): Promise<boole
 // Handles multiple routed preview tickets (one per KDS device)
 async function finalizePreviewTicket(
   checkId: string,
-  employeeId: string
+  employeeId: string,
+  workstationId?: string
 ): Promise<{ round: any; updatedItems: any[] } | null> {
   const check = await storage.getCheck(checkId);
   if (!check) return null;
@@ -947,7 +948,7 @@ async function finalizePreviewTicket(
 
   // For fire_on_next mode, send any pending items that haven't been added to KDS yet
   if (rvc.dynamicOrderMode && rvc.domSendMode === "fire_on_next") {
-    await sendPendingFireOnNextItems(checkId);
+    await sendPendingFireOnNextItems(checkId, workstationId);
   }
 
   // For fire_on_tender mode, all items need to be sent now via routing
@@ -955,7 +956,7 @@ async function finalizePreviewTicket(
     const items = await storage.getCheckItems(checkId);
     const unsentItems = items.filter(i => !i.sent && !i.voided);
     for (const item of unsentItems) {
-      await addItemToRoutedPreviewTicket(checkId, item, rvc);
+      await addItemToRoutedPreviewTicket(checkId, item, rvc, workstationId);
     }
   }
 
@@ -4947,7 +4948,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const rvc = await storage.getRvc(check.rvcId);
         
         // Check if there's a preview ticket (dynamic order mode)
-        const previewResult = await finalizePreviewTicket(checkId, employeeId);
+        const wsIdHeader = req.headers['x-workstation-id'] as string | undefined;
+        const previewResult = await finalizePreviewTicket(checkId, employeeId, wsIdHeader);
         if (previewResult) {
           // Preview ticket was finalized, return updated items
           const allItems = await storage.getCheckItems(checkId);
@@ -5512,7 +5514,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let previewFinalized = false;
         if (isDynamicMode) {
           try {
-            const result = await finalizePreviewTicket(checkId, employeeId);
+            const payWsId = req.headers['x-workstation-id'] as string | undefined;
+            const result = await finalizePreviewTicket(checkId, employeeId, payWsId);
             previewFinalized = result !== null;
           } catch (e) {
             console.error("Payment preview finalize error:", e);
