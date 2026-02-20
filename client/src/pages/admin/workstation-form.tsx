@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { insertWorkstationSchema, type Workstation, type InsertWorkstation, type Property, type Printer, type OrderDevice } from "@shared/schema";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Check } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -69,21 +69,35 @@ interface OrderDeviceRoutingProps {
 const OrderDeviceRouting = forwardRef<OrderDeviceRoutingHandle, OrderDeviceRoutingProps>(
   function OrderDeviceRouting({ editingItem, orderDevices, properties }, ref) {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const loadedForId = useRef<string | null>(null);
 
     useImperativeHandle(ref, () => ({
       getSelectedIds: () => selectedIds,
     }), [selectedIds]);
 
     useEffect(() => {
-      if (editingItem) {
+      const wsId = editingItem?.id ?? null;
+      if (!wsId) {
+        loadedForId.current = null;
+        return;
+      }
+      if (wsId !== loadedForId.current) {
+        loadedForId.current = wsId;
         let cancelled = false;
-        fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
+        fetch(`/api/workstations/${wsId}/order-devices`, { headers: getAuthHeaders() })
           .then(res => res.ok ? res.json() : [])
           .then((data) => {
-            const ids = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
-            if (!cancelled) setSelectedIds(ids);
+            const ids: string[] = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
+            if (!cancelled) {
+              setSelectedIds(prev => {
+                const sorted = [...ids].sort();
+                const prevSorted = [...prev].sort();
+                if (sorted.length === prevSorted.length && sorted.every((v, i) => v === prevSorted[i])) return prev;
+                return ids;
+              });
+            }
           })
-          .catch(() => { if (!cancelled) setSelectedIds([]); });
+          .catch(() => { if (!cancelled) setSelectedIds(prev => prev.length === 0 ? prev : []); });
         return () => { cancelled = true; };
       }
     }, [editingItem?.id]);
@@ -121,14 +135,12 @@ const OrderDeviceRouting = forwardRef<OrderDeviceRoutingHandle, OrderDeviceRouti
                   onClick={() => toggleDevice(device.id, !isSelected)}
                   data-testid={`row-ws-orderdevice-${device.id}`}
                 >
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={(checked) => {
-                      toggleDevice(device.id, checked === true);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
+                  <div
+                    className={`h-4 w-4 shrink-0 rounded-sm border ${isSelected ? 'bg-primary border-primary' : 'border-primary'} flex items-center justify-center`}
                     data-testid={`checkbox-ws-orderdevice-${device.id}`}
-                  />
+                  >
+                    {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{device.name}</span>

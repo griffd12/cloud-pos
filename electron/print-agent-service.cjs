@@ -555,63 +555,90 @@ class PrintAgentService {
     });
   }
 
-  sendToSerialPrinter(comPort, baudRate, data) {
+  sendToSerialPrinter(comPort, baudRate, data, retries = 2) {
+    let settled = false;
     return new Promise((resolve, reject) => {
-      try {
-        const { SerialPort } = require('serialport');
-        const port = new SerialPort({
-          path: comPort,
-          baudRate: baudRate || 9600,
-          dataBits: 8,
-          stopBits: 1,
-          parity: 'none',
-          autoOpen: false,
-        });
+      const safeResolve = (val) => { if (!settled) { settled = true; resolve(val); } };
+      const safeReject = (err) => { if (!settled) { settled = true; reject(err); } };
 
-        const timeout = setTimeout(() => {
-          port.close(() => {});
-          reject(new Error(`Serial printer timeout on ${comPort}`));
-        }, 10000);
+      const attempt = (attemptsLeft) => {
+        if (settled) return;
+        try {
+          const { SerialPort } = require('serialport');
+          const port = new SerialPort({
+            path: comPort,
+            baudRate: baudRate || 9600,
+            dataBits: 8,
+            stopBits: 1,
+            parity: 'none',
+            autoOpen: false,
+          });
 
-        port.open((err) => {
-          if (err) {
-            clearTimeout(timeout);
-            reject(new Error(`Failed to open ${comPort}: ${err.message}`));
-            return;
-          }
+          let portOpened = false;
+          const timeout = setTimeout(() => {
+            port.close(() => {});
+            if (attemptsLeft > 0 && !settled) {
+              printLogger.info('Serial', `Port ${comPort} timed out, retrying (${attemptsLeft} left)`);
+              setTimeout(() => attempt(attemptsLeft - 1), 500);
+            } else {
+              safeReject(new Error(`Serial printer timeout on ${comPort}`));
+            }
+          }, 10000);
 
-          port.write(data, (writeErr) => {
-            if (writeErr) {
+          port.open((err) => {
+            if (settled) { clearTimeout(timeout); port.close(() => {}); return; }
+            if (err) {
               clearTimeout(timeout);
-              port.close(() => {});
-              reject(writeErr);
+              if (attemptsLeft > 0 && (err.message.includes('Access denied') || err.message.includes('locked') || err.message.includes('busy') || err.message.includes('in use'))) {
+                printLogger.info('Serial', `Port ${comPort} busy, retrying in 500ms (${attemptsLeft} left)`);
+                setTimeout(() => attempt(attemptsLeft - 1), 500);
+              } else {
+                safeReject(new Error(`Failed to open ${comPort}: ${err.message}`));
+              }
               return;
             }
 
-            port.drain((drainErr) => {
-              clearTimeout(timeout);
-              port.close(() => {});
-              if (drainErr) {
-                reject(drainErr);
-              } else {
-                resolve({ success: true });
+            portOpened = true;
+            port.write(data, (writeErr) => {
+              if (writeErr) {
+                clearTimeout(timeout);
+                port.close(() => {});
+                safeReject(writeErr);
+                return;
               }
+
+              port.drain((drainErr) => {
+                clearTimeout(timeout);
+                port.close(() => {});
+                if (drainErr) {
+                  safeReject(drainErr);
+                } else {
+                  safeResolve({ success: true });
+                }
+              });
             });
           });
-        });
 
-        port.on('error', (err) => {
-          clearTimeout(timeout);
-          port.close(() => {});
-          reject(err);
-        });
-      } catch (err) {
-        if (err.code === 'MODULE_NOT_FOUND') {
-          reject(new Error(`Serial port support not available - 'serialport' module not installed. Install with: npm install serialport`));
-        } else {
-          reject(err);
+          port.on('error', (err) => {
+            if (settled || portOpened) return;
+            clearTimeout(timeout);
+            port.close(() => {});
+            if (attemptsLeft > 0) {
+              printLogger.info('Serial', `Port ${comPort} error, retrying in 500ms (${attemptsLeft} left): ${err.message}`);
+              setTimeout(() => attempt(attemptsLeft - 1), 500);
+            } else {
+              safeReject(err);
+            }
+          });
+        } catch (err) {
+          if (err.code === 'MODULE_NOT_FOUND') {
+            safeReject(new Error(`Serial port support not available - 'serialport' module not installed. Install with: npm install serialport`));
+          } else {
+            safeReject(err);
+          }
         }
-      }
+      };
+      attempt(retries);
     });
   }
 

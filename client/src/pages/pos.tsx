@@ -828,6 +828,7 @@ export default function PosPage() {
       await apiRequest("POST", "/api/cash-drawer-kick", { workstationId });
     } catch (err) {
       console.error("Cash drawer kick failed:", err);
+      toast({ title: "Cash Drawer", description: "Drawer kick failed — check printer connection", variant: "destructive" });
     }
   };
 
@@ -850,7 +851,9 @@ export default function PosPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/checks/open"] });
 
       const appliedTender = tenders.find(t => t.id === result.appliedTenderId);
-      if (appliedTender?.type === "cash" && wsContext?.workstation?.cashDrawerAutoOpenOnCash) {
+      const isCashTender = appliedTender?.type === "cash";
+      const shouldKickDrawer = isCashTender && wsContext?.workstation?.cashDrawerAutoOpenOnCash;
+      if (shouldKickDrawer && result.status !== "closed") {
         triggerCashDrawerKick();
       }
       if (result.status === "closed") {
