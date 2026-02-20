@@ -89,5 +89,6 @@
     "version": "1.4.2"
   },
   "buildDependenciesFromSource": false,
-  "npmRebuild": true
+  "npmRebuild": true,
+  "beforeBuild": "electron/rebuild-native.cjs"
 }
