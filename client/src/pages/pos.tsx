@@ -608,13 +608,15 @@ export default function PosPage() {
       setItemModifierGroups([]);
       decrementQuantity(data.menuItem.id);
 
+      const wsHeaders: Record<string, string> = {};
+      if (workstationId) wsHeaders["x-workstation-id"] = workstationId;
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/items", {
         menuItemId: data.menuItem.id,
         menuItemName: data.menuItem.name,
         unitPrice: data.menuItem.price,
         modifiers: data.modifiers,
         quantity: 1,
-      });
+      }, wsHeaders);
       const newItem = await response.json();
       return { newItem, optimisticId };
     },
@@ -636,9 +638,11 @@ export default function PosPage() {
 
   const sendCheckMutation = useMutation({
     mutationFn: async () => {
+      const sendHeaders: Record<string, string> = { "Idempotency-Key": crypto.randomUUID() };
+      if (workstationId) sendHeaders["x-workstation-id"] = workstationId;
       const response = await apiRequest("POST", "/api/checks/" + currentCheck?.id + "/send", {
         employeeId: currentEmployee?.id,
-      }, { "Idempotency-Key": crypto.randomUUID() });
+      }, sendHeaders);
       return response.json();
     },
     onSuccess: (data: { round: any; updatedItems: CheckItem[] }) => {
@@ -1133,9 +1137,11 @@ export default function PosPage() {
     mutationFn: async (checkId: string) => {
       const unsentItems = checkItems.filter(item => !item.sent && !item.voided);
       if (unsentItems.length > 0) {
+        const printSendHeaders: Record<string, string> = { "Idempotency-Key": crypto.randomUUID() };
+        if (workstationId) printSendHeaders["x-workstation-id"] = workstationId;
         await apiRequest("POST", `/api/checks/${checkId}/send`, {
           employeeId: currentEmployee?.id,
-        }, { "Idempotency-Key": crypto.randomUUID() });
+        }, printSendHeaders);
       }
 
       const response = await apiRequest("POST", `/api/checks/${checkId}/print`, {
