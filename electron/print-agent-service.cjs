@@ -356,10 +356,7 @@ class PrintAgentService {
 
     printLogger.info('DrawerKick', `Building ESC/POS command: pin=${pin} (byte=0x${pinByte.toString(16).padStart(2,'0')}), pulseOn=${pulseOn}, pulseOff=${pulseOff}, duration=${duration}ms`);
 
-    return Buffer.concat([
-      Buffer.from([0x1B, 0x40]),
-      Buffer.from([0x1B, 0x70, pinByte, pulseOn, pulseOff]),
-    ]);
+    return Buffer.from([0x1B, 0x70, pinByte, pulseOn, pulseOff]);
   }
 
   async handleDrawerKick(msg) {
