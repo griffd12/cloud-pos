@@ -32,13 +32,17 @@
     "node_modules/universalify/**/*",
     "node_modules/debug/**/*",
     "node_modules/ms/**/*",
-    "node_modules/sax/**/*"
+    "node_modules/sax/**/*",
+    "node_modules/serialport/**/*",
+    "node_modules/@serialport/**/*"
   ],
   "asarUnpack": [
     "node_modules/better-sqlite3/**/*",
     "node_modules/bindings/**/*",
     "node_modules/file-uri-to-path/**/*",
-    "node_modules/keytar/**/*"
+    "node_modules/keytar/**/*",
+    "node_modules/serialport/**/*",
+    "node_modules/@serialport/**/*"
   ],
   "extraResources": [
     {
@@ -82,7 +86,7 @@
   },
   "extraMetadata": {
     "main": "electron/main.cjs",
-    "version": "1.4.1"
+    "version": "1.4.2"
   },
   "buildDependenciesFromSource": false,
   "npmRebuild": true
