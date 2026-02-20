@@ -147,6 +147,7 @@ async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
     const message: any = {
       type: "JOB",
       jobId: job.id,
+      printerId: job.printerId,
       printerIp: job.printerIp,
       printerPort: job.printerPort || 9100,
       data: job.escPosData,
@@ -155,7 +156,8 @@ async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
     if (job.connectionType) message.connectionType = job.connectionType;
     if (job.comPort) message.comPort = job.comPort;
     if (job.baudRate) message.baudRate = job.baudRate;
-    console.log(`Sending job ${job.id} to agent ${agentId}: printer=${job.connectionType === 'serial' ? job.comPort : job.printerIp + ':' + (job.printerPort || 9100)}, dataLen=${job.escPosData?.length || 0}`);
+    const printerTarget = job.connectionType === 'serial' ? `serial:${job.comPort}` : `${job.printerIp || 'no-ip'}:${job.printerPort || 9100}`;
+    console.log(`[PrintRoute] Sending job ${job.id} to agent ${agentId}: connectionType=${job.connectionType}, target=${printerTarget}, dataLen=${job.escPosData?.length || 0}`);
     agentWs.send(JSON.stringify(message));
     return true;
   } catch (e) {
@@ -5953,10 +5955,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return null;
     }
 
-    // Find online print agent for this property
-    const agent = await storage.getOnlinePrintAgentForProperty(rvc.propertyId);
+    // Find the correct print agent for this job
+    // For serial/USB printers, we must route to the agent on the workstation that physically has the printer
+    // For network printers, any agent on the property can reach it
+    let agent = null;
+    const sourceWsId = options?.workstationId;
+
+    if (isSerialPrinter || (printer.connectionType === "usb")) {
+      // Serial/USB printer: route to the agent on the workstation that physically has the printer
+      // Use printer.hostWorkstationId to determine the physical host
+      const hostWsId = printer.hostWorkstationId;
+      if (hostWsId) {
+        agent = await storage.getOnlinePrintAgentForWorkstation(hostWsId);
+        if (agent) {
+          const hostWs = await storage.getWorkstation(hostWsId);
+          console.log(`[PrintRoute] Serial/USB printer "${printer.name}" -> routing to host workstation "${hostWs?.name}" agent "${agent.name}"`);
+        } else {
+          console.log(`[PrintRoute] Serial/USB printer "${printer.name}" has hostWorkstationId=${hostWsId} but no online agent found for that workstation`);
+        }
+      } else {
+        console.log(`[PrintRoute] WARNING: Serial/USB printer "${printer.name}" has no hostWorkstationId set - cannot determine which agent to route to`);
+        // Fallback: try source workstation's own agent
+        if (sourceWsId) {
+          agent = await storage.getOnlinePrintAgentForWorkstation(sourceWsId);
+          if (agent) {
+            console.log(`[PrintRoute] Fallback: using source workstation's agent "${agent.name}" (printer has no hostWorkstationId)`);
+          }
+        }
+      }
+    }
+
+    // Fallback for network printers or if no workstation-specific agent found
     if (!agent) {
-      console.log("No online print agent available for property - job will be queued");
+      agent = await storage.getOnlinePrintAgentForProperty(rvc.propertyId);
+    }
+
+    if (!agent) {
+      console.log("[PrintRoute] No online print agent available - job will be queued");
+    } else {
+      console.log(`[PrintRoute] Selected agent: "${agent.name}" (${agent.id}) for printer "${printer.name}" (${printer.connectionType}), source WS: ${sourceWsId || 'none'}`);
     }
 
     // Build receipt ESC/POS data
@@ -18079,23 +18116,22 @@ connect();
     return null;
   }
 
-  // Helper: try to resolve propertyId from workstation name embedded in agent name
-  async function resolvePropertyFromAgentName(agentName: string): Promise<string | null> {
+  // Helper: try to resolve propertyId and workstationId from workstation name embedded in agent name
+  async function resolveWorkstationFromAgentName(agentName: string): Promise<{ propertyId: string | null; workstationId: string | null }> {
     const wsMatch = agentName.match(/^(.+?)\s*\(Embedded Agent\)$/);
-    if (!wsMatch) return null;
+    if (!wsMatch) return { propertyId: null, workstationId: null };
     const wsName = wsMatch[1];
     try {
       const workstations = await storage.getWorkstations();
-      // Match by exact name or by name with dashes stripped, and only return if property is set
       const ws = workstations.find((w: any) => w.name === wsName || w.name === wsName.replace(/-/g, ''));
-      if (ws?.propertyId) {
-        console.log(`Print agent auto-resolved property from workstation "${wsName}": ${ws.propertyId}`);
-        return ws.propertyId;
+      if (ws) {
+        console.log(`Print agent auto-resolved workstation "${wsName}": wsId=${ws.id}, propertyId=${ws.propertyId}`);
+        return { propertyId: ws.propertyId || null, workstationId: ws.id };
       }
     } catch (e) {
-      console.warn("Could not resolve workstation for print agent property:", e);
+      console.warn("Could not resolve workstation for print agent:", e);
     }
-    return null;
+    return { propertyId: null, workstationId: null };
   }
 
   // Create new print agent
@@ -18109,10 +18145,13 @@ connect();
 
       // Resolve the incoming propertyId (only accept valid UUID strings)
       let incomingPropertyId = resolvePropertyId(propertyId);
+      let resolvedWorkstationId: string | null = null;
 
-      // If no valid propertyId provided, try to resolve from workstation name
-      if (!incomingPropertyId) {
-        incomingPropertyId = await resolvePropertyFromAgentName(name);
+      // Try to resolve workstation and property from agent name
+      const resolved = await resolveWorkstationFromAgentName(name);
+      resolvedWorkstationId = resolved.workstationId;
+      if (!incomingPropertyId && resolved.propertyId) {
+        incomingPropertyId = resolved.propertyId;
       }
 
       // Clean up expired block list entries
@@ -18148,10 +18187,13 @@ connect();
         const plainToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
         const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
 
-        const updated = await storage.updatePrintAgent(existingAgent.id, {
+        const updateData: any = {
           agentToken: tokenHash,
-          // Don't set status to "online" - that happens on WebSocket AUTH_OK handshake
-        });
+        };
+        if (resolvedWorkstationId && !existingAgent.workstationId) {
+          updateData.workstationId = resolvedWorkstationId;
+        }
+        const updated = await storage.updatePrintAgent(existingAgent.id, updateData);
         
         console.log(`Print agent re-authenticated (existing): ${name} (${existingAgent.id}) property: ${existingAgent.propertyId}`);
         return res.status(200).json({
@@ -18171,6 +18213,7 @@ connect();
 
       const agent = await storage.createPrintAgent({
         propertyId: incomingPropertyId,
+        workstationId: resolvedWorkstationId,
         name,
         description: description || null,
         agentToken: tokenHash, // Store the hash in the database

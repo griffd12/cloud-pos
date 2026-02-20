@@ -505,6 +505,7 @@ export interface IStorage {
   getPrintAgent(id: string): Promise<PrintAgent | undefined>;
   getPrintAgentByToken(agentTokenHash: string): Promise<PrintAgent | undefined>;
   getOnlinePrintAgentForProperty(propertyId: string): Promise<PrintAgent | undefined>;
+  getOnlinePrintAgentForWorkstation(workstationId: string): Promise<PrintAgent | undefined>;
   createPrintAgent(data: InsertPrintAgent): Promise<PrintAgent>;
   updatePrintAgent(id: string, data: Partial<PrintAgent>): Promise<PrintAgent | undefined>;
   deletePrintAgent(id: string): Promise<boolean>;
@@ -2658,6 +2659,17 @@ export class DatabaseStorage implements IStorage {
         eq(printAgents.active, true)
       ))
       .orderBy(printAgents.propertyId) // Prefer property-specific agents over global
+      .limit(1);
+    return result;
+  }
+
+  async getOnlinePrintAgentForWorkstation(workstationId: string): Promise<PrintAgent | undefined> {
+    const [result] = await db.select().from(printAgents)
+      .where(and(
+        eq(printAgents.workstationId, workstationId),
+        eq(printAgents.status, "online"),
+        eq(printAgents.active, true)
+      ))
       .limit(1);
     return result;
   }

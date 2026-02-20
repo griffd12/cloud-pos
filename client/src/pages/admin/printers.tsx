@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { insertPrinterSchema, type Printer, type InsertPrinter, type Property } from "@shared/schema";
+import { insertPrinterSchema, type Printer, type InsertPrinter, type Property, type Workstation } from "@shared/schema";
 import { Printer as PrinterIcon } from "lucide-react";
 import {
   Form,
@@ -109,6 +109,15 @@ export default function PrintersPage() {
     },
   });
 
+  const { data: workstations = [] } = useQuery<Workstation[]>({
+    queryKey: ["/api/workstations", filterKeys],
+    queryFn: async () => {
+      const res = await fetch(`/api/workstations${filterParam}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch workstations");
+      return res.json();
+    },
+  });
+
   const columns: Column<Printer>[] = [
     { key: "name", header: "Name", sortable: true },
     {
@@ -147,6 +156,15 @@ export default function PrintersPage() {
     },
     { key: "ipAddress", header: "IP Address" },
     {
+      key: "hostWorkstationId" as any,
+      header: "Host WS",
+      render: (value: any) => {
+        if (!value) return "-";
+        const ws = workstations.find((w) => w.id === value);
+        return ws?.name || "-";
+      },
+    },
+    {
       key: "isOnline",
       header: "Status",
       render: (value) => (value ? <Badge className="bg-green-600">Online</Badge> : <Badge variant="secondary">Offline</Badge>),
@@ -173,6 +191,7 @@ export default function PrintersPage() {
       port: 9100,
       comPort: "",
       baudRate: 9600,
+      hostWorkstationId: null,
       driverProtocol: "epson",
       model: "TM-T88VII",
       characterWidth: 42,
@@ -205,6 +224,7 @@ export default function PrintersPage() {
           port: editingItem.port ?? 9100,
           comPort: editingItem.comPort || "",
           baudRate: editingItem.baudRate ?? 9600,
+          hostWorkstationId: (editingItem as any).hostWorkstationId || null,
           driverProtocol: editingItem.driverProtocol || "epson",
           model: editingItem.model || "TM-T88VII",
           characterWidth: editingItem.characterWidth ?? 42,
@@ -230,6 +250,7 @@ export default function PrintersPage() {
           port: 9100,
           comPort: "",
           baudRate: 9600,
+          hostWorkstationId: null,
           driverProtocol: "epson",
           model: "TM-T88VII",
           characterWidth: 42,
@@ -486,6 +507,30 @@ export default function PrintersPage() {
                             <SelectItem value="38400">38400</SelectItem>
                             <SelectItem value="57600">57600</SelectItem>
                             <SelectItem value="115200">115200</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="hostWorkstationId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Host Workstation</FormLabel>
+                        <Select onValueChange={(v) => field.onChange(v === "__none__" ? null : v)} value={field.value || "__none__"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-hostWorkstation">
+                              <SelectValue placeholder="Select host workstation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">Not assigned</SelectItem>
+                            {workstations.map((ws) => (
+                              <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />

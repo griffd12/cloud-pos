@@ -278,6 +278,7 @@ export const workstations = pgTable("workstations", {
 export const printers = pgTable("printers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: varchar("property_id").notNull().references(() => properties.id),
+  hostWorkstationId: varchar("host_workstation_id").references(() => workstations.id), // Workstation physically connected to this printer (for serial/USB routing)
   name: text("name").notNull(),
   printerType: text("printer_type").notNull().default("kitchen"), // receipt, kitchen, bar, prep, report
   // Connection
@@ -1180,6 +1181,7 @@ export type PrintAgentStatus = (typeof PRINT_AGENT_STATUSES)[number];
 export const printAgents = pgTable("print_agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   propertyId: varchar("property_id").references(() => properties.id), // Optional - null means global (all properties)
+  workstationId: varchar("workstation_id").references(() => workstations.id), // Links agent to its host workstation for print routing
   name: text("name").notNull(),
   description: text("description"),
   // Authentication
