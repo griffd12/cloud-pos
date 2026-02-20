@@ -1233,6 +1233,9 @@ export const printJobs = pgTable("print_jobs", {
   printerIp: text("printer_ip"),
   printerPort: integer("printer_port").default(9100),
   printerName: text("printer_name"),
+  connectionType: text("connection_type").default("network"),
+  comPort: text("com_port"),
+  baudRate: integer("baud_rate"),
   // Retry handling
   attempts: integer("attempts").default(0),
   maxAttempts: integer("max_attempts").default(3),
