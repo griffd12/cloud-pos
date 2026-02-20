@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { eq, and, isNull, or } from "drizzle-orm";
 import {
-  menuItems, printClasses, printClassRouting, orderDevices, orderDeviceKds, kdsDevices,
+  menuItems, printClasses, printClassRouting, orderDevices, kdsDevices,
   workstationOrderDevices,
   type MenuItem, type KdsDevice, type OrderDevice
 } from "@shared/schema";
@@ -64,21 +64,18 @@ async function buildKdsTargetsFromOrderDeviceIds(
       .where(eq(orderDevices.id, odId));
     if (!orderDevice) continue;
 
-    const kdsLinks = await db.select().from(orderDeviceKds)
-      .where(eq(orderDeviceKds.orderDeviceId, orderDevice.id));
+    if (!orderDevice.kdsDeviceId) continue;
 
-    for (const link of kdsLinks) {
-      const [kdsDevice] = await db.select().from(kdsDevices)
-        .where(eq(kdsDevices.id, link.kdsDeviceId));
-      if (kdsDevice && kdsDevice.active) {
-        targets.push({
-          kdsDeviceId: kdsDevice.id,
-          kdsDeviceName: kdsDevice.name,
-          stationType: kdsDevice.stationType || "hot",
-          orderDeviceId: orderDevice.id,
-          orderDeviceName: orderDevice.name,
-        });
-      }
+    const [kdsDevice] = await db.select().from(kdsDevices)
+      .where(eq(kdsDevices.id, orderDevice.kdsDeviceId));
+    if (kdsDevice && kdsDevice.active) {
+      targets.push({
+        kdsDeviceId: kdsDevice.id,
+        kdsDeviceName: kdsDevice.name,
+        stationType: kdsDevice.stationType || "hot",
+        orderDeviceId: orderDevice.id,
+        orderDeviceName: orderDevice.name,
+      });
     }
   }
 
