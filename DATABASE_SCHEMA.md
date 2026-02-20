@@ -1700,6 +1700,12 @@ POS workstation configurations with peripheral assignments and operational setti
 | device_token | text | YES | — |
 | registered_device_id | varchar | YES | — |
 | font_scale | integer | YES | `100` |
+| com_port | text | YES | — |
+| com_baud_rate | integer | YES | `9600` |
+| com_data_bits | integer | YES | `8` |
+| com_stop_bits | text | YES | `'1'` |
+| com_parity | text | YES | `'none'` |
+| com_flow_control | text | YES | `'none'` |
 | cash_drawer_enabled | boolean | YES | `false` |
 | cash_drawer_printer_id | varchar | YES | — |
 | cash_drawer_kick_pin | text | YES | `'pin2'` |
@@ -1712,7 +1718,14 @@ POS workstation configurations with peripheral assignments and operational setti
   - `property_id` → `properties.id`
   - `rvc_id` → `rvcs.id`
 - **Notes:**
-  - Cash drawer fields configure printer-driven cash drawers connected via ESC/POS receipt printers.
+  - Serial COM port fields configure the physical RS-232 serial connection for serial printers connected to the workstation.
+  - `com_port`: COM1–COM8 (COM1 is the standard default port).
+  - `com_baud_rate`: Communication speed — 2400, 4800, 9600 (standard), 19200, 38400, 57600, 115200.
+  - `com_data_bits`: 7 or 8 (standard).
+  - `com_stop_bits`: 1 (standard), 1.5, or 2.
+  - `com_parity`: none (standard), even, odd, mark, space.
+  - `com_flow_control`: none (standard), xon_xoff, rts_cts, dtr_dsr.
+  - Cash drawer fields configure printer-driven cash drawers connected via ESC/POS receipt printers. The serial printer's DK (drawer kick) port connects to the cash drawer.
   - `cash_drawer_printer_id` references a `printers.id` record; defaults to `default_receipt_printer_id` if null.
   - `cash_drawer_kick_pin`: `pin2` (standard, most drawers) or `pin5` (alternate, dual-drawer setups).
   - `cash_drawer_pulse_duration`: Electronic kick pulse duration in milliseconds (50–500ms).

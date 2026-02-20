@@ -170,6 +170,12 @@ export default function WorkstationsPage() {
       autoLogoutMinutes: null,
       active: true,
       fontScale: 100,
+      comPort: null,
+      comBaudRate: 9600,
+      comDataBits: 8,
+      comStopBits: "1",
+      comParity: "none",
+      comFlowControl: "none",
       cashDrawerEnabled: false,
       cashDrawerPrinterId: null,
       cashDrawerKickPin: "pin2",
@@ -229,6 +235,12 @@ export default function WorkstationsPage() {
           autoLogoutMinutes: editingItem.autoLogoutMinutes ?? null,
           active: editingItem.active ?? true,
           fontScale: editingItem.fontScale ?? 100,
+          comPort: editingItem.comPort || null,
+          comBaudRate: editingItem.comBaudRate ?? 9600,
+          comDataBits: editingItem.comDataBits ?? 8,
+          comStopBits: editingItem.comStopBits || "1",
+          comParity: editingItem.comParity || "none",
+          comFlowControl: editingItem.comFlowControl || "none",
           cashDrawerEnabled: editingItem.cashDrawerEnabled ?? false,
           cashDrawerPrinterId: editingItem.cashDrawerPrinterId || null,
           cashDrawerKickPin: editingItem.cashDrawerKickPin || "pin2",
@@ -263,6 +275,12 @@ export default function WorkstationsPage() {
           autoLogoutMinutes: null,
           active: true,
           fontScale: 100,
+          comPort: null,
+          comBaudRate: 9600,
+          comDataBits: 8,
+          comStopBits: "1",
+          comParity: "none",
+          comFlowControl: "none",
           cashDrawerEnabled: false,
           cashDrawerPrinterId: null,
           cashDrawerKickPin: "pin2",
@@ -374,6 +392,7 @@ export default function WorkstationsPage() {
         voidPrinterId: cleanPrinterId(data.voidPrinterId),
         backupVoidPrinterId: cleanPrinterId(data.backupVoidPrinterId),
         cashDrawerPrinterId: cleanPrinterId(data.cashDrawerPrinterId),
+        comPort: cleanPrinterId(data.comPort),
       };
       if (editingItem) {
         updateMutation.mutate({ ...editingItem, ...cleanedData } as Workstation);
@@ -752,6 +771,169 @@ export default function WorkstationsPage() {
                       name="backupVoidPrinterId"
                       label="Backup Void Printer"
                       description="Fallback for void printing"
+                    />
+                  </div>
+                </div>
+
+                <div className="border rounded-md p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Serial Port Settings</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Configure the COM port for serial printers connected to this workstation. The serial adapter connects to a COM port on the workstation hardware.
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="comPort"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>COM Port</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "__none__"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-comPort">
+                                <SelectValue placeholder="Select COM port" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="__none__">None (Not Used)</SelectItem>
+                              <SelectItem value="COM1">COM1 (Standard)</SelectItem>
+                              <SelectItem value="COM2">COM2</SelectItem>
+                              <SelectItem value="COM3">COM3</SelectItem>
+                              <SelectItem value="COM4">COM4</SelectItem>
+                              <SelectItem value="COM5">COM5</SelectItem>
+                              <SelectItem value="COM6">COM6</SelectItem>
+                              <SelectItem value="COM7">COM7</SelectItem>
+                              <SelectItem value="COM8">COM8</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">Physical COM port on the workstation</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="comBaudRate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Baud Rate</FormLabel>
+                          <Select onValueChange={(v) => field.onChange(parseInt(v, 10))} value={String(field.value ?? 9600)}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-comBaudRate">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="2400">2400</SelectItem>
+                              <SelectItem value="4800">4800</SelectItem>
+                              <SelectItem value="9600">9600 (Standard)</SelectItem>
+                              <SelectItem value="19200">19200</SelectItem>
+                              <SelectItem value="38400">38400</SelectItem>
+                              <SelectItem value="57600">57600</SelectItem>
+                              <SelectItem value="115200">115200</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">Communication speed — 9600 is standard for most receipt printers</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="comDataBits"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data Bits</FormLabel>
+                          <Select onValueChange={(v) => field.onChange(parseInt(v, 10))} value={String(field.value ?? 8)}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-comDataBits">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="7">7</SelectItem>
+                              <SelectItem value="8">8 (Standard)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="comStopBits"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stop Bits</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "1"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-comStopBits">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="1">1 (Standard)</SelectItem>
+                              <SelectItem value="1.5">1.5</SelectItem>
+                              <SelectItem value="2">2</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="comParity"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Parity</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "none"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-comParity">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">None (Standard)</SelectItem>
+                              <SelectItem value="even">Even</SelectItem>
+                              <SelectItem value="odd">Odd</SelectItem>
+                              <SelectItem value="mark">Mark</SelectItem>
+                              <SelectItem value="space">Space</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="comFlowControl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Flow Control</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "none"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-comFlowControl">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">None (Standard)</SelectItem>
+                              <SelectItem value="xon_xoff">XON/XOFF (Software)</SelectItem>
+                              <SelectItem value="rts_cts">RTS/CTS (Hardware)</SelectItem>
+                              <SelectItem value="dtr_dsr">DTR/DSR (Hardware)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
                 </div>

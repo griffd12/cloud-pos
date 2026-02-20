@@ -258,6 +258,13 @@ export const workstations = pgTable("workstations", {
   deviceToken: text("device_token"), // Hashed token for device authentication
   registeredDeviceId: varchar("registered_device_id"), // Hardware ID of registered device
   fontScale: integer("font_scale").default(100), // Display font scale percentage: 85=Small, 100=Medium, 120=Large, 140=Extra Large
+  // Serial COM Port Settings (for serial printers connected to workstation COM ports)
+  comPort: text("com_port"), // COM1, COM2, COM3, COM4
+  comBaudRate: integer("com_baud_rate").default(9600), // 2400, 4800, 9600, 19200, 38400, 57600, 115200
+  comDataBits: integer("com_data_bits").default(8), // 7, 8
+  comStopBits: text("com_stop_bits").default("1"), // 1, 1.5, 2
+  comParity: text("com_parity").default("none"), // none, even, odd, mark, space
+  comFlowControl: text("com_flow_control").default("none"), // none, xon_xoff, rts_cts, dtr_dsr
   // Cash Drawer Settings
   cashDrawerEnabled: boolean("cash_drawer_enabled").default(false),
   cashDrawerPrinterId: varchar("cash_drawer_printer_id"),
