@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef, useCallback, memo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,106 @@ function cleanPrinterId(val: any): string | null {
   if (!val || val === "__none__") return null;
   return val;
 }
+
+interface OrderDeviceRoutingHandle {
+  getSelectedIds: () => string[];
+}
+
+interface OrderDeviceRoutingProps {
+  editingItem: Workstation | null;
+  orderDevices: OrderDevice[];
+  properties: Property[];
+}
+
+const OrderDeviceRouting = forwardRef<OrderDeviceRoutingHandle, OrderDeviceRoutingProps>(
+  function OrderDeviceRouting({ editingItem, orderDevices, properties }, ref) {
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+    useImperativeHandle(ref, () => ({
+      getSelectedIds: () => selectedIds,
+    }), [selectedIds]);
+
+    useEffect(() => {
+      if (editingItem) {
+        let cancelled = false;
+        fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
+          .then(res => res.ok ? res.json() : [])
+          .then((data) => {
+            const ids = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
+            if (!cancelled) setSelectedIds(ids);
+          })
+          .catch(() => { if (!cancelled) setSelectedIds([]); });
+        return () => { cancelled = true; };
+      }
+    }, [editingItem?.id]);
+
+    const toggleDevice = useCallback((deviceId: string, checked: boolean) => {
+      setSelectedIds((prev) => {
+        const has = prev.includes(deviceId);
+        if (checked && !has) return [...prev, deviceId];
+        if (!checked && has) return prev.filter((id) => id !== deviceId);
+        return prev;
+      });
+    }, []);
+
+    return (
+      <div className="border rounded-md p-4 space-y-3">
+        <div>
+          <h4 className="font-medium text-sm">Order Device Routing</h4>
+          <p className="text-xs text-muted-foreground mt-1">
+            Select which Order Devices this workstation is allowed to send orders to. If none are selected, the workstation will send to all devices based on the menu item's Print Class.
+          </p>
+        </div>
+
+        {orderDevices.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No order devices configured. Please create order devices first.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {orderDevices.map((device) => {
+              const isSelected = selectedIds.includes(device.id);
+              return (
+                <div
+                  key={device.id}
+                  className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
+                  onClick={() => toggleDevice(device.id, !isSelected)}
+                  data-testid={`row-ws-orderdevice-${device.id}`}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(checked) => {
+                      toggleDevice(device.id, checked === true);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid={`checkbox-ws-orderdevice-${device.id}`}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{device.name}</span>
+                      <Badge variant="outline" className="text-xs">{device.code}</Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {properties.find(p => p.id === device.propertyId)?.name || "Unknown Property"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {selectedIds.length > 0 && (
+          <div className="pt-2 border-t">
+            <p className="text-xs text-muted-foreground">
+              Selected: {selectedIds.length} device(s) — orders will only route to these devices
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+);
 
 export function WorkstationForm({
   editingItem,
@@ -150,21 +250,7 @@ export function WorkstationForm({
   });
 
   const [cashDrawerVisible, setCashDrawerVisible] = useState(editingItem?.cashDrawerEnabled ?? false);
-  const [selectedOrderDeviceIds, setSelectedOrderDeviceIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (editingItem) {
-      let cancelled = false;
-      fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
-        .then(res => res.ok ? res.json() : [])
-        .then((data) => {
-          const ids = Array.isArray(data) ? data : (data?.orderDeviceIds ?? []);
-          if (!cancelled) setSelectedOrderDeviceIds(ids);
-        })
-        .catch(() => { if (!cancelled) setSelectedOrderDeviceIds([]); });
-      return () => { cancelled = true; };
-    }
-  }, [editingItem?.id]);
+  const orderDeviceRoutingRef = useRef<OrderDeviceRoutingHandle>(null);
 
   const guardedChange = (field: any, newValue: string) => {
     const currentDisplay = field.value || "__none__";
@@ -209,10 +295,11 @@ export function WorkstationForm({
         cashDrawerPrinterId: cleanPrinterId(data.cashDrawerPrinterId),
         comPort: cleanPrinterId(data.comPort),
       };
+      const currentOrderDeviceIds = orderDeviceRoutingRef.current?.getSelectedIds() ?? [];
       if (editingItem) {
-        onSave({ ...editingItem, ...cleanedData } as Workstation, selectedOrderDeviceIds);
+        onSave({ ...editingItem, ...cleanedData } as Workstation, currentOrderDeviceIds);
       } else {
-        onSave(cleanedData, selectedOrderDeviceIds);
+        onSave(cleanedData, currentOrderDeviceIds);
       }
     })();
   };
@@ -852,70 +939,12 @@ export function WorkstationForm({
                 )}
               </div>
 
-              <div className="border rounded-md p-4 space-y-3">
-                <div>
-                  <h4 className="font-medium text-sm">Order Device Routing</h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Select which Order Devices this workstation is allowed to send orders to. If none are selected, the workstation will send to all devices based on the menu item's Print Class.
-                  </p>
-                </div>
-
-                {orderDevices.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No order devices configured. Please create order devices first.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {orderDevices.map((device) => {
-                      const isSelected = selectedOrderDeviceIds.includes(device.id);
-
-                      const setSelected = (nextChecked: boolean) => {
-                        setSelectedOrderDeviceIds((prev) => {
-                          const has = prev.includes(device.id);
-                          if (nextChecked && !has) return [...prev, device.id];
-                          if (!nextChecked && has) return prev.filter((id) => id !== device.id);
-                          return prev;
-                        });
-                      };
-
-                      return (
-                        <div
-                          key={device.id}
-                          className="flex items-center space-x-3 p-2 rounded-md hover-elevate cursor-pointer"
-                          onClick={() => setSelected(!isSelected)}
-                          data-testid={`row-ws-orderdevice-${device.id}`}
-                        >
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={(checked) => {
-                              setSelected(checked === true);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            data-testid={`checkbox-ws-orderdevice-${device.id}`}
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm">{device.name}</span>
-                              <Badge variant="outline" className="text-xs">{device.code}</Badge>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {properties.find(p => p.id === device.propertyId)?.name || "Unknown Property"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {selectedOrderDeviceIds.length > 0 && (
-                  <div className="pt-2 border-t">
-                    <p className="text-xs text-muted-foreground">
-                      Selected: {selectedOrderDeviceIds.length} device(s) — orders will only route to these devices
-                    </p>
-                  </div>
-                )}
-              </div>
+              <OrderDeviceRouting
+                ref={orderDeviceRoutingRef}
+                editingItem={editingItem}
+                orderDevices={orderDevices}
+                properties={properties}
+              />
 
               <div className="border rounded-md p-4 space-y-4">
                 <h4 className="font-medium text-sm">Network Settings</h4>
