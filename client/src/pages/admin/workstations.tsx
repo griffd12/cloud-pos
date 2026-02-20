@@ -408,16 +408,9 @@ export default function WorkstationsPage() {
     form.reset();
   };
 
-  const PrinterSelectField = ({ 
-    name, 
-    label, 
-    description 
-  }: { 
-    name: PrinterFieldName; 
-    label: string; 
-    description: string;
-  }) => (
+  const renderPrinterSelect = (name: PrinterFieldName, label: string, description: string) => (
     <FormField
+      key={name}
       control={form.control}
       name={name}
       render={({ field }) => (
@@ -737,41 +730,12 @@ export default function WorkstationsPage() {
                   </p>
                   
                   <div className="grid grid-cols-3 gap-4">
-                    <PrinterSelectField
-                      name="defaultReceiptPrinterId"
-                      label="Receipt Printer"
-                      description="Primary printer for guest checks"
-                    />
-                    
-                    <PrinterSelectField
-                      name="backupReceiptPrinterId"
-                      label="Backup Receipt Printer"
-                      description="Fallback if primary is offline"
-                    />
-                    
-                    <PrinterSelectField
-                      name="reportPrinterId"
-                      label="Report Printer"
-                      description="Printer for reports and summaries"
-                    />
-                    
-                    <PrinterSelectField
-                      name="backupReportPrinterId"
-                      label="Backup Report Printer"
-                      description="Fallback for report printing"
-                    />
-                    
-                    <PrinterSelectField
-                      name="voidPrinterId"
-                      label="Void Printer"
-                      description="Printer for void receipts"
-                    />
-                    
-                    <PrinterSelectField
-                      name="backupVoidPrinterId"
-                      label="Backup Void Printer"
-                      description="Fallback for void printing"
-                    />
+                    {renderPrinterSelect("defaultReceiptPrinterId", "Receipt Printer", "Primary printer for guest checks")}
+                    {renderPrinterSelect("backupReceiptPrinterId", "Backup Receipt Printer", "Fallback if primary is offline")}
+                    {renderPrinterSelect("reportPrinterId", "Report Printer", "Printer for reports and summaries")}
+                    {renderPrinterSelect("backupReportPrinterId", "Backup Report Printer", "Fallback for report printing")}
+                    {renderPrinterSelect("voidPrinterId", "Void Printer", "Printer for void receipts")}
+                    {renderPrinterSelect("backupVoidPrinterId", "Backup Void Printer", "Fallback for void printing")}
                   </div>
                 </div>
 
