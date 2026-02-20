@@ -408,6 +408,13 @@ export default function WorkstationsPage() {
     form.reset();
   };
 
+  const guardedChange = (field: any, newValue: string) => {
+    const currentDisplay = field.value || "__none__";
+    if (newValue !== currentDisplay) {
+      field.onChange(newValue);
+    }
+  };
+
   const renderPrinterSelect = (name: PrinterFieldName, label: string, description: string) => (
     <FormField
       key={name}
@@ -427,7 +434,7 @@ export default function WorkstationsPage() {
             </button>
           </div>
           <Select 
-            onValueChange={field.onChange} 
+            onValueChange={(v) => guardedChange(field, v)} 
             value={field.value || "__none__"}
           >
             <FormControl>
@@ -752,7 +759,7 @@ export default function WorkstationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>COM Port</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || "__none__"}>
+                          <Select onValueChange={(v) => guardedChange(field, v)} value={field.value || "__none__"}>
                             <FormControl>
                               <SelectTrigger data-testid="select-comPort">
                                 <SelectValue placeholder="Select COM port" />
@@ -782,7 +789,7 @@ export default function WorkstationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Baud Rate</FormLabel>
-                          <Select onValueChange={(v) => field.onChange(parseInt(v, 10))} value={String(field.value ?? 9600)}>
+                          <Select onValueChange={(v) => { if (v !== String(field.value ?? 9600)) field.onChange(parseInt(v, 10)); }} value={String(field.value ?? 9600)}>
                             <FormControl>
                               <SelectTrigger data-testid="select-comBaudRate">
                                 <SelectValue />
@@ -810,7 +817,7 @@ export default function WorkstationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Data Bits</FormLabel>
-                          <Select onValueChange={(v) => field.onChange(parseInt(v, 10))} value={String(field.value ?? 8)}>
+                          <Select onValueChange={(v) => { if (v !== String(field.value ?? 8)) field.onChange(parseInt(v, 10)); }} value={String(field.value ?? 8)}>
                             <FormControl>
                               <SelectTrigger data-testid="select-comDataBits">
                                 <SelectValue />
@@ -834,7 +841,7 @@ export default function WorkstationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Stop Bits</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || "1"}>
+                          <Select onValueChange={(v) => guardedChange(field, v)} value={field.value || "1"}>
                             <FormControl>
                               <SelectTrigger data-testid="select-comStopBits">
                                 <SelectValue />
@@ -857,7 +864,7 @@ export default function WorkstationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Parity</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || "none"}>
+                          <Select onValueChange={(v) => guardedChange(field, v)} value={field.value || "none"}>
                             <FormControl>
                               <SelectTrigger data-testid="select-comParity">
                                 <SelectValue />
@@ -882,7 +889,7 @@ export default function WorkstationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Flow Control</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || "none"}>
+                          <Select onValueChange={(v) => guardedChange(field, v)} value={field.value || "none"}>
                             <FormControl>
                               <SelectTrigger data-testid="select-comFlowControl">
                                 <SelectValue />
@@ -934,7 +941,7 @@ export default function WorkstationsPage() {
                             <FormItem>
                               <FormLabel>Drawer Printer</FormLabel>
                               <Select
-                                onValueChange={field.onChange}
+                                onValueChange={(v) => guardedChange(field, v)}
                                 value={field.value || "__none__"}
                               >
                                 <FormControl>
@@ -962,7 +969,7 @@ export default function WorkstationsPage() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Kick Pin</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || "pin2"}>
+                              <Select onValueChange={(v) => guardedChange(field, v)} value={field.value || "pin2"}>
                                 <FormControl>
                                   <SelectTrigger data-testid="select-cashDrawerKickPin">
                                     <SelectValue />
