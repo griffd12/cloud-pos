@@ -220,7 +220,8 @@ export default function PrintClassesPage() {
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+    if (e) e.preventDefault();
+    if (isSaving) return;
 
     const valid = await form.trigger();
     if (!valid) return;
@@ -283,9 +284,10 @@ export default function PrintClassesPage() {
                   Cancel
                 </Button>
                 <Button
+                  type="submit"
+                  form="print-class-form"
                   data-testid="button-save"
                   disabled={isFormLoading}
-                  onClick={handleSubmit}
                 >
                   {isFormLoading ? "Saving..." : "Save"}
                 </Button>
@@ -294,7 +296,7 @@ export default function PrintClassesPage() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form id="print-class-form" onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
