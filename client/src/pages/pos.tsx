@@ -1151,6 +1151,7 @@ export default function PosPage() {
 
       const response = await apiRequest("POST", `/api/checks/${checkId}/print`, {
         employeeId: currentEmployee?.id,
+        workstationId,
       });
       return response.json();
     },

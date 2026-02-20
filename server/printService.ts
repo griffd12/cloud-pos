@@ -462,6 +462,17 @@ export async function getPrinter(printerId: string) {
 
 // Find receipt printer for a property/workstation
 export async function findReceiptPrinter(propertyId: string, workstationId?: string) {
+  if (workstationId) {
+    const { workstations } = await import("@shared/schema");
+    const [ws] = await db.select().from(workstations).where(eq(workstations.id, workstationId)).limit(1);
+    if (ws?.defaultReceiptPrinterId) {
+      const [wsPrinter] = await db.select().from(printers).where(
+        and(eq(printers.id, ws.defaultReceiptPrinterId), eq(printers.active, true))
+      ).limit(1);
+      if (wsPrinter) return wsPrinter;
+    }
+  }
+
   const result = await db
     .select()
     .from(printers)

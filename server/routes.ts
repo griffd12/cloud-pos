@@ -5940,10 +5940,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return null;
     }
 
-    // Find receipt printer for this property
-    const printer = await findReceiptPrinter(rvc.propertyId);
-    if (!printer || printer.connectionType !== "network" || !printer.ipAddress) {
-      console.log("No network receipt printer configured for property");
+    // Find receipt printer - check workstation assignment first, then property fallback
+    const printer = await findReceiptPrinter(rvc.propertyId, options?.workstationId);
+    if (!printer) {
+      console.log("No receipt printer configured for property/workstation");
+      return null;
+    }
+    const isNetworkPrinter = printer.connectionType === "network" && printer.ipAddress;
+    const isSerialPrinter = printer.connectionType === "serial" && printer.comPort;
+    if (!isNetworkPrinter && !isSerialPrinter) {
+      console.log("Printer has no valid connection (need network IP or serial COM port)");
       return null;
     }
 
@@ -6022,14 +6028,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/checks/:id/print", async (req, res) => {
     try {
       const checkId = req.params.id;
-      const { employeeId } = req.body;
+      const { employeeId, workstationId } = req.body;
 
       const check = await storage.getCheck(checkId);
       if (!check) {
         return res.status(404).json({ message: "Check not found" });
       }
 
-      const result = await printCheckReceipt(checkId, check.rvcId);
+      const result = await printCheckReceipt(checkId, check.rvcId, { workstationId });
       
       if (!result) {
         return res.status(400).json({ message: "No receipt printer available for this property" });
