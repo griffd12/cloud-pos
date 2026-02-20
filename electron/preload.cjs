@@ -55,6 +55,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     localPrint: (config) => ipcRenderer.invoke('print-agent-local-print', config),
   },
 
+  // === Diagnostics API ===
+  diagnostics: {
+    listComPorts: () => ipcRenderer.invoke('diag-list-com-ports'),
+    testSerial: (comPort, baudRate, printTestPage) =>
+      ipcRenderer.invoke('diag-test-serial', { comPort, baudRate, printTestPage }),
+    testNetworkPrinter: (ipAddress, port) =>
+      ipcRenderer.invoke('diag-test-network-printer', { ipAddress, port }),
+  },
+
   // === Enhanced Offline Database API ===
   offlineDb: {
     sync: (enterpriseId, propertyId, rvcId) =>

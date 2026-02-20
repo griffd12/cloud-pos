@@ -16,7 +16,18 @@ import {
   Clock,
   AlertTriangle,
   Download,
+  Printer,
+  Plug,
+  Usb,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { isElectron, type UpdateStatus } from "@/lib/electron";
 import { getIsOfflineMode, onOfflineModeChange, fetchWithTimeout } from "@/lib/queryClient";
 import { offlineStorage } from "@/lib/offline-storage";
@@ -64,6 +75,18 @@ export default function OfflineTestPage() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [comPorts, setComPorts] = useState<Array<{ path: string; manufacturer: string | null }>>([]);
+  const [comPortsLoading, setComPortsLoading] = useState(false);
+  const [comPortsError, setComPortsError] = useState<string | null>(null);
+  const [selectedComPort, setSelectedComPort] = useState<string>("");
+  const [selectedBaudRate, setSelectedBaudRate] = useState<string>("9600");
+  const [serialTestResult, setSerialTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [serialTesting, setSerialTesting] = useState(false);
+  const [printAgentStatus, setPrintAgentStatus] = useState<any>(null);
+  const [networkTestIp, setNetworkTestIp] = useState("");
+  const [networkTestPort, setNetworkTestPort] = useState("9100");
+  const [networkTestResult, setNetworkTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [networkTesting, setNetworkTesting] = useState(false);
   const logIdRef = useRef(0);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
 
@@ -95,6 +118,77 @@ export default function OfflineTestPage() {
       return unsub;
     }
   }, []);
+
+  useEffect(() => {
+    if (!isElectron()) return;
+    const api = window.electronAPI;
+    if (api?.printAgent) {
+      api.printAgent.getStatus().then(setPrintAgentStatus).catch(() => {});
+    }
+    if (api?.diagnostics) {
+      loadComPorts();
+    }
+  }, []);
+
+  const loadComPorts = async () => {
+    const api = window.electronAPI;
+    if (!api?.diagnostics) return;
+    setComPortsLoading(true);
+    setComPortsError(null);
+    try {
+      const result = await api.diagnostics.listComPorts();
+      if (result.success) {
+        setComPorts(result.ports);
+        if (result.ports.length > 0 && !selectedComPort) {
+          setSelectedComPort(result.ports[0].path);
+        }
+      } else {
+        setComPortsError(result.error || 'Failed to list COM ports');
+      }
+    } catch {
+      setComPortsError('Failed to list COM ports');
+    }
+    setComPortsLoading(false);
+  };
+
+  const handleTestSerial = async (printTestPage: boolean) => {
+    const api = window.electronAPI;
+    if (!api?.diagnostics || !selectedComPort) return;
+    setSerialTesting(true);
+    setSerialTestResult(null);
+    try {
+      const result = await api.diagnostics.testSerial(selectedComPort, parseInt(selectedBaudRate), printTestPage);
+      if (result.success) {
+        const msg = printTestPage
+          ? `Port opened in ${result.openTimeMs}ms, sent ${result.bytesSent} bytes with test page`
+          : `Port opened successfully in ${result.openTimeMs}ms (connectivity OK)`;
+        setSerialTestResult({ success: true, message: msg });
+      } else {
+        setSerialTestResult({ success: false, message: result.error || 'Test failed' });
+      }
+    } catch (err: any) {
+      setSerialTestResult({ success: false, message: err.message || 'Test failed' });
+    }
+    setSerialTesting(false);
+  };
+
+  const handleTestNetwork = async () => {
+    const api = window.electronAPI;
+    if (!api?.diagnostics || !networkTestIp) return;
+    setNetworkTesting(true);
+    setNetworkTestResult(null);
+    try {
+      const result = await api.diagnostics.testNetworkPrinter(networkTestIp, parseInt(networkTestPort));
+      if (result.success) {
+        setNetworkTestResult({ success: true, message: `Connected in ${result.connectTimeMs}ms` });
+      } else {
+        setNetworkTestResult({ success: false, message: result.error || 'Connection failed' });
+      }
+    } catch (err: any) {
+      setNetworkTestResult({ success: false, message: err.message || 'Test failed' });
+    }
+    setNetworkTesting(false);
+  };
 
   const handleCheckUpdate = async () => {
     if (!isElectron() || !window.electronAPI?.updater) return;
@@ -438,6 +532,207 @@ export default function OfflineTestPage() {
                   </Button>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isElectron() && (
+          <Card data-testid="card-print-agent-status">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium">Print Agent</CardTitle>
+              <Printer className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge
+                  variant={printAgentStatus?.isRunning ? (printAgentStatus?.isConnected ? "default" : "secondary") : "destructive"}
+                  className="text-xs"
+                  data-testid="status-print-agent"
+                >
+                  {printAgentStatus?.isRunning
+                    ? (printAgentStatus?.isConnected
+                      ? (printAgentStatus?.isAuthenticated ? "Connected" : "Connecting...")
+                      : "Running (Disconnected)")
+                    : "Stopped"}
+                </Badge>
+              </div>
+              {printAgentStatus?.agentId && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Agent ID</span>
+                  <span className="text-sm font-mono truncate max-w-[180px]" data-testid="text-agent-id">
+                    {printAgentStatus.agentId}
+                  </span>
+                </div>
+              )}
+              {printAgentStatus?.printers && printAgentStatus.printers.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-sm text-muted-foreground">Configured Printers</span>
+                  {printAgentStatus.printers.map((p: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1">
+                      <span className="font-medium truncate max-w-[120px]">{p.name || p.printerId || `Printer ${i + 1}`}</span>
+                      <span className="text-muted-foreground font-mono">
+                        {p.connectionType === 'serial' ? `${p.comPort} @ ${p.baudRate || 9600}` : `${p.ipAddress}:${p.port || 9100}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {printAgentStatus && (
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span data-testid="text-completed-jobs">Completed: {printAgentStatus.completedJobs || 0}</span>
+                  <span data-testid="text-failed-jobs">Failed: {printAgentStatus.failedJobs || 0}</span>
+                </div>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.electronAPI?.printAgent.getStatus().then(setPrintAgentStatus).catch(() => {})}
+                data-testid="button-refresh-agent"
+              >
+                <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {isElectron() && (
+          <Card data-testid="card-com-port-test">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium">COM Port Test</CardTitle>
+              <Usb className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {comPortsError && (
+                <div className="text-xs text-destructive" data-testid="text-com-error">{comPortsError}</div>
+              )}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Port</span>
+                  <div className="w-[180px]">
+                    {comPorts.length > 0 ? (
+                      <Select value={selectedComPort} onValueChange={setSelectedComPort}>
+                        <SelectTrigger className="text-xs" data-testid="select-com-port">
+                          <SelectValue placeholder="Select port" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {comPorts.map(p => (
+                            <SelectItem key={p.path} value={p.path}>
+                              {p.path}{p.manufacturer ? ` (${p.manufacturer})` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {comPortsLoading ? 'Scanning...' : 'No COM ports found'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Baud Rate</span>
+                  <div className="w-[180px]">
+                    <Select value={selectedBaudRate} onValueChange={setSelectedBaudRate}>
+                      <SelectTrigger className="text-xs" data-testid="select-baud-rate">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="9600">9600</SelectItem>
+                        <SelectItem value="19200">19200</SelectItem>
+                        <SelectItem value="38400">38400</SelectItem>
+                        <SelectItem value="57600">57600</SelectItem>
+                        <SelectItem value="115200">115200</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              {serialTestResult && (
+                <div className={`text-xs p-2 rounded ${serialTestResult.success ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-red-500/10 text-red-700 dark:text-red-400'}`} data-testid="text-serial-result">
+                  {serialTestResult.success ? <CheckCircle className="w-3 h-3 inline mr-1" /> : <XCircle className="w-3 h-3 inline mr-1" />}
+                  {serialTestResult.message}
+                </div>
+              )}
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadComPorts}
+                  disabled={comPortsLoading}
+                  data-testid="button-scan-ports"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${comPortsLoading ? 'animate-spin' : ''}`} /> Scan Ports
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleTestSerial(false)}
+                  disabled={serialTesting || !selectedComPort}
+                  data-testid="button-test-connect"
+                >
+                  <Plug className="w-3 h-3 mr-1" /> Test Connect
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleTestSerial(true)}
+                  disabled={serialTesting || !selectedComPort}
+                  data-testid="button-test-print"
+                >
+                  {serialTesting ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Printer className="w-3 h-3 mr-1" />}
+                  Test Print
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isElectron() && (
+          <Card data-testid="card-network-printer-test">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium">Network Printer Test</CardTitle>
+              <Plug className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">IP Address</span>
+                  <Input
+                    type="text"
+                    value={networkTestIp}
+                    onChange={(e) => setNetworkTestIp(e.target.value)}
+                    placeholder="192.168.1.100"
+                    className="w-[180px] text-xs"
+                    data-testid="input-network-ip"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Port</span>
+                  <Input
+                    type="text"
+                    value={networkTestPort}
+                    onChange={(e) => setNetworkTestPort(e.target.value)}
+                    placeholder="9100"
+                    className="w-[180px] text-xs"
+                    data-testid="input-network-port"
+                  />
+                </div>
+              </div>
+              {networkTestResult && (
+                <div className={`text-xs p-2 rounded ${networkTestResult.success ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-red-500/10 text-red-700 dark:text-red-400'}`} data-testid="text-network-result">
+                  {networkTestResult.success ? <CheckCircle className="w-3 h-3 inline mr-1" /> : <XCircle className="w-3 h-3 inline mr-1" />}
+                  {networkTestResult.message}
+                </div>
+              )}
+              <Button
+                size="sm"
+                onClick={handleTestNetwork}
+                disabled={networkTesting || !networkTestIp}
+                data-testid="button-test-network"
+              >
+                {networkTesting ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Plug className="w-3 h-3 mr-1" />}
+                Test Connection
+              </Button>
             </CardContent>
           </Card>
         )}

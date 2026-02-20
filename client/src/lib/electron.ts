@@ -52,6 +52,36 @@ declare global {
         localPrint: (config: { printerIp: string; printerPort?: number; data: string; printerId?: string }) => Promise<{ success: boolean; jobId?: string }>;
       };
 
+      // Diagnostics API
+      diagnostics: {
+        listComPorts: () => Promise<{
+          success: boolean;
+          error?: string;
+          ports: Array<{
+            path: string;
+            manufacturer: string | null;
+            serialNumber: string | null;
+            pnpId: string | null;
+            vendorId: string | null;
+            productId: string | null;
+          }>;
+        }>;
+        testSerial: (comPort: string, baudRate?: number, printTestPage?: boolean) => Promise<{
+          success: boolean;
+          error?: string;
+          opened?: boolean;
+          openTimeMs?: number;
+          dataSent?: boolean;
+          bytesSent?: number;
+        }>;
+        testNetworkPrinter: (ipAddress: string, port?: number) => Promise<{
+          success: boolean;
+          error?: string;
+          connected?: boolean;
+          connectTimeMs?: number;
+        }>;
+      };
+
       // Enhanced Offline Database API
       offlineDb: {
         sync: (enterpriseId: string, propertyId?: string, rvcId?: string) => Promise<OfflineSyncResult>;

@@ -1015,6 +1015,141 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('diag-list-com-ports', async () => {
+    try {
+      const { SerialPort } = require('serialport');
+      const ports = await SerialPort.list();
+      return { success: true, ports: ports.map(p => ({
+        path: p.path,
+        manufacturer: p.manufacturer || null,
+        serialNumber: p.serialNumber || null,
+        pnpId: p.pnpId || null,
+        vendorId: p.vendorId || null,
+        productId: p.productId || null,
+      })) };
+    } catch (err) {
+      if (err.code === 'MODULE_NOT_FOUND') {
+        return { success: false, error: 'serialport module not available', ports: [] };
+      }
+      return { success: false, error: err.message, ports: [] };
+    }
+  });
+
+  ipcMain.handle('diag-test-serial', async (event, { comPort, baudRate, printTestPage }) => {
+    try {
+      const { SerialPort } = require('serialport');
+      const startTime = Date.now();
+      const result = await new Promise((resolve, reject) => {
+        const port = new SerialPort({
+          path: comPort,
+          baudRate: baudRate || 9600,
+          dataBits: 8,
+          stopBits: 1,
+          parity: 'none',
+          autoOpen: false,
+        });
+
+        const timeout = setTimeout(() => {
+          port.close(() => {});
+          reject(new Error(`Timeout opening ${comPort}`));
+        }, 8000);
+
+        port.open((err) => {
+          if (err) {
+            clearTimeout(timeout);
+            reject(new Error(`Failed to open ${comPort}: ${err.message}`));
+            return;
+          }
+
+          const openTime = Date.now() - startTime;
+
+          if (printTestPage) {
+            const init = Buffer.from([0x1B, 0x40]);
+            const center = Buffer.from([0x1B, 0x61, 0x01]);
+            const bold = Buffer.from([0x1B, 0x45, 0x01]);
+            const boldOff = Buffer.from([0x1B, 0x45, 0x00]);
+            const left = Buffer.from([0x1B, 0x61, 0x00]);
+            const text = Buffer.from([
+              '*** COM PORT TEST ***',
+              'Cloud POS Diagnostics',
+              `Port: ${comPort}`,
+              `Baud: ${baudRate || 9600}`,
+              `Time: ${new Date().toLocaleString()}`,
+              '',
+              'Serial communication OK',
+              '',
+              '',
+              '',
+            ].join('\n'), 'utf-8');
+            const cut = Buffer.from([0x1D, 0x56, 0x01]);
+            const fullData = Buffer.concat([init, center, bold, Buffer.from('*** COM PORT TEST ***\n'), boldOff, left, text, cut]);
+
+            port.write(fullData, (writeErr) => {
+              if (writeErr) {
+                clearTimeout(timeout);
+                port.close(() => {});
+                reject(new Error(`Write failed: ${writeErr.message}`));
+                return;
+              }
+              port.drain(() => {
+                clearTimeout(timeout);
+                port.close(() => {});
+                resolve({ opened: true, openTimeMs: openTime, dataSent: true, bytesSent: fullData.length });
+              });
+            });
+          } else {
+            clearTimeout(timeout);
+            port.close(() => {});
+            resolve({ opened: true, openTimeMs: openTime, dataSent: false, bytesSent: 0 });
+          }
+        });
+
+        port.on('error', (portErr) => {
+          clearTimeout(timeout);
+          port.close(() => {});
+          reject(portErr);
+        });
+      });
+
+      return { success: true, ...result };
+    } catch (err) {
+      if (err.code === 'MODULE_NOT_FOUND') {
+        return { success: false, error: 'serialport module not available' };
+      }
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('diag-test-network-printer', async (event, { ipAddress, port }) => {
+    try {
+      const startTime = Date.now();
+      const result = await new Promise((resolve, reject) => {
+        const socket = new net.Socket();
+        const timeout = setTimeout(() => {
+          socket.destroy();
+          reject(new Error(`Connection timeout to ${ipAddress}:${port}`));
+        }, 5000);
+
+        socket.connect(port || 9100, ipAddress, () => {
+          const connectTime = Date.now() - startTime;
+          clearTimeout(timeout);
+          socket.destroy();
+          resolve({ connected: true, connectTimeMs: connectTime });
+        });
+
+        socket.on('error', (err) => {
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error(`Connection failed: ${err.message}`));
+        });
+      });
+
+      return { success: true, ...result };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('print-agent-local-print', async (event, { printerIp, printerPort, data, printerId }) => {
     if (!printAgent) return { success: false, error: 'Print agent not initialized' };
     const jobId = printAgent.queueLocalPrintJob({
