@@ -97,12 +97,12 @@ export default function WorkstationsPage() {
 
   const [selectedOrderDeviceIds, setSelectedOrderDeviceIds] = useState<string[]>([]);
 
-  const columns: Column<Workstation>[] = [
+  const columns: Column<Workstation>[] = useMemo(() => [
     { key: "name", header: "Name", sortable: true },
     {
       key: "deviceType",
       header: "Type",
-      render: (value) => (
+      render: (value: any) => (
         <Badge variant="outline">
           {value === "pos_terminal" ? "POS Terminal" : value === "kiosk" ? "Kiosk" : "Manager Station"}
         </Badge>
@@ -111,38 +111,38 @@ export default function WorkstationsPage() {
     {
       key: "propertyId",
       header: "Property",
-      render: (value) => properties.find((p) => p.id === value)?.name || "-",
+      render: (value: any) => properties.find((p) => p.id === value)?.name || "-",
     },
     {
       key: "rvcId",
       header: "RVC",
-      render: (value) => rvcs.find((r) => r.id === value)?.name || "-",
+      render: (value: any) => rvcs.find((r) => r.id === value)?.name || "-",
     },
     { key: "ipAddress", header: "IP Address" },
     {
       key: "defaultReceiptPrinterId",
       header: "Receipt Printer",
-      render: (value) => printers.find((p) => p.id === value)?.name || "-",
+      render: (value: any) => printers.find((p) => p.id === value)?.name || "-",
     },
     {
       key: "fastTransactionEnabled",
       header: "Fast Transaction",
-      render: (value) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
+      render: (value: any) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
     },
     {
       key: "isOnline",
       header: "Status",
-      render: (value) => (value ? <Badge className="bg-green-600">Online</Badge> : <Badge variant="secondary">Offline</Badge>),
+      render: (value: any) => (value ? <Badge className="bg-green-600">Online</Badge> : <Badge variant="secondary">Offline</Badge>),
     },
     {
       key: "active",
       header: "Active",
-      render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
+      render: (value: any) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
     getZoneColumn<Workstation>(scopeLookup),
     getInheritanceColumn<Workstation>(contextPropertyId, selectedRvcId),
-  ];
+  ], [properties, rvcs, printers, scopeLookup, contextPropertyId, selectedRvcId]);
 
   const form = useForm<InsertWorkstation>({
     resolver: zodResolver(insertWorkstationSchema),

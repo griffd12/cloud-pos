@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useEmcFilter } from "@/lib/emc-context";
 import type { Property, Rvc, Enterprise } from "@shared/schema";
@@ -17,11 +18,12 @@ export function useScopeLookup() {
     queryKey: ["/api/rvcs"],
   });
 
-  const enterprise = enterprises.find(e => e.id === selectedEnterpriseId);
-
-  return {
-    properties: properties.map(p => ({ id: p.id, name: p.name })),
-    rvcs: rvcs.map(r => ({ id: r.id, name: r.name })),
-    enterpriseName: enterprise?.name || "Enterprise",
-  };
+  return useMemo(() => {
+    const enterprise = enterprises.find(e => e.id === selectedEnterpriseId);
+    return {
+      properties: properties.map(p => ({ id: p.id, name: p.name })),
+      rvcs: rvcs.map(r => ({ id: r.id, name: r.name })),
+      enterpriseName: enterprise?.name || "Enterprise",
+    };
+  }, [enterprises, properties, rvcs, selectedEnterpriseId]);
 }

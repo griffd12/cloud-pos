@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -58,12 +58,12 @@ export default function KdsDevicesPage() {
     },
   });
 
-  const columns: Column<KdsDevice>[] = [
+  const columns: Column<KdsDevice>[] = useMemo(() => [
     { key: "name", header: "Name", sortable: true },
     {
       key: "stationType",
       header: "Station Type",
-      render: (value) => {
+      render: (value: any) => {
         const types: Record<string, string> = {
           hot: "Hot Line",
           cold: "Cold Line",
@@ -77,33 +77,33 @@ export default function KdsDevicesPage() {
     {
       key: "propertyId",
       header: "Property",
-      render: (value) => properties.find((p) => p.id === value)?.name || "-",
+      render: (value: any) => properties.find((p) => p.id === value)?.name || "-",
     },
     {
       key: "expoMode",
       header: "Expo Mode",
-      render: (value) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
+      render: (value: any) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
     },
     {
       key: "showTimers",
       header: "Timers",
-      render: (value) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
+      render: (value: any) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
     },
     { key: "ipAddress", header: "IP Address" },
     {
       key: "isOnline",
       header: "Status",
-      render: (value) => (value ? <Badge className="bg-green-600">Online</Badge> : <Badge variant="secondary">Offline</Badge>),
+      render: (value: any) => (value ? <Badge className="bg-green-600">Online</Badge> : <Badge variant="secondary">Offline</Badge>),
     },
     {
       key: "active",
       header: "Active",
-      render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
+      render: (value: any) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
     getZoneColumn<KdsDevice>(scopeLookup),
     getInheritanceColumn<KdsDevice>(contextPropertyId, selectedRvcId),
-  ];
+  ], [properties, scopeLookup, contextPropertyId, selectedRvcId]);
 
   const form = useForm<InsertKdsDevice>({
     resolver: zodResolver(insertKdsDeviceSchema),

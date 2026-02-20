@@ -69,18 +69,18 @@ export default function OrderDevicesPage() {
     },
   });
 
-  const columns: Column<OrderDevice>[] = [
+  const columns: Column<OrderDevice>[] = useMemo(() => [
     { key: "name", header: "Name", sortable: true },
     { key: "code", header: "Code" },
     {
       key: "propertyId",
       header: "Property",
-      render: (value) => properties.find((p) => p.id === value)?.name || "-",
+      render: (value: any) => properties.find((p) => p.id === value)?.name || "-",
     },
     {
       key: "kdsDeviceId",
       header: "Controller KDS",
-      render: (value) => {
+      render: (value: any) => {
         const kds = kdsDevices.find((k) => k.id === value);
         if (!kds) return <span className="text-muted-foreground">None</span>;
         return (
@@ -93,7 +93,7 @@ export default function OrderDevicesPage() {
     {
       key: "sendOn",
       header: "Send On",
-      render: (value) => (
+      render: (value: any) => (
         <Badge variant="secondary">
           {value === "send_button" ? "Send Button" : "Dynamic"}
         </Badge>
@@ -102,17 +102,17 @@ export default function OrderDevicesPage() {
     {
       key: "sendVoids",
       header: "Send Voids",
-      render: (value) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
+      render: (value: any) => (value ? <Badge variant="secondary">Yes</Badge> : "-"),
     },
     {
       key: "active",
       header: "Status",
-      render: (value) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
+      render: (value: any) => (value ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>),
     },
     getScopeColumn(),
     getZoneColumn<OrderDevice>(scopeLookup),
     getInheritanceColumn<OrderDevice>(contextPropertyId, selectedRvcId),
-  ];
+  ], [properties, kdsDevices, scopeLookup, contextPropertyId, selectedRvcId]);
 
   const kdsOptions = useMemo(() => {
     const getPropertyName = (propertyId: string) => {
