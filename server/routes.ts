@@ -5998,10 +5998,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // Build receipt ESC/POS data
     const builder = await buildCheckReceipt(checkId, printer.characterWidth || 42);
-    let buffer = builder.cut().build();
 
-    // Append cash drawer kick command to receipt data if workstation has drawer enabled
-    // and payment is cash - this is more reliable than a separate kick command
+    // Embed cash drawer kick BEFORE the cut command — Star and most ESC/POS printers
+    // process commands sequentially, and some may discard bytes after a cut.
+    // Sending the kick before cut ensures reliable drawer operation.
     if (options?.workstationId && options?.isCashPayment) {
       try {
         const ws = await storage.getWorkstation(options.workstationId);
@@ -6009,15 +6009,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const pin = ws.cashDrawerKickPin === "pin5" ? 0x01 : 0x00;
           const pulseDuration = Math.max(50, Math.min(500, ws.cashDrawerPulseDuration || 200));
           const pulseOn = Math.max(1, Math.min(255, Math.round(pulseDuration / 2)));
-          const kickBytes = Buffer.from([0x1B, 0x70, pin, pulseOn, pulseOn]);
-          buffer = Buffer.concat([buffer, kickBytes]);
-          console.log(`Embedded cash drawer kick in receipt: pin=${ws.cashDrawerKickPin}, pulse=${pulseDuration}ms`);
+          builder.raw(Buffer.from([0x1B, 0x70, pin, pulseOn, pulseOn]));
+          console.log(`Embedded cash drawer kick in receipt (before cut): pin=${ws.cashDrawerKickPin}, pulse=${pulseDuration}ms`);
         }
       } catch (e) {
-        console.error("Failed to append drawer kick to receipt:", e);
+        console.error("Failed to embed drawer kick in receipt:", e);
       }
     }
 
+    const buffer = builder.cut().build();
     const escPosBase64 = buffer.toString("base64");
 
     // Create print job in database
@@ -20450,30 +20450,56 @@ connect();
 
       const pin = workstation.cashDrawerKickPin === "pin5" ? "pin5" : "pin2";
       const pulseDuration = Math.max(50, Math.min(500, workstation.cashDrawerPulseDuration || 200));
+      const isSerialPrinter = ((printer as any).connectionType === "serial" || (printer as any).connectionType === "usb") && (printer as any).comPort;
 
-      const agents = await storage.getPrintAgents(workstation.propertyId);
       const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
       let sent = false;
 
-      for (const agent of agents) {
-        const agentWs = connectedAgentsMap?.get(agent.id);
-        if (agentWs && agentWs.readyState === WebSocket.OPEN) {
-          const kickId = `kick_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-          agentWs.send(JSON.stringify({
-            type: "DRAWER_KICK",
-            kickId,
-            printerId: drawerPrinterId,
-            printerIp: (printer as any).ipAddress || (printer as any).ip_address,
-            printerPort: (printer as any).port || 9100,
-            connectionType: (printer as any).connectionType || 'network',
-            comPort: (printer as any).comPort || null,
-            baudRate: (printer as any).baudRate || null,
-            pin,
-            pulseDuration,
-          }));
-          sent = true;
-          console.log(`Cash drawer kick sent via agent ${agent.name} for workstation ${workstation.name}`);
-          break;
+      if (isSerialPrinter) {
+        const hostWsId = (printer as any).hostWorkstationId || workstationId;
+        const agent = await storage.getOnlinePrintAgentForWorkstation(hostWsId);
+        if (agent) {
+          const agentWs = connectedAgentsMap?.get(agent.id);
+          if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+            const kickId = `kick_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+            agentWs.send(JSON.stringify({
+              type: "DRAWER_KICK",
+              kickId,
+              printerId: drawerPrinterId,
+              connectionType: (printer as any).connectionType,
+              comPort: (printer as any).comPort,
+              baudRate: (printer as any).baudRate || 9600,
+              pin,
+              pulseDuration,
+            }));
+            sent = true;
+            console.log(`Cash drawer kick sent via serial agent ${agent.name} for workstation ${workstation.name} on ${(printer as any).comPort}`);
+          }
+        }
+      }
+
+      if (!sent) {
+        const agents = await storage.getPrintAgents(workstation.propertyId);
+        for (const agent of agents) {
+          const agentWs = connectedAgentsMap?.get(agent.id);
+          if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+            const kickId = `kick_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+            agentWs.send(JSON.stringify({
+              type: "DRAWER_KICK",
+              kickId,
+              printerId: drawerPrinterId,
+              printerIp: (printer as any).ipAddress || (printer as any).ip_address,
+              printerPort: (printer as any).port || 9100,
+              connectionType: (printer as any).connectionType || 'network',
+              comPort: (printer as any).comPort || null,
+              baudRate: (printer as any).baudRate || null,
+              pin,
+              pulseDuration,
+            }));
+            sent = true;
+            console.log(`Cash drawer kick sent via agent ${agent.name} for workstation ${workstation.name}`);
+            break;
+          }
         }
       }
 

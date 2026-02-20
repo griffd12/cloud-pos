@@ -137,6 +137,11 @@ export class ESCPOSBuilder {
     return this;
   }
 
+  raw(data: Buffer): this {
+    this.buffer.push(data);
+    return this;
+  }
+
   build(): Buffer {
     return Buffer.concat(this.buffer);
   }

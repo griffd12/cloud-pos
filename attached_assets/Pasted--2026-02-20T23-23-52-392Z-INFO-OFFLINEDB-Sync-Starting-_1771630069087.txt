@@ -1,0 +1,57 @@
+[2026-02-20T23:23:52.392Z] [INFO ] [OFFLINEDB   ] [Sync] Starting full sync from cloud...
+[2026-02-20T23:23:56.760Z] [INFO ] [OFFLINEDB   ] [Sync] Synced 15 open checks for offline access
+[2026-02-20T23:23:56.774Z] [INFO ] [OFFLINEDB   ] [Sync] Sync complete. 33 tables synced, 0 errors
+[2026-02-20T23:24:12.261Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:24:12.262Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:24:12.263Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 1s (attempt 1)
+[2026-02-20T23:24:13.269Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:24:13.640Z] [ERROR] [PRINT       ] [Connect] WebSocket error: Unexpected server response: 502
+[2026-02-20T23:24:13.641Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:24:13.641Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:24:13.642Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 2s (attempt 2)
+[2026-02-20T23:24:15.649Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:24:15.974Z] [ERROR] [PRINT       ] [Connect] WebSocket error: Unexpected server response: 502
+[2026-02-20T23:24:15.975Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:24:15.977Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:24:15.978Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 4s (attempt 3)
+[2026-02-20T23:24:19.982Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:24:20.521Z] [INFO ] [PRINT       ] [Connect] WebSocket connected, authenticating
+[2026-02-20T23:24:23.758Z] [INFO ] [PRINT       ] [Auth] Authenticated as: SNS-001-WS01 (Embedded Agent) (58663b6c-dc06-4ec2-848f-dfd0c2dbdcf4)
+[2026-02-20T23:24:23.760Z] [INFO ] [PRINT       ] [Status] connected=true, auth=true
+[2026-02-20T23:25:00.710Z] [DEBUG] [APP         ] [R:POS:CreateCheck] Creating check with workstationId: 32fb06f3-837f-42ed-a6f5-90436ca62e06
+[2026-02-20T23:25:05.920Z] [INFO ] [PRINT       ] [Job] Received job fdc4d613-013f-44f0-838b-dfa8305e6cd7 | DATA: {"printer":"COM1","connectionType":"serial"}
+[2026-02-20T23:25:10.301Z] [INFO ] [PRINT       ] [Job] Job fdc4d613-013f-44f0-838b-dfa8305e6cd7 printed successfully via serial | DATA: {"port":"COM1","baudRate":9600}
+[2026-02-20T23:25:13.240Z] [INFO ] [PRINT       ] [Job] Received job 2afc6d56-18fb-4110-8d5a-31a23967e3fe | DATA: {"printer":"COM1","connectionType":"serial"}
+[2026-02-20T23:25:17.274Z] [INFO ] [PRINT       ] [Job] Job 2afc6d56-18fb-4110-8d5a-31a23967e3fe printed successfully via serial | DATA: {"port":"COM1","baudRate":9600}
+[2026-02-20T23:26:16.744Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:26:16.745Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:26:16.746Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 1s (attempt 1)
+[2026-02-20T23:26:17.761Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:26:18.189Z] [ERROR] [PRINT       ] [Connect] WebSocket error: Unexpected server response: 502
+[2026-02-20T23:26:18.190Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:26:18.191Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:26:18.192Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 2s (attempt 2)
+[2026-02-20T23:26:20.198Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:26:20.553Z] [ERROR] [PRINT       ] [Connect] WebSocket error: Unexpected server response: 502
+[2026-02-20T23:26:20.555Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:26:20.556Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:26:20.557Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 4s (attempt 3)
+[2026-02-20T23:26:24.560Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:26:26.629Z] [INFO ] [PRINT       ] [Connect] WebSocket connected, authenticating
+[2026-02-20T23:26:26.993Z] [INFO ] [PRINT       ] [Auth] Authenticated as: SNS-001-WS01 (Embedded Agent) (58663b6c-dc06-4ec2-848f-dfd0c2dbdcf4)
+[2026-02-20T23:26:26.994Z] [INFO ] [PRINT       ] [Status] connected=true, auth=true
+[2026-02-20T23:27:19.111Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:27:19.112Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:27:19.113Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 1s (attempt 1)
+[2026-02-20T23:27:20.113Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:27:20.671Z] [ERROR] [PRINT       ] [Connect] WebSocket error: Unexpected server response: 502
+[2026-02-20T23:27:20.672Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:27:20.672Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:27:20.673Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 2s (attempt 2)
+[2026-02-20T23:27:22.678Z] [INFO ] [PRINT       ] [Connect] Connecting to wss://bf45f44b-03bc-427b-ac1c-2f61e2b72052-00-3jaa279qam2p9.janeway.replit.dev/ws/print-agents
+[2026-02-20T23:27:22.789Z] [INFO ] [APP         ] [Interceptor] Offline mode ENABLED
+[2026-02-20T23:27:22.792Z] [WARN ] [APP         ] [R:NETWORK:Mode] Switched to OFFLINE mode
+[2026-02-20T23:27:23.046Z] [ERROR] [PRINT       ] [Connect] WebSocket error: Unexpected server response: 502
+[2026-02-20T23:27:23.047Z] [INFO ] [PRINT       ] [Connect] Disconnected (code: 1006)
+[2026-02-20T23:27:23.048Z] [INFO ] [PRINT       ] [Status] connected=false, auth=false
+[2026-02-20T23:27:23.048Z] [INFO ] [PRINT       ] [Connect] Reconnecting in 4s (attempt 3)
