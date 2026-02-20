@@ -26,6 +26,7 @@ class PrintAgentService {
     this.jobQueue = [];
     this.activeJobs = new Map();
     this.offlineDb = options.offlineDb || null;
+    this.serialPortQueues = new Map();
 
     this.listeners = {
       status: [],
@@ -302,10 +303,10 @@ class PrintAgentService {
       this.ws.send(JSON.stringify({ type: 'ACK', jobId }));
     } catch (e) {}
 
-    if (connectionType === 'serial' && comPort) {
+    if ((connectionType === 'serial' || connectionType === 'usb') && comPort) {
       try {
         const buffer = Buffer.from(printData, 'base64');
-        await this.sendToSerialPrinter(comPort, baudRate, buffer);
+        await this.enqueueSerialJob(comPort, baudRate, buffer);
         this.sendJobResult(jobId, true);
         this.emit('jobCompleted', { jobId, printer: comPort });
         printLogger.info('Job', `Job ${jobId} printed successfully via serial`, { port: comPort, baudRate });
@@ -323,10 +324,10 @@ class PrintAgentService {
     if (!targetIp && printerId) {
       const printer = this.printerMap.get(printerId);
       if (printer) {
-        if (printer.connectionType === 'serial' && printer.comPort) {
+        if ((printer.connectionType === 'serial' || printer.connectionType === 'usb') && printer.comPort) {
           try {
             const buffer = Buffer.from(printData, 'base64');
-            await this.sendToSerialPrinter(printer.comPort, printer.baudRate || 9600, buffer);
+            await this.enqueueSerialJob(printer.comPort, printer.baudRate || 9600, buffer);
             this.sendJobResult(jobId, true);
             this.emit('jobCompleted', { jobId, printer: printer.comPort });
             printLogger.info('Job', `Job ${jobId} printed via serial (mapped)`, { port: printer.comPort });
@@ -409,9 +410,9 @@ class PrintAgentService {
 
     const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
 
-    if (connectionType === 'serial' && comPort) {
+    if ((connectionType === 'serial' || connectionType === 'usb') && comPort) {
       try {
-        await this.sendToSerialPrinter(comPort, baudRate, kickCommand);
+        await this.enqueueSerialJob(comPort, baudRate, kickCommand);
         this.sendKickResult(kickId, true);
         printLogger.info('DrawerKick', `Drawer kick ${kickId} sent via serial`, { port: comPort, pin });
       } catch (err) {
@@ -427,9 +428,9 @@ class PrintAgentService {
     if (!targetIp && printerId) {
       const printer = this.printerMap.get(printerId);
       if (printer) {
-        if (printer.connectionType === 'serial' && printer.comPort) {
+        if ((printer.connectionType === 'serial' || printer.connectionType === 'usb') && printer.comPort) {
           try {
-            await this.sendToSerialPrinter(printer.comPort, printer.baudRate || 9600, kickCommand);
+            await this.enqueueSerialJob(printer.comPort, printer.baudRate || 9600, kickCommand);
             this.sendKickResult(kickId, true);
             printLogger.info('DrawerKick', `Drawer kick ${kickId} sent via serial (mapped)`, { port: printer.comPort, pin });
           } catch (err) {
@@ -553,6 +554,41 @@ class PrintAgentService {
         reject(err);
       });
     });
+  }
+
+  enqueueSerialJob(comPort, baudRate, data) {
+    return new Promise((resolve, reject) => {
+      const portKey = comPort.toUpperCase();
+      if (!this.serialPortQueues.has(portKey)) {
+        this.serialPortQueues.set(portKey, { busy: false, queue: [] });
+      }
+      const q = this.serialPortQueues.get(portKey);
+      q.queue.push({ comPort, baudRate, data, resolve, reject });
+      if (!q.busy) {
+        this._drainSerialQueue(portKey);
+      }
+    });
+  }
+
+  async _drainSerialQueue(portKey) {
+    const q = this.serialPortQueues.get(portKey);
+    if (!q || q.busy || q.queue.length === 0) return;
+    q.busy = true;
+    let first = true;
+    while (q.queue.length > 0) {
+      if (!first) {
+        await new Promise(r => setTimeout(r, 150));
+      }
+      first = false;
+      const job = q.queue.shift();
+      try {
+        const result = await this.sendToSerialPrinter(job.comPort, job.baudRate, job.data);
+        job.resolve(result);
+      } catch (err) {
+        job.reject(err);
+      }
+    }
+    q.busy = false;
   }
 
   sendToSerialPrinter(comPort, baudRate, data, retries = 2) {
