@@ -17988,6 +17988,41 @@ connect();
     }
   });
 
+  // Block list for recently deleted agents (prevents immediate re-registration)
+  // Key = "name::propertyId" composite key for property-scoped blocking
+  const deletedAgentBlockList = new Map<string, number>();
+  const BLOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+  function makeBlockKey(name: string, propertyId: string | null): string {
+    return `${name}::${propertyId || "global"}`;
+  }
+
+  // Helper: resolve a propertyId from the request body (UUID string or null)
+  function resolvePropertyId(rawPropertyId: any): string | null {
+    if (rawPropertyId && typeof rawPropertyId === 'string' && rawPropertyId.includes('-')) {
+      return rawPropertyId;
+    }
+    return null;
+  }
+
+  // Helper: try to resolve propertyId from workstation name embedded in agent name
+  async function resolvePropertyFromAgentName(agentName: string): Promise<string | null> {
+    const wsMatch = agentName.match(/^(.+?)\s*\(Embedded Agent\)$/);
+    if (!wsMatch) return null;
+    const wsName = wsMatch[1];
+    try {
+      const workstations = await storage.getWorkstations();
+      // Match by exact name or by name with dashes stripped, and only return if property is set
+      const ws = workstations.find((w: any) => w.name === wsName || w.name === wsName.replace(/-/g, ''));
+      if (ws?.propertyId) {
+        console.log(`Print agent auto-resolved property from workstation "${wsName}": ${ws.propertyId}`);
+        return ws.propertyId;
+      }
+    } catch (e) {
+      console.warn("Could not resolve workstation for print agent property:", e);
+    }
+    return null;
+  }
+
   // Create new print agent
   app.post("/api/print-agents", async (req, res) => {
     try {
@@ -17996,13 +18031,71 @@ connect();
       if (!name) {
         return res.status(400).json({ message: "Name is required" });
       }
+
+      // Resolve the incoming propertyId (only accept valid UUID strings)
+      let incomingPropertyId = resolvePropertyId(propertyId);
+
+      // If no valid propertyId provided, try to resolve from workstation name
+      if (!incomingPropertyId) {
+        incomingPropertyId = await resolvePropertyFromAgentName(name);
+      }
+
+      // Clean up expired block list entries
+      for (const [key, expiresAt] of deletedAgentBlockList) {
+        if (Date.now() >= expiresAt) deletedAgentBlockList.delete(key);
+      }
+
+      // Check if this name+property combination was recently deleted (block re-registration)
+      const blockKey = makeBlockKey(name, incomingPropertyId);
+      const blockedUntil = deletedAgentBlockList.get(blockKey);
+      if (blockedUntil && Date.now() < blockedUntil) {
+        const remainingSec = Math.ceil((blockedUntil - Date.now()) / 1000);
+        return res.status(409).json({ 
+          message: `Agent "${name}" was recently deleted. Re-registration blocked for ${remainingSec}s.`,
+          blockedUntil,
+        });
+      }
+
+      // Check for existing agent with the same name AND same property scope
+      // This prevents cross-property collisions (same WS name at different properties)
+      const allAgents = await storage.getPrintAgents();
+      const existingAgent = allAgents.find((a: any) => {
+        if (a.name !== name) return false;
+        // Match scope: both null (global), or same propertyId
+        if (!a.propertyId && !incomingPropertyId) return true;
+        if (a.propertyId === incomingPropertyId) return true;
+        return false;
+      });
+
+      if (existingAgent) {
+
+        // Re-authenticate existing agent with a fresh token (don't create duplicate)
+        const plainToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
+
+        const updated = await storage.updatePrintAgent(existingAgent.id, {
+          agentToken: tokenHash,
+          // Don't set status to "online" - that happens on WebSocket AUTH_OK handshake
+        });
+        
+        console.log(`Print agent re-authenticated (existing): ${name} (${existingAgent.id}) property: ${existingAgent.propertyId}`);
+        return res.status(200).json({
+          ...updated,
+          agentToken: plainToken,
+          message: "Existing agent re-authenticated with new token.",
+        });
+      }
       
       // Generate secure agent token (we store the hash, return the plain token once)
       const plainToken = crypto.randomUUID() + "-" + crypto.randomBytes(32).toString("hex");
       const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
       
+      if (!incomingPropertyId) {
+        console.warn(`Print agent registering without property scope: "${name}" - may be assigned globally. Ensure workstation name is configured.`);
+      }
+
       const agent = await storage.createPrintAgent({
-        propertyId: propertyId || null, // null means global agent
+        propertyId: incomingPropertyId,
         name,
         description: description || null,
         agentToken: tokenHash, // Store the hash in the database
@@ -18094,6 +18187,12 @@ connect();
   // Delete print agent
   app.delete("/api/print-agents/:id", async (req, res) => {
     try {
+      // Look up the agent first to get its name for the block list
+      const agentToDelete = await storage.getPrintAgent(req.params.id);
+      if (!agentToDelete) {
+        return res.status(404).json({ message: "Print agent not found" });
+      }
+
       // Disconnect if connected
       const connectedAgentsMap = (app as any).connectedAgents as Map<string, WebSocket>;
       const existingWs = connectedAgentsMap?.get(req.params.id);
@@ -18101,6 +18200,11 @@ connect();
         existingWs.close(4005, "Agent deleted");
         connectedAgentsMap.delete(req.params.id);
       }
+
+      // Add name+property composite key to block list to prevent immediate re-registration
+      const delBlockKey = makeBlockKey(agentToDelete.name, agentToDelete.propertyId);
+      deletedAgentBlockList.set(delBlockKey, Date.now() + BLOCK_DURATION_MS);
+      console.log(`Print agent deleted and blocked from re-registration for 5 min: ${agentToDelete.name} (${agentToDelete.id}) key: ${delBlockKey}`);
       
       const success = await storage.deletePrintAgent(req.params.id);
       if (!success) {
