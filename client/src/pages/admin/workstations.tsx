@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -50,7 +50,6 @@ export default function WorkstationsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Workstation | null>(null);
   const [cashDrawerVisible, setCashDrawerVisible] = useState(false);
-  const lastResetKeyRef = useRef<string>("");
 
   const { data: workstations = [], isLoading } = useQuery<Workstation[]>({
     queryKey: ["/api/workstations", filterKeys],
@@ -206,101 +205,93 @@ export default function WorkstationsPage() {
     ...rvcs.map((r) => ({ value: r.id, label: r.name })),
   ], [rvcs]);
 
-  useEffect(() => {
-    if (!formOpen) {
-      lastResetKeyRef.current = "";
-      return;
-    }
-    const resetKey = editingItem ? `edit-${editingItem.id}` : "new";
-    if (lastResetKeyRef.current === resetKey) return;
-    lastResetKeyRef.current = resetKey;
+  const resetFormForItem = useCallback((item: Workstation) => {
+    fetch(`/api/workstations/${item.id}/order-devices`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(ids => setSelectedOrderDeviceIds(ids))
+      .catch(() => setSelectedOrderDeviceIds([]));
+    setCashDrawerVisible(item.cashDrawerEnabled ?? false);
+    form.reset({
+      name: item.name,
+      deviceType: item.deviceType,
+      propertyId: item.propertyId,
+      rvcId: item.rvcId || null,
+      defaultOrderType: item.defaultOrderType || "dine_in",
+      fastTransactionEnabled: item.fastTransactionEnabled ?? false,
+      requireBeginCheck: item.requireBeginCheck ?? true,
+      allowPickupCheck: item.allowPickupCheck ?? true,
+      allowReopenClosedChecks: item.allowReopenClosedChecks ?? false,
+      allowOfflineOperation: item.allowOfflineOperation ?? false,
+      managerApprovalDevice: item.managerApprovalDevice ?? false,
+      clockInAllowed: item.clockInAllowed ?? true,
+      defaultReceiptPrinterId: item.defaultReceiptPrinterId || null,
+      backupReceiptPrinterId: item.backupReceiptPrinterId || null,
+      reportPrinterId: item.reportPrinterId || null,
+      backupReportPrinterId: item.backupReportPrinterId || null,
+      voidPrinterId: item.voidPrinterId || null,
+      backupVoidPrinterId: item.backupVoidPrinterId || null,
+      ipAddress: item.ipAddress || "",
+      hostname: item.hostname || "",
+      autoLogoutMinutes: item.autoLogoutMinutes ?? null,
+      active: item.active ?? true,
+      fontScale: item.fontScale ?? 100,
+      comPort: item.comPort || null,
+      comBaudRate: item.comBaudRate ?? 9600,
+      comDataBits: item.comDataBits ?? 8,
+      comStopBits: item.comStopBits || "1",
+      comParity: item.comParity || "none",
+      comFlowControl: item.comFlowControl || "none",
+      cashDrawerEnabled: item.cashDrawerEnabled ?? false,
+      cashDrawerPrinterId: item.cashDrawerPrinterId || null,
+      cashDrawerKickPin: item.cashDrawerKickPin || "pin2",
+      cashDrawerPulseDuration: item.cashDrawerPulseDuration ?? 100,
+      cashDrawerAutoOpenOnCash: item.cashDrawerAutoOpenOnCash ?? true,
+      cashDrawerAutoOpenOnDrop: item.cashDrawerAutoOpenOnDrop ?? true,
+    });
+  }, [form]);
 
-    if (editingItem) {
-      fetch(`/api/workstations/${editingItem.id}/order-devices`, { headers: getAuthHeaders() })
-        .then(res => res.ok ? res.json() : [])
-        .then(ids => setSelectedOrderDeviceIds(ids))
-        .catch(() => setSelectedOrderDeviceIds([]));
-      setCashDrawerVisible(editingItem.cashDrawerEnabled ?? false);
-      form.reset({
-        name: editingItem.name,
-        deviceType: editingItem.deviceType,
-        propertyId: editingItem.propertyId,
-        rvcId: editingItem.rvcId || null,
-        defaultOrderType: editingItem.defaultOrderType || "dine_in",
-        fastTransactionEnabled: editingItem.fastTransactionEnabled ?? false,
-        requireBeginCheck: editingItem.requireBeginCheck ?? true,
-        allowPickupCheck: editingItem.allowPickupCheck ?? true,
-        allowReopenClosedChecks: editingItem.allowReopenClosedChecks ?? false,
-        allowOfflineOperation: editingItem.allowOfflineOperation ?? false,
-        managerApprovalDevice: editingItem.managerApprovalDevice ?? false,
-        clockInAllowed: editingItem.clockInAllowed ?? true,
-        defaultReceiptPrinterId: editingItem.defaultReceiptPrinterId || null,
-        backupReceiptPrinterId: editingItem.backupReceiptPrinterId || null,
-        reportPrinterId: editingItem.reportPrinterId || null,
-        backupReportPrinterId: editingItem.backupReportPrinterId || null,
-        voidPrinterId: editingItem.voidPrinterId || null,
-        backupVoidPrinterId: editingItem.backupVoidPrinterId || null,
-        ipAddress: editingItem.ipAddress || "",
-        hostname: editingItem.hostname || "",
-        autoLogoutMinutes: editingItem.autoLogoutMinutes ?? null,
-        active: editingItem.active ?? true,
-        fontScale: editingItem.fontScale ?? 100,
-        comPort: editingItem.comPort || null,
-        comBaudRate: editingItem.comBaudRate ?? 9600,
-        comDataBits: editingItem.comDataBits ?? 8,
-        comStopBits: editingItem.comStopBits || "1",
-        comParity: editingItem.comParity || "none",
-        comFlowControl: editingItem.comFlowControl || "none",
-        cashDrawerEnabled: editingItem.cashDrawerEnabled ?? false,
-        cashDrawerPrinterId: editingItem.cashDrawerPrinterId || null,
-        cashDrawerKickPin: editingItem.cashDrawerKickPin || "pin2",
-        cashDrawerPulseDuration: editingItem.cashDrawerPulseDuration ?? 100,
-        cashDrawerAutoOpenOnCash: editingItem.cashDrawerAutoOpenOnCash ?? true,
-        cashDrawerAutoOpenOnDrop: editingItem.cashDrawerAutoOpenOnDrop ?? true,
-      });
-    } else {
-      setSelectedOrderDeviceIds([]);
-      setCashDrawerVisible(false);
-      const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
-      form.reset({
-        name: "",
-        deviceType: "pos_terminal",
-        propertyId: defaultPropertyId,
-        rvcId: null,
-        defaultOrderType: "dine_in",
-        fastTransactionEnabled: false,
-        requireBeginCheck: true,
-        allowPickupCheck: true,
-        allowReopenClosedChecks: false,
-        allowOfflineOperation: false,
-        managerApprovalDevice: false,
-        clockInAllowed: true,
-        defaultReceiptPrinterId: null,
-        backupReceiptPrinterId: null,
-        reportPrinterId: null,
-        backupReportPrinterId: null,
-        voidPrinterId: null,
-        backupVoidPrinterId: null,
-        ipAddress: "",
-        hostname: "",
-        autoLogoutMinutes: null,
-        active: true,
-        fontScale: 100,
-        comPort: null,
-        comBaudRate: 9600,
-        comDataBits: 8,
-        comStopBits: "1",
-        comParity: "none",
-        comFlowControl: "none",
-        cashDrawerEnabled: false,
-        cashDrawerPrinterId: null,
-        cashDrawerKickPin: "pin2",
-        cashDrawerPulseDuration: 100,
-        cashDrawerAutoOpenOnCash: true,
-        cashDrawerAutoOpenOnDrop: true,
-      });
-    }
-  }, [formOpen, editingItem]);
+  const resetFormForNew = useCallback(() => {
+    setSelectedOrderDeviceIds([]);
+    setCashDrawerVisible(false);
+    const defaultPropertyId = contextPropertyId || properties[0]?.id || "";
+    form.reset({
+      name: "",
+      deviceType: "pos_terminal",
+      propertyId: defaultPropertyId,
+      rvcId: null,
+      defaultOrderType: "dine_in",
+      fastTransactionEnabled: false,
+      requireBeginCheck: true,
+      allowPickupCheck: true,
+      allowReopenClosedChecks: false,
+      allowOfflineOperation: false,
+      managerApprovalDevice: false,
+      clockInAllowed: true,
+      defaultReceiptPrinterId: null,
+      backupReceiptPrinterId: null,
+      reportPrinterId: null,
+      backupReportPrinterId: null,
+      voidPrinterId: null,
+      backupVoidPrinterId: null,
+      ipAddress: "",
+      hostname: "",
+      autoLogoutMinutes: null,
+      active: true,
+      fontScale: 100,
+      comPort: null,
+      comBaudRate: 9600,
+      comDataBits: 8,
+      comStopBits: "1",
+      comParity: "none",
+      comFlowControl: "none",
+      cashDrawerEnabled: false,
+      cashDrawerPrinterId: null,
+      cashDrawerKickPin: "pin2",
+      cashDrawerPulseDuration: 100,
+      cashDrawerAutoOpenOnCash: true,
+      cashDrawerAutoOpenOnDrop: true,
+    });
+  }, [form, contextPropertyId, properties]);
 
   const cleanPrinterId = (value: string | null | undefined): string | null => {
     if (!value || value === "__none__") return null;
@@ -1171,10 +1162,12 @@ export default function WorkstationsPage() {
         columns={columns}
         title="Workstations"
         onAdd={() => {
+          resetFormForNew();
           setEditingItem(null);
           setFormOpen(true);
         }}
         onEdit={(item) => {
+          resetFormForItem(item);
           setEditingItem(item);
           setFormOpen(true);
         }}
