@@ -1016,23 +1016,92 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('diag-list-com-ports', async () => {
+    let ports = [];
+    const errors = [];
+
     try {
       const { SerialPort } = require('serialport');
-      const ports = await SerialPort.list();
-      return { success: true, ports: ports.map(p => ({
+      const spPorts = await SerialPort.list();
+      ports = spPorts.map(p => ({
         path: p.path,
         manufacturer: p.manufacturer || null,
         serialNumber: p.serialNumber || null,
         pnpId: p.pnpId || null,
         vendorId: p.vendorId || null,
         productId: p.productId || null,
-      })) };
+        source: 'serialport',
+      }));
     } catch (err) {
-      if (err.code === 'MODULE_NOT_FOUND') {
-        return { success: false, error: 'serialport module not available', ports: [] };
-      }
-      return { success: false, error: err.message, ports: [] };
+      const msg = err.code === 'MODULE_NOT_FOUND' ? 'serialport module not available' : err.message;
+      errors.push(msg);
+      appLogger.warn('Diagnostics', 'serialport list failed, trying registry fallback', msg);
     }
+
+    if (ports.length === 0 && process.platform === 'win32') {
+      try {
+        const { execSync } = require('child_process');
+        const regOutput = execSync(
+          'reg query HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM 2>nul',
+          { encoding: 'utf-8', timeout: 5000 }
+        );
+        const regPorts = [];
+        for (const line of regOutput.split('\n')) {
+          const match = line.match(/REG_SZ\s+(COM\d+)/i);
+          if (match) {
+            regPorts.push({
+              path: match[1],
+              manufacturer: null,
+              serialNumber: null,
+              pnpId: null,
+              vendorId: null,
+              productId: null,
+              source: 'registry',
+            });
+          }
+        }
+        if (regPorts.length > 0) {
+          ports = regPorts;
+          appLogger.info('Diagnostics', `Registry fallback found ${regPorts.length} COM port(s): ${regPorts.map(p => p.path).join(', ')}`);
+        }
+      } catch (regErr) {
+        appLogger.warn('Diagnostics', 'Registry COM port query failed', regErr.message);
+      }
+    }
+
+    if (ports.length === 0 && process.platform === 'win32') {
+      try {
+        const { execSync } = require('child_process');
+        const wmiOutput = execSync(
+          'powershell -NoProfile -Command "Get-WmiObject Win32_SerialPort | Select-Object DeviceID, Name | ConvertTo-Json"',
+          { encoding: 'utf-8', timeout: 10000 }
+        );
+        const trimmed = wmiOutput.trim();
+        if (trimmed && trimmed !== '') {
+          let wmiPorts = JSON.parse(trimmed);
+          if (!Array.isArray(wmiPorts)) wmiPorts = [wmiPorts];
+          const parsed = wmiPorts.filter(p => p.DeviceID).map(p => ({
+            path: p.DeviceID,
+            manufacturer: p.Name || null,
+            serialNumber: null,
+            pnpId: null,
+            vendorId: null,
+            productId: null,
+            source: 'wmi',
+          }));
+          if (parsed.length > 0) {
+            ports = parsed;
+            appLogger.info('Diagnostics', `WMI fallback found ${parsed.length} COM port(s): ${parsed.map(p => p.path).join(', ')}`);
+          }
+        }
+      } catch (wmiErr) {
+        appLogger.warn('Diagnostics', 'WMI COM port query failed', wmiErr.message);
+      }
+    }
+
+    if (ports.length === 0 && errors.length > 0) {
+      return { success: false, error: errors.join('; ') + '. Use manual port entry below.', ports: [] };
+    }
+    return { success: true, ports };
   });
 
   ipcMain.handle('diag-test-serial', async (event, { comPort, baudRate, printTestPage }) => {

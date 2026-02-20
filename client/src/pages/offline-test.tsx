@@ -79,6 +79,7 @@ export default function OfflineTestPage() {
   const [comPortsLoading, setComPortsLoading] = useState(false);
   const [comPortsError, setComPortsError] = useState<string | null>(null);
   const [selectedComPort, setSelectedComPort] = useState<string>("");
+  const [manualComPort, setManualComPort] = useState<string>("");
   const [selectedBaudRate, setSelectedBaudRate] = useState<string>("9600");
   const [serialTestResult, setSerialTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [serialTesting, setSerialTesting] = useState(false);
@@ -151,13 +152,15 @@ export default function OfflineTestPage() {
     setComPortsLoading(false);
   };
 
+  const effectiveComPort = selectedComPort || manualComPort.trim().toUpperCase();
+
   const handleTestSerial = async (printTestPage: boolean) => {
     const api = window.electronAPI;
-    if (!api?.diagnostics || !selectedComPort) return;
+    if (!api?.diagnostics || !effectiveComPort) return;
     setSerialTesting(true);
     setSerialTestResult(null);
     try {
-      const result = await api.diagnostics.testSerial(selectedComPort, parseInt(selectedBaudRate), printTestPage);
+      const result = await api.diagnostics.testSerial(effectiveComPort, parseInt(selectedBaudRate), printTestPage);
       if (result.success) {
         const msg = printTestPage
           ? `Port opened in ${result.openTimeMs}ms, sent ${result.bytesSent} bytes with test page`
@@ -624,12 +627,22 @@ export default function OfflineTestPage() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {comPortsLoading ? 'Scanning...' : 'No COM ports found'}
-                      </span>
+                      <Input
+                        type="text"
+                        value={manualComPort}
+                        onChange={(e) => setManualComPort(e.target.value)}
+                        placeholder={comPortsLoading ? 'Scanning...' : 'COM1'}
+                        className="text-xs"
+                        data-testid="input-manual-com-port"
+                      />
                     )}
                   </div>
                 </div>
+                {comPorts.length === 0 && !comPortsLoading && (
+                  <div className="text-xs text-muted-foreground" data-testid="text-manual-port-hint">
+                    Auto-detect found no ports. Type a port name (e.g. COM1) to test directly.
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Baud Rate</span>
                   <div className="w-[180px]">
@@ -668,7 +681,7 @@ export default function OfflineTestPage() {
                   size="sm"
                   variant="outline"
                   onClick={() => handleTestSerial(false)}
-                  disabled={serialTesting || !selectedComPort}
+                  disabled={serialTesting || !effectiveComPort}
                   data-testid="button-test-connect"
                 >
                   <Plug className="w-3 h-3 mr-1" /> Test Connect
@@ -676,7 +689,7 @@ export default function OfflineTestPage() {
                 <Button
                   size="sm"
                   onClick={() => handleTestSerial(true)}
-                  disabled={serialTesting || !selectedComPort}
+                  disabled={serialTesting || !effectiveComPort}
                   data-testid="button-test-print"
                 >
                   {serialTesting ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Printer className="w-3 h-3 mr-1" />}
