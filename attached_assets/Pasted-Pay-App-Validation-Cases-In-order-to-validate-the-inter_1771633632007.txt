@@ -1,0 +1,368 @@
+Pay App Validation Cases
+In order to validate the interface between your application and Heartland Pay App, Heartland requires some basic testing procedures be followed. The validation testing process is as follows:
+
+1. Test cards are required to complete these tests, see this link for purchase: US Global Portico Test Device Shop
+
+2. Review required test cases for your integration and be sure to record the Transaction ID or responesID for each test case that you plan to support for your final release.  
+
+3. If you will be supporting any of the additional transaction types (Optional Test Cases), please perform the applicable test cases and record the Transaction ID's.
+
+4. Submit completed form and email an example of your error/debug logging + transaction receipts to PayAppValidations@globalpay.com. Your Heartland certification analyst will review your test cases and respond within 3 business days.
+
+
+If you are only running a couple test cases for adding a service or for recertification, you can put N/A in the field for those test cases that you are NOT performing.  This will allow you to submit the form without errors.
+derekgriffin1000@gmail.com Switch account
+ 
+* Indicates required question
+Email
+*
+Company Name
+*
+POS Application Name
+*
+POS Application Version
+*
+Test Device Serial Number and TID
+*
+Test Cases Overview
+Fill out the following sections with the Transaction ID for each transaction type that you plan to support.  
+
+Provide a debug log with the raw request/response of the transactions that will be used by your support staff and can be shared with our support teams to assist with hardware or software related issues.  
+
+If generating your own receipts, receipt copies are required; an example of both an EMV receipt and MSR receipt are below.
+
+
+MSR Receipt Example
+
+MSR Receipt Requirements
+
+EMV Receipt Example
+
+EMV Receipt Requirements
+
+Required Test Cases
+Test case 1-EMV contact sale
+Objective: Process an EMV contact sale with offline PIN.
+
+Test Card: EMV MasterCard
+
+ 
+
+1. Send Sale command for an amount of $4.00.
+
+2. Insert Test Card and select application if prompted.
+
+3. Terminal will respond approved.
+
+Pass Criteria
+
+1. Transaction must be approved. Receipt must conform to EMV
+Receipt Requirements
+
+EMV Contact Sale Transaction ID
+*
+Test Case 2-MSR/Swiped sale
+Objective: Ensure application can handle non-EMV swiped transactions.
+
+Test Card: Magnetic stripe MasterCard
+
+
+
+1. Send sale command and swipe for the amount of $7.00
+
+2. Swipe Test Card and select application if prompted.
+
+3. Terminal will respond approved.
+
+Pass Criteria     
+
+1. Transaction must be approved. Receipt must conform to Non-EMV Receipt Requirements
+
+MSR Contact Sale Transaction ID
+*
+TEST CASE 3-Manual Sale
+Objective: Process a keyed sale, with PAN &
+exp date, along with Address Verification and Card Security Code to confirm the
+application can support any or all of these.
+
+Test Card: 5473*5300*0000*0014 EXP 12/25
+
+
+
+1. Send sale command and manually key for the amount of $118.00.
+
+2. Enter test card number
+
+3. Choose Credit
+
+4. Enter expiration date
+
+5. Choose card not present
+
+6. Enter 76321 for address and ZIP, Enter 321 for Card Security Code (CVV2, CID)
+
+Pass Criteria     
+
+1. Transaction must be approved online.  AVS Result Code: YCVV Result Code: M
+
+Manual Sale Transaction ID
+*
+TEST CASE 4-Transaction Void
+Objective: Process an online void.
+
+Test Card: MSD only MasterCard
+
+ 
+
+1. Send void command with response/txnID from sale in test case 2.
+
+Pass Criteria
+
+1. Transaction successfully returns a voided response.
+
+Transaction Void Transaction ID
+*
+TEST CASE 5-Partial Approval  **Required  to be supported by Visa and Discover**
+Objective: Ensure application can handle Partial Approval from our host.
+
+Test Card: Magnetic stripe MasterCard
+
+
+
+1. Send sale command and swipe for the amount of $155.00
+
+2. Swipe test Card and select application if prompted.
+
+3. Receive an approved amount less than requested. Finalize open ticket with remaining
+balancing using a different card or tender.
+
+Pass Criteria
+
+1. Transaction must be approved. Approved Amount:  $ 100.00.Issuer Response Code:  10
+
+Partial Approval Transaction ID
+*
+TEST CASE 6- Batch Close/EOD Processing
+Objective: Close the batch, ensuring all approved transactions (offline or online) are settled.  Before EOD can be performed, the reversal and SAF transactions should be sent to the host.
+
+Integrators are automatically provided accounts with
+auto-close enabled, so if manual batch transmission will not be performed in
+the production environment then it does not need to be tested.  
+
+**It is recommended that POS software have a way to manually send EOD commands in the event that terminal downloads need to be performed outside of any automated updates**
+
+Test Card          N/A
+
+
+
+1. Initiate EOD Processing command
+
+Pass Criteria
+
+1.Batch submission must be
+successful.
+
+Batch Close BATCH NUMBER
+Optional Test Cases
+If you wish to support any of the following transactions, please complete the corresponding test case:
+-Refund
+-Token Payment
+-Debit Sale 
+-Adjust Payment 
+-EBT
+-Healthcare/FSA/HSA 
+-Store and Forward – presented in log
+-Surcharge – present in logs and receipt
+
+Credit Refund
+Objective: Confirm support of a refund transaction for credit/debit using response ID
+
+Test Card:         N/A
+
+
+
+1. Send sale command for $4.00
+
+2. Swipe card and record response/txn ID from response
+
+3. Send refund command w/ response/txn ID from step 3
+
+Pass Criteria     
+
+1.Batch submission must be successful.
+
+Credit Return Transaction ID
+Token Sale
+Objective: Complete Token request and then use that token for a SALE transaction
+
+**Tokenization must be enabled to be processed**
+
+Test Card: MSR credit card
+
+
+
+1. Send a Verify command w/ card on file indicators and token request.
+
+2. Review the response back from our host and locate the token value that is
+returned.  Store this within your localized token vault and be able to retrieve it for the next transaction
+
+3. Send sale command w/ Token and card on file indicators for $15.01
+
+Pass Criteria
+
+1.TokenValue returned in response
+
+2.Transaction # 2 receives Gateway Response Code of 0, Issuer Response Code of 00. 
+
+Token Payment Transaction ID
+Debit Sale
+Objective: Confirm support of PIN Debit sale
+
+**ALL CVM/DEBIT must be enabled to be processed**
+
+Test Card: Personal EMV Debit card or B2 Debit Test Card (not provided by HPS)
+
+
+
+1. Send sale command and select Debit for the card type OR select DEBIT function.  For the test amount use $10.00.
+
+Pass Criteria
+
+1.Transaction must be approved online.
+
+Debit Sale Transaction ID
+Auth/Capture/Adjust
+Objective: Complete Sale with Adjustment
+
+Pick One Gratuity Approach
+
+1.CREDIT AUTH + CREDIT POSTAUTH (Portico “CreditAddToBatch”)
+
+2.CREDIT SALE + CREDIT ADJUST (Portico “CreditTxnEdit”)
+
+Test Card          MasterCard
+
+
+
+1. Send sale command and process for the amount of $15.12
+
+2. Add a $3.00 tip at Settlement.
+
+Pass Criteria     
+
+1.Transaction must be approved.
+Approved Amount: $18.12
+
+Adjustment or Capture Transaction ID
+Incremental Auth
+*
+Objective: 
+Authorize a card for $10.50 Retain Transaction ID.
+
+
+Pass Criteria:
+Send Incremental Auth + original Trxn ID and provide the new Trxn ID
+
+
+Incremental Auth Transaction ID
+*
+EBT
+Objective: Transactions: EBT Purchase, EBT Return and EBT Balance Inquiry
+
+**EBT must be enabled to be processed**
+
+Test Card: MSD only Visa
+
+
+
+1. EBT purchase:
+
+          a. Send a sale command
+
+          b. Swipe card, select EBT if prompted.
+
+2. EBT return:
+
+          a. Send a refund command
+
+          b. Swipe card, select EBT if prompted.
+
+3.EBT balance inquiry:
+
+          a. Send a balance inquiry command
+
+          b. Swipe card, select EBT if prompted.
+
+Pass Criteria
+
+1.All transactions must be approved
+
+EBT Transaction ID (should have 3 Transaction ID values)
+Healthcare/FSA/HSA
+Objective: Send extended healthcare (Rx, Vision, Dental, Clinical).
+
+**FSA must be enabled to be processed**
+
+Test Card: Visa
+
+
+
+1. Send sale command with appropriate cardIsHSAFSA flag and appropriate prescription, clinic, dental, or vision amount for $100.00, with
+$50 being qualified for healthcare.  Choose any of the groups (Rx, Vision, Dental, Clinical).
+
+Pass Criteria
+
+1.Transaction will approve online.
+
+Healthcare/FSA/HSA Transaction ID
+Store and forward
+Objective: Process credit sale in Store and Forward, upload transaction, and close batch.
+
+**Store and forward must be enabled to be processed**
+
+Test Card: EMV
+Visa
+
+
+
+1. Send sale command amount of $4.00. 
+
+2. Send sale command amount $10.25
+
+3. Send SendSAF command.
+
+4. Initiate EOD processing command
+
+Pass Criteria     
+
+1.Transaction for $4.00 approves and $10.25 declines
+
+Store and Forward w/ Approval, does upload appear in logs?
+Surcharge
+Objective: Apply
+a surcharge to a transaction.  You will need to make sure that you have worked with the Heartland team to set a surcharge amount for all qualifying transactions.
+
+**Surcharge must be enabled to be processed**
+
+Test Card: EMV
+MasterCard
+
+
+
+1.Send a sale command for $50.00 with a 3% surcharge (the surcharge is set in the download)
+
+Pass Criteria
+
+1.Printed receipt shows that a surcharge was added to the total amount and that the total amount processes
+matches the principle amount plus the surcharge
+
+Surcharge Transaction ID
+Have you emailed your receipts and POS debug (raw request/response) logs to ProductOpsIntegration@e-hps.com?
+*
+Yes
+No
+Please review your tests, are all of the required test cases completed?
+*
+Yes
+No
+A copy of your responses will be emailed to the address you provided.
