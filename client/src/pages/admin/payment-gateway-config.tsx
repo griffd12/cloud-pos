@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,8 @@ import { ContextHelpWrapper } from "@/components/ui/context-help";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
+import { getConnectionFields, isFieldSupported, getFieldOverride, getSuggestedDefaults } from "@/lib/gateway-field-registry";
+import type { GatewayFieldKey } from "@/lib/gateway-field-registry";
 import type { PaymentGatewayConfig } from "@shared/schema";
 import {
   Form,
@@ -43,6 +45,7 @@ import {
   Info,
   ChevronDown,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import {
   Collapsible,
@@ -354,6 +357,52 @@ export default function PaymentGatewayConfigPage() {
     },
   });
 
+  const lastAppliedGateway = useRef<string>("");
+
+  const selectedGateway = form.watch("gatewayType") || "";
+
+  const fieldSupported = useCallback((field: GatewayFieldKey) => {
+    if (!selectedGateway) return true;
+    return isFieldSupported(selectedGateway, field);
+  }, [selectedGateway]);
+
+  const getFieldLabel = useCallback((field: GatewayFieldKey, defaultLabel: string) => {
+    if (!selectedGateway) return defaultLabel;
+    const override = getFieldOverride(selectedGateway, field);
+    return override?.label || defaultLabel;
+  }, [selectedGateway]);
+
+  const getFieldDesc = useCallback((field: GatewayFieldKey, defaultDesc: string) => {
+    if (!selectedGateway) return defaultDesc;
+    const override = getFieldOverride(selectedGateway, field);
+    return override?.description || defaultDesc;
+  }, [selectedGateway]);
+
+  const applyGatewayDefaults = useCallback(() => {
+    if (!selectedGateway) return;
+    const defaults = getSuggestedDefaults(selectedGateway);
+    const allBoolFields: GatewayFieldKey[] = [
+      "enableSale", "enableVoid", "enableRefund", "enableAuthCapture", "enableManualEntry",
+      "enableDebit", "enableEbt", "enableHealthcare",
+      "enableEmv", "enableContactless", "enableMsr",
+      "enablePartialApproval", "enableTokenization", "enableStoreAndForward",
+      "enableSurcharge", "enableTipAdjust", "enableIncrementalAuth", "enableCashback",
+      "enableAutoBatchClose", "enableManualBatchClose",
+      "receiptShowEmvFields", "receiptShowAid", "receiptShowTvr", "receiptShowTsi",
+      "receiptShowAppLabel", "receiptShowEntryMethod", "receiptPrintMerchantCopy", "receiptPrintCustomerCopy",
+      "enableDebugLogging", "logRawRequests", "logRawResponses",
+    ];
+    for (const field of allBoolFields) {
+      if (!isFieldSupported(selectedGateway, field)) continue;
+      const val = defaults[field] ?? false;
+      form.setValue(field as any, val);
+    }
+    lastAppliedGateway.current = selectedGateway;
+    toast({ title: `Applied recommended defaults for ${GATEWAY_TYPES.find(g => g.value === selectedGateway)?.label || selectedGateway}` });
+  }, [selectedGateway, form, toast]);
+
+  const showApplyDefaults = selectedGateway && (!currentLevelConfig || lastAppliedGateway.current !== selectedGateway);
+
   const onSubmit = form.handleSubmit((data) => {
     saveMutation.mutate(data);
   });
@@ -457,6 +506,19 @@ export default function PaymentGatewayConfigPage() {
                     );
                   }}
                 />
+
+                {showApplyDefaults && (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/20">
+                    <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-xs text-muted-foreground flex-1">
+                      Apply recommended settings for {GATEWAY_TYPES.find(g => g.value === selectedGateway)?.label}?
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={applyGatewayDefaults} data-testid="button-apply-gateway-defaults">
+                      Apply Defaults
+                    </Button>
+                  </div>
+                )}
+
                 <FormField
                   control={form.control}
                   name="environment"
@@ -477,42 +539,23 @@ export default function PaymentGatewayConfigPage() {
                     );
                   }}
                 />
-                <FormField control={form.control} name="credentialKeyPrefix" render={({ field }) => (
-                  <ConfigField fieldName="credentialKeyPrefix" label="Credential Key Prefix" description="Secret name prefix (e.g., HEARTLAND_MAIN)">
-                    <Input {...field} className="w-[240px]" placeholder="HEARTLAND_MAIN" data-testid="input-credential-prefix" />
-                  </ConfigField>
-                )} />
-                <FormField control={form.control} name="merchantId" render={({ field }) => (
-                  <ConfigField fieldName="merchantId" label="Merchant ID (MID)" description="Processor-assigned merchant identifier">
-                    <Input {...field} className="w-[240px]" placeholder="Merchant ID" data-testid="input-merchant-id" />
-                  </ConfigField>
-                )} />
-                <FormField control={form.control} name="terminalId" render={({ field }) => (
-                  <ConfigField fieldName="terminalId" label="Terminal ID (TID)" description="Assigned terminal identifier">
-                    <Input {...field} className="w-[240px]" placeholder="Terminal ID" data-testid="input-terminal-id" />
-                  </ConfigField>
-                )} />
-                <FormField control={form.control} name="siteId" render={({ field }) => (
-                  <ConfigField fieldName="siteId" label="Site ID" description="Heartland site identifier">
-                    <Input {...field} className="w-[240px]" placeholder="Site ID" data-testid="input-site-id" />
-                  </ConfigField>
-                )} />
-                <FormField control={form.control} name="deviceId" render={({ field }) => (
-                  <ConfigField fieldName="deviceId" label="Device ID" description="Heartland device identifier">
-                    <Input {...field} className="w-[240px]" placeholder="Device ID" data-testid="input-device-id" />
-                  </ConfigField>
-                )} />
-                <FormField control={form.control} name="licenseId" render={({ field }) => (
-                  <ConfigField fieldName="licenseId" label="License ID" description="Heartland license identifier">
-                    <Input {...field} className="w-[240px]" placeholder="License ID" data-testid="input-license-id" />
-                  </ConfigField>
-                )} />
+
+                {getConnectionFields(selectedGateway || "_fallback").map(cf => (
+                  <FormField key={cf.field} control={form.control} name={cf.field as any} render={({ field }) => {
+                    const inherited = getInheritedValue(cf.field);
+                    return (
+                      <ConfigField fieldName={cf.field} label={cf.label} description={cf.description} inherited={!field.value && !!inherited} inheritedFrom={inherited?.from}>
+                        <Input {...field} value={field.value ?? ""} className="w-[240px]" placeholder={inherited ? `${inherited.value} (inherited)` : cf.placeholder} data-testid={`input-${cf.field}`} />
+                      </ConfigField>
+                    );
+                  }} />
+                ))}
               </ConfigSection>
 
               <Separator />
 
               <ConfigSection title="Transaction Types" icon={Banknote} defaultOpen={true}>
-                {[
+                {([
                   { name: "enableSale" as const, label: "Sale", desc: "Standard credit/debit sale" },
                   { name: "enableVoid" as const, label: "Void", desc: "Void unsettled transactions" },
                   { name: "enableRefund" as const, label: "Refund", desc: "Credit refund by transaction ID" },
@@ -521,11 +564,11 @@ export default function PaymentGatewayConfigPage() {
                   { name: "enableDebit" as const, label: "PIN Debit", desc: "PIN-based debit transactions" },
                   { name: "enableEbt" as const, label: "EBT", desc: "Electronic Benefits Transfer" },
                   { name: "enableHealthcare" as const, label: "Healthcare / FSA / HSA", desc: "Healthcare flexible spending" },
-                ].map(item => (
+                ] as const).filter(item => fieldSupported(item.name)).map(item => (
                   <FormField key={item.name} control={form.control} name={item.name} render={({ field }) => {
                     const inherited = getInheritedValue(item.name);
                     return (
-                      <ConfigField fieldName={item.name} label={item.label} description={item.desc} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
+                      <ConfigField fieldName={item.name} label={getFieldLabel(item.name, item.label)} description={getFieldDesc(item.name, item.desc)} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
                         <Switch checked={field.value ?? getEffectiveValue(item.name, field.value) ?? false} onCheckedChange={field.onChange} data-testid={`switch-${item.name}`} />
                       </ConfigField>
                     );
@@ -535,27 +578,29 @@ export default function PaymentGatewayConfigPage() {
 
               <Separator />
 
+              {(fieldSupported("enableEmv") || fieldSupported("enableContactless") || fieldSupported("enableMsr")) && (
               <ConfigSection title="Card Entry Methods" icon={CreditCard} defaultOpen={false}>
-                {[
+                {([
                   { name: "enableEmv" as const, label: "EMV (Chip)", desc: "Contact chip card reading" },
                   { name: "enableContactless" as const, label: "Contactless (NFC/Tap)", desc: "Tap-to-pay transactions" },
                   { name: "enableMsr" as const, label: "MSR (Swipe)", desc: "Magnetic stripe swipe" },
-                ].map(item => (
+                ] as const).filter(item => fieldSupported(item.name)).map(item => (
                   <FormField key={item.name} control={form.control} name={item.name} render={({ field }) => {
                     const inherited = getInheritedValue(item.name);
                     return (
-                      <ConfigField fieldName={item.name} label={item.label} description={item.desc} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
+                      <ConfigField fieldName={item.name} label={getFieldLabel(item.name, item.label)} description={getFieldDesc(item.name, item.desc)} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
                         <Switch checked={field.value ?? getEffectiveValue(item.name, field.value) ?? false} onCheckedChange={field.onChange} data-testid={`switch-${item.name}`} />
                       </ConfigField>
                     );
                   }} />
                 ))}
               </ConfigSection>
+              )}
 
               <Separator />
 
               <ConfigSection title="Payment Features" icon={Shield} defaultOpen={true}>
-                {[
+                {([
                   { name: "enablePartialApproval" as const, label: "Partial Approval", desc: "Required by Visa/Discover — handle partial auth with split tender" },
                   { name: "enableTokenization" as const, label: "Tokenization", desc: "Store card tokens for repeat payments" },
                   { name: "enableStoreAndForward" as const, label: "Store and Forward (SAF)", desc: "Queue transactions when offline for later upload" },
@@ -563,63 +608,77 @@ export default function PaymentGatewayConfigPage() {
                   { name: "enableTipAdjust" as const, label: "Tip Adjust", desc: "Allow tip adjustment after auth/sale" },
                   { name: "enableIncrementalAuth" as const, label: "Incremental Auth", desc: "Add to existing authorization amount" },
                   { name: "enableCashback" as const, label: "Cashback", desc: "Allow cashback on debit transactions" },
-                ].map(item => (
+                ] as const).filter(item => fieldSupported(item.name)).map(item => (
                   <FormField key={item.name} control={form.control} name={item.name} render={({ field }) => {
                     const inherited = getInheritedValue(item.name);
                     return (
-                      <ConfigField fieldName={item.name} label={item.label} description={item.desc} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
+                      <ConfigField fieldName={item.name} label={getFieldLabel(item.name, item.label)} description={getFieldDesc(item.name, item.desc)} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
                         <Switch checked={field.value ?? getEffectiveValue(item.name, field.value) ?? false} onCheckedChange={field.onChange} data-testid={`switch-${item.name}`} />
                       </ConfigField>
                     );
                   }} />
                 ))}
 
+                {fieldSupported("surchargePercent") && (
                 <FormField control={form.control} name="surchargePercent" render={({ field }) => (
                   <ConfigField fieldName="surchargePercent" label="Surcharge Percentage" description="e.g., 3.00 for 3%">
                     <Input {...field} className="w-[120px]" placeholder="0.00" data-testid="input-surcharge-percent" />
                   </ConfigField>
                 )} />
+                )}
+                {fieldSupported("safFloorLimit") && (
                 <FormField control={form.control} name="safFloorLimit" render={({ field }) => (
                   <ConfigField fieldName="safFloorLimit" label="SAF Floor Limit" description="Max offline transaction amount ($)">
                     <Input {...field} className="w-[120px]" placeholder="50.00" data-testid="input-saf-floor-limit" />
                   </ConfigField>
                 )} />
+                )}
+                {fieldSupported("safMaxTransactions") && (
                 <FormField control={form.control} name="safMaxTransactions" render={({ field }) => (
                   <ConfigField fieldName="safMaxTransactions" label="SAF Max Transactions" description="Max offline transactions before forced upload">
                     <Input {...field} className="w-[120px]" placeholder="50" data-testid="input-saf-max-transactions" />
                   </ConfigField>
                 )} />
+                )}
+                {fieldSupported("authHoldMinutes") && (
                 <FormField control={form.control} name="authHoldMinutes" render={({ field }) => (
                   <ConfigField fieldName="authHoldMinutes" label="Auth Hold Duration (min)" description="How long an auth remains valid before expiring">
                     <Input {...field} className="w-[120px]" placeholder="1440" data-testid="input-auth-hold-minutes" />
                   </ConfigField>
                 )} />
+                )}
               </ConfigSection>
 
               <Separator />
 
               <ConfigSection title="Batch / Settlement" icon={Clock} defaultOpen={false}>
+                {fieldSupported("enableAutoBatchClose") && (
                 <FormField control={form.control} name="enableAutoBatchClose" render={({ field }) => (
-                  <ConfigField fieldName="enableAutoBatchClose" label="Auto Batch Close" description="Automatically close batch at scheduled time">
+                  <ConfigField fieldName="enableAutoBatchClose" label={getFieldLabel("enableAutoBatchClose", "Auto Batch Close")} description="Automatically close batch at scheduled time">
                     <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-auto-batch-close" />
                   </ConfigField>
                 )} />
+                )}
+                {fieldSupported("batchCloseTime") && (
                 <FormField control={form.control} name="batchCloseTime" render={({ field }) => (
-                  <ConfigField fieldName="batchCloseTime" label="Batch Close Time" description="HH:MM format (e.g., 02:00 for 2 AM)">
+                  <ConfigField fieldName="batchCloseTime" label={getFieldLabel("batchCloseTime", "Batch Close Time")} description="HH:MM format (e.g., 02:00 for 2 AM)">
                     <Input {...field} className="w-[120px]" placeholder="02:00" data-testid="input-batch-close-time" />
                   </ConfigField>
                 )} />
+                )}
+                {fieldSupported("enableManualBatchClose") && (
                 <FormField control={form.control} name="enableManualBatchClose" render={({ field }) => (
-                  <ConfigField fieldName="enableManualBatchClose" label="Manual Batch Close (EOD)" description="Allow manual EOD processing command">
+                  <ConfigField fieldName="enableManualBatchClose" label={getFieldLabel("enableManualBatchClose", "Manual Batch Close (EOD)")} description="Allow manual EOD processing command">
                     <Switch checked={field.value ?? false} onCheckedChange={field.onChange} data-testid="switch-manual-batch-close" />
                   </ConfigField>
                 )} />
+                )}
               </ConfigSection>
 
               <Separator />
 
               <ConfigSection title="Receipt Options" icon={Receipt} defaultOpen={false}>
-                {[
+                {([
                   { name: "receiptShowEmvFields" as const, label: "Show EMV Fields", desc: "Include EMV data block on chip receipts" },
                   { name: "receiptShowAid" as const, label: "Show AID", desc: "Application Identifier" },
                   { name: "receiptShowTvr" as const, label: "Show TVR", desc: "Terminal Verification Results" },
@@ -628,11 +687,11 @@ export default function PaymentGatewayConfigPage() {
                   { name: "receiptShowEntryMethod" as const, label: "Show Entry Method", desc: "Chip/Swipe/Contactless/Keyed" },
                   { name: "receiptPrintMerchantCopy" as const, label: "Print Merchant Copy", desc: "Print a copy for the merchant" },
                   { name: "receiptPrintCustomerCopy" as const, label: "Print Customer Copy", desc: "Print a copy for the customer" },
-                ].map(item => (
+                ] as const).filter(item => fieldSupported(item.name)).map(item => (
                   <FormField key={item.name} control={form.control} name={item.name} render={({ field }) => {
                     const inherited = getInheritedValue(item.name);
                     return (
-                      <ConfigField fieldName={item.name} label={item.label} description={item.desc} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
+                      <ConfigField fieldName={item.name} label={getFieldLabel(item.name, item.label)} description={getFieldDesc(item.name, item.desc)} inherited={field.value === undefined && !!inherited} inheritedFrom={inherited?.from}>
                         <Switch checked={field.value ?? getEffectiveValue(item.name, field.value) ?? false} onCheckedChange={field.onChange} data-testid={`switch-${item.name}`} />
                       </ConfigField>
                     );
