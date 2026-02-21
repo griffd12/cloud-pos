@@ -1137,6 +1137,7 @@ Hierarchy-aware payment gateway configuration with Simphony-class inheritance (E
 | property_id | varchar | YES | — |
 | workstation_id | varchar | YES | — |
 | gateway_type | text | YES | — |
+| integration_model | text | YES | — |
 | environment | text | YES | — |
 | credential_key_prefix | text | YES | — |
 | merchant_id | text | YES | — |
@@ -1144,6 +1145,9 @@ Hierarchy-aware payment gateway configuration with Simphony-class inheritance (E
 | site_id | text | YES | — |
 | device_id | text | YES | — |
 | license_id | text | YES | — |
+| terminal_ip_address | text | YES | — |
+| terminal_port | text | YES | — |
+| terminal_connection_type | text | YES | — |
 | enable_sale | boolean | YES | `false` |
 | enable_void | boolean | YES | `false` |
 | enable_refund | boolean | YES | `false` |

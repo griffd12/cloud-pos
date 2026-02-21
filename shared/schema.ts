@@ -3793,6 +3793,7 @@ export const paymentGatewayConfig = pgTable("payment_gateway_config", {
   workstationId: varchar("workstation_id"),
 
   gatewayType: text("gateway_type"),
+  integrationModel: text("integration_model"),
   environment: text("environment"),
   credentialKeyPrefix: text("credential_key_prefix"),
   merchantId: text("merchant_id"),
@@ -3800,6 +3801,10 @@ export const paymentGatewayConfig = pgTable("payment_gateway_config", {
   siteId: text("site_id"),
   deviceId: text("device_id"),
   licenseId: text("license_id"),
+
+  terminalIpAddress: text("terminal_ip_address"),
+  terminalPort: text("terminal_port"),
+  terminalConnectionType: text("terminal_connection_type"),
 
   enableSale: boolean("enable_sale").default(false),
   enableVoid: boolean("enable_void").default(false),

@@ -60,6 +60,7 @@ Preferred communication style: Simple, everyday language.
 - **Delivery Platform Integration APIs**: Direct API integrations with Uber Eats, DoorDash, and Grubhub for order parsing, acceptance, menu sync, and store status management.
 - **Workstation Order Device Routing**: Per-workstation control over which order devices can receive orders, via `workstation_order_devices` junction table. When configured, the KDS routing engine intersects the menu item's Print Class devices with the workstation's allowed devices. Defaults to all devices when no assignments exist (backward compatible).
 - **Payment Gateway Configuration**: Hierarchical payment gateway configuration system (`payment_gateway_config` table) with Simphony-style inheritance (Enterprise → Property → Workstation). EMC configuration panel shows inherited values with badges and override toggles. API routes support CRUD and merged config resolution via `getMergedPaymentGatewayConfig()`. Gateway-aware UI: selecting a gateway type (Heartland, Elavon, Stripe, Shift4, etc.) dynamically shows only supported fields with processor-specific labels, descriptions, and connection field names. "Apply Defaults" button pre-fills recommended settings per processor. Driven by `client/src/lib/gateway-field-registry.ts`.
+- **Semi-Integrated Payment Architecture**: Card-present payment processing uses a semi-integrated model where the POS sends high-level commands (sale, void, refund) to physical payment terminals, and the terminals handle card reading, EMV chip processing, and processor communication. This eliminates PCI scope for card data and shifts certification responsibility to terminal vendors. Integration model classification: `direct` (POS talks to processor API), `direct_with_terminal` (Stripe — uses own SDK for both online and terminal), `semi_integrated` (Heartland Pay App, Elavon Fusebox, Ingenico, Shift4, FreedomPay, Eigen). Interface defined in `server/payments/semi-integrated-types.ts`, Heartland adapter in `server/payments/adapters/heartland-semi-integrated.ts`.
 
 ## External Dependencies
 
@@ -75,8 +76,11 @@ Preferred communication style: Simple, everyday language.
 - Recharts
 
 ### Payment Gateways
-- Stripe (card-not-present / online payments)
-- Elavon Converge (EMV terminal integration)
-- Elavon Fusebox (EMV terminal with multi-processor support)
-- Heartland / Global Payments (EMV terminal + online via Portico gateway)
-- North / Ingenico SI (semi-integrated EMV terminals via Cloud WebSocket API)
+- Stripe (direct_with_terminal — card-not-present / online + Stripe Terminal SDK for card-present)
+- Elavon Converge (semi_integrated — EMV terminal)
+- Elavon Fusebox (semi_integrated — EMV terminal with multi-processor support)
+- Heartland / Global Payments (semi_integrated — Heartland Pay App on terminal)
+- North / Ingenico SI (semi_integrated — Cloud WebSocket API to Ingenico terminals)
+- Shift4 (semi_integrated — UTG gateway to terminal)
+- FreedomPay (semi_integrated — FreedomPay API to terminal)
+- Eigen (semi_integrated — terminal integration)

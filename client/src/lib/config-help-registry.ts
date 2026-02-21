@@ -46,6 +46,26 @@ const configHelpRegistry: Record<string, ConfigHelpEntry> = {
     description: "A license identifier assigned by the payment processor. Part of the credential set required for some gateways (like Heartland) to authenticate API requests alongside Site ID and Device ID.",
     category: "Payment Gateway",
   },
+  integrationModel: {
+    label: "Integration Model",
+    description: "Determines how the POS communicates with the payment processor. 'Direct' means the POS talks directly to the processor's API. 'Semi-Integrated' means the POS sends commands to a physical payment terminal, and the terminal handles card reading, EMV processing, and processor communication. 'Direct with Terminal' (like Stripe) uses the processor's own SDK for both online and terminal payments.",
+    category: "Payment Gateway",
+  },
+  terminalIpAddress: {
+    label: "Terminal IP Address",
+    description: "The network IP address of the physical payment terminal. The POS connects to this address to send sale, void, refund, and other commands. Make sure the terminal and POS are on the same network. Example: 192.168.1.100",
+    category: "Terminal Connection",
+  },
+  terminalPort: {
+    label: "Terminal Port",
+    description: "The TCP port number used to communicate with the payment terminal. Each terminal vendor uses a different default port. Heartland typically uses 12000, Shift4 UTG uses 5015. Check your terminal documentation for the correct port.",
+    category: "Terminal Connection",
+  },
+  terminalConnectionType: {
+    label: "Connection Type",
+    description: "How the POS physically connects to the payment terminal. TCP/IP (Network) is the most common — the terminal and POS communicate over the local network. USB connects directly to the workstation. Cloud WebSocket routes through the processor's cloud service (used by Ingenico). Serial uses a COM port connection.",
+    category: "Terminal Connection",
+  },
 
   // Payment Gateway Config — Transaction Types
   enableSale: {

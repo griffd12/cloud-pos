@@ -8,7 +8,7 @@ import { ContextHelpWrapper } from "@/components/ui/context-help";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useEmcFilter } from "@/lib/emc-context";
-import { getConnectionFields, isFieldSupported, getFieldOverride, getSuggestedDefaults } from "@/lib/gateway-field-registry";
+import { getConnectionFields, isFieldSupported, getFieldOverride, getSuggestedDefaults, isSemiIntegrated, getIntegrationModel, TERMINAL_CONNECTION_TYPES } from "@/lib/gateway-field-registry";
 import type { GatewayFieldKey } from "@/lib/gateway-field-registry";
 import type { PaymentGatewayConfig } from "@shared/schema";
 import {
@@ -229,6 +229,7 @@ export default function PaymentGatewayConfigPage() {
   const form = useForm({
     values: currentLevelConfig ? {
       gatewayType: currentLevelConfig.gatewayType || "",
+      integrationModel: currentLevelConfig.integrationModel || "",
       environment: currentLevelConfig.environment || "",
       credentialKeyPrefix: currentLevelConfig.credentialKeyPrefix || "",
       merchantId: currentLevelConfig.merchantId || "",
@@ -236,6 +237,9 @@ export default function PaymentGatewayConfigPage() {
       siteId: currentLevelConfig.siteId || "",
       deviceId: currentLevelConfig.deviceId || "",
       licenseId: currentLevelConfig.licenseId || "",
+      terminalIpAddress: currentLevelConfig.terminalIpAddress || "",
+      terminalPort: currentLevelConfig.terminalPort || "",
+      terminalConnectionType: currentLevelConfig.terminalConnectionType || "",
       enableSale: currentLevelConfig.enableSale ?? false,
       enableVoid: currentLevelConfig.enableVoid ?? false,
       enableRefund: currentLevelConfig.enableRefund ?? false,
@@ -274,6 +278,7 @@ export default function PaymentGatewayConfigPage() {
       logRawResponses: currentLevelConfig.logRawResponses ?? false,
     } : {
       gatewayType: "",
+      integrationModel: "",
       environment: "",
       credentialKeyPrefix: "",
       merchantId: "",
@@ -281,6 +286,9 @@ export default function PaymentGatewayConfigPage() {
       siteId: "",
       deviceId: "",
       licenseId: "",
+      terminalIpAddress: "",
+      terminalPort: "",
+      terminalConnectionType: "",
       enableSale: false,
       enableVoid: false,
       enableRefund: false,
@@ -322,9 +330,11 @@ export default function PaymentGatewayConfigPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
+      const model = data.gatewayType ? getIntegrationModel(data.gatewayType) : null;
       const payload = {
         ...data,
         configLevel,
+        integrationModel: model,
         propertyId: selectedPropertyId || null,
         workstationId: workstationId || null,
         safMaxTransactions: data.safMaxTransactions ? parseInt(data.safMaxTransactions) : null,
@@ -519,6 +529,15 @@ export default function PaymentGatewayConfigPage() {
                   </div>
                 )}
 
+                {selectedGateway && isSemiIntegrated(selectedGateway) && (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20" data-testid="banner-semi-integrated">
+                    <Shield className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span className="text-xs text-muted-foreground flex-1">
+                      <strong>Semi-Integrated Mode</strong> — The payment terminal handles card reading, EMV processing, and processor communication. Your POS sends commands (sale, void, refund) and receives results. No card data touches your system.
+                    </span>
+                  </div>
+                )}
+
                 <FormField
                   control={form.control}
                   name="environment"
@@ -543,6 +562,22 @@ export default function PaymentGatewayConfigPage() {
                 {getConnectionFields(selectedGateway || "_fallback").map(cf => (
                   <FormField key={cf.field} control={form.control} name={cf.field as any} render={({ field }) => {
                     const inherited = getInheritedValue(cf.field);
+                    if (cf.field === "terminalConnectionType") {
+                      return (
+                        <ConfigField fieldName={cf.field} label={cf.label} description={cf.description} inherited={!field.value && !!inherited} inheritedFrom={inherited?.from}>
+                          <Select value={field.value || ""} onValueChange={field.onChange}>
+                            <SelectTrigger className="w-[240px]" data-testid="select-terminal-connection-type">
+                              <SelectValue placeholder={inherited ? `${inherited.value} (inherited)` : "Select connection type"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {TERMINAL_CONNECTION_TYPES.map(ct => (
+                                <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </ConfigField>
+                      );
+                    }
                     return (
                       <ConfigField fieldName={cf.field} label={cf.label} description={cf.description} inherited={!field.value && !!inherited} inheritedFrom={inherited?.from}>
                         <Input {...field} value={field.value ?? ""} className="w-[240px]" placeholder={inherited ? `${inherited.value} (inherited)` : cf.placeholder} data-testid={`input-${cf.field}`} />
@@ -578,7 +613,7 @@ export default function PaymentGatewayConfigPage() {
 
               <Separator />
 
-              {(fieldSupported("enableEmv") || fieldSupported("enableContactless") || fieldSupported("enableMsr")) && (
+              {!isSemiIntegrated(selectedGateway) && (fieldSupported("enableEmv") || fieldSupported("enableContactless") || fieldSupported("enableMsr")) && (
               <ConfigSection title="Card Entry Methods" icon={CreditCard} defaultOpen={false}>
                 {([
                   { name: "enableEmv" as const, label: "EMV (Chip)", desc: "Contact chip card reading" },

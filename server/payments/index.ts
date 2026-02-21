@@ -7,6 +7,7 @@
 
 // Export types
 export * from './types';
+export * from './semi-integrated-types';
 
 // Export registry functions
 export {
@@ -17,6 +18,9 @@ export {
   resolveCredentials,
   getRequiredCredentialKeys,
 } from './registry';
+
+// Export semi-integrated adapters
+export { HeartlandSemiIntegratedTerminal, createHeartlandSemiIntegratedTerminal } from './adapters/heartland-semi-integrated';
 
 // Import adapters to register them
 import './adapters/stripe';
