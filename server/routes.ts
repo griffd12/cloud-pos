@@ -41,6 +41,7 @@ import {
   insertTipPoolPolicySchema, insertTipPoolRunSchema,
   // Payment schemas
   insertPaymentProcessorSchema,
+  insertPaymentGatewayConfigSchema,
   insertTerminalDeviceSchema,
   insertTerminalSessionSchema,
   TERMINAL_MODELS,
@@ -15142,6 +15143,121 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Test connection error:", error);
       res.status(500).json({ message: "Failed to test connection", success: false });
+    }
+  });
+
+  // ============================================================================
+  // PAYMENT GATEWAY CONFIGURATION (Hierarchy-aware option bits)
+  // ============================================================================
+
+  app.get("/api/payment-gateway-config", async (req, res) => {
+    try {
+      const enterpriseId = await getEnforcedEnterpriseId(req, res);
+      if (!enterpriseId) return;
+      const configs = await storage.getPaymentGatewayConfigs(enterpriseId);
+      res.json(configs);
+    } catch (error) {
+      console.error("Failed to fetch payment gateway configs:", error);
+      res.status(500).json({ message: "Failed to fetch payment gateway configurations" });
+    }
+  });
+
+  app.get("/api/payment-gateway-config/merged", async (req, res) => {
+    try {
+      const enterpriseId = await getEnforcedEnterpriseId(req, res);
+      if (!enterpriseId) return;
+      const { propertyId, workstationId } = req.query;
+      const merged = await storage.getMergedPaymentGatewayConfig(
+        enterpriseId,
+        (propertyId as string) || null,
+        (workstationId as string) || null
+      );
+      res.json(merged);
+    } catch (error) {
+      console.error("Failed to fetch merged payment gateway config:", error);
+      res.status(500).json({ message: "Failed to fetch merged config" });
+    }
+  });
+
+  app.get("/api/payment-gateway-config/:id", async (req, res) => {
+    try {
+      const enterpriseId = await getEnforcedEnterpriseId(req, res);
+      if (!enterpriseId) return;
+      const config = await storage.getPaymentGatewayConfig(req.params.id);
+      if (!config) {
+        return res.status(404).json({ message: "Payment gateway config not found" });
+      }
+      if (config.enterpriseId !== enterpriseId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      res.json(config);
+    } catch (error) {
+      console.error("Failed to fetch payment gateway config:", error);
+      res.status(500).json({ message: "Failed to fetch config" });
+    }
+  });
+
+  app.post("/api/payment-gateway-config", async (req, res) => {
+    try {
+      const enterpriseId = await getEnforcedEnterpriseId(req, res);
+      if (!enterpriseId) return;
+      const parsed = insertPaymentGatewayConfigSchema.safeParse({ ...req.body, enterpriseId });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid payload", errors: parsed.error.flatten() });
+      }
+      const config = await storage.createPaymentGatewayConfig(parsed.data);
+      res.status(201).json(config);
+    } catch (error) {
+      console.error("Failed to create payment gateway config:", error);
+      res.status(500).json({ message: "Failed to create config" });
+    }
+  });
+
+  app.patch("/api/payment-gateway-config/:id", async (req, res) => {
+    try {
+      const enterpriseId = await getEnforcedEnterpriseId(req, res);
+      if (!enterpriseId) return;
+      const existing = await storage.getPaymentGatewayConfig(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Payment gateway config not found" });
+      }
+      if (existing.enterpriseId !== enterpriseId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const parsed = insertPaymentGatewayConfigSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid payload", errors: parsed.error.flatten() });
+      }
+      const config = await storage.updatePaymentGatewayConfig(req.params.id, parsed.data);
+      if (!config) {
+        return res.status(404).json({ message: "Payment gateway config not found" });
+      }
+      res.json(config);
+    } catch (error) {
+      console.error("Failed to update payment gateway config:", error);
+      res.status(500).json({ message: "Failed to update config" });
+    }
+  });
+
+  app.delete("/api/payment-gateway-config/:id", async (req, res) => {
+    try {
+      const enterpriseId = await getEnforcedEnterpriseId(req, res);
+      if (!enterpriseId) return;
+      const existing = await storage.getPaymentGatewayConfig(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Payment gateway config not found" });
+      }
+      if (existing.enterpriseId !== enterpriseId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const success = await storage.deletePaymentGatewayConfig(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Payment gateway config not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete payment gateway config:", error);
+      res.status(500).json({ message: "Failed to delete config" });
     }
   });
 

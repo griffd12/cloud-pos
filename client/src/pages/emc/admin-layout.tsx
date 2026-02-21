@@ -110,6 +110,7 @@ import BreakRulesPage from "../admin/break-rules";
 import BreakMonitoringPage from "../admin/break-monitoring";
 import BreakViolationsPage from "../admin/break-violations";
 import MinorLaborPage from "../admin/minor-labor";
+import PaymentGatewayConfigPage from "../admin/payment-gateway-config";
 import StressTestReportPage from "./stress-test-report";
 import { cn } from "@/lib/utils";
 
@@ -167,6 +168,7 @@ const navGroups: NavGroup[] = [
       { title: "Discounts", url: "/emc/discounts", icon: Percent },
       { title: "Tenders", url: "/emc/tenders", icon: CreditCard },
       { title: "Payment Processors", url: "/emc/payment-processors", icon: Wallet },
+      { title: "Payment Gateway Config", url: "/emc/payment-gateway-config", icon: CreditCard },
       { title: "Service Charges", url: "/emc/service-charges", icon: DollarSign },
       { title: "Major Groups", url: "/emc/major-groups", icon: LayoutGrid },
       { title: "Family Groups", url: "/emc/family-groups", icon: LayoutGrid },
@@ -621,6 +623,7 @@ export default function EmcAdminLayout() {
                 <Route path="/emc/tax-groups" component={TaxGroupsPage} />
                 <Route path="/emc/tenders" component={TendersPage} />
                 <Route path="/emc/payment-processors" component={PaymentProcessorsPage} />
+                <Route path="/emc/payment-gateway-config" component={PaymentGatewayConfigPage} />
                 <Route path="/emc/discounts" component={DiscountsPage} />
                 <Route path="/emc/service-charges" component={ServiceChargesPage} />
                 <Route path="/emc/print-classes" component={PrintClassesPage} />

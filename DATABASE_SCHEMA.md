@@ -1,8 +1,8 @@
 # Cloud POS - Database Schema Reference
 
-> Auto-generated schema documentation. Last updated: 2026-02-17
+> Auto-generated schema documentation. Last updated: 2026-02-21
 > **This document must be updated whenever database schema changes are made.**
-> Total tables: 134 | Database: PostgreSQL
+> Total tables: 135 | Database: PostgreSQL
 
 ---
 
@@ -1122,6 +1122,73 @@ Gateway-agnostic payment processor configurations per property.
 - **Primary Key:** `id`
 - **Foreign Keys:**
   - `property_id` → `properties.id`
+
+---
+
+### `payment_gateway_config`
+
+Hierarchy-aware payment gateway configuration with Simphony-class inheritance (Enterprise → Property → Workstation). Settings defined at higher levels inherit down; overrides at lower levels take precedence.
+
+| Column | Data Type | Nullable | Default |
+|--------|-----------|----------|---------|
+| id | varchar (UUID) | NO | `gen_random_uuid()` |
+| config_level | text | NO | — |
+| enterprise_id | varchar | YES | — |
+| property_id | varchar | YES | — |
+| workstation_id | varchar | YES | — |
+| gateway_type | text | YES | — |
+| environment | text | YES | — |
+| credential_key_prefix | text | YES | — |
+| merchant_id | text | YES | — |
+| terminal_id | text | YES | — |
+| site_id | text | YES | — |
+| device_id | text | YES | — |
+| license_id | text | YES | — |
+| enable_sale | boolean | YES | `true` |
+| enable_void | boolean | YES | `true` |
+| enable_refund | boolean | YES | `true` |
+| enable_auth_capture | boolean | YES | `false` |
+| enable_manual_entry | boolean | YES | `false` |
+| enable_debit | boolean | YES | `false` |
+| enable_ebt | boolean | YES | `false` |
+| enable_healthcare | boolean | YES | `false` |
+| enable_contactless | boolean | YES | `true` |
+| enable_emv | boolean | YES | `true` |
+| enable_msr | boolean | YES | `true` |
+| enable_partial_approval | boolean | YES | `true` |
+| enable_tokenization | boolean | YES | `false` |
+| enable_store_and_forward | boolean | YES | `false` |
+| enable_surcharge | boolean | YES | `false` |
+| enable_tip_adjust | boolean | YES | `false` |
+| enable_incremental_auth | boolean | YES | `false` |
+| enable_cashback | boolean | YES | `false` |
+| surcharge_percent | text | YES | — |
+| saf_floor_limit | text | YES | — |
+| saf_max_transactions | integer | YES | — |
+| auth_hold_minutes | integer | YES | — |
+| enable_auto_batch_close | boolean | YES | `false` |
+| batch_close_time | text | YES | — |
+| enable_manual_batch_close | boolean | YES | `true` |
+| receipt_show_emv_fields | boolean | YES | `true` |
+| receipt_show_aid | boolean | YES | `true` |
+| receipt_show_tvr | boolean | YES | `true` |
+| receipt_show_tsi | boolean | YES | `true` |
+| receipt_show_app_label | boolean | YES | `true` |
+| receipt_show_entry_method | boolean | YES | `true` |
+| receipt_print_merchant_copy | boolean | YES | `true` |
+| receipt_print_customer_copy | boolean | YES | `true` |
+| enable_debug_logging | boolean | YES | `false` |
+| log_raw_requests | boolean | YES | `false` |
+| log_raw_responses | boolean | YES | `false` |
+| active | boolean | YES | `true` |
+| created_at | timestamp | YES | `now()` |
+| updated_at | timestamp | YES | `now()` |
+
+- **Primary Key:** `id`
+- **Foreign Keys:**
+  - `enterprise_id` → `enterprises.id`
+  - `property_id` → `properties.id`
+- **Inheritance:** `config_level` is one of `enterprise`, `property`, `workstation`. Only one config row per level+scope combination.
 
 ---
 

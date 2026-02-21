@@ -160,6 +160,8 @@ import {
   workstationServiceBindings,
   type WorkstationServiceBinding, type InsertWorkstationServiceBinding,
   idempotencyKeys,
+  paymentGatewayConfig,
+  type PaymentGatewayConfig, type InsertPaymentGatewayConfig,
   calPackages, calPackageVersions, calPackagePrerequisites, calDeployments, calDeploymentTargets,
   type CalPackage, type InsertCalPackage,
   type CalPackageVersion, type InsertCalPackageVersion,
@@ -440,6 +442,15 @@ export interface IStorage {
   updatePaymentProcessor(id: string, data: Partial<InsertPaymentProcessor>): Promise<PaymentProcessor | undefined>;
   deletePaymentProcessor(id: string): Promise<boolean>;
   getActivePaymentProcessor(propertyId: string): Promise<PaymentProcessor | undefined>;
+
+  // Payment Gateway Configuration (hierarchy-aware)
+  getPaymentGatewayConfigs(enterpriseId: string): Promise<PaymentGatewayConfig[]>;
+  getPaymentGatewayConfig(id: string): Promise<PaymentGatewayConfig | undefined>;
+  getPaymentGatewayConfigForLevel(configLevel: string, enterpriseId: string, propertyId?: string | null, workstationId?: string | null): Promise<PaymentGatewayConfig | undefined>;
+  getMergedPaymentGatewayConfig(enterpriseId: string, propertyId?: string | null, workstationId?: string | null): Promise<Partial<PaymentGatewayConfig>>;
+  createPaymentGatewayConfig(data: InsertPaymentGatewayConfig): Promise<PaymentGatewayConfig>;
+  updatePaymentGatewayConfig(id: string, data: Partial<InsertPaymentGatewayConfig>): Promise<PaymentGatewayConfig | undefined>;
+  deletePaymentGatewayConfig(id: string): Promise<boolean>;
 
   // Payment Transactions
   getPaymentTransactions(checkPaymentId?: string): Promise<PaymentTransaction[]>;
@@ -2342,6 +2353,82 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select().from(paymentProcessors)
       .where(and(eq(paymentProcessors.propertyId, propertyId), eq(paymentProcessors.active, true)));
     return result;
+  }
+
+  // Payment Gateway Configuration (hierarchy-aware)
+  async getPaymentGatewayConfigs(enterpriseId: string): Promise<PaymentGatewayConfig[]> {
+    return db.select().from(paymentGatewayConfig)
+      .where(eq(paymentGatewayConfig.enterpriseId, enterpriseId));
+  }
+
+  async getPaymentGatewayConfig(id: string): Promise<PaymentGatewayConfig | undefined> {
+    const [result] = await db.select().from(paymentGatewayConfig)
+      .where(eq(paymentGatewayConfig.id, id));
+    return result;
+  }
+
+  async getPaymentGatewayConfigForLevel(
+    configLevel: string,
+    enterpriseId: string,
+    propertyId?: string | null,
+    workstationId?: string | null
+  ): Promise<PaymentGatewayConfig | undefined> {
+    const conditions = [
+      eq(paymentGatewayConfig.configLevel, configLevel),
+      eq(paymentGatewayConfig.enterpriseId, enterpriseId),
+    ];
+    if (configLevel === "property" && propertyId) {
+      conditions.push(eq(paymentGatewayConfig.propertyId, propertyId));
+    }
+    if (configLevel === "workstation" && workstationId) {
+      conditions.push(eq(paymentGatewayConfig.workstationId, workstationId));
+    }
+    const [result] = await db.select().from(paymentGatewayConfig)
+      .where(and(...conditions));
+    return result;
+  }
+
+  async getMergedPaymentGatewayConfig(
+    enterpriseId: string,
+    propertyId?: string | null,
+    workstationId?: string | null
+  ): Promise<Partial<PaymentGatewayConfig>> {
+    const enterpriseConfig = await this.getPaymentGatewayConfigForLevel("enterprise", enterpriseId);
+    const propertyConfig = propertyId
+      ? await this.getPaymentGatewayConfigForLevel("property", enterpriseId, propertyId)
+      : undefined;
+    const workstationConfig = workstationId
+      ? await this.getPaymentGatewayConfigForLevel("workstation", enterpriseId, propertyId, workstationId)
+      : undefined;
+
+    const merged: Partial<PaymentGatewayConfig> = {};
+    const configs = [enterpriseConfig, propertyConfig, workstationConfig].filter(Boolean) as PaymentGatewayConfig[];
+    for (const config of configs) {
+      for (const [key, value] of Object.entries(config)) {
+        if (value !== null && value !== undefined && key !== "id" && key !== "configLevel" && key !== "enterpriseId" && key !== "propertyId" && key !== "workstationId" && key !== "createdAt" && key !== "updatedAt") {
+          (merged as any)[key] = value;
+        }
+      }
+    }
+    return merged;
+  }
+
+  async createPaymentGatewayConfig(data: InsertPaymentGatewayConfig): Promise<PaymentGatewayConfig> {
+    const [result] = await db.insert(paymentGatewayConfig).values(sanitizeDates(data)).returning();
+    return result;
+  }
+
+  async updatePaymentGatewayConfig(id: string, data: Partial<InsertPaymentGatewayConfig>): Promise<PaymentGatewayConfig | undefined> {
+    const [result] = await db.update(paymentGatewayConfig)
+      .set({ ...sanitizeDates(data), updatedAt: new Date() })
+      .where(eq(paymentGatewayConfig.id, id))
+      .returning();
+    return result;
+  }
+
+  async deletePaymentGatewayConfig(id: string): Promise<boolean> {
+    const result = await db.delete(paymentGatewayConfig).where(eq(paymentGatewayConfig.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Payment Transactions

@@ -3778,6 +3778,86 @@ export type ConfigOverride = typeof configOverrides.$inferSelect;
 export type InsertConfigOverride = z.infer<typeof insertConfigOverrideSchema>;
 
 // ============================================================================
+// PAYMENT GATEWAY CONFIGURATION - Hierarchy-aware option-bit settings
+// Follows Simphony-class inheritance: Enterprise → Property → Workstation
+// ============================================================================
+
+export const PAYMENT_GATEWAY_CONFIG_LEVELS = ["enterprise", "property", "workstation"] as const;
+export type PaymentGatewayConfigLevel = (typeof PAYMENT_GATEWAY_CONFIG_LEVELS)[number];
+
+export const paymentGatewayConfig = pgTable("payment_gateway_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  configLevel: text("config_level").notNull(),
+  enterpriseId: varchar("enterprise_id").references(() => enterprises.id),
+  propertyId: varchar("property_id").references(() => properties.id),
+  workstationId: varchar("workstation_id"),
+
+  gatewayType: text("gateway_type"),
+  environment: text("environment"),
+  credentialKeyPrefix: text("credential_key_prefix"),
+  merchantId: text("merchant_id"),
+  terminalId: text("terminal_id"),
+  siteId: text("site_id"),
+  deviceId: text("device_id"),
+  licenseId: text("license_id"),
+
+  enableSale: boolean("enable_sale").default(true),
+  enableVoid: boolean("enable_void").default(true),
+  enableRefund: boolean("enable_refund").default(true),
+  enableAuthCapture: boolean("enable_auth_capture").default(false),
+  enableManualEntry: boolean("enable_manual_entry").default(false),
+  enableDebit: boolean("enable_debit").default(false),
+  enableEbt: boolean("enable_ebt").default(false),
+  enableHealthcare: boolean("enable_healthcare").default(false),
+  enableContactless: boolean("enable_contactless").default(true),
+  enableEmv: boolean("enable_emv").default(true),
+  enableMsr: boolean("enable_msr").default(true),
+
+  enablePartialApproval: boolean("enable_partial_approval").default(true),
+  enableTokenization: boolean("enable_tokenization").default(false),
+  enableStoreAndForward: boolean("enable_store_and_forward").default(false),
+  enableSurcharge: boolean("enable_surcharge").default(false),
+  enableTipAdjust: boolean("enable_tip_adjust").default(false),
+  enableIncrementalAuth: boolean("enable_incremental_auth").default(false),
+  enableCashback: boolean("enable_cashback").default(false),
+
+  surchargePercent: text("surcharge_percent"),
+  safFloorLimit: text("saf_floor_limit"),
+  safMaxTransactions: integer("saf_max_transactions"),
+  authHoldMinutes: integer("auth_hold_minutes"),
+
+  enableAutoBatchClose: boolean("enable_auto_batch_close").default(false),
+  batchCloseTime: text("batch_close_time"),
+  enableManualBatchClose: boolean("enable_manual_batch_close").default(true),
+
+  receiptShowEmvFields: boolean("receipt_show_emv_fields").default(true),
+  receiptShowAid: boolean("receipt_show_aid").default(true),
+  receiptShowTvr: boolean("receipt_show_tvr").default(true),
+  receiptShowTsi: boolean("receipt_show_tsi").default(true),
+  receiptShowAppLabel: boolean("receipt_show_app_label").default(true),
+  receiptShowEntryMethod: boolean("receipt_show_entry_method").default(true),
+  receiptPrintMerchantCopy: boolean("receipt_print_merchant_copy").default(true),
+  receiptPrintCustomerCopy: boolean("receipt_print_customer_copy").default(true),
+
+  enableDebugLogging: boolean("enable_debug_logging").default(false),
+  logRawRequests: boolean("log_raw_requests").default(false),
+  logRawResponses: boolean("log_raw_responses").default(false),
+
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const paymentGatewayConfigRelations = relations(paymentGatewayConfig, ({ one }) => ({
+  enterprise: one(enterprises, { fields: [paymentGatewayConfig.enterpriseId], references: [enterprises.id] }),
+  property: one(properties, { fields: [paymentGatewayConfig.propertyId], references: [properties.id] }),
+}));
+
+export const insertPaymentGatewayConfigSchema = createInsertSchema(paymentGatewayConfig).omit({ id: true, createdAt: true, updatedAt: true });
+export type PaymentGatewayConfig = typeof paymentGatewayConfig.$inferSelect;
+export type InsertPaymentGatewayConfig = z.infer<typeof insertPaymentGatewayConfigSchema>;
+
+// ============================================================================
 // IDEMPOTENCY KEYS (Production Hardening)
 // ============================================================================
 
