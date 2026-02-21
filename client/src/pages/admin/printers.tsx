@@ -152,7 +152,7 @@ export default function PrintersPage() {
     {
       key: "connectionType",
       header: "Connection",
-      render: (value) => value === "network" ? "Network" : value === "usb" ? "USB" : "Serial",
+      render: (value) => value === "network" ? "Network" : value === "windows_printer" ? "Windows USB" : value === "usb" ? "USB" : "Serial",
     },
     { key: "ipAddress", header: "IP Address" },
     {
@@ -191,6 +191,7 @@ export default function PrintersPage() {
       port: 9100,
       comPort: "",
       baudRate: 9600,
+      windowsPrinterName: "",
       hostWorkstationId: null,
       driverProtocol: "epson",
       model: "TM-T88VII",
@@ -224,6 +225,7 @@ export default function PrintersPage() {
           port: editingItem.port ?? 9100,
           comPort: editingItem.comPort || "",
           baudRate: editingItem.baudRate ?? 9600,
+          windowsPrinterName: (editingItem as any).windowsPrinterName || "",
           hostWorkstationId: (editingItem as any).hostWorkstationId || null,
           driverProtocol: editingItem.driverProtocol || "epson",
           model: editingItem.model || "TM-T88VII",
@@ -250,6 +252,7 @@ export default function PrintersPage() {
           port: 9100,
           comPort: "",
           baudRate: 9600,
+          windowsPrinterName: "",
           hostWorkstationId: null,
           driverProtocol: "epson",
           model: "TM-T88VII",
@@ -449,8 +452,8 @@ export default function PrintersPage() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="network">Network (IP)</SelectItem>
-                            <SelectItem value="usb">USB</SelectItem>
-                            <SelectItem value="serial">Serial (Legacy)</SelectItem>
+                            <SelectItem value="windows_printer">Windows USB Printer</SelectItem>
+                            <SelectItem value="serial">Serial (COM Port)</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -459,7 +462,55 @@ export default function PrintersPage() {
                   />
                 </div>
 
-                {watchedConnectionType === "serial" ? (
+                {watchedConnectionType === "windows_printer" ? (
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="windowsPrinterName"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Windows Printer Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder='e.g., Star TSP100 CUTTER (TSP143)'
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-windowsPrinterName"
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Enter the exact printer name from Windows Devices and Printers
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="hostWorkstationId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Host Workstation</FormLabel>
+                        <Select onValueChange={(v) => field.onChange(v === "__none__" ? null : v)} value={field.value || "__none__"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-hostWorkstation-winprinter">
+                              <SelectValue placeholder="Select host workstation" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">Not assigned</SelectItem>
+                            {workstations.map((ws) => (
+                              <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                ) : watchedConnectionType === "serial" ? (
                 <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}

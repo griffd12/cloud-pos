@@ -282,12 +282,13 @@ export const printers = pgTable("printers", {
   name: text("name").notNull(),
   printerType: text("printer_type").notNull().default("kitchen"), // receipt, kitchen, bar, prep, report
   // Connection
-  connectionType: text("connection_type").notNull().default("network"), // network, usb, serial
+  connectionType: text("connection_type").notNull().default("network"), // network, usb, serial, windows_printer
   ipAddress: text("ip_address"),
   subnetMask: text("subnet_mask").default("255.255.255.0"),
   port: integer("port").default(9100),
   comPort: text("com_port"), // e.g., COM1, COM2, COM3 (for serial connection_type)
   baudRate: integer("baud_rate").default(9600), // 9600, 19200, 38400, 57600, 115200
+  windowsPrinterName: text("windows_printer_name"), // Windows spooler printer name for USB printers (e.g., "Star TSP100 CUTTER (TSP143)")
   driverProtocol: text("driver_protocol").default("epson"), // epson, star
   model: text("model"), // e.g., TM-T88V, TM-T20III, TSP143IV, mC-Print3
   characterWidth: integer("character_width").default(42), // 42, 48, 56
@@ -1236,6 +1237,7 @@ export const printJobs = pgTable("print_jobs", {
   connectionType: text("connection_type").default("network"),
   comPort: text("com_port"),
   baudRate: integer("baud_rate"),
+  windowsPrinterName: text("windows_printer_name"),
   // Retry handling
   attempts: integer("attempts").default(0),
   maxAttempts: integer("max_attempts").default(3),

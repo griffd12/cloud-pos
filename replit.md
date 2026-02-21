@@ -35,7 +35,7 @@ Preferred communication style: Simple, everyday language.
 - **Authentication**: PIN-based employee authentication with role-based access control.
 - **Time & Attendance**: Time clock, timecards, scheduling, and labor analytics.
 - **Payment Processing**: PCI-compliant, gateway-agnostic framework.
-- **Printing System**: Database-backed print queue and standalone Print Agent System for network (ESC/POS) printers.
+- **Printing System**: Database-backed print queue and standalone Print Agent System supporting three connection types: network (TCP/IP), serial (COM port), and Windows Print Spooler (USB printers via PowerShell raw port access). Printer discovery via `DISCOVER_PRINTERS` WebSocket message enumerates Windows printers through `Get-WmiObject Win32_Printer`.
 - **Enterprise Features**: Fiscal Close, Cash Management, Gift Cards, Loyalty Programs, Online Ordering, Inventory, Sales & Labor Forecasting.
 - **Pizza Builder Module**: Visual, full-page interface for pizza customization.
 - **Multi-Enterprise Architecture**: Server-side data isolation enforced via `getEnforcedEnterpriseId()` helper; `system_admin`, `enterprise_admin`, `property_admin` access levels.

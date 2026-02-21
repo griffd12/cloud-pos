@@ -104,9 +104,13 @@ class PrintAgentService {
       port: config.port || 9100,
       printerId: config.printerId,
       type: config.type || 'network',
+      connectionType: config.connectionType || config.type || 'network',
+      comPort: config.comPort || null,
+      baudRate: config.baudRate || 9600,
+      windowsPrinterName: config.windowsPrinterName || null,
     });
     this.savePrinterConfig();
-    printLogger.info('Config', `Printer added: ${config.name}`, { ip: config.ipAddress, port: config.port || 9100 });
+    printLogger.info('Config', `Printer added: ${config.name}`, { connectionType: config.connectionType || config.type, ip: config.ipAddress, windowsPrinterName: config.windowsPrinterName });
   }
 
   removePrinter(key) {
@@ -275,6 +279,10 @@ class PrintAgentService {
           this.handleDrawerKick(msg);
           break;
 
+        case 'DISCOVER_PRINTERS':
+          this.handleDiscoverPrinters(msg);
+          break;
+
         case 'PONG':
         case 'HEARTBEAT_ACK':
           break;
@@ -287,6 +295,38 @@ class PrintAgentService {
     }
   }
 
+  async handleDiscoverPrinters(msg) {
+    const requestId = msg.requestId || `discover_${Date.now()}`;
+    printLogger.info('Discovery', `Printer discovery requested (${requestId})`);
+
+    try {
+      const printers = await this.enumerateWindowsPrinters();
+      const response = {
+        type: 'PRINTER_DISCOVERY_RESULT',
+        requestId,
+        agentId: this.agentId,
+        printers: printers.map(p => ({
+          name: p.Name,
+          port: p.Port,
+          driver: p.Driver,
+          status: p.Status,
+        })),
+      };
+      this.ws.send(JSON.stringify(response));
+      printLogger.info('Discovery', `Sent ${printers.length} printers for request ${requestId}`);
+    } catch (err) {
+      const response = {
+        type: 'PRINTER_DISCOVERY_RESULT',
+        requestId,
+        agentId: this.agentId,
+        printers: [],
+        error: err.message,
+      };
+      try { this.ws.send(JSON.stringify(response)); } catch (e) {}
+      printLogger.error('Discovery', `Discovery failed: ${err.message}`);
+    }
+  }
+
   async handlePrintJob(msg) {
     const jobId = msg.jobId;
     const printerIp = msg.printerIp;
@@ -296,12 +336,30 @@ class PrintAgentService {
     const connectionType = msg.connectionType || 'network';
     const comPort = msg.comPort;
     const baudRate = msg.baudRate || 9600;
+    const windowsPrinterName = msg.windowsPrinterName;
 
-    printLogger.info('Job', `Received job ${jobId}`, { printer: printerIp || comPort || printerId || 'default', connectionType });
+    printLogger.info('Job', `Received job ${jobId}`, { printer: windowsPrinterName || printerIp || comPort || printerId || 'default', connectionType });
 
     try {
       this.ws.send(JSON.stringify({ type: 'ACK', jobId }));
     } catch (e) {}
+
+    // Windows Print Spooler path — for USB printers on Windows
+    if (connectionType === 'windows_printer' && windowsPrinterName) {
+      try {
+        const buffer = Buffer.from(printData, 'base64');
+        printLogger.info('Job', `Job ${jobId} sending ${buffer.length} bytes to Windows printer`, { printer: windowsPrinterName });
+        await this.sendToWindowsPrinter(windowsPrinterName, buffer);
+        this.sendJobResult(jobId, true);
+        this.emit('jobCompleted', { jobId, printer: windowsPrinterName });
+        printLogger.info('Job', `Job ${jobId} printed successfully via Windows spooler`, { printer: windowsPrinterName });
+      } catch (err) {
+        this.sendJobResult(jobId, false, err.message);
+        this.emit('jobFailed', { jobId, printer: windowsPrinterName, error: err.message });
+        printLogger.error('Job', `Job ${jobId} Windows printer failed: ${err.message}`);
+      }
+      return;
+    }
 
     if ((connectionType === 'serial' || connectionType === 'usb') && comPort) {
       try {
@@ -325,6 +383,21 @@ class PrintAgentService {
     if (!targetIp && printerId) {
       const printer = this.printerMap.get(printerId);
       if (printer) {
+        // Check if mapped printer uses Windows spooler
+        if (printer.connectionType === 'windows_printer' && printer.windowsPrinterName) {
+          try {
+            const buffer = Buffer.from(printData, 'base64');
+            await this.sendToWindowsPrinter(printer.windowsPrinterName, buffer);
+            this.sendJobResult(jobId, true);
+            this.emit('jobCompleted', { jobId, printer: printer.windowsPrinterName });
+            printLogger.info('Job', `Job ${jobId} printed via Windows spooler (mapped)`, { printer: printer.windowsPrinterName });
+          } catch (err) {
+            this.sendJobResult(jobId, false, err.message);
+            this.emit('jobFailed', { jobId, printer: printer.windowsPrinterName, error: err.message });
+            printLogger.error('Job', `Job ${jobId} Windows printer failed: ${err.message}`);
+          }
+          return;
+        }
         if ((printer.connectionType === 'serial' || printer.connectionType === 'usb') && printer.comPort) {
           try {
             const buffer = Buffer.from(printData, 'base64');
@@ -406,10 +479,24 @@ class PrintAgentService {
     const connectionType = msg.connectionType || 'network';
     const comPort = msg.comPort;
     const baudRate = msg.baudRate || 9600;
+    const windowsPrinterName = msg.windowsPrinterName;
 
-    printLogger.info('DrawerKick', `Received drawer kick ${kickId}`, { printer: printerIp || comPort || printerId || 'default', pin, connectionType });
+    printLogger.info('DrawerKick', `Received drawer kick ${kickId}`, { printer: windowsPrinterName || printerIp || comPort || printerId || 'default', pin, connectionType });
 
     const kickCommand = this.buildDrawerKickCommand(pin, pulseDuration);
+
+    // Windows Print Spooler path for drawer kick
+    if (connectionType === 'windows_printer' && windowsPrinterName) {
+      try {
+        await this.sendToWindowsPrinter(windowsPrinterName, kickCommand);
+        this.sendKickResult(kickId, true);
+        printLogger.info('DrawerKick', `Drawer kick ${kickId} sent via Windows printer`, { printer: windowsPrinterName, pin });
+      } catch (err) {
+        this.sendKickResult(kickId, false, err.message);
+        printLogger.error('DrawerKick', `Drawer kick ${kickId} Windows printer failed: ${err.message}`);
+      }
+      return;
+    }
 
     if ((connectionType === 'serial' || connectionType === 'usb') && comPort) {
       try {
@@ -492,6 +579,11 @@ class PrintAgentService {
     if (printerId) {
       const printer = this.printerMap.get(printerId);
       if (printer) {
+        if (printer.connectionType === 'windows_printer' && printer.windowsPrinterName) {
+          await this.sendToWindowsPrinter(printer.windowsPrinterName, kickCommand);
+          printLogger.info('DrawerKick', 'Local drawer kick sent via Windows printer', { printer: printer.windowsPrinterName, pin });
+          return { success: true, printer: printer.windowsPrinterName };
+        }
         if ((printer.connectionType === 'serial' || printer.connectionType === 'usb') && printer.comPort) {
           await this.enqueueSerialJob(printer.comPort, printer.baudRate || 9600, kickCommand);
           printLogger.info('DrawerKick', 'Local drawer kick sent via serial', { port: printer.comPort, pin });
@@ -503,6 +595,12 @@ class PrintAgentService {
           return { success: true, printer: printer.ipAddress };
         }
       }
+    }
+
+    if (options.windowsPrinterName) {
+      await this.sendToWindowsPrinter(options.windowsPrinterName, kickCommand);
+      printLogger.info('DrawerKick', 'Local drawer kick sent via Windows printer (direct)', { printer: options.windowsPrinterName, pin });
+      return { success: true, printer: options.windowsPrinterName };
     }
 
     if (options.comPort) {
@@ -517,6 +615,11 @@ class PrintAgentService {
     if (!targetIp) {
       const firstPrinter = this.printerMap.values().next().value;
       if (firstPrinter) {
+        if (firstPrinter.connectionType === 'windows_printer' && firstPrinter.windowsPrinterName) {
+          await this.sendToWindowsPrinter(firstPrinter.windowsPrinterName, kickCommand);
+          printLogger.info('DrawerKick', 'Local drawer kick sent via Windows printer (fallback)', { printer: firstPrinter.windowsPrinterName, pin });
+          return { success: true, printer: firstPrinter.windowsPrinterName };
+        }
         if ((firstPrinter.connectionType === 'serial' || firstPrinter.connectionType === 'usb') && firstPrinter.comPort) {
           await this.enqueueSerialJob(firstPrinter.comPort, firstPrinter.baudRate || 9600, kickCommand);
           printLogger.info('DrawerKick', 'Local drawer kick sent via serial (fallback)', { port: firstPrinter.comPort, pin });
@@ -572,6 +675,117 @@ class PrintAgentService {
         clearTimeout(timeout);
         cleanup();
         reject(err);
+      });
+    });
+  }
+
+  sendToWindowsPrinter(printerName, data) {
+    return new Promise((resolve, reject) => {
+      const { execFile } = require('child_process');
+      const os = require('os');
+      const tmpFile = path.join(os.tmpdir(), `cloudpos_print_${Date.now()}.bin`);
+
+      try {
+        fs.writeFileSync(tmpFile, data);
+        printLogger.info('WindowsPrint', `Wrote ${data.length} bytes to temp file ${tmpFile}`);
+
+        const psScript = `
+          $ErrorActionPreference = 'Stop'
+          try {
+            $printerName = '${printerName.replace(/'/g, "''")}'
+            $printer = Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Name='$($printerName.Replace("\\","\\\\"))'" -ErrorAction Stop
+            if (-not $printer) {
+              Write-Error "Printer '$printerName' not found in Windows"
+              exit 1
+            }
+            $portName = $printer.PortName
+            if (-not $portName) {
+              Write-Error "No port found for printer '$printerName'"
+              exit 1
+            }
+            Write-Host "PRINTER_PORT=$portName"
+            $rawData = [System.IO.File]::ReadAllBytes('${tmpFile.replace(/\\/g, '\\\\')}')
+            Write-Host "Sending $($rawData.Length) bytes to port $portName"
+            $fileStream = New-Object System.IO.FileStream("\\\\.\\\\" + $portName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            $fileStream.Write($rawData, 0, $rawData.Length)
+            $fileStream.Flush()
+            $fileStream.Close()
+            Write-Host "SUCCESS"
+          } catch {
+            Write-Error $_.Exception.Message
+            exit 1
+          }
+        `;
+
+        execFile('powershell.exe', [
+          '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+          '-Command', psScript,
+        ], { timeout: 15000 }, (error, stdout, stderr) => {
+          try { fs.unlinkSync(tmpFile); } catch (e) {}
+
+          if (error) {
+            const errMsg = stderr?.trim() || error.message || 'Unknown PowerShell error';
+            printLogger.error('WindowsPrint', `PowerShell failed: ${errMsg}`);
+            printLogger.error('WindowsPrint', `stdout: ${stdout?.trim()}`);
+            reject(new Error(`Windows printer "${printerName}" failed: ${errMsg}`));
+            return;
+          }
+
+          const output = stdout?.trim() || '';
+          printLogger.info('WindowsPrint', `PowerShell output: ${output}`);
+
+          if (output.includes('SUCCESS')) {
+            resolve({ success: true });
+          } else {
+            reject(new Error(`Windows printer "${printerName}" - unexpected output: ${output}`));
+          }
+        });
+      } catch (err) {
+        try { fs.unlinkSync(tmpFile); } catch (e) {}
+        reject(new Error(`Failed to prepare print data: ${err.message}`));
+      }
+    });
+  }
+
+  async enumerateWindowsPrinters() {
+    return new Promise((resolve, reject) => {
+      const { execFile } = require('child_process');
+      const psScript = `
+        Get-WmiObject -Query "SELECT Name, PortName, DriverName, PrinterStatus FROM Win32_Printer" |
+          ForEach-Object {
+            [PSCustomObject]@{
+              Name = $_.Name
+              Port = $_.PortName
+              Driver = $_.DriverName
+              Status = $_.PrinterStatus
+            }
+          } | ConvertTo-Json -Compress
+      `;
+
+      execFile('powershell.exe', [
+        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-Command', psScript,
+      ], { timeout: 10000 }, (error, stdout, stderr) => {
+        if (error) {
+          printLogger.error('WindowsPrint', `Enumerate failed: ${stderr || error.message}`);
+          reject(new Error(`Failed to enumerate printers: ${stderr || error.message}`));
+          return;
+        }
+
+        try {
+          const output = stdout?.trim();
+          if (!output) {
+            resolve([]);
+            return;
+          }
+          let printers = JSON.parse(output);
+          if (!Array.isArray(printers)) printers = [printers];
+          printLogger.info('WindowsPrint', `Found ${printers.length} Windows printers`);
+          resolve(printers);
+        } catch (parseErr) {
+          printLogger.error('WindowsPrint', `Parse error: ${parseErr.message}`);
+          resolve([]);
+        }
       });
     });
   }

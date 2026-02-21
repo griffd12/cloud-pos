@@ -157,7 +157,8 @@ async function sendJobToAgent(agentId: string, job: any): Promise<boolean> {
     if (job.connectionType) message.connectionType = job.connectionType;
     if (job.comPort) message.comPort = job.comPort;
     if (job.baudRate) message.baudRate = job.baudRate;
-    const printerTarget = job.connectionType === 'serial' ? `serial:${job.comPort}` : `${job.printerIp || 'no-ip'}:${job.printerPort || 9100}`;
+    if (job.windowsPrinterName) message.windowsPrinterName = job.windowsPrinterName;
+    const printerTarget = job.connectionType === 'windows_printer' ? `win:${job.windowsPrinterName}` : job.connectionType === 'serial' ? `serial:${job.comPort}` : `${job.printerIp || 'no-ip'}:${job.printerPort || 9100}`;
     console.log(`[PrintRoute] Sending job ${job.id} to agent ${agentId}: connectionType=${job.connectionType}, target=${printerTarget}, dataLen=${job.escPosData?.length || 0}`);
     agentWs.send(JSON.stringify(message));
     return true;
@@ -5951,8 +5952,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const isNetworkPrinter = printer.connectionType === "network" && printer.ipAddress;
     const isSerialPrinter = (printer.connectionType === "serial" || printer.connectionType === "usb") && printer.comPort;
-    if (!isNetworkPrinter && !isSerialPrinter) {
-      console.log("Printer has no valid connection (need network IP or serial/USB COM port)");
+    const isWindowsPrinter = printer.connectionType === "windows_printer" && (printer as any).windowsPrinterName;
+    if (!isNetworkPrinter && !isSerialPrinter && !isWindowsPrinter) {
+      console.log("Printer has no valid connection (need network IP, serial/USB COM port, or Windows printer name)");
       return null;
     }
 
@@ -5962,8 +5964,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let agent = null;
     const sourceWsId = options?.workstationId;
 
-    if (isSerialPrinter || (printer.connectionType === "usb")) {
-      // Serial/USB printer: route to the agent on the workstation that physically has the printer
+    if (isWindowsPrinter || isSerialPrinter || (printer.connectionType === "usb")) {
+      // Windows USB / Serial / USB printer: route to the agent on the workstation that physically has the printer
       // Use printer.hostWorkstationId to determine the physical host
       const hostWsId = printer.hostWorkstationId;
       if (hostWsId) {
@@ -6038,6 +6040,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       connectionType: printer.connectionType || 'network',
       comPort: printer.comPort || null,
       baudRate: printer.baudRate || null,
+      windowsPrinterName: (printer as any).windowsPrinterName || null,
       attempts: 0,
       maxAttempts: 3,
     });
@@ -18475,12 +18478,15 @@ connect();
         return res.status(404).json({ message: "Print agent not found" });
       }
 
-      const { printerIp, printerPort = 9100, connectionType, comPort, baudRate } = req.body;
-      if (!printerIp && connectionType !== 'serial') {
+      const { printerIp, printerPort = 9100, connectionType, comPort, baudRate, windowsPrinterName } = req.body;
+      if (!printerIp && connectionType !== 'serial' && connectionType !== 'windows_printer') {
         return res.status(400).json({ message: "Printer IP address is required for network printers" });
       }
       if (connectionType === 'serial' && !comPort) {
         return res.status(400).json({ message: "COM port is required for serial printers" });
+      }
+      if (connectionType === 'windows_printer' && !windowsPrinterName) {
+        return res.status(400).json({ message: "Windows printer name is required for Windows USB printers" });
       }
 
       // Check if agent is connected
@@ -18538,15 +18544,17 @@ connect();
         connectionType: connectionType || 'network',
         comPort: comPort || null,
         baudRate: baudRate || null,
+        windowsPrinterName: windowsPrinterName || null,
       });
 
       if (sent) {
         await storage.updatePrintJob(job.id, { status: "printing" });
+        const targetDesc = connectionType === 'windows_printer' ? `${windowsPrinterName} (Windows USB)` : connectionType === 'serial' ? `${comPort} (serial)` : `${printerIp}:${printerPort}`;
         res.json({ 
           message: "Test print sent to agent",
           jobId: job.id,
           agentName: agent.name,
-          targetPrinter: connectionType === 'serial' ? `${comPort} (serial)` : `${printerIp}:${printerPort}`
+          targetPrinter: targetDesc
         });
       } else {
         await storage.updatePrintJob(job.id, { status: "failed" });

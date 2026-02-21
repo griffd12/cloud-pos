@@ -1601,15 +1601,17 @@ Physical printer configurations.
 | subnet_mask | text | YES | `'255.255.255.0'` |
 | com_port | text | YES | — |
 | baud_rate | integer | YES | `9600` |
+| windows_printer_name | text | YES | — |
 
 - **Primary Key:** `id`
 - **Foreign Keys:**
   - `property_id` → `properties.id`
 - **Notes:**
-  - `connection_type` can be `'network'` (default) or `'serial'`
+  - `connection_type` can be `'network'` (default), `'serial'`, or `'windows_printer'`
   - For serial printers: `com_port` (e.g., COM1-COM8) and `baud_rate` are required; `ip_address`/`port` should be null
   - For network printers: `ip_address`/`port` are required; `com_port`/`baud_rate` should be null
-  - Serial port printing only works from the Electron desktop app (browsers cannot access serial ports)
+  - For Windows USB printers: `windows_printer_name` is required (exact name from Windows Devices and Printers, e.g., "Star TSP100 CUTTER (TSP143)")
+  - Serial and Windows USB printing only work from the Electron desktop app
 
 ---
 
@@ -1689,6 +1691,10 @@ Individual print job queue entries with ESC/POS data.
 | leased_until | timestamp | YES | — |
 | dedupe_key | text | YES | — |
 | origin_device_id | varchar | YES | — |
+| connection_type | text | YES | `'network'` |
+| com_port | text | YES | — |
+| baud_rate | integer | YES | — |
+| windows_printer_name | text | YES | — |
 
 - **Primary Key:** `id`
 - **Unique Constraints:** `dedupe_key`
@@ -1699,6 +1705,9 @@ Individual print job queue entries with ESC/POS data.
   - `check_id` → `checks.id`
   - `employee_id` → `employees.id`
   - `print_agent_id` → `print_agents.id`
+- **Notes:**
+  - `connection_type` determines how the print agent routes this job: `'network'`, `'serial'`, or `'windows_printer'`
+  - `windows_printer_name` is the exact Windows printer device name for USB printer routing
 
 ---
 
