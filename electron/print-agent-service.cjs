@@ -306,6 +306,7 @@ class PrintAgentService {
     if ((connectionType === 'serial' || connectionType === 'usb') && comPort) {
       try {
         const buffer = Buffer.from(printData, 'base64');
+        printLogger.info('Job', `Job ${jobId} sending ${buffer.length} bytes to serial`, { port: comPort, baudRate });
         await this.enqueueSerialJob(comPort, baudRate, buffer);
         this.sendJobResult(jobId, true);
         this.emit('jobCompleted', { jobId, printer: comPort });
@@ -626,6 +627,8 @@ class PrintAgentService {
             dataBits: 8,
             stopBits: 1,
             parity: 'none',
+            rtscts: false,
+            hupcl: false,
             autoOpen: false,
           });
 
@@ -644,6 +647,7 @@ class PrintAgentService {
             if (settled) { clearTimeout(timeout); port.close(() => {}); return; }
             if (err) {
               clearTimeout(timeout);
+              printLogger.error('Serial', `Port ${comPort} open error: ${err.message}`);
               if (attemptsLeft > 0 && (err.message.includes('Access denied') || err.message.includes('locked') || err.message.includes('busy') || err.message.includes('in use'))) {
                 printLogger.info('Serial', `Port ${comPort} busy, retrying in 500ms (${attemptsLeft} left)`);
                 setTimeout(() => attempt(attemptsLeft - 1), 500);
@@ -654,23 +658,37 @@ class PrintAgentService {
             }
 
             portOpened = true;
-            port.write(data, (writeErr) => {
-              if (writeErr) {
-                clearTimeout(timeout);
-                port.close(() => {});
-                safeReject(writeErr);
-                return;
+            printLogger.info('Serial', `Port ${comPort} opened, setting DTR/RTS high`);
+            port.set({ dtr: true, rts: true }, (setErr) => {
+              if (setErr) {
+                printLogger.warn('Serial', `Port ${comPort} set signals warning: ${setErr.message}`);
               }
 
-              port.drain((drainErr) => {
-                clearTimeout(timeout);
-                port.close(() => {});
-                if (drainErr) {
-                  safeReject(drainErr);
-                } else {
-                  safeResolve({ success: true });
-                }
-              });
+              setTimeout(() => {
+                printLogger.info('Serial', `Writing ${data.length} bytes to ${comPort}`);
+                port.write(data, (writeErr) => {
+                  if (writeErr) {
+                    clearTimeout(timeout);
+                    printLogger.error('Serial', `Port ${comPort} write error: ${writeErr.message}`);
+                    port.close(() => {});
+                    safeReject(writeErr);
+                    return;
+                  }
+
+                  port.drain((drainErr) => {
+                    clearTimeout(timeout);
+                    printLogger.info('Serial', `Port ${comPort} drain complete, closing`);
+                    setTimeout(() => {
+                      port.close(() => {});
+                      if (drainErr) {
+                        safeReject(drainErr);
+                      } else {
+                        safeResolve({ success: true });
+                      }
+                    }, 100);
+                  });
+                });
+              }, 50);
             });
           });
 
