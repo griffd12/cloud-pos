@@ -86,7 +86,7 @@
   },
   "extraMetadata": {
     "main": "electron/main.cjs",
-    "version": "1.4.9"
+    "version": "1.4.10"
   },
   "buildDependenciesFromSource": false,
   "npmRebuild": true
