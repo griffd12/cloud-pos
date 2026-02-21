@@ -706,7 +706,8 @@ class PrintAgentService {
             Write-Host "PRINTER_PORT=$portName"
             $rawData = [System.IO.File]::ReadAllBytes('${tmpFile.replace(/\\/g, '\\\\')}')
             Write-Host "Sending $($rawData.Length) bytes to port $portName"
-            $fileStream = New-Object System.IO.FileStream("\\\\.\\\\" + $portName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            $portPath = '\\\\.\\' + $portName
+            $fileStream = [System.IO.FileStream]::new($portPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
             $fileStream.Write($rawData, 0, $rawData.Length)
             $fileStream.Flush()
             $fileStream.Close()
