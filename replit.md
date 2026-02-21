@@ -16,7 +16,11 @@ Preferred communication style: Simple, everyday language.
 - **Touch-First UI**: High-contrast theming optimized for POS terminals.
 - **Real-time Operations**: WebSocket communication for KDS updates and CAPS synchronization.
 - **Offline Resilience**: Optional on-premise CAPS with local SQLite for offline operations and cloud synchronization.
-- **Non-Destructive Changes**: All system modifications must be additive and not alter existing enterprise configurations. New features must be optional and default to OFF/NULL for existing enterprises.
+- **Non-Destructive Changes**: All system modifications must be additive and not alter existing enterprise configurations. New features must be optional and default to OFF/NULL/false for existing enterprises. Specifically:
+  - All new boolean option bits / feature flags in any schema table MUST default to `false` (never `true`).
+  - New text/integer config fields MUST default to `null` (no value) unless there is an explicit reason.
+  - This ensures existing running enterprises are never impacted by newly added features.
+- **Context Help Requirement**: Every option bit or configuration field added to EMC panels MUST have a corresponding entry in the config help text registry (`client/src/lib/config-help-registry.ts`). The help text must describe in plain English what the option does and what happens when it is enabled. The `ContextHelpWrapper` component renders a help icon (?) next to each field label that shows this description on click.
 
 ### Technical Stack
 - **Frontend**: React 18, TypeScript, Vite, Wouter, TanStack React Query, React Context, shadcn/ui, Tailwind CSS.
